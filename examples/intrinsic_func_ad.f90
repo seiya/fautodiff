@@ -85,39 +85,39 @@ contains
     dp_dx = 2.0 / sqrt(acos(-1.0)) * exp(-(x)**2)
     dp_dy = -2.0 / sqrt(acos(-1.0)) * exp(-(y)**2)
     y_ad = p_ad * dp_dy + y_ad
-    x_ad = p_ad * dp_dx
+    x_ad = p_ad * dp_dx + x_ad
     do_dx = merge(1.0, 0.0, x <= y)
     do_dy = merge(0.0, 1.0, x <= y)
     y_ad = o_ad * do_dy + y_ad
-    x_ad = o_ad * do_dx
+    x_ad = o_ad * do_dx + x_ad
     dh_dx = merge(1.0, 0.0, x >= y)
     dh_dy = merge(0.0, 1.0, x >= y)
     y_ad = h_ad * dh_dy + y_ad
-    x_ad = h_ad * dh_dx
+    x_ad = h_ad * dh_dx + x_ad
     dg_dx = sign(1.0, x) * sign(1.0, y)
-    x_ad = g_ad * dg_dx
+    x_ad = g_ad * dg_dx + x_ad
     df_dx = y / (x**2 + y**2) + sinh(x) + 1.0 / cosh(x)**2
     df_dy = -x / (x**2 + y**2) + cosh(y)
-    x_ad = f_ad * df_dx
+    x_ad = f_ad * df_dx + x_ad
     y_ad = f_ad * df_dy + y_ad
     de_dx = 1.0 / sqrt((x)**2 + 1.0) + 1.0 / (1.0 - (x)**2)
     de_dy = 1.0 / sqrt(y - 1.0) / sqrt(y + 1.0)
-    x_ad = e_ad * de_dx
+    x_ad = e_ad * de_dx + x_ad
     y_ad = e_ad * de_dy + y_ad
     dd_dx = 1.0 / sqrt(1.0 - (x / pi)**2) * 1.0 / pi + 1.0 / (1.0 + (x)**2)
     dd_dy = -1.0 / sqrt(1.0 - (y / (pi + 1.0))**2) * 1.0 / (pi + 1.0)
-    x_ad = d_ad * dd_dx
+    x_ad = d_ad * dd_dx + x_ad
     y_ad = d_ad * dd_dy + y_ad
     dc_dx = cos(x) + 1.0 / cos(x)**2
     dc_dy = -sin(y)
-    x_ad = c_ad * dc_dx
+    x_ad = c_ad * dc_dx + x_ad
     y_ad = c_ad * dc_dy + y_ad
     db_dx = exp(x) + 1.0 / ((ABS(x) + 1.0) * log(10.0)) * sign(1.0, x)
     db_dy = 1.0 / y
-    x_ad = b_ad * db_dx
+    x_ad = b_ad * db_dx + x_ad
     y_ad = b_ad * db_dy + y_ad
     da_dx = 0.5 / sqrt(ABS(x)) * sign(1.0, x)
-    x_ad = a_ad * da_dx
+    x_ad = a_ad * da_dx + x_ad
 
     return
   end subroutine math_intrinsics_ad

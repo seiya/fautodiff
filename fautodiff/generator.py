@@ -352,9 +352,12 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                         break
                     j += 1
                 if assign_indices and not used:
+                    first = True
                     for idx in assign_indices:
                         line = result[idx]
-                        line = re.sub(rf"\s*\+\s*{re.escape(var)}\b", "", line)
+                        if first:
+                            line = re.sub(rf"\s*\+\s*{re.escape(var)}\b", "", line)
+                            first = False
                         result[idx] = line
                     del result[i]
                     continue

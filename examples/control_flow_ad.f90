@@ -17,7 +17,7 @@ contains
       x_ad = z_ad * dz_dx
     ELSE IF (x < 0.0) THEN
       dz_dx = - 1.0
-      x_ad = z_ad * dz_dx
+      x_ad = z_ad * dz_dx + x_ad
     ELSE
     END IF
 
@@ -38,7 +38,7 @@ contains
       x_ad = z_ad * dz_dx
     CASE (2)
       dz_dx = 1.0
-      x_ad = z_ad * dz_dx
+      x_ad = z_ad * dz_dx + x_ad
     CASE DEFAULT
     END SELECT
 
