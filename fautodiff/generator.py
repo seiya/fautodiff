@@ -125,8 +125,12 @@ def _generate_ad_subroutine(routine, indent):
     return lines
 
 
-def generate_ad(in_file, out_file):
-    """Generate a very small reverse-mode AD version of ``in_file``."""
+def generate_ad(in_file, out_file=None):
+    """Generate a very small reverse-mode AD version of ``in_file``.
+
+    If ``out_file`` is ``None`` the generated code is returned as a string.
+    When ``out_file`` is provided the code is also written to that path.
+    """
     ast = parser.parse_file(in_file)
     output = []
     for module in walk(ast, Fortran2003.Module):
@@ -150,7 +154,10 @@ def generate_ad(in_file, out_file):
                 output.append("\n")
         output.append(f"end module {name}_ad\n")
 
-    Path(out_file).write_text("".join(output))
+    code = "".join(output)
+    if out_file:
+        Path(out_file).write_text(code)
+    return code
 
 
 if __name__ == "__main__":
@@ -160,7 +167,15 @@ if __name__ == "__main__":
         description="Generate simple reverse-mode AD code"
     )
     parser_arg.add_argument("input", help="path to original Fortran file")
-    parser_arg.add_argument("output", help="path for generated Fortran file")
+    parser_arg.add_argument(
+        "output",
+        nargs="?",
+        help=(
+            "path for generated Fortran file; if omitted, the code is printed"
+        ),
+    )
     args = parser_arg.parse_args()
 
-    generate_ad(args.input, args.output)
+    code = generate_ad(args.input, args.output)
+    if args.output is None:
+        print(code, end="")
