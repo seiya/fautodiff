@@ -365,6 +365,22 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             return f"real, dimension{dim}"
         return "real"
 
+    def _sized_dims(typ, name):
+        typ = str(typ).lower()
+        if "dimension" not in typ:
+            return None
+        dim = typ.split("dimension", 1)[1].strip()
+        if not dim.startswith("(") or not dim.endswith(")"):
+            return None
+        parts = [p.strip() for p in dim[1:-1].split(",")]
+        new = []
+        for i, p in enumerate(parts, 1):
+            if ":" in p or p == "":
+                new.append(f"size({name}, {i})")
+            else:
+                new.append(p)
+        return "(" + ", ".join(new) + ")"
+
     for arg in args:
         typ, intent = decl_map.get(arg, ("real", "in"))
         arg_int = intent or "in"
@@ -544,15 +560,25 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         lines.append(cl)
     for dname in decls:
         typ = "real"
+        dims = None
         if dname.endswith("_ad"):
             base = dname[:-3]
             typ = _grad_type(decl_map.get(base, ("real",))[0])
+            dims = _sized_dims(decl_map.get(base, ("real",))[0], base)
         elif dname.endswith("_ad_"):
             base = dname[:-4]
-            typ = _grad_type(decl_map.get(base, ("real",))[0])
+            if base.endswith("_ad"):
+                base0 = base[:-3]
+            else:
+                base0 = base
+            typ = _grad_type(decl_map.get(base0, ("real",))[0])
+            dims = _sized_dims(decl_map.get(base0, ("real",))[0], f"{base0}_ad")
         elif dname.startswith("d") and "_d" in dname:
             base = dname.split("_d", 1)[1]
             typ = _grad_type(decl_map.get(base, ("real",))[0])
+            dims = _sized_dims(decl_map.get(base, ("real",))[0], base)
+        if dims is not None:
+            typ = f"real, dimension{dims}"
         lines.append(f"{indent}  {typ} :: {dname}\n")
     lines.append("\n")
     for pl in pre_lines:

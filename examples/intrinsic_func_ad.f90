@@ -152,7 +152,7 @@ contains
     real, dimension(:, :), intent(in)  :: mat_in
     real, dimension(:, :), intent(out) :: mat_in_ad
     real, dimension(:, :), intent(in)  :: mat_out_ad
-    real, dimension(:, :) :: mat_out_ad_
+    real, dimension(size(mat_out_ad, 1), size(mat_out_ad, 2)) :: mat_out_ad_
 
     mat_out_ad_ = cshift(mat_out_ad, -1, 2)
     mat_in_ad = transpose(mat_out_ad_)
