@@ -4,6 +4,153 @@ from . import parser
 from .parser import Fortran2003, walk
 
 
+def _strip_paren(text: str) -> str:
+    """Remove a single pair of parentheses from ``text`` if present."""
+    if text.startswith("(") and text.endswith(")"):
+        return text[1:-1]
+    return text
+
+
+def _to_number(val: float, keep_decimal: bool = False) -> str:
+    """Return ``val`` as a Fortran number string."""
+    if val.is_integer():
+        return f"{int(val)}.0" if keep_decimal else str(int(val))
+    return str(val)
+
+
+def _minus_one(expr) -> str:
+    """Return a Fortran expression for ``expr - 1``."""
+    if isinstance(expr, Fortran2003.Parenthesis):
+        inner = _minus_one(expr.items[1])
+        return f"({_strip_paren(inner)})"
+    if isinstance(expr, Fortran2003.Int_Literal_Constant):
+        val = int(expr.items[0]) - 1
+        return str(val)
+    if isinstance(expr, Fortran2003.Real_Literal_Constant):
+        val = float(expr.items[0]) - 1.0
+        keep = "." in expr.items[0]
+        return _to_number(val, keep_decimal=keep)
+    if (
+        isinstance(expr, Fortran2003.Level_2_Expr)
+        and len(expr.items) == 3
+        and expr.items[1] == "+"
+        and isinstance(expr.items[2], (Fortran2003.Int_Literal_Constant, Fortran2003.Real_Literal_Constant))
+    ):
+        left, _, right = expr.items
+        return f"{left.tofortran()} + {_minus_one(right)}"
+    return f"{expr.tofortran()} - 1.0"
+
+
+def _collect_names(expr, names):
+    """Collect variable names found in ``expr`` preserving order."""
+    if isinstance(expr, Fortran2003.Name):
+        name = str(expr)
+        if name not in names:
+            names.append(name)
+    for item in getattr(expr, "items", []):
+        if not isinstance(item, str):
+            _collect_names(item, names)
+
+
+def _parenthesize_if_needed(text: str) -> str:
+    """Add parentheses to ``text`` if it contains operators."""
+    if text.startswith("(") and text.endswith(")"):
+        return text
+    if any(op in text for op in (" ", "+", "-", "*", "/")):
+        return f"({text})"
+    return text
+
+
+def _derivative(expr, var: str) -> str:
+    """Return derivative of ``expr`` with respect to ``var`` as a string."""
+    if isinstance(expr, Fortran2003.Name):
+        return "1.0" if str(expr) == var else "0.0"
+    if isinstance(expr, (Fortran2003.Int_Literal_Constant, Fortran2003.Real_Literal_Constant)):
+        return "0.0"
+    if isinstance(expr, Fortran2003.Parenthesis):
+        return _derivative(expr.items[1], var)
+    if isinstance(expr, Fortran2003.Level_2_Unary_Expr):
+        sign = expr.items[0]
+        d = _derivative(expr.items[1], var)
+        if sign == "-":
+            if d == "0.0":
+                return "0.0"
+            if d.startswith("-"):
+                return d[2:]
+            return f"- {d}"
+        return d
+    if isinstance(expr, Fortran2003.Level_2_Expr) and len(expr.items) == 3 and isinstance(expr.items[1], str):
+        left, op, right = expr.items
+        if op == "+":
+            d1 = _derivative(left, var)
+            d2 = _derivative(right, var)
+            if d1 == "0.0":
+                return d2
+            if d2 == "0.0":
+                return d1
+            return f"{d1} + {d2}"
+        if op == "-":
+            d1 = _derivative(left, var)
+            d2 = _derivative(right, var)
+            if d1 == "0.0" and d2 == "0.0":
+                return "0.0"
+            if d2 == "0.0":
+                return d1
+            if d1 == "0.0":
+                return f"- {d2}"
+            return f"{d1} - {d2}"
+    if isinstance(expr, Fortran2003.Add_Operand) and len(expr.items) == 3:
+        left, op, right = expr.items
+        if op == "*":
+            d1 = _derivative(left, var)
+            d2 = _derivative(right, var)
+            left_s = left.tofortran()
+            right_s = right.tofortran()
+            terms = []
+            if d1 != "0.0":
+                terms.append(right_s if d1 == "1.0" else f"{d1} * {right_s}")
+            if d2 != "0.0":
+                terms.append(left_s if d2 == "1.0" else f"{left_s} * {d2}")
+            return " + ".join(terms) if terms else "0.0"
+        if op == "/":
+            u = left.tofortran()
+            v = right.tofortran()
+            vsq = v if v.startswith("(") else f"({v})"
+            d1 = _derivative(left, var)
+            d2 = _derivative(right, var)
+            if d1 == "0.0" and d2 == "0.0":
+                return "0.0"
+            if d2 == "0.0":
+                return f"{d1} / {v}" if d1 != "1.0" else f"1.0 / {v}"
+            if d1 == "0.0":
+                fac = "" if d2 == "1.0" else f" * {d2}"
+                return f"- {u}{fac} / {vsq}**2"
+            num1 = v if d1 == "1.0" else f"{d1} * {v}"
+            num2 = f"- {u}" if d2 == "1.0" else f"- {u} * {d2}"
+            return f"({num1} + {num2}) / {vsq}**2"
+    if isinstance(expr, Fortran2003.Mult_Operand) and len(expr.items) == 3 and expr.items[1] == "**":
+        base, _, exponent = expr.items
+        base_s = base.tofortran()
+        exp_s = exponent.tofortran()
+        d_base = _derivative(base, var)
+        d_exp = _derivative(exponent, var)
+        terms = []
+        if d_base != "0.0":
+            minus = _parenthesize_if_needed(_minus_one(exponent))
+            term = f"{exp_s} * {base_s}**{minus}"
+            if d_base != "1.0":
+                term += f" * {d_base}"
+            terms.append(term)
+        if d_exp != "0.0":
+            log_base = _strip_paren(base_s)
+            term = f"{base_s}**{exp_s} * log({log_base})"
+            if d_exp != "1.0":
+                term += f" * {d_exp}"
+            terms.append(term)
+        return " + ".join(terms) if terms else "0.0"
+    return "0.0"
+
+
 def _decl_names(stmt):
     """Return variable names from a ``Type_Declaration_Stmt``."""
     return [str(ed.items[0]) for ed in stmt.items[2].items]
@@ -46,40 +193,14 @@ def _routine_parts(routine):
 
 def _assignment_parts(stmt):
     """Return mapping of variables to partial derivative expressions."""
-    lhs = str(stmt.items[0])
-    rhs_str = stmt.items[2].tofortran().strip()
-
-    def _is_number(text):
-        try:
-            float(text)
-            return True
-        except ValueError:
-            return False
-
+    rhs = stmt.items[2]
+    names = []
+    _collect_names(rhs, names)
     parts = {}
-
-    if any(op in rhs_str for op in ("**", "/", "-")):
-        return {}
-
-    if "+" in rhs_str:
-        add_terms = [t.strip() for t in rhs_str.split("+")]
-        for term in add_terms:
-            if "*" in term:
-                mul_left, mul_right = [s.strip() for s in term.split("*")]
-                if _is_number(mul_left) and not _is_number(mul_right):
-                    parts[mul_right] = mul_left
-                elif _is_number(mul_right) and not _is_number(mul_left):
-                    parts[mul_left] = mul_right
-            elif not _is_number(term):
-                parts[term] = "1.0"
-    elif "*" in rhs_str:
-        mul_left, mul_right = [s.strip() for s in rhs_str.split("*")]
-        if not _is_number(mul_left):
-            parts[mul_left] = mul_right
-        if not _is_number(mul_right):
-            parts[mul_right] = mul_left
-    else:
-        return {}
+    for name in names:
+        deriv = _derivative(rhs, name)
+        if deriv != "0.0":
+            parts[name] = deriv
     return parts
 
 
