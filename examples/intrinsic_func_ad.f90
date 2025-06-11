@@ -151,6 +151,18 @@ contains
     return
   end subroutine non_differentiable_intrinsics_ad
 
+  subroutine special_intrinsics_ad(mat_in, mat_in_ad, mat_out_ad)
+    real, intent(in)  :: mat_in
+    real, intent(out) :: mat_in_ad
+    real, intent(in)  :: mat_out_ad
+    real :: mat_out_ad_
+
+    mat_out_ad_ = cshift(mat_out_ad, -1, 2)
+    mat_in_ad = transpose(mat_out_ad_)
+
+    return
+  end subroutine special_intrinsics_ad
+
   subroutine casting_intrinsics_ad(i, i_ad, r, r_ad, d_ad, c, n_ad)
     integer, intent(in)  :: i
     real, intent(out) :: i_ad

@@ -47,9 +47,6 @@ contains
     ub = ubound(arr, 1)
     n = size(arr)
 
-    mat_out = transpose(mat_in)
-    mat_out = cshift(mat_out, 1, 2)
-
     a = epsilon(x)
     b = huge(x)
     c = tiny(x)
@@ -57,6 +54,16 @@ contains
 
     return
   end subroutine non_differentiable_intrinsics
+
+  subroutine special_intrinsics(mat_in, mat_out)
+    real, intent(in)  :: mat_in(:,:)
+    real, intent(out) :: mat_out(:,:)
+
+    mat_out = transpose(mat_in)
+    mat_out = cshift(mat_out, 1, 2)
+
+    return
+  end subroutine special_intrinsics
 
   subroutine casting_intrinsics(i, r, d, c, n)
     integer, intent(in) :: i
