@@ -195,7 +195,7 @@ def _routine_parts(routine):
 
 
 def _assignment_parts(stmt):
-    """Return mapping of variables to partial derivative expressions and whether variables repeat."""
+    """Return mapping of variables to partial derivative expressions and whether any variable is used twice."""
     rhs = stmt.items[2]
     all_names = []
     _collect_names(rhs, all_names, unique=False)
@@ -206,8 +206,8 @@ def _assignment_parts(stmt):
         deriv = _derivative(rhs, name)
         if deriv != "0.0":
             parts[name] = deriv
-    has_dup = len(all_names) != len(set(all_names))
-    return parts, has_dup
+    has_repeat = len(all_names) != len(set(all_names))
+    return parts, has_repeat
 
 
 def _generate_ad_subroutine(routine, indent):
@@ -285,7 +285,7 @@ def _generate_ad_subroutine(routine, indent):
 
     for stmt in reversed(statements):
         lhs = str(stmt.items[0])
-        parts, has_dup = _assignment_parts(stmt)
+        parts, has_repeat = _assignment_parts(stmt)
         for var in parts:
             name_d = f"d{lhs}_d{var}"
             if name_d not in decl_set:
@@ -306,7 +306,7 @@ def _generate_ad_subroutine(routine, indent):
         for var, expr in parts.items():
             block.append(f"{indent}  d{lhs}_d{var} = {expr}\n")
         lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
-        order = list(parts.keys()) if has_dup else list(reversed(list(parts.keys())))
+        order = list(parts.keys()) if has_repeat else list(reversed(list(parts.keys())))
         for var in order:
             if var == lhs:
                 continue
