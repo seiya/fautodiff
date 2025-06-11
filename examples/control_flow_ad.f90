@@ -54,9 +54,10 @@ contains
     real :: dsum_dx
     real :: sum_ad_
 
-
     x_ad = 0.0
-    sum_ad_ = 0.0
+
+    sum_ad_ = sum_ad
+
     DO i = n, 1, -1
       dsum_dsum = 1.0
       dsum_dx = i
@@ -75,9 +76,6 @@ contains
 
     x_ad = 0.0
     limit_ad = 0.0
-
-    DO WHILE (y < limit)
-    END DO
 
     return
   end subroutine do_while_example_ad
