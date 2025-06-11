@@ -7,11 +7,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fautodiff import generator
 
 class TestGenerator(unittest.TestCase):
-    def test_simple_math(self):
+    def test_examples(self):
         examples = Path('examples')
-        generated = generator.generate_ad(str(examples / 'simple_math.f90'))
-        expected = (examples / 'simple_math_ad.f90').read_text()
-        self.assertEqual(generated, expected)
+        for src in sorted(examples.glob('*.f90')):
+            if src.name.endswith('_ad.f90'):
+                continue
+            generated = generator.generate_ad(str(src))
+            expected = src.with_name(src.stem + '_ad.f90').read_text()
+            self.assertEqual(generated, expected, msg=f"Mismatch for {src.name}")
 
 if __name__ == '__main__':
     unittest.main()

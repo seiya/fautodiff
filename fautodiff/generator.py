@@ -41,15 +41,18 @@ def _minus_one(expr) -> str:
     return f"{expr.tofortran()} - 1.0"
 
 
-def _collect_names(expr, names):
+def _collect_names(expr, names, unique=True):
     """Collect variable names found in ``expr`` preserving order."""
     if isinstance(expr, Fortran2003.Name):
         name = str(expr)
-        if name not in names:
+        if unique:
+            if name not in names:
+                names.append(name)
+        else:
             names.append(name)
     for item in getattr(expr, "items", []):
         if not isinstance(item, str):
-            _collect_names(item, names)
+            _collect_names(item, names, unique=unique)
 
 
 def _parenthesize_if_needed(text: str) -> str:
@@ -192,8 +195,10 @@ def _routine_parts(routine):
 
 
 def _assignment_parts(stmt):
-    """Return mapping of variables to partial derivative expressions."""
+    """Return mapping of variables to partial derivative expressions and whether any variable is used twice."""
     rhs = stmt.items[2]
+    all_names = []
+    _collect_names(rhs, all_names, unique=False)
     names = []
     _collect_names(rhs, names)
     parts = {}
@@ -201,7 +206,8 @@ def _assignment_parts(stmt):
         deriv = _derivative(rhs, name)
         if deriv != "0.0":
             parts[name] = deriv
-    return parts
+    has_repeat = len(all_names) != len(set(all_names))
+    return parts, has_repeat
 
 
 def _generate_ad_subroutine(routine, indent):
@@ -279,7 +285,7 @@ def _generate_ad_subroutine(routine, indent):
 
     for stmt in reversed(statements):
         lhs = str(stmt.items[0])
-        parts = _assignment_parts(stmt)
+        parts, has_repeat = _assignment_parts(stmt)
         for var in parts:
             name_d = f"d{lhs}_d{var}"
             if name_d not in decl_set:
@@ -300,7 +306,8 @@ def _generate_ad_subroutine(routine, indent):
         for var, expr in parts.items():
             block.append(f"{indent}  d{lhs}_d{var} = {expr}\n")
         lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
-        for var in reversed(list(parts.keys())):
+        order = list(parts.keys()) if has_repeat else list(reversed(list(parts.keys())))
+        for var in order:
             if var == lhs:
                 continue
             update = f"{lhs_grad} * d{lhs}_d{var}"
