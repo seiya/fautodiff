@@ -27,7 +27,7 @@ contains
     dwork_da = 1.0
     dwork_db = 1.0
     b_ad = work_ad * dwork_db
-    a_ad = work_ad * dwork_da + a_ad
+    a_ad = work_ad * dwork_da
 
     return
   end subroutine add_numbers_ad
@@ -50,7 +50,7 @@ contains
     c_ad_ = c_ad * dc_dc
     dc_da = 1.0
     dc_db = - 1.0
-    b_ad = c_ad_ * dc_db + b_ad
+    b_ad = c_ad_ * dc_db
     a_ad = c_ad_ * dc_da
 
     return
@@ -74,7 +74,7 @@ contains
     c_ad_ = c_ad * dc_dc
     dc_da = b + 1.0
     dc_db = a
-    a_ad = c_ad_ * dc_da + a_ad
+    a_ad = c_ad_ * dc_da
     b_ad = c_ad_ * dc_db
 
     return
@@ -99,7 +99,7 @@ contains
     dc_da = 1.0 / (b + 1.5)
     dc_db = - a / (b + 1.5)**2
     b_ad = c_ad_ * dc_db
-    a_ad = c_ad_ * dc_da + a_ad
+    a_ad = c_ad_ * dc_da
 
     return
   end subroutine divide_numbers_ad
@@ -124,8 +124,8 @@ contains
     c_ad_ = c_ad * dc_dc
     dc_da = 3 * a**2
     dc_db = 5.5 * b**4.5
-    b_ad = c_ad_ * dc_db + b_ad
-    a_ad = c_ad_ * dc_da + a_ad
+    b_ad = c_ad_ * dc_db
+    a_ad = c_ad_ * dc_da
 
     return
   end subroutine power_numbers_ad

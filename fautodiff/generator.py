@@ -323,8 +323,10 @@ def _assignment_parts(stmt, warn_info=None, warnings=None):
 def _generate_ad_subroutine(routine, indent, filename, warnings):
     lines = []
 
-    def _optimize_lines(raw_lines):
+    def _optimize_lines(raw_lines, keep=None):
         """Remove redundant initializations and unused assignments."""
+        if keep is None:
+            keep = set()
         result = list(raw_lines)
         init_pat = re.compile(r"^\s*(\w+_ad)\s*=\s*0\.0\s*$")
         i = 0
@@ -332,23 +334,28 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             m = init_pat.match(result[i].strip())
             if m:
                 var = m.group(1)
+                if var in keep:
+                    i += 1
+                    continue
                 var_pat = re.compile(rf"\b{re.escape(var)}\b")
                 assign_pat = re.compile(rf"^\s*{re.escape(var)}\s*=")
                 j = i + 1
                 used = False
-                assign_idx = None
+                assign_indices = []
                 while j < len(result):
+                    if assign_pat.match(result[j]):
+                        assign_indices.append(j)
+                        j += 1
+                        continue
                     if var_pat.search(result[j]):
-                        if assign_pat.match(result[j]):
-                            assign_idx = j
-                            break
                         used = True
                         break
                     j += 1
-                if assign_idx is not None and not used:
-                    line = result[assign_idx]
-                    line = re.sub(rf"\s*\+\s*{re.escape(var)}\b", "", line)
-                    result[assign_idx] = line
+                if assign_indices and not used:
+                    for idx in assign_indices:
+                        line = result[idx]
+                        line = re.sub(rf"\s*\+\s*{re.escape(var)}\b", "", line)
+                        result[idx] = line
                     del result[i]
                     continue
             i += 1
@@ -515,6 +522,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     decl_set = set()
     stmt_blocks = {}
 
+    loop_grad_vars = set()
+
     loop_lhs = {str(s.items[0]) for s, _, in_do in statements if in_do}
 
 
@@ -662,10 +671,14 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             else:
                 block.append(f"{var}_ad = {update}\n")
                 defined.add(var)
+            if in_do:
+                loop_grad_vars.add(var)
         if lhs in parts:
             new_grad = f"{lhs}_ad_"
             block.append(f"{new_grad} = {lhs_grad} * d{lhs}_d{lhs}\n")
             grad_var[lhs] = new_grad
+            if in_do:
+                loop_grad_vars.add(lhs)
         stmt_blocks[id(stmt)] = block
         used_vars.update(rhs_names)
         used_vars.add(lhs)
@@ -805,7 +818,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     lines.append(f"{indent}  return\n")
 
     lines.append(f"{indent}end subroutine {name}_ad\n")
-    return _optimize_lines(lines)
+    keep = {f"{v}_ad" for v in loop_grad_vars}
+    return _optimize_lines(lines, keep)
 
 
 def generate_ad(in_file, out_file=None, warn=True):
