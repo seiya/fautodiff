@@ -324,35 +324,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     lines = []
 
     def _optimize_lines(raw_lines):
-        """Remove redundant initializations and unused assignments."""
-        result = list(raw_lines)
-        init_pat = re.compile(r"^\s*(\w+_ad)\s*=\s*0\.0\s*$")
-        i = 0
-        while i < len(result):
-            m = init_pat.match(result[i].strip())
-            if m:
-                var = m.group(1)
-                var_pat = re.compile(rf"\b{re.escape(var)}\b")
-                assign_pat = re.compile(rf"^\s*{re.escape(var)}\s*=")
-                j = i + 1
-                used = False
-                assign_idx = None
-                while j < len(result):
-                    if var_pat.search(result[j]):
-                        if assign_pat.match(result[j]):
-                            assign_idx = j
-                            break
-                        used = True
-                        break
-                    j += 1
-                if assign_idx is not None and not used:
-                    line = result[assign_idx]
-                    line = re.sub(rf"\s*\+\s*{re.escape(var)}\b", "", line)
-                    result[assign_idx] = line
-                    del result[i]
-                    continue
-            i += 1
-        return result
+        """Return lines without modification."""
+        return list(raw_lines)
 
     if isinstance(routine, Fortran2003.Function_Subprogram):
         stmt = routine.content[0]
@@ -423,6 +396,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         return "(" + ", ".join(new) + ")"
 
     out_grad_args = []
+    has_grad_input = False
     for arg in args:
         typ, intent = decl_map.get(arg, ("real", "in"))
         arg_int = intent or "in"
@@ -434,6 +408,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 lines.append(
                     f"{indent}  {gtyp}, intent(in){_space('in')}:: {arg}_ad\n"
                 )
+                has_grad_input = True
         else:
             lines.append(
                 f"{indent}  {typ}, intent({arg_int}){_space(arg_int)}:: {arg}\n"
@@ -448,6 +423,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 )
                 if grad_int == "out":
                     out_grad_args.append(arg)
+                else:
+                    has_grad_input = True
 
     for outv in outputs:
         if outv not in args:
@@ -455,6 +432,18 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             lines.append(
                 f"{indent}  {out_typ}, intent(in){_space('in')}:: {outv}_ad\n"
             )
+            has_grad_input = True
+
+    # If no derivative inputs exist, all output gradients remain zero
+    if not has_grad_input:
+        lines.append("\n")
+        for arg in out_grad_args:
+            lines.append(f"{indent}  {arg}_ad = 0.0\n")
+        if out_grad_args:
+            lines.append("\n")
+        lines.append(f"{indent}  return\n")
+        lines.append(f"{indent}end subroutine {name}_ad\n")
+        return lines
 
     # If there are no input gradients to propagate we can exit early
     if not out_grad_args:
@@ -463,12 +452,17 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         lines.append(f"{indent}end subroutine {name}_ad\n")
         return lines
 
-    def _find_assignments(node, out_list, top=True):
+    def _find_assignments(node, out_list, top=True, in_do=False):
         if isinstance(node, Fortran2003.Assignment_Stmt):
-            out_list.append((node, top))
+            out_list.append((node, top, in_do))
         for item in getattr(node, "content", []):
             if not isinstance(item, str):
-                _find_assignments(item, out_list, top=False)
+                _find_assignments(
+                    item,
+                    out_list,
+                    top=False,
+                    in_do=in_do or isinstance(node, Block_Nonlabel_Do_Construct),
+                )
 
     def _collect_do_indices(node, out_set):
         if isinstance(node, Block_Nonlabel_Do_Construct):
@@ -488,14 +482,17 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         _find_assignments(stmt, statements)
         _collect_do_indices(stmt, do_indices)
     const_vars.update(do_indices)
-    defined = set()
+    defined = set(out_grad_args)
     grad_var = {v: f"{v}_ad" for v in outputs}
     decls = []
     decl_set = set()
     stmt_blocks = {}
 
+    loop_lhs = {str(s.items[0]) for s, _, in_do in statements if in_do}
+
+
     const_map = {}
-    for stmt, _ in statements:
+    for stmt, _, _ in statements:
         lhs = str(stmt.items[0])
         rhs_names = []
         _collect_names(stmt.items[2], rhs_names)
@@ -507,7 +504,12 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         if is_const:
             const_vars.add(var)
 
-    for stmt, top in reversed(statements):
+    for var in sorted(loop_lhs):
+        if var in outputs:
+            pre_lines.append(f"{indent}  {var}_ad_ = {var}_ad\n")
+            grad_var[var] = f"{var}_ad_"
+
+    for stmt, top, in_do in reversed(statements):
         lhs = str(stmt.items[0])
         line_no = None
         if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
@@ -628,7 +630,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             if var == lhs:
                 continue
             update = f"{lhs_grad} * d{lhs}_d{var}"
-            if var in defined:
+            if var in defined or in_do:
                 block.append(f"{var}_ad = {update} + {var}_ad\n")
             else:
                 block.append(f"{var}_ad = {update}\n")

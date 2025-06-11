@@ -11,13 +11,14 @@ contains
     real, intent(in)  :: z_ad
     real :: dz_dx
 
+    x_ad = 0.0
 
     IF (x > 0.0) THEN
       dz_dx = 1.0
-      x_ad = z_ad * dz_dx
+      x_ad = z_ad * dz_dx + x_ad
     ELSE IF (x < 0.0) THEN
       dz_dx = - 1.0
-      x_ad = z_ad * dz_dx
+      x_ad = z_ad * dz_dx + x_ad
     ELSE
     END IF
 
@@ -31,14 +32,15 @@ contains
     real, intent(in)  :: z_ad
     real :: dz_dx
 
+    x_ad = 0.0
 
     SELECT CASE (i)
     CASE (1)
       dz_dx = 1.0
-      x_ad = z_ad * dz_dx
+      x_ad = z_ad * dz_dx + x_ad
     CASE (2)
       dz_dx = 1.0
-      x_ad = z_ad * dz_dx
+      x_ad = z_ad * dz_dx + x_ad
     CASE DEFAULT
     END SELECT
 
@@ -54,9 +56,10 @@ contains
     real :: dsum_dx
     real :: sum_ad_
 
-
     x_ad = 0.0
-    sum_ad_ = 0.0
+
+    sum_ad_ = sum_ad
+
     DO i = n, 1, -1
       dsum_dsum = 1.0
       dsum_dx = i
@@ -75,9 +78,6 @@ contains
 
     x_ad = 0.0
     limit_ad = 0.0
-
-    DO WHILE (y < limit)
-    END DO
 
     return
   end subroutine do_while_example_ad

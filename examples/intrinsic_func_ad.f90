@@ -53,6 +53,7 @@ contains
     real :: db_dy
     real :: da_dx
 
+    x_ad = 0.0
 
     pi = ACOS(- 1.0)
 
@@ -81,7 +82,7 @@ contains
     dq_dx = 1.0
     dq_dy = -real(int(x / y), kind(x))
     y_ad = q_ad * dq_dy
-    x_ad = q_ad * dq_dx
+    x_ad = q_ad * dq_dx + x_ad
     dp_dx = 2.0 / sqrt(acos(-1.0)) * exp(-(x)**2)
     dp_dy = -2.0 / sqrt(acos(-1.0)) * exp(-(y)**2)
     y_ad = p_ad * dp_dy + y_ad
@@ -155,9 +156,10 @@ contains
     real, dimension(:, :), intent(in)  :: mat_out_ad
     real, dimension(size(mat_out_ad, 1), size(mat_out_ad, 2)) :: mat_out_ad_
 
+    mat_in_ad = 0.0
 
     mat_out_ad_ = cshift(mat_out_ad, -1, 2)
-    mat_in_ad = transpose(mat_out_ad_)
+    mat_in_ad = transpose(mat_out_ad_) + mat_in_ad
 
     return
   end subroutine special_intrinsics_ad
@@ -170,9 +172,10 @@ contains
     character(len = 1), intent(inout) :: c
     real :: dd_dr
 
+    r_ad = 0.0
 
     dd_dr = 1.0
-    r_ad = d_ad * dd_dr
+    r_ad = d_ad * dd_dr + r_ad
 
     return
   end subroutine casting_intrinsics_ad
