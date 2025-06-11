@@ -492,22 +492,24 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
 
         parts, has_repeat = _assignment_parts(stmt, info, warnings)
 
-        lhs_typ = decl_map.get(lhs, ("",))[0]
-        if str(lhs_typ).strip().lower().startswith("character"):
-            used = []
-            _collect_names(stmt.items[2], used)
-            used_vars.update(used)
+        rhs_names = []
+        _collect_names(stmt.items[2], rhs_names)
+
+        if lhs not in used_vars and lhs not in outputs:
+            # The value of ``lhs`` does not contribute to any output so we do
+            # not need to propagate a gradient through this assignment.
             continue
 
+        lhs_typ = decl_map.get(lhs, ("",))[0]
+        if str(lhs_typ).strip().lower().startswith("character"):
+            used_vars.update(rhs_names)
+            continue
         parts = {
             v: e
             for v, e in parts.items()
             if not str(decl_map.get(v, ("",))[0]).strip().lower().startswith("character")
             and v not in const_vars
         }
-
-        rhs_names = []
-        _collect_names(stmt.items[2], rhs_names)
         if not parts and lhs in used_vars and not rhs_names:
             pre_lines.insert(0, f"{indent}  {stmt.tofortran().strip()}\n")
             used_vars.update(rhs_names)
