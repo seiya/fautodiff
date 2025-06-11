@@ -5,6 +5,11 @@ from fparser.two.parser import ParserFactory
 from fparser.two import Fortran2003
 from fparser.two.utils import walk
 
+# Re-export commonly used classes and utilities so other modules do not need
+# to import ``fparser2`` directly.
+
+__all__ = ["parse_file", "find_subroutines", "Fortran2003", "walk"]
+
 
 def parse_file(path):
     """Parse a Fortran source file and return the ``fparser`` AST."""
