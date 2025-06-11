@@ -38,14 +38,15 @@ contains
     return
   end subroutine select_example
 
-  subroutine do_example(n, sum)
+  subroutine do_example(n, x, sum)
     integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(out) :: sum
     integer :: i
 
     sum = 0.0
     do i = 1, n
-      sum = sum + i
+      sum = sum + i * x
     end do
 
     return
