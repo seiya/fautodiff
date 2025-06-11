@@ -306,18 +306,28 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
 
     spec, exec_part = _routine_parts(routine)
     decl_map = _parse_decls(spec)
-
+    pre_lines = []
+    used_vars = set()
+    const_vars = set()
+    const_decl = []
+    const_decl_names = set()
     ad_args = []
     outputs = []
     if result is not None:
-        outputs.append(result)
+        r_typ = decl_map.get(result, ("real", None))[0]
+        if not r_typ.strip().lower().startswith("character"):
+            outputs.append(result)
     for arg in args:
-        typ_int = decl_map.get(arg, (None, None))[1]
-        if typ_int == "out":
-            outputs.append(arg)
-            ad_args.append(f"{arg}_ad")
+        typ, intent = decl_map.get(arg, (None, None))
+        is_char = str(typ).strip().lower().startswith("character")
+        if intent == "out":
+            if not is_char:
+                outputs.append(arg)
+                ad_args.append(f"{arg}_ad")
         else:
-            ad_args.extend([arg, f"{arg}_ad"])
+            ad_args.append(arg)
+            if not is_char:
+                ad_args.append(f"{arg}_ad")
     for outv in outputs:
         if outv not in args:
             ad_args.append(f"{outv}_ad")
@@ -330,10 +340,12 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     for arg in args:
         typ, intent = decl_map.get(arg, ("real", "in"))
         arg_int = intent or "in"
+        is_char = str(typ).strip().lower().startswith("character")
         if arg_int == "out":
-            lines.append(
-                f"{indent}  real, intent(in){_space('in')}:: {arg}_ad\n"
-            )
+            if not is_char:
+                lines.append(
+                    f"{indent}  real, intent(in){_space('in')}:: {arg}_ad\n"
+                )
         else:
             if arg_int == "inout":
                 ad_int = "inout"
@@ -343,10 +355,11 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 f"{indent}  {typ}, intent({arg_int})"
                 f"{_space(arg_int)}:: {arg}\n"
             )
-            lines.append(
-                f"{indent}  real, intent({ad_int})"
-                f"{_space(ad_int)}:: {arg}_ad\n"
-            )
+            if not is_char:
+                lines.append(
+                    f"{indent}  real, intent({ad_int})"
+                    f"{_space(ad_int)}:: {arg}_ad\n"
+                )
 
     for outv in outputs:
         if outv not in args:
@@ -363,6 +376,13 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     decl_set = set()
     assign_lines = []
 
+    for stmt in statements:
+        lhs = str(stmt.items[0])
+        rhs_names = []
+        _collect_names(stmt.items[2], rhs_names)
+        if not rhs_names:
+            const_vars.add(lhs)
+
     for stmt in reversed(statements):
         lhs = str(stmt.items[0])
         line_no = None
@@ -374,6 +394,33 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             "code": stmt.tofortran().strip(),
         }
         parts, has_repeat = _assignment_parts(stmt, info, warnings)
+
+        lhs_typ = decl_map.get(lhs, ("",))[0]
+        if str(lhs_typ).strip().lower().startswith("character"):
+            used = []
+            _collect_names(stmt.items[2], used)
+            used_vars.update(used)
+            continue
+
+        parts = {
+            v: e
+            for v, e in parts.items()
+            if not str(decl_map.get(v, ("",))[0]).strip().lower().startswith("character")
+            and v not in const_vars
+        }
+
+        rhs_names = []
+        _collect_names(stmt.items[2], rhs_names)
+        if not parts and lhs in used_vars and not rhs_names:
+            pre_lines.insert(0, f"{indent}  {stmt.tofortran().strip()}\n")
+            used_vars.update(rhs_names)
+            used_vars.add(lhs)
+            if lhs not in args and lhs not in outputs and lhs not in const_decl_names:
+                typ = decl_map.get(lhs, ("real", None))[0]
+                if not str(typ).strip().lower().startswith("character"):
+                    const_decl.append(f"{indent}  {typ} :: {lhs}\n")
+                    const_decl_names.add(lhs)
+            continue
         for var in parts:
             name_d = f"d{lhs}_d{var}"
             if name_d not in decl_set:
@@ -409,10 +456,18 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             block.append(f"{indent}  {new_grad} = {lhs_grad} * d{lhs}_d{lhs}\n")
             grad_var[lhs] = new_grad
         assign_lines.append(block)
+        used_vars.update(rhs_names)
+        used_vars.add(lhs)
 
+    for cl in const_decl:
+        lines.append(cl)
     for dname in decls:
         lines.append(f"{indent}  real :: {dname}\n")
     lines.append("\n")
+    for pl in pre_lines:
+        lines.append(pl)
+    if pre_lines:
+        lines.append("\n")
     for block in assign_lines:
         for l in block:
             lines.append(l)
