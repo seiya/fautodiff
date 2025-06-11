@@ -52,6 +52,15 @@ def _collect_names(expr, names):
             _collect_names(item, names)
 
 
+def _collect_all_names(expr, names):
+    """Collect all variable names from ``expr`` including duplicates."""
+    if isinstance(expr, Fortran2003.Name):
+        names.append(str(expr))
+    for item in getattr(expr, "items", []):
+        if not isinstance(item, str):
+            _collect_all_names(item, names)
+
+
 def _parenthesize_if_needed(text: str) -> str:
     """Add parentheses to ``text`` if it contains operators."""
     if text.startswith("(") and text.endswith(")"):
@@ -300,7 +309,17 @@ def _generate_ad_subroutine(routine, indent):
         for var, expr in parts.items():
             block.append(f"{indent}  d{lhs}_d{var} = {expr}\n")
         lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
-        for var in reversed(list(parts.keys())):
+
+        names_all = []
+        _collect_all_names(stmt.items[2], names_all)
+        names_unique = []
+        _collect_names(stmt.items[2], names_unique)
+        if names_unique and names_all.count(names_unique[0]) > 1:
+            order = list(parts.keys())
+        else:
+            order = list(reversed(list(parts.keys())))
+
+        for var in order:
             if var == lhs:
                 continue
             update = f"{lhs_grad} * d{lhs}_d{var}"
