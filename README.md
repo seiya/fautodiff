@@ -46,6 +46,7 @@ python -m fautodiff.generator examples/simple_math.f90
 # or write to a file
 python -m fautodiff.generator examples/simple_math.f90 examples/simple_math_ad.f90
 ```
+Additional examples illustrating Fortran intrinsic routines are available in ``examples/intrinsic_func.f90``.
 
 Run the included tests with:
 
