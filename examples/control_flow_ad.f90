@@ -45,9 +45,24 @@ contains
     return
   end subroutine select_example_ad
 
-  subroutine do_example_ad(n, sum_ad)
+  subroutine do_example_ad(n, x, x_ad, sum_ad)
     integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(out) :: x_ad
     real, intent(in)  :: sum_ad
+    real :: dsum_dsum
+    real :: dsum_dx
+    real :: sum_ad_
+
+
+    x_ad = 0.0
+    sum_ad_ = 0.0
+    DO i = n, 1, -1
+      dsum_dsum = 1.0
+      dsum_dx = i
+      x_ad = sum_ad_ * dsum_dx + x_ad
+      sum_ad_ = sum_ad_ * dsum_dsum
+    END DO
 
     return
   end subroutine do_example_ad
