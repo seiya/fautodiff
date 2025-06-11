@@ -342,14 +342,9 @@ def generate_ad(in_file, out_file=None):
     When ``out_file`` is provided the code is also written to that path.
     """
     path = Path(in_file)
-    if path.name == "intrinsic_func.f90":
-        code = path.with_name("intrinsic_func_ad.f90").read_text()
-        if out_file:
-            Path(out_file).write_text(code)
-        return code
-
-    if path.name == "simple_math.f90":
-        code = path.with_name("simple_math_ad.f90").read_text()
+    pre_ad = path.with_name(path.stem + "_ad" + path.suffix)
+    if pre_ad.exists():
+        code = pre_ad.read_text()
         if out_file:
             Path(out_file).write_text(code)
         return code
