@@ -8,7 +8,6 @@ contains
     real, intent(inout) :: y
     real, intent(out) :: z
 
-    z = 0.0
     if (x > 0.0) then
       y = y + 1.0
       z = x
@@ -22,15 +21,16 @@ contains
     return
   end subroutine if_example
 
-  subroutine select_example(i, z)
+  subroutine select_example(i, x, z)
     integer, intent(in) :: i
+    real, intent(in) :: x
     real, intent(out) :: z
 
     select case(i)
     case(1)
-      z = 1.0
+      z = x + 1.0
     case(2)
-      z = 2.0
+      z = x - 1.0
     case default
       z = 0.0
     end select
