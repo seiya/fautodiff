@@ -5,7 +5,11 @@ import re
 from . import parser
 from .parser import Fortran2003, walk
 from fparser.two.Fortran2008 import Block_Nonlabel_Do_Construct
-from .intrinsic_derivatives import INTRINSIC_DERIVATIVES, NONDIFF_INTRINSICS
+from .intrinsic_rules import (
+    DERIVATIVE_TEMPLATES,
+    NONDIFF_INTRINSICS,
+    SPECIAL_HANDLERS,
+)
 
 
 def _warn(warnings, info, code, reason):
@@ -58,7 +62,7 @@ def _collect_names(expr, names, unique=True):
     """Collect variable names found in ``expr`` preserving order."""
     if isinstance(expr, (Fortran2003.Intrinsic_Function_Reference, Fortran2003.Part_Ref)):
         name = expr.items[0].tofortran().lower()
-        if name in INTRINSIC_DERIVATIVES:
+        if name in DERIVATIVE_TEMPLATES:
             args = expr.items[1]
             for arg in getattr(args, "items", []):
                 if isinstance(arg, Fortran2003.Actual_Arg_Spec):
@@ -110,8 +114,8 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
     ):
         name = expr.items[0].tofortran().lower()
         items = [a for a in getattr(expr.items[1], "items", []) if not isinstance(a, str)]
-        if name in INTRINSIC_DERIVATIVES:
-            templates = INTRINSIC_DERIVATIVES[name]
+        if name in DERIVATIVE_TEMPLATES:
+            templates = DERIVATIVE_TEMPLATES[name]
             args = []
             for item in items:
                 if isinstance(item, Fortran2003.Actual_Arg_Spec):
@@ -592,46 +596,11 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             intr_name = None
             items = []
 
-        special_handled = False
-        if intr_name == "transpose" and len(items) == 1:
-            arg = items[0].tofortran()
-            lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
-            block = []
-            if arg in defined:
-                block.append(f"{arg}_ad = transpose({lhs_grad}) + {arg}_ad\n")
-            else:
-                block.append(f"{arg}_ad = transpose({lhs_grad})\n")
-                defined.add(arg)
+        handler = SPECIAL_HANDLERS.get(intr_name)
+        if handler:
+            block, names = handler(lhs, items, grad_var, defined, decls, decl_set)
             stmt_blocks[id(stmt)] = block
-            used_vars.add(lhs)
-            used_vars.add(arg)
-            special_handled = True
-        elif intr_name == "cshift" and len(items) >= 2:
-            arr = items[0].tofortran()
-            shift = items[1].tofortran()
-            dim = items[2].tofortran() if len(items) > 2 else None
-            lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
-            update = f"cshift({lhs_grad}, -{shift}" + (f", {dim})" if dim else ")")
-            block = []
-            if arr == lhs:
-                new_grad = f"{lhs}_ad_"
-                block.append(f"{new_grad} = {update}\n")
-                grad_var[lhs] = new_grad
-                if new_grad not in decl_set:
-                    decls.append(new_grad)
-                    decl_set.add(new_grad)
-            else:
-                if arr in defined:
-                    block.append(f"{arr}_ad = {update} + {arr}_ad\n")
-                else:
-                    block.append(f"{arr}_ad = {update}\n")
-                    defined.add(arr)
-            stmt_blocks[id(stmt)] = block
-            used_vars.add(lhs)
-            used_vars.add(arr)
-            special_handled = True
-
-        if special_handled:
+            used_vars.update(names)
             continue
 
         parts, has_repeat = _assignment_parts(stmt, info, warnings)
