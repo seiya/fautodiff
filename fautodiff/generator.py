@@ -285,6 +285,13 @@ def _parse_decls(spec):
     return decl_map
 
 
+def _is_integer_type(typ) -> bool:
+    """Return ``True`` if ``typ`` represents an integer type."""
+    if typ is None:
+        return False
+    return str(typ).strip().lower().startswith("integer")
+
+
 def _routine_parts(routine):
     """Return the specification and execution parts of a routine."""
     spec = None
@@ -338,18 +345,19 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     outputs = []
     if result is not None:
         r_typ = decl_map.get(result, ("real", None))[0]
-        if not r_typ.strip().lower().startswith("character"):
+        if not r_typ.strip().lower().startswith("character") and not _is_integer_type(r_typ):
             outputs.append(result)
     for arg in args:
         typ, intent = decl_map.get(arg, (None, None))
         is_char = str(typ).strip().lower().startswith("character")
+        is_int = _is_integer_type(typ)
         if intent == "out":
-            if not is_char:
+            if not is_char and not is_int:
                 outputs.append(arg)
                 ad_args.append(f"{arg}_ad")
         else:
             ad_args.append(arg)
-            if not is_char:
+            if not is_char and not is_int:
                 ad_args.append(f"{arg}_ad")
     for outv in outputs:
         if outv not in args:
@@ -388,9 +396,10 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         typ, intent = decl_map.get(arg, ("real", "in"))
         arg_int = intent or "in"
         is_char = str(typ).strip().lower().startswith("character")
+        is_int = _is_integer_type(typ)
         gtyp = _grad_type(typ)
         if arg_int == "out":
-            if not is_char:
+            if not is_char and not is_int:
                 lines.append(
                     f"{indent}  {gtyp}, intent(in){_space('in')}:: {arg}_ad\n"
                 )
@@ -398,7 +407,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             lines.append(
                 f"{indent}  {typ}, intent({arg_int}){_space(arg_int)}:: {arg}\n"
             )
-            if not is_char:
+            if not is_char and not is_int:
                 grad_int = {
                     "in": "out",
                     "inout": "inout",
@@ -532,13 +541,14 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             continue
 
         lhs_typ = decl_map.get(lhs, ("",))[0]
-        if str(lhs_typ).strip().lower().startswith("character"):
+        if str(lhs_typ).strip().lower().startswith("character") or _is_integer_type(lhs_typ):
             used_vars.update(rhs_names)
             continue
         parts = {
             v: e
             for v, e in parts.items()
             if not str(decl_map.get(v, ("",))[0]).strip().lower().startswith("character")
+            and not _is_integer_type(decl_map.get(v, ("",))[0])
             and v not in const_vars
         }
         if not parts and lhs in used_vars and not rhs_names and lhs not in outputs:
@@ -550,7 +560,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             used_vars.add(lhs)
             if lhs not in args and lhs not in outputs and lhs not in const_decl_names:
                 typ = decl_map.get(lhs, ("real", None))[0]
-                if not str(typ).strip().lower().startswith("character"):
+                if not str(typ).strip().lower().startswith("character") and not _is_integer_type(typ):
                     const_decl.append(f"{indent}  {typ} :: {lhs}\n")
                     const_decl_names.add(lhs)
             continue
@@ -559,16 +569,17 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             if name_d not in decl_set:
                 decls.append(name_d)
                 decl_set.add(name_d)
-            if var not in args and var not in outputs:
+            if var not in args and var not in outputs and not _is_integer_type(decl_map.get(var, ("",))[0]):
                 name_ad = f"{var}_ad"
                 if name_ad not in decl_set:
                     decls.append(name_ad)
                     decl_set.add(name_ad)
         if lhs in parts:
-            name_ad = f"{lhs}_ad_"
-            if name_ad not in decl_set:
-                decls.append(name_ad)
-                decl_set.add(name_ad)
+            if not _is_integer_type(lhs_typ):
+                name_ad = f"{lhs}_ad_"
+                if name_ad not in decl_set:
+                    decls.append(name_ad)
+                    decl_set.add(name_ad)
 
         block = []
         for var, expr in parts.items():
