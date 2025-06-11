@@ -3,7 +3,8 @@
 Each entry maps the lowercase intrinsic name to either a single format string
 for unary functions or a tuple of strings for multi argument functions.  The
 placeholders ``{arg}``, ``{arg1}``, ``{arg2}``, ... are replaced with the
-corresponding argument expressions when forming the derivative.
+corresponding argument expressions when forming the derivative.  Intrinsic
+functions returning integer values are considered non-differentiable.
 """
 
 INTRINSIC_DERIVATIVES = {
@@ -29,8 +30,6 @@ INTRINSIC_DERIVATIVES = {
     # Two argument intrinsics map to a tuple of partial derivative expressions
     # (d/darg1, d/darg2)
     'mod': ('1.0', '-real(int({arg1} / {arg2}), kind({arg1}))'),
-    'int': '0.0',
-    'nint': '0.0',
     'real': '1.0',
     'dble': '1.0',
     'min': ('merge(1.0, 0.0, {arg1} <= {arg2})',
@@ -59,4 +58,6 @@ NONDIFF_INTRINSICS = {
     'tiny',
     'ichar',
     'achar',
+    'int',
+    'nint',
 }

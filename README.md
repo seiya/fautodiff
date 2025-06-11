@@ -35,7 +35,8 @@ For simple examples the ``fautodiff.generator`` module can create a reverse
 mode automatic differentiation version of a Fortran source file. The generator
 parses the input via :mod:`fautodiff.parser` (which internally relies on
 ``fparser2``) and retains the original structure with ``_ad`` appended to
-routine names.
+routine names. Integer variables are treated as constants, so no ``_ad``
+variables are generated for them.
 
 Generate the AD code for ``examples/simple_math.f90``:
 

@@ -123,13 +123,10 @@ contains
     return
   end subroutine math_intrinsics_ad
 
-  subroutine non_differentiable_intrinsics_ad(str, arr, arr_ad, idx_ad, lb_ad, ub_ad, x, x_ad, y_ad)
+  subroutine non_differentiable_intrinsics_ad(str, arr, arr_ad, x, x_ad, y_ad)
     character(len = *), intent(in)  :: str
     real, dimension(:), intent(in)  :: arr
     real, dimension(:), intent(out) :: arr_ad
-    real, intent(in)  :: idx_ad
-    real, intent(in)  :: lb_ad
-    real, intent(in)  :: ub_ad
     real, intent(in)  :: x
     real, intent(out) :: x_ad
     real, intent(in)  :: y_ad
@@ -167,24 +164,17 @@ contains
     return
   end subroutine special_intrinsics_ad
 
-  subroutine casting_intrinsics_ad(i, i_ad, r, r_ad, d_ad, c, n_ad)
+  subroutine casting_intrinsics_ad(i, r, r_ad, d_ad, c)
     integer, intent(in)  :: i
-    real, intent(out) :: i_ad
     real, intent(in)  :: r
     real, intent(out) :: r_ad
     real, intent(in)  :: d_ad
     character(len = 1), intent(inout) :: c
-    real, intent(in)  :: n_ad
     real :: dd_dr
-    real :: dd_di2
-    real :: i2_ad
 
-    i_ad = 0.0
     r_ad = 0.0
 
     dd_dr = 1.0
-    dd_di2 = 1.0
-    i2_ad = d_ad * dd_di2
     r_ad = d_ad * dd_dr
 
     return
