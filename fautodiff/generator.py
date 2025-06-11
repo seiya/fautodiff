@@ -57,12 +57,12 @@ def _generate_ad_subroutine(routine, indent):
 
     if isinstance(routine, Fortran2003.Function_Subprogram):
         stmt = routine.content[0]
-        name = str(stmt.get_name())
+        name = parser._stmt_name(stmt)
         args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
         result = str(stmt.items[3].items[0])
     else:
         stmt = routine.content[0]
-        name = str(stmt.get_name())
+        name = parser._stmt_name(stmt)
         args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
         result = None
 
@@ -134,7 +134,7 @@ def generate_ad(in_file, out_file=None):
     ast = parser.parse_file(in_file)
     output = []
     for module in walk(ast, Fortran2003.Module):
-        name = str(module.content[0].get_name())
+        name = parser._stmt_name(module.content[0])
         output.append(f"module {name}_ad\n")
         output.append("contains\n")
         children = [

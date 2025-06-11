@@ -5,6 +5,22 @@ from fparser.two.parser import ParserFactory
 from fparser.two import Fortran2003
 from fparser.two.utils import walk
 
+
+def _stmt_name(stmt):
+    """Return the name from a program unit statement.
+
+    This helper works with both new and old versions of ``fparser`` by
+    falling back to simple string parsing when ``get_name`` is not
+    available.
+    """
+    if hasattr(stmt, "get_name"):
+        return str(stmt.get_name())
+    text = stmt.tofortran().strip()
+    parts = text.split()
+    if len(parts) >= 2:
+        return parts[1].split("(")[0]
+    raise AttributeError("Could not determine statement name")
+
 # Re-export commonly used classes and utilities so other modules do not need
 # to import ``fparser2`` directly.
 
@@ -23,5 +39,5 @@ def find_subroutines(ast):
     names = []
     for node in walk(ast, Fortran2003.Subroutine_Subprogram):
         stmt = node.children[0]  # Subroutine_Stmt
-        names.append(str(stmt.get_name()))
+        names.append(_stmt_name(stmt))
     return names
