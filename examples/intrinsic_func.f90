@@ -28,11 +28,9 @@ contains
     return
   end subroutine math_intrinsics
 
-  subroutine non_differentiable_intrinsics(str, arr, mat_in, mat_out, idx, lb, ub, x, y)
+  subroutine non_differentiable_intrinsics(str, arr, idx, lb, ub, x, y)
     character(len=*), intent(in) :: str
     real, intent(in) :: arr(:)
-    real, intent(in) :: mat_in(:,:)
-    real, intent(out) :: mat_out(:,:)
     integer, intent(out) :: idx, lb, ub
     real, intent(in) :: x
     real, intent(out) :: y

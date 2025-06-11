@@ -249,7 +249,7 @@ def _parse_decls(spec):
     for decl in spec.content:
         if not isinstance(decl, Fortran2003.Type_Declaration_Stmt):
             continue
-        type_str = decl.items[0].tofortran().lower()
+        base_type = decl.items[0].tofortran().lower()
         text = decl.tofortran().upper()
         if "INTENT(INOUT)" in text:
             intent = "inout"
@@ -259,7 +259,26 @@ def _parse_decls(spec):
             intent = "in"
         else:
             intent = None
-        for name in _decl_names(decl):
+
+        dim_attr = None
+        attrs = decl.items[1]
+        if attrs is not None:
+            for attr in attrs.items:
+                if hasattr(attr, "items") and str(attr.items[0]).upper() == "DIMENSION":
+                    dim_attr = attr.items[1].tofortran()
+                    break
+
+        for entity in decl.items[2].items:
+            name = str(entity.items[0])
+            arrspec = entity.items[1]
+            type_str = base_type
+            dims = None
+            if arrspec is not None:
+                dims = arrspec.tofortran()
+            elif dim_attr is not None:
+                dims = dim_attr
+            if dims is not None:
+                type_str = f"{type_str}, dimension({dims})"
             decl_map[name] = (type_str, intent)
     return decl_map
 
@@ -339,14 +358,22 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     def _space(intent):
         return "  " if intent == "in" else " "
 
+    def _grad_type(typ):
+        typ = str(typ).lower()
+        if "dimension" in typ:
+            dim = typ.split("dimension", 1)[1]
+            return f"real, dimension{dim}"
+        return "real"
+
     for arg in args:
         typ, intent = decl_map.get(arg, ("real", "in"))
         arg_int = intent or "in"
         is_char = str(typ).strip().lower().startswith("character")
+        gtyp = _grad_type(typ)
         if arg_int == "out":
             if not is_char:
                 lines.append(
-                    f"{indent}  real, intent(in){_space('in')}:: {arg}_ad\n"
+                    f"{indent}  {gtyp}, intent(in){_space('in')}:: {arg}_ad\n"
                 )
         else:
             if arg_int == "inout":
@@ -359,14 +386,15 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             )
             if not is_char:
                 lines.append(
-                    f"{indent}  real, intent({ad_int})"
+                    f"{indent}  {gtyp}, intent({ad_int})"
                     f"{_space(ad_int)}:: {arg}_ad\n"
                 )
 
     for outv in outputs:
         if outv not in args:
+            out_typ = _grad_type(decl_map.get(outv, ("real",))[0])
             lines.append(
-                f"{indent}  real, intent(in){_space('in')}:: {outv}_ad\n"
+                f"{indent}  {out_typ}, intent(in){_space('in')}:: {outv}_ad\n"
             )
 
     statements = [
@@ -515,7 +543,17 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     for cl in const_decl:
         lines.append(cl)
     for dname in decls:
-        lines.append(f"{indent}  real :: {dname}\n")
+        typ = "real"
+        if dname.endswith("_ad"):
+            base = dname[:-3]
+            typ = _grad_type(decl_map.get(base, ("real",))[0])
+        elif dname.endswith("_ad_"):
+            base = dname[:-4]
+            typ = _grad_type(decl_map.get(base, ("real",))[0])
+        elif dname.startswith("d") and "_d" in dname:
+            base = dname.split("_d", 1)[1]
+            typ = _grad_type(decl_map.get(base, ("real",))[0])
+        lines.append(f"{indent}  {typ} :: {dname}\n")
     lines.append("\n")
     for pl in pre_lines:
         lines.append(pl)

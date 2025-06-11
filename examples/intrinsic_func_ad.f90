@@ -121,13 +121,10 @@ contains
     return
   end subroutine math_intrinsics_ad
 
-  subroutine non_differentiable_intrinsics_ad(str, arr, arr_ad, mat_in, mat_in_ad, mat_out_ad, idx_ad, lb_ad, ub_ad, x, x_ad, y_ad)
+  subroutine non_differentiable_intrinsics_ad(str, arr, arr_ad, idx_ad, lb_ad, ub_ad, x, x_ad, y_ad)
     character(len = *), intent(in)  :: str
-    real, intent(in)  :: arr
-    real, intent(out) :: arr_ad
-    real, intent(in)  :: mat_in
-    real, intent(out) :: mat_in_ad
-    real, intent(in)  :: mat_out_ad
+    real, dimension(:), intent(in)  :: arr
+    real, dimension(:), intent(out) :: arr_ad
     real, intent(in)  :: idx_ad
     real, intent(in)  :: lb_ad
     real, intent(in)  :: ub_ad
@@ -152,10 +149,10 @@ contains
   end subroutine non_differentiable_intrinsics_ad
 
   subroutine special_intrinsics_ad(mat_in, mat_in_ad, mat_out_ad)
-    real, intent(in)  :: mat_in
-    real, intent(out) :: mat_in_ad
-    real, intent(in)  :: mat_out_ad
-    real :: mat_out_ad_
+    real, dimension(:, :), intent(in)  :: mat_in
+    real, dimension(:, :), intent(out) :: mat_in_ad
+    real, dimension(:, :), intent(in)  :: mat_out_ad
+    real, dimension(:, :) :: mat_out_ad_
 
     mat_out_ad_ = cshift(mat_out_ad, -1, 2)
     mat_in_ad = transpose(mat_out_ad_)
