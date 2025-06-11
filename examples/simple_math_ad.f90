@@ -17,8 +17,6 @@ contains
     real :: dwork_da
     real :: dwork_db
 
-    a_ad = 0.0
-    b_ad = 0.0
 
     dc_dc = 1.0
     dc_dwork = 1.0
@@ -45,8 +43,6 @@ contains
     real :: c_ad_
     real :: dc_da
 
-    a_ad = 0.0
-    b_ad = 0.0
 
     dc_dc = - 1.0
     dc_db = 1.0
@@ -71,8 +67,6 @@ contains
     real :: c_ad_
     real :: dc_db
 
-    a_ad = 0.0
-    b_ad = 0.0
 
     dc_dc = 3.0
     dc_da = 1.0
@@ -97,8 +91,6 @@ contains
     real :: c_ad_
     real :: dc_db
 
-    a_ad = 0.0
-    b_ad = 0.0
 
     dc_dc = 1.0 / 2.0
     dc_da = 1.0
@@ -123,8 +115,6 @@ contains
     real :: dc_db
     real :: c_ad_
 
-    a_ad = 0.0
-    b_ad = 0.0
 
     dc_dc = 1.0
     dc_da = b * a**(b - 1.0) + b * (4.0 * a + 2.0)**(b - 1.0) * 4.0 + (b * 5.0 + 3.0) * a**(b * 5.0 + 2.0)
