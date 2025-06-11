@@ -324,8 +324,35 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     lines = []
 
     def _optimize_lines(raw_lines):
-        """Return lines without modification."""
-        return list(raw_lines)
+        """Remove redundant initializations and unused assignments."""
+        result = list(raw_lines)
+        init_pat = re.compile(r"^\s*(\w+_ad)\s*=\s*0\.0\s*$")
+        i = 0
+        while i < len(result):
+            m = init_pat.match(result[i].strip())
+            if m:
+                var = m.group(1)
+                var_pat = re.compile(rf"\b{re.escape(var)}\b")
+                assign_pat = re.compile(rf"^\s*{re.escape(var)}\s*=")
+                j = i + 1
+                used = False
+                assign_idx = None
+                while j < len(result):
+                    if var_pat.search(result[j]):
+                        if assign_pat.match(result[j]):
+                            assign_idx = j
+                            break
+                        used = True
+                        break
+                    j += 1
+                if assign_idx is not None and not used:
+                    line = result[assign_idx]
+                    line = re.sub(rf"\s*\+\s*{re.escape(var)}\b", "", line)
+                    result[assign_idx] = line
+                    del result[i]
+                    continue
+            i += 1
+        return result
 
     if isinstance(routine, Fortran2003.Function_Subprogram):
         stmt = routine.content[0]
