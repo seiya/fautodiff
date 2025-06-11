@@ -17,7 +17,8 @@ This file provides guidelines for contributors about the repository and develop 
 - Aim for one topic per commit and write clear messages.
 - When opening a PR, explain the changes and test steps.
 - Run the tests before pushing.
-- Messages such as commits and PRs, as well as branch names, should be in English.
+- Messages such as commits and PRs should be in English.
+- Branch names **must** be in English (ASCII only) to avoid issues with non-English characters.
 
 ## 5. Tests and Examples
 - Place the original Fortran code samples under “examples” and the test scripts under “tests.”
