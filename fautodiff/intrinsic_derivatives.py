@@ -41,3 +41,22 @@ INTRINSIC_DERIVATIVES = {
     'atan2': ('{arg2} / ({arg1}**2 + {arg2}**2)',
               '-{arg1} / ({arg1}**2 + {arg2}**2)'),
 }
+
+# Intrinsic functions that are constant or otherwise not differentiable.
+# Derivatives of these functions are treated as zero and no warnings are
+# produced when they are encountered during AD code generation.  Derivatives for
+# ``transpose`` and ``cshift`` are implemented directly in the generator.
+NONDIFF_INTRINSICS = {
+    'len',
+    'len_trim',
+    'adjustl',
+    'index',
+    'lbound',
+    'ubound',
+    'size',
+    'epsilon',
+    'huge',
+    'tiny',
+    'ichar',
+    'achar',
+}

@@ -3,7 +3,7 @@ import sys
 
 from . import parser
 from .parser import Fortran2003, walk
-from .intrinsic_derivatives import INTRINSIC_DERIVATIVES
+from .intrinsic_derivatives import INTRINSIC_DERIVATIVES, NONDIFF_INTRINSICS
 
 
 def _warn(warnings, info, code, reason):
@@ -146,6 +146,8 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
                 if not terms:
                     return "0.0"
                 return " + ".join(terms)
+        if name in NONDIFF_INTRINSICS:
+            return "0.0"
         if isinstance(expr, Fortran2003.Intrinsic_Function_Reference):
             reason = f"unsupported intrinsic '{name}'"
             _warn(warnings, warn_info, expr.tofortran(), reason)
@@ -247,7 +249,7 @@ def _parse_decls(spec):
     for decl in spec.content:
         if not isinstance(decl, Fortran2003.Type_Declaration_Stmt):
             continue
-        type_str = decl.items[0].tofortran().lower()
+        base_type = decl.items[0].tofortran().lower()
         text = decl.tofortran().upper()
         if "INTENT(INOUT)" in text:
             intent = "inout"
@@ -257,7 +259,26 @@ def _parse_decls(spec):
             intent = "in"
         else:
             intent = None
-        for name in _decl_names(decl):
+
+        dim_attr = None
+        attrs = decl.items[1]
+        if attrs is not None:
+            for attr in attrs.items:
+                if hasattr(attr, "items") and str(attr.items[0]).upper() == "DIMENSION":
+                    dim_attr = attr.items[1].tofortran()
+                    break
+
+        for entity in decl.items[2].items:
+            name = str(entity.items[0])
+            arrspec = entity.items[1]
+            type_str = base_type
+            dims = None
+            if arrspec is not None:
+                dims = arrspec.tofortran()
+            elif dim_attr is not None:
+                dims = dim_attr
+            if dims is not None:
+                type_str = f"{type_str}, dimension({dims})"
             decl_map[name] = (type_str, intent)
     return decl_map
 
@@ -337,14 +358,38 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     def _space(intent):
         return "  " if intent == "in" else " "
 
+    def _grad_type(typ):
+        typ = str(typ).lower()
+        if "dimension" in typ:
+            dim = typ.split("dimension", 1)[1]
+            return f"real, dimension{dim}"
+        return "real"
+
+    def _sized_dims(typ, name):
+        typ = str(typ).lower()
+        if "dimension" not in typ:
+            return None
+        dim = typ.split("dimension", 1)[1].strip()
+        if not dim.startswith("(") or not dim.endswith(")"):
+            return None
+        parts = [p.strip() for p in dim[1:-1].split(",")]
+        new = []
+        for i, p in enumerate(parts, 1):
+            if ":" in p or p == "":
+                new.append(f"size({name}, {i})")
+            else:
+                new.append(p)
+        return "(" + ", ".join(new) + ")"
+
     for arg in args:
         typ, intent = decl_map.get(arg, ("real", "in"))
         arg_int = intent or "in"
         is_char = str(typ).strip().lower().startswith("character")
+        gtyp = _grad_type(typ)
         if arg_int == "out":
             if not is_char:
                 lines.append(
-                    f"{indent}  real, intent(in){_space('in')}:: {arg}_ad\n"
+                    f"{indent}  {gtyp}, intent(in){_space('in')}:: {arg}_ad\n"
                 )
         else:
             if arg_int == "inout":
@@ -357,14 +402,15 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             )
             if not is_char:
                 lines.append(
-                    f"{indent}  real, intent({ad_int})"
+                    f"{indent}  {gtyp}, intent({ad_int})"
                     f"{_space(ad_int)}:: {arg}_ad\n"
                 )
 
     for outv in outputs:
         if outv not in args:
+            out_typ = _grad_type(decl_map.get(outv, ("real",))[0])
             lines.append(
-                f"{indent}  real, intent(in){_space('in')}:: {outv}_ad\n"
+                f"{indent}  {out_typ}, intent(in){_space('in')}:: {outv}_ad\n"
             )
 
     statements = [
@@ -393,6 +439,57 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             "line": line_no,
             "code": stmt.tofortran().strip(),
         }
+
+        rhs = stmt.items[2]
+        if isinstance(rhs, Fortran2003.Intrinsic_Function_Reference):
+            intr_name = rhs.items[0].tofortran().lower()
+            items = [a for a in getattr(rhs.items[1], "items", []) if not isinstance(a, str)]
+        else:
+            intr_name = None
+            items = []
+
+        special_handled = False
+        if intr_name == "transpose" and len(items) == 1:
+            arg = items[0].tofortran()
+            lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
+            block = []
+            if arg in defined:
+                block.append(f"{indent}  {arg}_ad = transpose({lhs_grad}) + {arg}_ad\n")
+            else:
+                block.append(f"{indent}  {arg}_ad = transpose({lhs_grad})\n")
+                defined.add(arg)
+            assign_lines.append(block)
+            used_vars.add(lhs)
+            used_vars.add(arg)
+            special_handled = True
+        elif intr_name == "cshift" and len(items) >= 2:
+            arr = items[0].tofortran()
+            shift = items[1].tofortran()
+            dim = items[2].tofortran() if len(items) > 2 else None
+            lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
+            update = f"cshift({lhs_grad}, -{shift}" + (f", {dim})" if dim else ")")
+            block = []
+            if arr == lhs:
+                new_grad = f"{lhs}_ad_"
+                block.append(f"{indent}  {new_grad} = {update}\n")
+                grad_var[lhs] = new_grad
+                if new_grad not in decl_set:
+                    decls.append(new_grad)
+                    decl_set.add(new_grad)
+            else:
+                if arr in defined:
+                    block.append(f"{indent}  {arr}_ad = {update} + {arr}_ad\n")
+                else:
+                    block.append(f"{indent}  {arr}_ad = {update}\n")
+                    defined.add(arr)
+            assign_lines.append(block)
+            used_vars.add(lhs)
+            used_vars.add(arr)
+            special_handled = True
+
+        if special_handled:
+            continue
+
         parts, has_repeat = _assignment_parts(stmt, info, warnings)
 
         lhs_typ = decl_map.get(lhs, ("",))[0]
@@ -462,7 +559,27 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     for cl in const_decl:
         lines.append(cl)
     for dname in decls:
-        lines.append(f"{indent}  real :: {dname}\n")
+        typ = "real"
+        dims = None
+        if dname.endswith("_ad"):
+            base = dname[:-3]
+            typ = _grad_type(decl_map.get(base, ("real",))[0])
+            dims = _sized_dims(decl_map.get(base, ("real",))[0], base)
+        elif dname.endswith("_ad_"):
+            base = dname[:-4]
+            if base.endswith("_ad"):
+                base0 = base[:-3]
+            else:
+                base0 = base
+            typ = _grad_type(decl_map.get(base0, ("real",))[0])
+            dims = _sized_dims(decl_map.get(base0, ("real",))[0], f"{base0}_ad")
+        elif dname.startswith("d") and "_d" in dname:
+            base = dname.split("_d", 1)[1]
+            typ = _grad_type(decl_map.get(base, ("real",))[0])
+            dims = _sized_dims(decl_map.get(base, ("real",))[0], base)
+        if dims is not None:
+            typ = f"real, dimension{dims}"
+        lines.append(f"{indent}  {typ} :: {dname}\n")
     lines.append("\n")
     for pl in pre_lines:
         lines.append(pl)
