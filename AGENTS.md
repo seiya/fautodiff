@@ -29,3 +29,33 @@ This file provides guidelines for contributors about the repository and develop 
 ## 6. Generator Usage
 - By default ``fautodiff.generator`` prints the generated code to standard
   output. Provide an output path if you want the code written to a file.
+
+## 7. AD Code Generation Logic
+- The generator parses the original source using ``fparser`` and walks through
+  modules and their contained routines.
+- For every ``module`` ``foo`` in the input a new module named ``foo_ad`` is
+  produced.  The new module preserves the ordering of routines and uses
+  ``implicit none``.
+- Each Fortran function or subroutine is converted to a ``subroutine`` with the
+  original name followed by ``_ad``.
+- Arguments of the generated subroutine consist of the original arguments
+  followed by their corresponding adjoint variables (``arg`` and ``arg_ad``).
+  Result variables and ``intent(out)`` arguments are treated as gradients only
+  (``result_ad``).
+- The body is processed in reverse order of assignment statements.  For each
+  assignment ``lhs = expr`` the partial derivatives ``d<lhs>_d<var>`` are
+  computed symbolically.  Gradients are accumulated using these partials to
+  update ``<var>_ad`` variables.
+- Temporary derivative variables are declared as the same type as ``<var>`` and named
+  ``d<lhs>_d<var>``.  Gradient variables use the ``_ad`` suffix.
+- The generator keeps the overall structure close to the original so the output
+  is easy to compare with the source.
+
+## 8. AD Code Style Guidelines
+- Use two spaces for indentation in generated Fortran code.
+- Keep routine, module and variable names identical to the original with ``_ad``
+  appended.
+- Gradient updates should accumulate contributions in the order they appear in
+  the reversed execution of the routine.
+- Do not introduce additional control flow or modify the numerical logic other
+  than inserting the derivative computations.
