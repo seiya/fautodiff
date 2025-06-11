@@ -114,8 +114,8 @@ contains
     dc_dc = 1.0
     dc_da = b * a**(b - 1.0) + b * (4.0 * a + 2.0)**(b - 1.0) * 4.0 + (b * 5.0 + 3.0) * a**(b * 5.0 + 2.0)
     dc_db = a**b * log(a) + (4.0 * a + 2.0)**b * log(4.0 * a + 2.0) + a**(b * 5.0 + 3.0) * log(a) * 5.0
-    b_ad = c_ad * dc_db
     a_ad = c_ad * dc_da
+    b_ad = c_ad * dc_db
     c_ad_ = c_ad * dc_dc
     dc_da = 3 * a**2
     dc_db = 5.5 * b**4.5

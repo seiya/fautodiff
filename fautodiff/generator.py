@@ -341,14 +341,6 @@ def generate_ad(in_file, out_file=None):
     If ``out_file`` is ``None`` the generated code is returned as a string.
     When ``out_file`` is provided the code is also written to that path.
     """
-    path = Path(in_file)
-    pre_ad = path.with_name(path.stem + "_ad" + path.suffix)
-    if pre_ad.exists():
-        code = pre_ad.read_text()
-        if out_file:
-            Path(out_file).write_text(code)
-        return code
-
     ast = parser.parse_file(in_file)
     output = []
     for module in walk(ast, Fortran2003.Module):
