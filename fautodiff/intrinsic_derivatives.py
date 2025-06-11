@@ -1,7 +1,10 @@
-"""Mapping of Fortran intrinsic functions to derivative expressions."""
+"""Mapping of Fortran intrinsic functions to derivative expressions.
 
-# Map intrinsic function name (lowercase) to a format string for its derivative.
-# The placeholder ``{arg}`` is replaced with the argument expression.
+Each entry maps the lowercase intrinsic name to either a single format string
+for unary functions or a tuple of strings for multi argument functions.  The
+placeholders ``{arg}``, ``{arg1}``, ``{arg2}``, ... are replaced with the
+corresponding argument expressions when forming the derivative.
+"""
 
 INTRINSIC_DERIVATIVES = {
     'abs': 'sign(1.0, {arg})',
@@ -21,4 +24,16 @@ INTRINSIC_DERIVATIVES = {
     'asinh': '1.0 / sqrt(({arg})**2 + 1.0)',
     'acosh': '1.0 / sqrt({arg} - 1.0) / sqrt({arg} + 1.0)',
     'atanh': '1.0 / (1.0 - ({arg})**2)',
+    'erf': '2.0 / sqrt(acos(-1.0)) * exp(-({arg})**2)',
+    'erfc': '-2.0 / sqrt(acos(-1.0)) * exp(-({arg})**2)',
+    # Two argument intrinsics map to a tuple of partial derivative expressions
+    # (d/darg1, d/darg2)
+    'mod': ('1.0', '0.0'),
+    'min': ('merge(1.0, 0.0, {arg1} <= {arg2})',
+            'merge(0.0, 1.0, {arg1} <= {arg2})'),
+    'max': ('merge(1.0, 0.0, {arg1} >= {arg2})',
+            'merge(0.0, 1.0, {arg1} >= {arg2})'),
+    'sign': ('sign(1.0, {arg1}) * sign(1.0, {arg2})', '0.0'),
+    'atan2': ('{arg2} / ({arg1}**2 + {arg2}**2)',
+              '-{arg1} / ({arg1}**2 + {arg2}**2)'),
 }

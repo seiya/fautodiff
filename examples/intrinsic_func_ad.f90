@@ -31,8 +31,18 @@ contains
     real :: p_ad
     real :: dz_dq
     real :: q_ad
+    real :: dq_dx
+    real :: dp_dx
+    real :: dp_dy
+    real :: do_dx
+    real :: do_dy
+    real :: dh_dx
+    real :: dh_dy
+    real :: dg_dx
     real :: df_dx
     real :: df_dy
+    real :: de_dx
+    real :: de_dy
     real :: dd_dx
     real :: dc_dx
     real :: dc_dy
@@ -62,10 +72,30 @@ contains
     c_ad = z_ad * dz_dc
     b_ad = z_ad * dz_db
     a_ad = z_ad * dz_da
-    df_dx = sinh(x) + 1.0 / cosh(x)**2
-    df_dy = cosh(y)
-    x_ad = f_ad * df_dx
-    y_ad = f_ad * df_dy
+    dq_dx = 1.0
+    x_ad = q_ad * dq_dx
+    dp_dx = 2.0 / sqrt(acos(-1.0)) * exp(-(x)**2)
+    dp_dy = -2.0 / sqrt(acos(-1.0)) * exp(-(y)**2)
+    y_ad = p_ad * dp_dy
+    x_ad = p_ad * dp_dx + x_ad
+    do_dx = merge(1.0, 0.0, x <= y)
+    do_dy = merge(0.0, 1.0, x <= y)
+    y_ad = o_ad * do_dy + y_ad
+    x_ad = o_ad * do_dx + x_ad
+    dh_dx = merge(1.0, 0.0, x >= y)
+    dh_dy = merge(0.0, 1.0, x >= y)
+    y_ad = h_ad * dh_dy + y_ad
+    x_ad = h_ad * dh_dx + x_ad
+    dg_dx = sign(1.0, x) * sign(1.0, y)
+    x_ad = g_ad * dg_dx + x_ad
+    df_dx = y / (x**2 + y**2) + sinh(x) + 1.0 / cosh(x)**2
+    df_dy = -x / (x**2 + y**2) + cosh(y)
+    x_ad = f_ad * df_dx + x_ad
+    y_ad = f_ad * df_dy + y_ad
+    de_dx = 1.0 / sqrt((x)**2 + 1.0) + 1.0 / (1.0 - (x)**2)
+    de_dy = 1.0 / sqrt(y - 1.0) / sqrt(y + 1.0)
+    x_ad = e_ad * de_dx + x_ad
+    y_ad = e_ad * de_dy + y_ad
     dd_dx = 1.0 / sqrt(1.0 - (x / pi)**2) * 1.0 / pi + 1.0 / (1.0 + (x)**2)
     x_ad = d_ad * dd_dx + x_ad
     dc_dx = cos(x) + 1.0 / cos(x)**2

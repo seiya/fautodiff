@@ -54,13 +54,14 @@ def _minus_one(expr) -> str:
 
 def _collect_names(expr, names, unique=True):
     """Collect variable names found in ``expr`` preserving order."""
-    if isinstance(expr, Fortran2003.Intrinsic_Function_Reference):
-        # Skip the function name (first item) and recurse into arguments.
-        args = expr.items[1]
-        for arg in getattr(args, "items", []):
-            subexpr = arg.items[1] if hasattr(arg, "items") and len(arg.items) > 1 else arg
-            _collect_names(subexpr, names, unique=unique)
-        return
+    if isinstance(expr, (Fortran2003.Intrinsic_Function_Reference, Fortran2003.Part_Ref)):
+        name = expr.items[0].tofortran().lower()
+        if name in INTRINSIC_DERIVATIVES:
+            args = expr.items[1]
+            for arg in getattr(args, "items", []):
+                subexpr = arg.items[1] if hasattr(arg, "items") and len(arg.items) > 1 else arg
+                _collect_names(subexpr, names, unique=unique)
+            return
     if isinstance(expr, Fortran2003.Name):
         name = str(expr)
         if unique:
@@ -94,24 +95,58 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
         return "0.0"
     if isinstance(expr, Fortran2003.Parenthesis):
         return _derivative(expr.items[1], var, warn_info, warnings)
-    if isinstance(expr, Fortran2003.Intrinsic_Function_Reference):
+    if isinstance(
+        expr,
+        (
+            Fortran2003.Intrinsic_Function_Reference,
+            Fortran2003.Function_Reference,
+            Fortran2003.Part_Ref,
+        ),
+    ):
         name = expr.items[0].tofortran().lower()
         items = [a for a in getattr(expr.items[1], "items", []) if not isinstance(a, str)]
-        if name in INTRINSIC_DERIVATIVES and len(items) == 1:
-            arg = items[0]
-            if isinstance(arg, Fortran2003.Actual_Arg_Spec):
-                arg = arg.items[1]
-            arg_s = arg.tofortran()
-            d_arg = _derivative(arg, var, warn_info, warnings)
-            deriv = INTRINSIC_DERIVATIVES[name].format(arg=arg_s)
-            if d_arg == "0.0":
-                return "0.0"
-            if d_arg == "1.0":
-                return deriv
-            return f"{deriv} * {d_arg}"
-        reason = f"unsupported intrinsic '{name}'"
-        _warn(warnings, warn_info, expr.tofortran(), reason)
-        return "0.0"
+        if name in INTRINSIC_DERIVATIVES:
+            templates = INTRINSIC_DERIVATIVES[name]
+            args = []
+            for item in items:
+                if isinstance(item, Fortran2003.Actual_Arg_Spec):
+                    item = item.items[1]
+                args.append(item)
+            arg_strs = [a.tofortran() for a in args]
+            if isinstance(templates, str):
+                if len(args) != 1:
+                    reason = f"unsupported intrinsic '{name}'"
+                    _warn(warnings, warn_info, expr.tofortran(), reason)
+                    return "0.0"
+                d_arg = _derivative(args[0], var, warn_info, warnings)
+                deriv = templates.format(arg=arg_strs[0])
+                if d_arg == "0.0":
+                    return "0.0"
+                if d_arg == "1.0":
+                    return deriv
+                return f"{deriv} * {d_arg}"
+            else:
+                if len(args) != len(templates):
+                    reason = f"unsupported intrinsic '{name}'"
+                    _warn(warnings, warn_info, expr.tofortran(), reason)
+                    return "0.0"
+                placeholder = {f"arg{i+1}": s for i, s in enumerate(arg_strs)}
+                terms = []
+                for arg, tmpl in zip(args, templates):
+                    d_arg = _derivative(arg, var, warn_info, warnings)
+                    if d_arg == "0.0":
+                        continue
+                    deriv = tmpl.format(**placeholder)
+                    if d_arg != "1.0":
+                        deriv = f"{deriv} * {d_arg}"
+                    terms.append(deriv)
+                if not terms:
+                    return "0.0"
+                return " + ".join(terms)
+        if isinstance(expr, Fortran2003.Intrinsic_Function_Reference):
+            reason = f"unsupported intrinsic '{name}'"
+            _warn(warnings, warn_info, expr.tofortran(), reason)
+            return "0.0"
     if isinstance(expr, Fortran2003.Level_2_Unary_Expr):
         sign = expr.items[0]
         d = _derivative(expr.items[1], var, warn_info, warnings)
