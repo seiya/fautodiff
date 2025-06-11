@@ -46,7 +46,7 @@ This file provides guidelines for contributors about the repository and develop 
   assignment ``lhs = expr`` the partial derivatives ``d<lhs>_d<var>`` are
   computed symbolically.  Gradients are accumulated using these partials to
   update ``<var>_ad`` variables.
-- Temporary derivative variables are declared as ``real`` and named
+- Temporary derivative variables are declared as the same type as ``<var>`` and named
   ``d<lhs>_d<var>``.  Gradient variables use the ``_ad`` suffix.
 - The generator keeps the overall structure close to the original so the output
   is easy to compare with the source.
@@ -55,7 +55,6 @@ This file provides guidelines for contributors about the repository and develop 
 - Use two spaces for indentation in generated Fortran code.
 - Keep routine, module and variable names identical to the original with ``_ad``
   appended.
-- Declare all derivative temporaries as ``real``.
 - Gradient updates should accumulate contributions in the order they appear in
   the reversed execution of the routine.
 - Do not introduce additional control flow or modify the numerical logic other
