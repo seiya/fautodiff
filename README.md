@@ -48,6 +48,13 @@ python -m fautodiff.generator examples/simple_math.f90 examples/simple_math_ad.f
 ```
 Additional examples illustrating Fortran intrinsic routines are available in ``examples/intrinsic_func.f90``.
 
+By default the generator prints warnings when it encounters code it cannot
+differentiate.  Use ``--no-warn`` to silence these messages:
+
+```bash
+python -m fautodiff.generator --no-warn examples/simple_math.f90
+```
+
 Run the included tests with:
 
 ```bash
