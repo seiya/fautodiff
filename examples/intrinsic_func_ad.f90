@@ -171,14 +171,11 @@ contains
     real :: dd_dr
     real :: dd_di2
     real :: i2_ad
-    real :: dr2_di
 
     dd_dr = 1.0
     dd_di2 = 1.0
     i2_ad = d_ad * dd_di2
     r_ad = d_ad * dd_dr
-    dr2_di = 1.0
-    i_ad = r2_ad * dr2_di
 
     return
   end subroutine casting_intrinsics_ad
