@@ -31,6 +31,14 @@ contains
     real :: p_ad
     real :: dz_dq
     real :: q_ad
+    real :: df_dx
+    real :: df_dy
+    real :: dd_dx
+    real :: dc_dx
+    real :: dc_dy
+    real :: db_dx
+    real :: db_dy
+    real :: da_dx
 
     dz_da = 1.0
     dz_db = 1.0
@@ -54,6 +62,22 @@ contains
     c_ad = z_ad * dz_dc
     b_ad = z_ad * dz_db
     a_ad = z_ad * dz_da
+    df_dx = sinh(x) + 1.0 / cosh(x)**2
+    df_dy = cosh(y)
+    x_ad = f_ad * df_dx
+    y_ad = f_ad * df_dy
+    dd_dx = 1.0 / sqrt(1.0 - (x / pi)**2) * 1.0 / pi + 1.0 / (1.0 + (x)**2)
+    x_ad = d_ad * dd_dx + x_ad
+    dc_dx = cos(x) + 1.0 / cos(x)**2
+    dc_dy = -sin(y)
+    x_ad = c_ad * dc_dx + x_ad
+    y_ad = c_ad * dc_dy + y_ad
+    db_dx = exp(x) + 1.0 / (ABS(x) + 1.0 * log(10.0)) * sign(1.0, x)
+    db_dy = 1.0 / y
+    y_ad = b_ad * db_dy + y_ad
+    x_ad = b_ad * db_dx + x_ad
+    da_dx = 0.5 / sqrt(ABS(x)) * sign(1.0, x)
+    x_ad = a_ad * da_dx + x_ad
 
     return
   end subroutine math_intrinsics_ad

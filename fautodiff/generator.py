@@ -2,6 +2,7 @@ from pathlib import Path
 
 from . import parser
 from .parser import Fortran2003, walk
+from .intrinsic_derivatives import INTRINSIC_DERIVATIVES
 
 
 def _strip_paren(text: str) -> str:
@@ -43,6 +44,13 @@ def _minus_one(expr) -> str:
 
 def _collect_names(expr, names, unique=True):
     """Collect variable names found in ``expr`` preserving order."""
+    if isinstance(expr, Fortran2003.Intrinsic_Function_Reference):
+        # Skip the function name (first item) and recurse into arguments.
+        args = expr.items[1]
+        for arg in getattr(args, "items", []):
+            subexpr = arg.items[1] if hasattr(arg, "items") and len(arg.items) > 1 else arg
+            _collect_names(subexpr, names, unique=unique)
+        return
     if isinstance(expr, Fortran2003.Name):
         name = str(expr)
         if unique:
@@ -72,6 +80,22 @@ def _derivative(expr, var: str) -> str:
         return "0.0"
     if isinstance(expr, Fortran2003.Parenthesis):
         return _derivative(expr.items[1], var)
+    if isinstance(expr, Fortran2003.Intrinsic_Function_Reference):
+        name = expr.items[0].tofortran().lower()
+        items = [a for a in getattr(expr.items[1], "items", []) if not isinstance(a, str)]
+        if name in INTRINSIC_DERIVATIVES and len(items) == 1:
+            arg = items[0]
+            if isinstance(arg, Fortran2003.Actual_Arg_Spec):
+                arg = arg.items[1]
+            arg_s = arg.tofortran()
+            d_arg = _derivative(arg, var)
+            deriv = INTRINSIC_DERIVATIVES[name].format(arg=arg_s)
+            if d_arg == "0.0":
+                return "0.0"
+            if d_arg == "1.0":
+                return deriv
+            return f"{deriv} * {d_arg}"
+        return "0.0"
     if isinstance(expr, Fortran2003.Level_2_Unary_Expr):
         sign = expr.items[0]
         d = _derivative(expr.items[1], var)
