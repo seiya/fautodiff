@@ -1,27 +1,45 @@
 module intrinsic_func
   implicit none
+
 contains
+
   subroutine math_intrinsics(x, y, z)
     real, intent(in) :: x
     real, intent(inout) :: y
     real, intent(out) :: z
     real :: pi
+    real :: a, b, c, d, e, f, g, h
+    real :: o, p, q
+
     pi = acos(-1.0)
-    y = sqrt(abs(x)) + exp(y) + log(x) + log10(abs(y) + 1.0)
-    y = y + sin(x) + cos(y) + tan(x)
-    y = y + asin(x / pi) + acos(y / (pi + 1.0)) + atan(x)
-    y = y + atan2(x, y) + cosh(x) + sinh(y) + tanh(x)
-    y = y + sign(x, y) + max(x, y) + min(x, y)
-    z = mod(x, y) + epsilon(x) + huge(x) / tiny(x)
+    a = sqrt(abs(x))
+    b = exp(x) + log(y) + log10(abs(x) + 1.0)
+    c = sin(x) + cos(y) + tan(x)
+    d = asin(x / pi) + acos(y / (pi + 1.0)) + atan(x)
+    e = asinh(x) + acosh(y) + atanh(x)
+    f = atan2(x, y) + cosh(x) + sinh(y) + tanh(x)
+    g = sign(x, y)
+    h = max(x, y)
+    o = min(x, y)
+    p = erf(x) + erfc(y)
+    q = mod(x, y)
+    z = a + b + c + d + e + f + g + h + o + p + q
+
     return
   end subroutine math_intrinsics
 
-  subroutine non_math_intrinsics(str, arr, mat, idx, lb, ub)
+  subroutine non_differentiable_intrinsics(str, arr, mat_in, mat_out, idx, lb, ub, x, y)
     character(len=*), intent(in) :: str
     real, intent(in) :: arr(:)
-    real, allocatable, intent(out) :: mat(:,:)
+    real, intent(in) :: mat_in(:,:)
+    real, intent(out) :: mat_out(:,:)
     integer, intent(out) :: idx, lb, ub
+    real, intent(in) :: x
+    real, intent(out) :: y
     integer :: n, len_trimmed
+    real :: a
+    real :: b
+    real :: c
 
     len_trimmed = len_trim(adjustl(str))
     idx = index(str, 'a')
@@ -29,12 +47,16 @@ contains
     ub = ubound(arr, 1)
     n = size(arr)
 
-    allocate(mat(2, n))
-    mat(1, :) = arr
-    mat(2, :) = arr
-    mat = transpose(mat)
-    mat = cshift(mat, 1, 2)
-  end subroutine non_math_intrinsics
+    mat_out = transpose(mat_in)
+    mat_out = cshift(mat_out, 1, 2)
+
+    a = epsilon(x)
+    b = huge(x)
+    c = tiny(x)
+    y = a + b + c
+
+    return
+  end subroutine non_differentiable_intrinsics
 
   subroutine casting_intrinsics(i, r, d, c, n)
     integer, intent(in) :: i
@@ -50,7 +72,9 @@ contains
     d = dble(r) + dble(i2)
     n = nint(r)
     c = achar(ichar(c) + i2)
+
     return
   end subroutine casting_intrinsics
+
 end module intrinsic_func
 
