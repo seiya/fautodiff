@@ -58,6 +58,9 @@ def _assignment_parts(stmt):
 
     parts = {}
 
+    if any(op in rhs_str for op in ("**", "/", "-")):
+        return {}
+
     if "+" in rhs_str:
         add_terms = [t.strip() for t in rhs_str.split("+")]
         for term in add_terms:

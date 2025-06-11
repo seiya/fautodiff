@@ -54,4 +54,37 @@ contains
     return
   end subroutine multiply_numbers_ad
 
+  subroutine subtract_numbers_ad(a, a_ad, b, b_ad, c_ad)
+    real, intent(in)  :: a
+    real, intent(out) :: a_ad
+    real, intent(in)  :: b
+    real, intent(out) :: b_ad
+    real, intent(in)  :: c_ad
+
+
+    return
+  end subroutine subtract_numbers_ad
+
+  subroutine divide_numbers_ad(a, a_ad, b, b_ad, c_ad)
+    real, intent(in)  :: a
+    real, intent(out) :: a_ad
+    real, intent(in)  :: b
+    real, intent(out) :: b_ad
+    real, intent(in)  :: c_ad
+
+
+    return
+  end subroutine divide_numbers_ad
+
+  subroutine power_numbers_ad(a, a_ad, b, b_ad, c_ad)
+    real, intent(in)  :: a
+    real, intent(out) :: a_ad
+    real, intent(in)  :: b
+    real, intent(out) :: b_ad
+    real, intent(in)  :: c_ad
+
+
+    return
+  end subroutine power_numbers_ad
+
 end module simple_math_ad
