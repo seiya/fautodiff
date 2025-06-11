@@ -11,7 +11,7 @@ INTRINSIC_DERIVATIVES = {
     'sqrt': '0.5 / sqrt({arg})',
     'exp': 'exp({arg})',
     'log': '1.0 / {arg}',
-    'log10': '1.0 / ({arg} * log(10.0))',
+    'log10': '1.0 / (({arg}) * log(10.0))',
     'sin': 'cos({arg})',
     'cos': '-sin({arg})',
     'tan': '1.0 / cos({arg})**2',
@@ -28,7 +28,7 @@ INTRINSIC_DERIVATIVES = {
     'erfc': '-2.0 / sqrt(acos(-1.0)) * exp(-({arg})**2)',
     # Two argument intrinsics map to a tuple of partial derivative expressions
     # (d/darg1, d/darg2)
-    'mod': ('1.0', '0.0'),
+    'mod': ('1.0', '-real(int({arg1} / {arg2}), kind({arg1}))'),
     'min': ('merge(1.0, 0.0, {arg1} <= {arg2})',
             'merge(0.0, 1.0, {arg1} <= {arg2})'),
     'max': ('merge(1.0, 0.0, {arg1} >= {arg2})',

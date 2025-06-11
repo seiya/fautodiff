@@ -32,6 +32,7 @@ contains
     real :: dz_dq
     real :: q_ad
     real :: dq_dx
+    real :: dq_dy
     real :: dp_dx
     real :: dp_dy
     real :: do_dx
@@ -44,6 +45,9 @@ contains
     real :: de_dx
     real :: de_dy
     real :: dd_dx
+    real :: dd_dpi
+    real :: pi_ad
+    real :: dd_dy
     real :: dc_dx
     real :: dc_dy
     real :: db_dx
@@ -73,10 +77,12 @@ contains
     b_ad = z_ad * dz_db
     a_ad = z_ad * dz_da
     dq_dx = 1.0
+    dq_dy = -real(int(x / y), kind(x))
+    y_ad = q_ad * dq_dy
     x_ad = q_ad * dq_dx
     dp_dx = 2.0 / sqrt(acos(-1.0)) * exp(-(x)**2)
     dp_dy = -2.0 / sqrt(acos(-1.0)) * exp(-(y)**2)
-    y_ad = p_ad * dp_dy
+    y_ad = p_ad * dp_dy + y_ad
     x_ad = p_ad * dp_dx + x_ad
     do_dx = merge(1.0, 0.0, x <= y)
     do_dy = merge(0.0, 1.0, x <= y)
@@ -97,15 +103,19 @@ contains
     x_ad = e_ad * de_dx + x_ad
     y_ad = e_ad * de_dy + y_ad
     dd_dx = 1.0 / sqrt(1.0 - (x / pi)**2) * 1.0 / pi + 1.0 / (1.0 + (x)**2)
+    dd_dpi = 1.0 / sqrt(1.0 - (x / pi)**2) * - x / (pi)**2 + -1.0 / sqrt(1.0 - (y / (pi + 1.0))**2) * - y / (pi + 1.0)**2
+    dd_dy = -1.0 / sqrt(1.0 - (y / (pi + 1.0))**2) * 1.0 / (pi + 1.0)
     x_ad = d_ad * dd_dx + x_ad
+    pi_ad = d_ad * dd_dpi
+    y_ad = d_ad * dd_dy + y_ad
     dc_dx = cos(x) + 1.0 / cos(x)**2
     dc_dy = -sin(y)
     x_ad = c_ad * dc_dx + x_ad
     y_ad = c_ad * dc_dy + y_ad
-    db_dx = exp(x) + 1.0 / (ABS(x) + 1.0 * log(10.0)) * sign(1.0, x)
+    db_dx = exp(x) + 1.0 / ((ABS(x) + 1.0) * log(10.0)) * sign(1.0, x)
     db_dy = 1.0 / y
-    y_ad = b_ad * db_dy + y_ad
     x_ad = b_ad * db_dx + x_ad
+    y_ad = b_ad * db_dy + y_ad
     da_dx = 0.5 / sqrt(ABS(x)) * sign(1.0, x)
     x_ad = a_ad * da_dx + x_ad
 

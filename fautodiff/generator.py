@@ -59,7 +59,10 @@ def _collect_names(expr, names, unique=True):
         if name in INTRINSIC_DERIVATIVES:
             args = expr.items[1]
             for arg in getattr(args, "items", []):
-                subexpr = arg.items[1] if hasattr(arg, "items") and len(arg.items) > 1 else arg
+                if isinstance(arg, Fortran2003.Actual_Arg_Spec):
+                    subexpr = arg.items[1]
+                else:
+                    subexpr = arg
                 _collect_names(subexpr, names, unique=unique)
             return
     if isinstance(expr, Fortran2003.Name):
