@@ -71,8 +71,8 @@ contains
     c_ad_ = c_ad * dc_dc
     dc_da = b + 1.0
     dc_db = a
-    b_ad = c_ad_ * dc_db
     a_ad = c_ad_ * dc_da + a_ad
+    b_ad = c_ad_ * dc_db
 
     return
   end subroutine multiply_numbers_ad
