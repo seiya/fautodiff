@@ -1,8 +1,18 @@
 from pathlib import Path
+import sys
 
 from . import parser
 from .parser import Fortran2003, walk
 from .intrinsic_derivatives import INTRINSIC_DERIVATIVES
+
+
+def _warn(warnings, info, code, reason):
+    """Append a formatted warning message to ``warnings`` list."""
+    if warnings is not None and info is not None:
+        filename = info.get("file", "<unknown>")
+        line = info.get("line", "?")
+        msg = f"{filename}:{line}: {code} - {reason}"
+        warnings.append(msg)
 
 
 def _strip_paren(text: str) -> str:
@@ -72,14 +82,18 @@ def _parenthesize_if_needed(text: str) -> str:
     return text
 
 
-def _derivative(expr, var: str) -> str:
-    """Return derivative of ``expr`` with respect to ``var`` as a string."""
+def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
+    """Return derivative of ``expr`` with respect to ``var`` as a string.
+
+    ``warn_info`` should contain context (file, line, stmt) for warning messages.
+    ``warnings`` is a list that collects formatted warning strings.
+    """
     if isinstance(expr, Fortran2003.Name):
         return "1.0" if str(expr) == var else "0.0"
     if isinstance(expr, (Fortran2003.Int_Literal_Constant, Fortran2003.Real_Literal_Constant)):
         return "0.0"
     if isinstance(expr, Fortran2003.Parenthesis):
-        return _derivative(expr.items[1], var)
+        return _derivative(expr.items[1], var, warn_info, warnings)
     if isinstance(expr, Fortran2003.Intrinsic_Function_Reference):
         name = expr.items[0].tofortran().lower()
         items = [a for a in getattr(expr.items[1], "items", []) if not isinstance(a, str)]
@@ -88,17 +102,19 @@ def _derivative(expr, var: str) -> str:
             if isinstance(arg, Fortran2003.Actual_Arg_Spec):
                 arg = arg.items[1]
             arg_s = arg.tofortran()
-            d_arg = _derivative(arg, var)
+            d_arg = _derivative(arg, var, warn_info, warnings)
             deriv = INTRINSIC_DERIVATIVES[name].format(arg=arg_s)
             if d_arg == "0.0":
                 return "0.0"
             if d_arg == "1.0":
                 return deriv
             return f"{deriv} * {d_arg}"
+        reason = f"unsupported intrinsic '{name}'"
+        _warn(warnings, warn_info, expr.tofortran(), reason)
         return "0.0"
     if isinstance(expr, Fortran2003.Level_2_Unary_Expr):
         sign = expr.items[0]
-        d = _derivative(expr.items[1], var)
+        d = _derivative(expr.items[1], var, warn_info, warnings)
         if sign == "-":
             if d == "0.0":
                 return "0.0"
@@ -109,16 +125,16 @@ def _derivative(expr, var: str) -> str:
     if isinstance(expr, Fortran2003.Level_2_Expr) and len(expr.items) == 3 and isinstance(expr.items[1], str):
         left, op, right = expr.items
         if op == "+":
-            d1 = _derivative(left, var)
-            d2 = _derivative(right, var)
+            d1 = _derivative(left, var, warn_info, warnings)
+            d2 = _derivative(right, var, warn_info, warnings)
             if d1 == "0.0":
                 return d2
             if d2 == "0.0":
                 return d1
             return f"{d1} + {d2}"
         if op == "-":
-            d1 = _derivative(left, var)
-            d2 = _derivative(right, var)
+            d1 = _derivative(left, var, warn_info, warnings)
+            d2 = _derivative(right, var, warn_info, warnings)
             if d1 == "0.0" and d2 == "0.0":
                 return "0.0"
             if d2 == "0.0":
@@ -129,8 +145,8 @@ def _derivative(expr, var: str) -> str:
     if isinstance(expr, Fortran2003.Add_Operand) and len(expr.items) == 3:
         left, op, right = expr.items
         if op == "*":
-            d1 = _derivative(left, var)
-            d2 = _derivative(right, var)
+            d1 = _derivative(left, var, warn_info, warnings)
+            d2 = _derivative(right, var, warn_info, warnings)
             left_s = left.tofortran()
             right_s = right.tofortran()
             terms = []
@@ -143,8 +159,8 @@ def _derivative(expr, var: str) -> str:
             u = left.tofortran()
             v = right.tofortran()
             vsq = v if v.startswith("(") else f"({v})"
-            d1 = _derivative(left, var)
-            d2 = _derivative(right, var)
+            d1 = _derivative(left, var, warn_info, warnings)
+            d2 = _derivative(right, var, warn_info, warnings)
             if d1 == "0.0" and d2 == "0.0":
                 return "0.0"
             if d2 == "0.0":
@@ -159,8 +175,8 @@ def _derivative(expr, var: str) -> str:
         base, _, exponent = expr.items
         base_s = base.tofortran()
         exp_s = exponent.tofortran()
-        d_base = _derivative(base, var)
-        d_exp = _derivative(exponent, var)
+        d_base = _derivative(base, var, warn_info, warnings)
+        d_exp = _derivative(exponent, var, warn_info, warnings)
         terms = []
         if d_base != "0.0":
             minus = _parenthesize_if_needed(_minus_one(exponent))
@@ -175,6 +191,8 @@ def _derivative(expr, var: str) -> str:
                 term += f" * {d_exp}"
             terms.append(term)
         return " + ".join(terms) if terms else "0.0"
+    reason = "unsupported expression"
+    _warn(warnings, warn_info, expr.tofortran(), reason)
     return "0.0"
 
 
@@ -218,7 +236,7 @@ def _routine_parts(routine):
     return spec, exec_part
 
 
-def _assignment_parts(stmt):
+def _assignment_parts(stmt, warn_info=None, warnings=None):
     """Return mapping of variables to partial derivative expressions and whether any variable is used twice."""
     rhs = stmt.items[2]
     all_names = []
@@ -227,14 +245,14 @@ def _assignment_parts(stmt):
     _collect_names(rhs, names)
     parts = {}
     for name in names:
-        deriv = _derivative(rhs, name)
+        deriv = _derivative(rhs, name, warn_info, warnings)
         if deriv != "0.0":
             parts[name] = deriv
     has_repeat = len(all_names) != len(set(all_names))
     return parts, has_repeat
 
 
-def _generate_ad_subroutine(routine, indent):
+def _generate_ad_subroutine(routine, indent, filename, warnings):
     lines = []
 
     if isinstance(routine, Fortran2003.Function_Subprogram):
@@ -309,7 +327,15 @@ def _generate_ad_subroutine(routine, indent):
 
     for stmt in reversed(statements):
         lhs = str(stmt.items[0])
-        parts, has_repeat = _assignment_parts(stmt)
+        line_no = None
+        if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
+            line_no = stmt.item.span[0]
+        info = {
+            "file": filename,
+            "line": line_no,
+            "code": stmt.tofortran().strip(),
+        }
+        parts, has_repeat = _assignment_parts(stmt, info, warnings)
         for var in parts:
             name_d = f"d{lhs}_d{var}"
             if name_d not in decl_set:
@@ -359,7 +385,7 @@ def _generate_ad_subroutine(routine, indent):
     return lines
 
 
-def generate_ad(in_file, out_file=None):
+def generate_ad(in_file, out_file=None, warn=True):
     """Generate a very small reverse-mode AD version of ``in_file``.
 
     If ``out_file`` is ``None`` the generated code is returned as a string.
@@ -367,6 +393,7 @@ def generate_ad(in_file, out_file=None):
     """
     ast = parser.parse_file(in_file)
     output = []
+    warnings = []
     for module in walk(ast, Fortran2003.Module):
         name = parser._stmt_name(module.content[0])
         output.append(f"module {name}_ad\n")
@@ -388,13 +415,18 @@ def generate_ad(in_file, out_file=None):
                 ]
                 break
         for child in children:
-            output.extend(_generate_ad_subroutine(child, "  "))
+            output.extend(
+                _generate_ad_subroutine(child, "  ", in_file, warnings)
+            )
             output.append("\n")
         output.append(f"end module {name}_ad\n")
 
     code = "".join(output)
     if out_file:
         Path(out_file).write_text(code)
+    if warn and warnings:
+        for msg in warnings:
+            print(f"Warning: {msg}", file=sys.stderr)
     return code
 
 
@@ -412,8 +444,13 @@ if __name__ == "__main__":
             "path for generated Fortran file; if omitted, the code is printed"
         ),
     )
+    parser_arg.add_argument(
+        "--no-warn",
+        action="store_true",
+        help="suppress warnings about unsupported derivatives",
+    )
     args = parser_arg.parse_args()
 
-    code = generate_ad(args.input, args.output)
+    code = generate_ad(args.input, args.output, warn=not args.no_warn)
     if args.output is None:
         print(code, end="")
