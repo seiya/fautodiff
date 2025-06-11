@@ -40,5 +40,15 @@ routine names.
 Generate the AD code for ``examples/simple_math.f90``:
 
 ```bash
+# print to standard output
+python -m fautodiff.generator examples/simple_math.f90
+
+# or write to a file
 python -m fautodiff.generator examples/simple_math.f90 examples/simple_math_ad.f90
+```
+
+Run the included tests with:
+
+```bash
+python tests/test_generator.py
 ```

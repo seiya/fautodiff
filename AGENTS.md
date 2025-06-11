@@ -17,8 +17,15 @@ This file provides guidelines for contributors about the repository and develop 
 - Aim for one topic per commit and write clear messages.
 - When opening a PR, explain the changes and test steps.
 - Run the tests before pushing.
+  Use ``python tests/test_generator.py`` to run the unit tests.
 - Messages such as commits and PRs should be in English.
 - Branch names **must** be in English (ASCII only) to avoid issues with non-English characters.
 
 ## 5. Tests and Examples
 - Place the original Fortran code samples under “examples” and the test scripts under “tests.”
+- The provided test script reads code from ``examples`` and checks the generated
+  AD output against the expected Fortran code.
+
+## 6. Generator Usage
+- By default ``fautodiff.generator`` prints the generated code to standard
+  output. Provide an output path if you want the code written to a file.
