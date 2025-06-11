@@ -1,8 +1,10 @@
 from pathlib import Path
 import sys
+import re
 
 from . import parser
 from .parser import Fortran2003, walk
+from fparser.two.Fortran2008 import Block_Nonlabel_Do_Construct
 from .intrinsic_derivatives import INTRINSIC_DERIVATIVES, NONDIFF_INTRINSICS
 
 
@@ -327,8 +329,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
 
     spec, exec_part = _routine_parts(routine)
     decl_map = _parse_decls(spec)
-    pre_lines = []
     used_vars = set()
+    pre_lines = []
     const_vars = set()
     const_decl = []
     const_decl_names = set()
@@ -381,6 +383,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 new.append(p)
         return "(" + ", ".join(new) + ")"
 
+    out_grad_args = []
     for arg in args:
         typ, intent = decl_map.get(arg, ("real", "in"))
         arg_int = intent or "in"
@@ -392,19 +395,19 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                     f"{indent}  {gtyp}, intent(in){_space('in')}:: {arg}_ad\n"
                 )
         else:
-            if arg_int == "inout":
-                ad_int = "inout"
-            else:
-                ad_int = "out"
             lines.append(
-                f"{indent}  {typ}, intent({arg_int})"
-                f"{_space(arg_int)}:: {arg}\n"
+                f"{indent}  {typ}, intent({arg_int}){_space(arg_int)}:: {arg}\n"
             )
             if not is_char:
+                grad_int = {
+                    "in": "out",
+                    "inout": "inout",
+                }.get(arg_int, "out")
                 lines.append(
-                    f"{indent}  {gtyp}, intent({ad_int})"
-                    f"{_space(ad_int)}:: {arg}_ad\n"
+                    f"{indent}  {gtyp}, intent({grad_int}){_space(grad_int)}:: {arg}_ad\n"
                 )
+                if grad_int == "out":
+                    out_grad_args.append(arg)
 
     for outv in outputs:
         if outv not in args:
@@ -413,23 +416,51 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 f"{indent}  {out_typ}, intent(in){_space('in')}:: {outv}_ad\n"
             )
 
-    statements = [
-        s for s in exec_part.content if isinstance(s, Fortran2003.Assignment_Stmt)
-    ]
+    def _find_assignments(node, out_list, top=True):
+        if isinstance(node, Fortran2003.Assignment_Stmt):
+            out_list.append((node, top))
+        for item in getattr(node, "content", []):
+            if not isinstance(item, str):
+                _find_assignments(item, out_list, top=False)
+
+    def _collect_do_indices(node, out_set):
+        if isinstance(node, Block_Nonlabel_Do_Construct):
+            stmt = node.content[0]
+            ctrl = stmt.items[1]
+            if ctrl is not None:
+                lc = ctrl.items[1]
+                if isinstance(lc, tuple) and lc and isinstance(lc[0], Fortran2003.Name):
+                    out_set.add(str(lc[0]))
+        for item in getattr(node, "content", []):
+            if not isinstance(item, str):
+                _collect_do_indices(item, out_set)
+
+    statements = []
+    do_indices = set()
+    for stmt in exec_part.content:
+        _find_assignments(stmt, statements)
+        _collect_do_indices(stmt, do_indices)
+    const_vars.update(do_indices)
     defined = set()
     grad_var = {v: f"{v}_ad" for v in outputs}
     decls = []
     decl_set = set()
-    assign_lines = []
+    stmt_blocks = {}
 
-    for stmt in statements:
+    const_map = {}
+    for stmt, _ in statements:
         lhs = str(stmt.items[0])
         rhs_names = []
         _collect_names(stmt.items[2], rhs_names)
-        if not rhs_names:
-            const_vars.add(lhs)
+        if lhs not in const_map:
+            const_map[lhs] = True
+        if rhs_names:
+            const_map[lhs] = False
+    for var, is_const in const_map.items():
+        if is_const:
+            const_vars.add(var)
 
-    for stmt in reversed(statements):
+    for stmt, top in reversed(statements):
         lhs = str(stmt.items[0])
         line_no = None
         if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
@@ -454,11 +485,11 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
             block = []
             if arg in defined:
-                block.append(f"{indent}  {arg}_ad = transpose({lhs_grad}) + {arg}_ad\n")
+                block.append(f"{arg}_ad = transpose({lhs_grad}) + {arg}_ad\n")
             else:
-                block.append(f"{indent}  {arg}_ad = transpose({lhs_grad})\n")
+                block.append(f"{arg}_ad = transpose({lhs_grad})\n")
                 defined.add(arg)
-            assign_lines.append(block)
+            stmt_blocks[id(stmt)] = block
             used_vars.add(lhs)
             used_vars.add(arg)
             special_handled = True
@@ -471,18 +502,18 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             block = []
             if arr == lhs:
                 new_grad = f"{lhs}_ad_"
-                block.append(f"{indent}  {new_grad} = {update}\n")
+                block.append(f"{new_grad} = {update}\n")
                 grad_var[lhs] = new_grad
                 if new_grad not in decl_set:
                     decls.append(new_grad)
                     decl_set.add(new_grad)
             else:
                 if arr in defined:
-                    block.append(f"{indent}  {arr}_ad = {update} + {arr}_ad\n")
+                    block.append(f"{arr}_ad = {update} + {arr}_ad\n")
                 else:
-                    block.append(f"{indent}  {arr}_ad = {update}\n")
+                    block.append(f"{arr}_ad = {update}\n")
                     defined.add(arr)
-            assign_lines.append(block)
+            stmt_blocks[id(stmt)] = block
             used_vars.add(lhs)
             used_vars.add(arr)
             special_handled = True
@@ -510,8 +541,11 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             if not str(decl_map.get(v, ("",))[0]).strip().lower().startswith("character")
             and v not in const_vars
         }
-        if not parts and lhs in used_vars and not rhs_names:
-            pre_lines.insert(0, f"{indent}  {stmt.tofortran().strip()}\n")
+        if not parts and lhs in used_vars and not rhs_names and lhs not in outputs:
+            if top:
+                pre_lines.insert(0, f"{indent}  {stmt.tofortran().strip()}\n")
+            else:
+                stmt_blocks[id(stmt)] = [f"{stmt.tofortran().strip()}\n"]
             used_vars.update(rhs_names)
             used_vars.add(lhs)
             if lhs not in args and lhs not in outputs and lhs not in const_decl_names:
@@ -538,7 +572,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
 
         block = []
         for var, expr in parts.items():
-            block.append(f"{indent}  d{lhs}_d{var} = {expr}\n")
+            block.append(f"d{lhs}_d{var} = {expr}\n")
         lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
         order = list(parts.keys()) if has_repeat else list(reversed(list(parts.keys())))
         for var in order:
@@ -546,15 +580,15 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 continue
             update = f"{lhs_grad} * d{lhs}_d{var}"
             if var in defined:
-                block.append(f"{indent}  {var}_ad = {update} + {var}_ad\n")
+                block.append(f"{var}_ad = {update} + {var}_ad\n")
             else:
-                block.append(f"{indent}  {var}_ad = {update}\n")
+                block.append(f"{var}_ad = {update}\n")
                 defined.add(var)
         if lhs in parts:
             new_grad = f"{lhs}_ad_"
-            block.append(f"{indent}  {new_grad} = {lhs_grad} * d{lhs}_d{lhs}\n")
+            block.append(f"{new_grad} = {lhs_grad} * d{lhs}_d{lhs}\n")
             grad_var[lhs] = new_grad
-        assign_lines.append(block)
+        stmt_blocks[id(stmt)] = block
         used_vars.update(rhs_names)
         used_vars.add(lhs)
 
@@ -582,14 +616,113 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         if dims is not None:
             typ = f"real, dimension{dims}"
         lines.append(f"{indent}  {typ} :: {dname}\n")
+
+    init_lines = []
+    for arg in out_grad_args:
+        init_lines.append(f"{indent}  {arg}_ad = 0.0\n")
+    # only intent(out) argument gradients need initialization
+
     lines.append("\n")
+    for il in init_lines:
+        lines.append(il)
+    if init_lines:
+        lines.append("\n")
     for pl in pre_lines:
         lines.append(pl)
     if pre_lines:
         lines.append("\n")
-    for block in assign_lines:
-        for l in block:
-            lines.append(l)
+    def _reverse_block(body, ind):
+        out = []
+        for st in reversed(body):
+            out.extend(_reverse_stmt(st, ind))
+        return out
+
+    def _reverse_do_line(stmt):
+        s = stmt.tofortran().strip()
+        m = re.match(r"do\s+(\w+)\s*=\s*(.*?),\s*(.*?)(?:,\s*(.*?))?$", s, re.I)
+        if not m:
+            return s
+        var, start, end, step = m.groups()
+        start = start.strip()
+        end = end.strip()
+        if step is None:
+            step = "1"
+        step = step.strip()
+        if step.startswith("-"):
+            rev_step = step[1:].strip()
+        else:
+            rev_step = f"-{step}" if re.fullmatch(r"[\w.]+", step) else f"-({step})"
+        return f"DO {var} = {end}, {start}, {rev_step}"
+
+    def _reverse_stmt(st, ind):
+        if isinstance(st, Fortran2003.Assignment_Stmt):
+            block = stmt_blocks.get(id(st), [])
+            return [f"{ind}{line}" for line in block]
+        if isinstance(st, Fortran2003.If_Construct):
+            res = [f"{ind}{st.content[0].tofortran()}\n"]
+            i = 1
+            seg = []
+            while i < len(st.content):
+                itm = st.content[i]
+                if isinstance(itm, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
+                    break
+                seg.append(itm)
+                i += 1
+            res.extend(_reverse_block(seg, ind + "  "))
+            while i < len(st.content):
+                itm = st.content[i]
+                if isinstance(itm, Fortran2003.Else_If_Stmt):
+                    res.append(f"{ind}{itm.tofortran()}\n")
+                    i += 1
+                    seg = []
+                    while i < len(st.content):
+                        j = st.content[i]
+                        if isinstance(j, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
+                            break
+                        seg.append(j)
+                        i += 1
+                    res.extend(_reverse_block(seg, ind + "  "))
+                elif isinstance(itm, Fortran2003.Else_Stmt):
+                    res.append(f"{ind}{itm.tofortran()}\n")
+                    i += 1
+                    seg = []
+                    while i < len(st.content):
+                        j = st.content[i]
+                        if isinstance(j, Fortran2003.End_If_Stmt):
+                            break
+                        seg.append(j)
+                        i += 1
+                    res.extend(_reverse_block(seg, ind + "  "))
+                elif isinstance(itm, Fortran2003.End_If_Stmt):
+                    res.append(f"{ind}{itm.tofortran()}\n")
+                    i += 1
+                else:
+                    i += 1
+            return res
+        if isinstance(st, Fortran2003.Case_Construct):
+            res = [f"{ind}{st.content[0].tofortran()}\n"]
+            i = 1
+            while i < len(st.content) - 1:
+                cs = st.content[i]
+                res.append(f"{ind}{cs.tofortran()}\n")
+                i += 1
+                seg = []
+                while i < len(st.content) - 1 and not isinstance(st.content[i], Fortran2003.Case_Stmt):
+                    seg.append(st.content[i])
+                    i += 1
+                res.extend(_reverse_block(seg, ind + "  "))
+            res.append(f"{ind}{st.content[-1].tofortran()}\n")
+            return res
+        if isinstance(st, Block_Nonlabel_Do_Construct):
+            do_line = _reverse_do_line(st.content[0])
+            res = [f"{ind}{do_line}\n"]
+            res.extend(_reverse_block(st.content[1:-1], ind + "  "))
+            res.append(f"{ind}{st.content[-1].tofortran()}\n")
+            return res
+        return []
+
+    for l in _reverse_block(exec_part.content, indent + "  "):
+        lines.append(l)
     lines.append("\n")
     lines.append(f"{indent}  return\n")
 
