@@ -9,6 +9,7 @@ contains
     real, intent(inout) :: y
     real, intent(inout) :: y_ad
     real, intent(in)  :: z_ad
+    real :: pi
     real :: dz_da
     real :: a_ad
     real :: dz_db
@@ -45,14 +46,14 @@ contains
     real :: de_dx
     real :: de_dy
     real :: dd_dx
-    real :: dd_dpi
-    real :: pi_ad
     real :: dd_dy
     real :: dc_dx
     real :: dc_dy
     real :: db_dx
     real :: db_dy
     real :: da_dx
+
+    pi = ACOS(- 1.0)
 
     dz_da = 1.0
     dz_db = 1.0
@@ -103,10 +104,8 @@ contains
     x_ad = e_ad * de_dx + x_ad
     y_ad = e_ad * de_dy + y_ad
     dd_dx = 1.0 / sqrt(1.0 - (x / pi)**2) * 1.0 / pi + 1.0 / (1.0 + (x)**2)
-    dd_dpi = 1.0 / sqrt(1.0 - (x / pi)**2) * - x / (pi)**2 + -1.0 / sqrt(1.0 - (y / (pi + 1.0))**2) * - y / (pi + 1.0)**2
     dd_dy = -1.0 / sqrt(1.0 - (y / (pi + 1.0))**2) * 1.0 / (pi + 1.0)
     x_ad = d_ad * dd_dx + x_ad
-    pi_ad = d_ad * dd_dpi
     y_ad = d_ad * dd_dy + y_ad
     dc_dx = cos(x) + 1.0 / cos(x)**2
     dc_dy = -sin(y)
@@ -122,9 +121,8 @@ contains
     return
   end subroutine math_intrinsics_ad
 
-  subroutine non_differentiable_intrinsics_ad(str, str_ad, arr, arr_ad, mat_in, mat_in_ad, mat_out_ad, idx_ad, lb_ad, ub_ad, x, x_ad, y_ad)
+  subroutine non_differentiable_intrinsics_ad(str, arr, arr_ad, mat_in, mat_in_ad, mat_out_ad, idx_ad, lb_ad, ub_ad, x, x_ad, y_ad)
     character(len = *), intent(in)  :: str
-    real, intent(out) :: str_ad
     real, intent(in)  :: arr
     real, intent(out) :: arr_ad
     real, intent(in)  :: mat_in
@@ -153,16 +151,25 @@ contains
     return
   end subroutine non_differentiable_intrinsics_ad
 
-  subroutine casting_intrinsics_ad(i, i_ad, r, r_ad, d_ad, c, c_ad, n_ad)
+  subroutine casting_intrinsics_ad(i, i_ad, r, r_ad, d_ad, c, n_ad)
     integer, intent(in)  :: i
     real, intent(out) :: i_ad
     real, intent(in)  :: r
     real, intent(out) :: r_ad
     real, intent(in)  :: d_ad
     character(len = 1), intent(inout) :: c
-    real, intent(inout) :: c_ad
     real, intent(in)  :: n_ad
+    real :: dd_dr
+    real :: dd_di2
+    real :: i2_ad
+    real :: dr2_di
 
+    dd_dr = 1.0
+    dd_di2 = 1.0
+    i2_ad = d_ad * dd_di2
+    r_ad = d_ad * dd_dr
+    dr2_di = 1.0
+    i_ad = r2_ad * dr2_di
 
     return
   end subroutine casting_intrinsics_ad
