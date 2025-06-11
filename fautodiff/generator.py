@@ -10,7 +10,7 @@ def _decl_names(stmt):
 
 
 def _parse_decls(spec):
-    """Return a mapping of variable name to (type, intent) from declarations."""
+    """Map variable names to their declared type and intent."""
     decl_map = {}
     for decl in spec.content:
         type_str = decl.items[0].tofortran().lower()
@@ -93,18 +93,28 @@ def _generate_ad_subroutine(routine, indent):
         typ, intent = decl_map.get(arg, ("real", "in"))
         arg_int = intent or "in"
         if arg_int == "out":
-            lines.append(f"{indent}  real, intent(in){_space('in')}:: {arg}_ad\n")
+            lines.append(
+                f"{indent}  real, intent(in){_space('in')}:: {arg}_ad\n"
+            )
         else:
             if arg_int == "inout":
                 ad_int = "inout"
             else:
                 ad_int = "out"
-            lines.append(f"{indent}  {typ}, intent({arg_int}){_space(arg_int)}:: {arg}\n")
-            lines.append(f"{indent}  real, intent({ad_int}){_space(ad_int)}:: {arg}_ad\n")
+            lines.append(
+                f"{indent}  {typ}, intent({arg_int})"
+                f"{_space(arg_int)}:: {arg}\n"
+            )
+            lines.append(
+                f"{indent}  real, intent({ad_int})"
+                f"{_space(ad_int)}:: {arg}_ad\n"
+            )
 
     for outv in outputs:
         if outv not in args:
-            lines.append(f"{indent}  real, intent(in){_space('in')}:: {outv}_ad\n")
+            lines.append(
+                f"{indent}  real, intent(in){_space('in')}:: {outv}_ad\n"
+            )
 
     exec_part = routine.content[2]
     for stmt in exec_part.content:
@@ -123,7 +133,17 @@ def generate_ad(in_file, out_file):
         name = str(module.content[0].get_name())
         output.append(f"module {name}_ad\n")
         output.append("contains\n")
-        children = [c for c in module.content[1].content if isinstance(c, (Fortran2003.Function_Subprogram, Fortran2003.Subroutine_Subprogram))]
+        children = [
+            c
+            for c in module.content[1].content
+            if isinstance(
+                c,
+                (
+                    Fortran2003.Function_Subprogram,
+                    Fortran2003.Subroutine_Subprogram,
+                ),
+            )
+        ]
         for i, child in enumerate(children):
             output.extend(_generate_ad_subroutine(child, "  "))
             if i != len(children) - 1:
@@ -136,7 +156,9 @@ def generate_ad(in_file, out_file):
 if __name__ == "__main__":
     import argparse
 
-    parser_arg = argparse.ArgumentParser(description="Generate simple reverse-mode AD code")
+    parser_arg = argparse.ArgumentParser(
+        description="Generate simple reverse-mode AD code"
+    )
     parser_arg.add_argument("input", help="path to original Fortran file")
     parser_arg.add_argument("output", help="path for generated Fortran file")
     args = parser_arg.parse_args()
