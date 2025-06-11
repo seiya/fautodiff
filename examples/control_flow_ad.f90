@@ -11,11 +11,10 @@ contains
     real, intent(in)  :: z_ad
     real :: dz_dx
 
-    x_ad = 0.0
 
     IF (x > 0.0) THEN
       dz_dx = 1.0
-      x_ad = z_ad * dz_dx + x_ad
+      x_ad = z_ad * dz_dx
     ELSE IF (x < 0.0) THEN
       dz_dx = - 1.0
       x_ad = z_ad * dz_dx
@@ -32,12 +31,11 @@ contains
     real, intent(in)  :: z_ad
     real :: dz_dx
 
-    x_ad = 0.0
 
     SELECT CASE (i)
     CASE (1)
       dz_dx = 1.0
-      x_ad = z_ad * dz_dx + x_ad
+      x_ad = z_ad * dz_dx
     CASE (2)
       dz_dx = 1.0
       x_ad = z_ad * dz_dx
@@ -50,13 +48,6 @@ contains
   subroutine do_example_ad(n, sum_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: sum_ad
-    real :: dsum_dsum
-    real :: sum_ad_
-
-    DO i = n, 1, -1
-      dsum_dsum = 1.0
-      sum_ad_ = sum_ad * dsum_dsum
-    END DO
 
     return
   end subroutine do_example_ad
