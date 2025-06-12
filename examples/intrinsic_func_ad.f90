@@ -10,6 +10,19 @@ contains
     real, intent(inout) :: y_ad
     real, intent(in)  :: z_ad
     real :: pi
+    real :: z
+    real :: pi
+    real :: a
+    real :: b
+    real :: c
+    real :: d
+    real :: e
+    real :: f
+    real :: g
+    real :: h
+    real :: o
+    real :: p
+    real :: q
     real :: dz_da
     real :: a_ad
     real :: dz_db
@@ -53,6 +66,20 @@ contains
     real :: db_dy
     real :: da_dx
 
+
+    pi = ACOS(- 1.0)
+    a = SQRT(ABS(x))
+    b = EXP(x) + LOG(y) + LOG10(ABS(x) + 1.0)
+    c = SIN(x) + COS(y) + TAN(x)
+    d = ASIN(x / pi) + ACOS(y / (pi + 1.0)) + ATAN(x)
+    e = asinh(x) + acosh(y) + atanh(x)
+    f = ATAN2(x, y) + COSH(x) + SINH(y) + TANH(x)
+    g = SIGN(x, y)
+    h = MAX(x, y)
+    o = MIN(x, y)
+    p = erf(x) + erfc(y)
+    q = MOD(x, y)
+    z = a + b + c + d + e + f + g + h + o + p + q
 
     pi = ACOS(- 1.0)
 
@@ -129,6 +156,15 @@ contains
     real, intent(in)  :: x
     real, intent(out) :: x_ad
     real, intent(in)  :: y_ad
+    integer :: idx
+    integer :: lb
+    integer :: ub
+    real :: y
+    integer :: n
+    integer :: len_trimmed
+    real :: a
+    real :: b
+    real :: c
     real :: dy_da
     real :: a_ad
     real :: dy_db
@@ -138,6 +174,11 @@ contains
 
     arr_ad(:) = 0.0
     x_ad = 0.0
+
+    a = EPSILON(x)
+    b = HUGE(x)
+    c = TINY(x)
+    y = a + b + c
 
     dy_da = 1.0
     dy_db = 1.0
@@ -153,8 +194,12 @@ contains
     real, intent(in)  :: mat_in(:, :)
     real, intent(out) :: mat_in_ad(:, :)
     real, intent(in)  :: mat_out_ad(:, :)
+    real :: mat_out(:, :)
     real :: mat_out_ad_(size(mat_out_ad, 1), size(mat_out_ad, 2))
 
+
+    mat_out = TRANSPOSE(mat_in)
+    mat_out = CSHIFT(mat_out, 1, 2)
 
     mat_out_ad_ = cshift(mat_out_ad, -1, 2)
     mat_in_ad = transpose(mat_out_ad_)
@@ -168,8 +213,15 @@ contains
     real, intent(out) :: r_ad
     real, intent(in)  :: d_ad
     character(len = 1), intent(inout) :: c
+    double precision :: d
+    integer :: n
+    integer :: i2
+    real :: r2
     real :: dd_dr
 
+
+    i2 = INT(r)
+    d = DBLE(r) + DBLE(i2)
 
     dd_dr = 1.0
     r_ad = d_ad * dd_dr

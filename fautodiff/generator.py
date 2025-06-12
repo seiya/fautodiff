@@ -674,6 +674,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     grad_var = {v: f"{v}_ad" for v in outputs}
     decls = []
     decl_set = set()
+    forward_decls = []
     stmt_blocks = {}
 
     scalar_derivs = set()
@@ -711,6 +712,15 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             if f"{var}_ad_" not in decl_set:
                 decls.append(f"{var}_ad_")
                 decl_set.add(f"{var}_ad_")
+
+    passed_args = set(ad_args)
+
+    for varname, (typ, _) in decl_map.items():
+        if varname in passed_args or varname in const_decl_names:
+            continue
+        if varname not in decl_set:
+            forward_decls.append(_decl_line(f"{indent}  ", typ, varname))
+            decl_set.add(varname)
 
     last_block = None
     for stmt, top, in_do in reversed(statements):
@@ -882,6 +892,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
 
     for cl in const_decl:
         lines.append(cl)
+    for fd in forward_decls:
+        lines.append(fd)
     for dname in decls:
         typ = "real"
         dims = None
@@ -921,6 +933,71 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         lines.append(il)
     if init_lines:
         lines.append("\n")
+
+    forward_body = list(exec_part.content)
+    if forward_body and isinstance(forward_body[-1], Fortran2003.Return_Stmt):
+        forward_body = forward_body[:-1]
+
+    def _forward_stmt(st, ind):
+        if isinstance(st, Fortran2003.Assignment_Stmt):
+            lhs_base = str(st.items[0]).split('(')[0]
+            if lhs_base in used_vars or lhs_base in index_vars:
+                return [f"{ind}{st.tofortran().strip()}\n"]
+            return []
+        if isinstance(st, Fortran2003.If_Construct):
+            res = [f"{ind}{st.content[0].tofortran()}\n"]
+            i = 1
+            seg = []
+            has_body = False
+            while i < len(st.content):
+                itm = st.content[i]
+                if isinstance(itm, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
+                    body = _forward_block(seg, ind + "  ")
+                    if body:
+                        has_body = True
+                    res.extend(body)
+                    res.append(f"{ind}{itm.tofortran()}\n")
+                    seg = []
+                    i += 1
+                else:
+                    seg.append(itm)
+                    i += 1
+            if has_body:
+                return res
+            return []
+        if isinstance(st, Fortran2003.Case_Construct):
+            res = [f"{ind}{st.content[0].tofortran()}\n"]
+            i = 1
+            while i < len(st.content) - 1:
+                cs = st.content[i]
+                res.append(f"{ind}{cs.tofortran()}\n")
+                i += 1
+                seg = []
+                while i < len(st.content) - 1 and not isinstance(st.content[i], Fortran2003.Case_Stmt):
+                    seg.append(st.content[i])
+                    i += 1
+                res.extend(_forward_block(seg, ind + "  "))
+            res.append(f"{ind}{st.content[-1].tofortran()}\n")
+            return res
+        if isinstance(st, Block_Nonlabel_Do_Construct):
+            res = [f"{ind}{st.content[0].tofortran().strip()}\n"]
+            res.extend(_forward_block(st.content[1:-1], ind + "  "))
+            res.append(f"{ind}{st.content[-1].tofortran()}\n")
+            return res
+        return [f"{ind}{st.tofortran().strip()}\n"]
+
+    def _forward_block(body, ind):
+        out = []
+        for st in body:
+            out.extend(_forward_stmt(st, ind))
+        return out
+
+    forward_lines = _forward_block(forward_body, indent + "  ")
+    for fl in forward_lines:
+        lines.append(fl)
+    if forward_lines:
+        lines.append("\n")
+
     for pl in pre_lines:
         lines.append(pl)
     if pre_lines:
