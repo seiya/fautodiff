@@ -7,8 +7,14 @@ from .code_tree import (
     Declaration,
     IfBlock,
     Assignment,
-    Statement,
+    Subroutine,
+    EndSubroutine,
+    Function,
+    EndFunction,
+    DoLoop,
+    SelectBlock,
     Return,
+    EmptyLine,
     render_program,
 )
 
@@ -328,21 +334,6 @@ def _split_type(typ):
     return text, None
 
 
-def _decl_line(indent, typ, var, intent=None, space_func=None):
-    """Format a declaration line using ``typ`` and ``var``."""
-    base, dims = _split_type(typ)
-    line = f"{indent}{base}"
-    if intent is not None:
-        line += f", intent({intent})"
-        if space_func:
-            line += space_func(intent)
-        line += f":: {var}"
-    else:
-        line += f" :: {var}"
-    if dims:
-        line += dims
-    line += "\n"
-    return line
 
 
 def _is_integer_type(typ) -> bool:
@@ -432,6 +423,7 @@ def _assignment_parts(stmt, warn_info=None, warnings=None):
 def _generate_ad_subroutine(routine, indent, filename, warnings):
     # blocks of code_tree nodes representing statements
     lines = Block([])
+    indent_len = len(indent)
 
     def _optimize_lines(raw_lines, keep=None):
         """Remove redundant initializations and unused assignments."""
@@ -558,7 +550,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         if outv not in args:
             ad_args.append(f"{outv}_ad")
 
-    lines.append(Statement(f"{indent}subroutine {name}_ad({', '.join(ad_args)})"))
+    lines.append(Subroutine(f"{name}_ad", ", ".join(ad_args), indent))
 
     def _space(intent):
         return "  " if intent == "in" else " "
@@ -590,26 +582,19 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         gtyp = _grad_type(typ)
         if arg_int == "out":
             if not is_char and not is_int:
-                lines.append(
-                    Declaration(
-                        _decl_line(f"{indent}  ", gtyp, f"{arg}_ad", "in", _space).rstrip()
-                    )
-                )
+                base, dims = _split_type(gtyp)
+                lines.append(Declaration(base, f"{arg}_ad", "in", dims, indent + "  "))
                 has_grad_input = True
         else:
-            lines.append(
-                Declaration(_decl_line(f"{indent}  ", typ, arg, arg_int, _space).rstrip())
-            )
+            base, dims = _split_type(typ)
+            lines.append(Declaration(base, arg, arg_int, dims, indent + "  "))
             if not is_char and not is_int:
                 grad_int = {
                     "in": "out",
                     "inout": "inout",
                 }.get(arg_int, "out")
-                lines.append(
-                    Declaration(
-                        _decl_line(f"{indent}  ", gtyp, f"{arg}_ad", grad_int, _space).rstrip()
-                    )
-                )
+                gbase, gdims = _split_type(gtyp)
+                lines.append(Declaration(gbase, f"{arg}_ad", grad_int, gdims, indent + "  "))
                 if grad_int == "out":
                     out_grad_args.append(arg)
                 else:
@@ -618,31 +603,30 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     for outv in outputs:
         if outv not in args:
             out_typ = _grad_type(decl_map.get(outv, ("real",))[0])
-            lines.append(
-                Declaration(_decl_line(f"{indent}  ", out_typ, f"{outv}_ad", "in", _space).rstrip())
-            )
+            base, dims = _split_type(out_typ)
+            lines.append(Declaration(base, f"{outv}_ad", "in", dims, indent + "  "))
             has_grad_input = True
 
     # If no derivative inputs exist, all output gradients remain zero
     if not has_grad_input:
-        lines.append(Statement(""))
+        lines.append(EmptyLine(indent + "  "))
         for arg in out_grad_args:
             t, _ = decl_map.get(arg, ("real", None))
             _, dims = _split_type(t)
             suffix = "(:)" if dims else ""
-            lines.append(Statement(f"{indent}  {arg}_ad{suffix} = 0.0"))
+            lines.append(Assignment(f"{arg}_ad{suffix}", "0.0", indent + "  "))
         if out_grad_args:
-            lines.append(Statement(""))
-        lines.append(Statement(f"{indent}  return"))
-        lines.append(Statement(f"{indent}end subroutine {name}_ad"))
-        return lines
+            lines.append(EmptyLine(indent + "  "))
+        lines.append(Return(indent + "  "))
+        lines.append(EndSubroutine(f"{name}_ad", indent))
+        return render_program(lines, 0)
 
     # If there are no input gradients to propagate we can exit early
     if not out_grad_args:
-        lines.append(Statement(""))
-        lines.append(Statement(f"{indent}  return"))
-        lines.append(Statement(f"{indent}end subroutine {name}_ad"))
-        return lines
+        lines.append(EmptyLine(indent + "  "))
+        lines.append(Return(indent + "  "))
+        lines.append(EndSubroutine(f"{name}_ad", indent))
+        return render_program(lines, 0)
 
     def _find_assignments(node, out_list, top=True, in_do=False):
         if isinstance(node, Fortran2003.Assignment_Stmt):
@@ -683,7 +667,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     const_vars.update(do_indices)
     for idx in sorted(do_indices):
         if idx not in const_decl_names:
-            const_decl.append(Declaration(_decl_line(f"{indent}  ", "integer", idx).rstrip()))
+            const_decl.append(Declaration("integer", idx, None, None, indent + "  "))
             const_decl_names.add(idx)
     defined = set(out_grad_args)
     grad_var = {v: f"{v}_ad" for v in outputs}
@@ -721,7 +705,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             vtyp = decl_map.get(var, ("real",))[0]
             _, dims = _split_type(vtyp)
             suf = "(:)" if dims else ""
-            pre_lines.append(Statement(f"{indent}  {var}_ad_{suf} = {var}_ad{suf}"))
+            pre_lines.append(Assignment(f"{var}_ad_{suf}", f"{var}_ad{suf}", indent + "  "))
             grad_var[var] = f"{var}_ad_"
             if f"{var}_ad_" not in decl_set:
                 decls.append(f"{var}_ad_")
@@ -787,7 +771,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         }
         if not parts and lhs_base in used_vars and not rhs_names and lhs_base not in outputs:
             if top:
-                pre_lines.insert(0, Statement(f"{indent}  {stmt.tofortran().strip()}"))
+                pre_lines.insert(0, Assignment(str(stmt.items[0]), stmt.items[2].tofortran().strip(), indent + "  "))
                 last_block = None
             else:
                 stmt_blocks[id(stmt)] = [f"{stmt.tofortran().strip()}\n"]
@@ -797,7 +781,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             if lhs_base not in args and lhs_base not in outputs and lhs_base not in const_decl_names:
                 typ = decl_map.get(lhs_base, ("real", None))[0]
                 if not str(typ).strip().lower().startswith("character") and not _is_integer_type(typ):
-                    const_decl.append(Declaration(_decl_line(f"{indent}  ", typ, lhs_base).rstrip()))
+                    base, dims = _split_type(typ)
+                    const_decl.append(Declaration(base, lhs_base, None, dims, indent + "  "))
                     const_decl_names.add(lhs_base)
             continue
         for var in parts:
@@ -921,25 +906,26 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             typ = "real"
         if dims is not None:
             typ = f"real, dimension{dims}"
-        lines.append(Declaration(_decl_line(f"{indent}  ", typ, dname).rstrip()))
+        base, ldims = _split_type(typ)
+        lines.append(Declaration(base, dname, None, ldims, indent + "  "))
 
     init_lines = Block([])  # initialization statements as nodes
     for arg in out_grad_args:
         t, _ = decl_map.get(arg, ("real", None))
         _, dims = _split_type(t)
         suf = "(:)" if dims else ""
-        init_lines.append(Statement(f"{indent}  {arg}_ad{suf} = 0.0"))
+        init_lines.append(Assignment(f"{arg}_ad{suf}", "0.0", indent + "  "))
     # only intent(out) argument gradients need initialization
 
-    lines.append(Statement(""))
+    lines.append(EmptyLine(indent + "  "))
     for il in init_lines:
         lines.append(il)
     if len(init_lines):
-        lines.append(Statement(""))
+        lines.append(EmptyLine(indent + "  "))
     for pl in pre_lines:
         lines.append(pl)
     if len(pre_lines):
-        lines.append(Statement(""))
+        lines.append(EmptyLine(indent + "  "))
     def _reverse_block(body, ind):
         block = Block([])
         for st in reversed(body):
@@ -966,7 +952,16 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     def _reverse_stmt(st, ind):
         if isinstance(st, Fortran2003.Assignment_Stmt):
             block = stmt_blocks.get(id(st), [])
-            return Block([Statement(f"{ind}{line.strip()}") for line in block])
+            nodes = []
+            for line in block:
+                text = line.strip()
+                if not text:
+                    nodes.append(EmptyLine(ind))
+                    continue
+                if "=" in text:
+                    lhs, rhs = text.split("=", 1)
+                    nodes.append(Assignment(lhs.strip(), rhs.strip(), ind))
+            return Block(nodes)
         if isinstance(st, Fortran2003.If_Construct):
             cond = st.content[0].items[0].tofortran()
             i = 1
@@ -1013,39 +1008,46 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 return Block([node])
             return Block([])
         if isinstance(st, Fortran2003.Case_Construct):
-            res = [Statement(f"{ind}{st.content[0].tofortran().strip()}")]
+            expr = st.content[0].items[0].tofortran()
+            cases = []
+            default = None
             i = 1
             while i < len(st.content) - 1:
                 cs = st.content[i]
-                res.append(Statement(f"{ind}{cs.tofortran().strip()}"))
+                cond = cs.tofortran().split(None, 1)[1]
                 i += 1
                 seg = []
                 while i < len(st.content) - 1 and not isinstance(st.content[i], Fortran2003.Case_Stmt):
                     seg.append(st.content[i])
                     i += 1
-                res.extend(_reverse_block(seg, ind + "  "))
-            res.append(Statement(f"{ind}{st.content[-1].tofortran().strip()}"))
-            return Block(res)
+                blk = _reverse_block(seg, ind + "  ")
+                if cond.lower().startswith("default"):
+                    default = blk
+                else:
+                    cond = cond.strip()
+                    if cond.startswith("(") and cond.endswith(")"):
+                        cond = cond[1:-1]
+                    cases.append((cond, blk))
+            node = SelectBlock(expr, cases, default=default, indent=ind)
+            return Block([node])
         if isinstance(st, Block_Nonlabel_Do_Construct):
             do_line = _reverse_do_line(st.content[0])
-            res = [Statement(f"{ind}{do_line}")]
-            res.extend(_reverse_block(st.content[1:-1], ind + "  "))
-            res.append(Statement(f"{ind}{st.content[-1].tofortran().strip()}"))
-            return Block(res)
+            body = _reverse_block(st.content[1:-1], ind + "  ")
+            res = DoLoop(do_line, body, ind)
+            return Block([res])
         return Block([])
 
     for l in _reverse_block(exec_part.content, indent + "  "):
         lines.append(l)
-    lines.append(Statement(""))
-    lines.append(Statement(f"{indent}  return"))
+    lines.append(EmptyLine(indent + "  "))
+    lines.append(Return(indent + "  "))
 
-    lines.append(Statement(f"{indent}end subroutine {name}_ad"))
+    lines.append(EndSubroutine(f"{name}_ad", indent))
     keep = {f"{v}_ad" for v in loop_grad_vars}
-    raw_lines = render_program(lines, indent=0).splitlines(keepends=True)
+    raw_lines = render_program(lines, 0).splitlines(keepends=True)
     optimized = _optimize_lines(raw_lines, keep)
 
-    prog = Block([Statement(l.rstrip()) for l in optimized])
-    return prog
+    return "".join(optimized)
 
 
 def generate_ad(in_file, out_file=None, warn=True):
@@ -1078,8 +1080,8 @@ def generate_ad(in_file, out_file=None, warn=True):
                 ]
                 break
         for child in children:
-            block = _generate_ad_subroutine(child, "  ", in_file, warnings)
-            output.append(render_program(block))
+            sub_code = _generate_ad_subroutine(child, "  ", in_file, warnings)
+            output.append(sub_code)
             output.append("\n")
         output.append(f"end module {name}_ad\n")
 
