@@ -274,38 +274,47 @@ def _derivative(expr, var: str, index=None, warn_info=None, warnings=None) -> st
     return "0.0"
 
 
-def _decl_names(stmt):
-    """Return variable names from a ``Type_Declaration_Stmt``."""
-    return [str(ed.items[0]) for ed in stmt.items[2].items]
+def _dims_spec(typ) -> str | None:
+    """Return dimension specification string from ``typ`` if present."""
+    text = str(typ).strip()
+    low = text.lower()
+    idx = low.find("dimension")
+    if idx == -1:
+        return None
+    start = low.find("(", idx)
+    if start == -1:
+        return None
+    depth = 0
+    end = None
+    for i in range(start, len(text)):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+    if end is not None:
+        return text[start:end + 1].strip()
+    return None
 
 
 def _split_type(typ):
     """Return base type and dimension spec from a declaration string."""
     text = str(typ).strip()
-    low = text.lower()
-    idx = low.find("dimension")
-    if idx != -1:
-        start = low.find("(", idx)
-        if start != -1:
-            depth = 0
-            end = None
-            for i in range(start, len(text)):
-                if text[i] == "(":
-                    depth += 1
-                elif text[i] == ")":
-                    depth -= 1
-                    if depth == 0:
-                        end = i
-                        break
-            if end is not None:
-                dims = text[start:end + 1]
-                base = text[:idx].rstrip().rstrip(',')
-                remainder = text[end + 1:].strip()
-                if remainder.startswith(','):
-                    remainder = remainder[1:].strip()
-                if remainder:
-                    base = f"{base}, {remainder}" if base else remainder
-                return base.strip(), dims
+    dims = _dims_spec(text)
+    if dims:
+        idx = text.lower().find("dimension")
+        base = text[:idx].rstrip().rstrip(',')
+        remainder = text[idx + len("dimension") :]
+        pos = remainder.lower().find(dims.lower())
+        if pos != -1:
+            remainder = remainder[pos + len(dims) :].strip()
+            if remainder.startswith(','):
+                remainder = remainder[1:].strip()
+            if remainder:
+                base = f"{base}, {remainder}" if base else remainder
+        return base.strip(), dims
     return text, None
 
 
@@ -338,63 +347,14 @@ def _sanitize_var(name: str) -> str:
     return re.sub(r"[^0-9A-Za-z_]", "_", name)
 
 
-def _find_index_exprs(expr, var):
-    """Return list of unique index expressions for ``var`` in ``expr``."""
-    result = []
+def _find_index_expr(expr, var, all_indices=False):
+    """Return index expressions for ``var`` in ``expr``.
 
-    def _walk(node):
-        if isinstance(node, Fortran2003.Part_Ref):
-            name = node.items[0].tofortran().lower()
-            if name == var.lower():
-                items = []
-                for arg in getattr(node.items[1], "items", []):
-                    if isinstance(arg, Fortran2003.Actual_Arg_Spec):
-                        arg = arg.items[1]
-                    items.append(arg.tofortran())
-                idx = ", ".join(items)
-                if idx not in result:
-                    result.append(idx)
-                return
-        for itm in getattr(node, "items", []):
-            if not isinstance(itm, str):
-                _walk(itm)
+    If ``all_indices`` is ``True`` a list of unique index expressions is
+    returned.  Otherwise the function returns the single unique expression if
+    one is found, or ``None`` when there are multiple different expressions.
+    """
 
-    _walk(expr)
-    return result
-
-
-def _assignment_parts(stmt, warn_info=None, warnings=None):
-    """Return mapping of variables to partial derivatives and index info."""
-    rhs = stmt.items[2]
-    all_names = []
-    _collect_names(rhs, all_names, unique=False)
-    names = []
-    _collect_names(rhs, names)
-    parts = {}
-    index_map = {}
-    index_vars = set()
-    for name in names:
-        idx_list = _find_index_exprs(rhs, name)
-        if idx_list:
-            for idx in idx_list:
-                deriv = _derivative(rhs, name, idx, warn_info, warnings)
-                if deriv != "0.0":
-                    key = f"{name}@{idx}"
-                    parts[key] = deriv
-                    index_map[key] = (name, idx)
-                for var in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", idx):
-                    index_vars.add(var)
-        else:
-            deriv = _derivative(rhs, name, None, warn_info, warnings)
-            if deriv != "0.0":
-                parts[name] = deriv
-                index_map[name] = (name, None)
-    has_repeat = len(all_names) != len(set(all_names))
-    return parts, has_repeat, index_map, index_vars
-
-
-def _find_index_expr(expr, var):
-    """Return the unique index expression string for ``var`` if present."""
     found = []
 
     def _walk(node):
@@ -413,10 +373,50 @@ def _find_index_expr(expr, var):
                 _walk(itm)
 
     _walk(expr)
+
+    if all_indices:
+        result = []
+        for idx in found:
+            if idx not in result:
+                result.append(idx)
+        return result
+
     uniq = set(found)
     if len(uniq) == 1:
         return uniq.pop()
     return None
+
+
+def _assignment_parts(stmt, warn_info=None, warnings=None):
+    """Return mapping of variables to partial derivatives and index info."""
+    rhs = stmt.items[2]
+    all_names = []
+    _collect_names(rhs, all_names, unique=False)
+    names = []
+    _collect_names(rhs, names)
+    parts = {}
+    index_map = {}
+    index_vars = set()
+    for name in names:
+        idx_list = _find_index_expr(rhs, name, all_indices=True)
+        if idx_list:
+            for idx in idx_list:
+                deriv = _derivative(rhs, name, idx, warn_info, warnings)
+                if deriv != "0.0":
+                    key = f"{name}@{idx}"
+                    parts[key] = deriv
+                    index_map[key] = (name, idx)
+                for var in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", idx):
+                    index_vars.add(var)
+        else:
+            deriv = _derivative(rhs, name, None, warn_info, warnings)
+            if deriv != "0.0":
+                parts[name] = deriv
+                index_map[name] = (name, None)
+    has_repeat = len(all_names) != len(set(all_names))
+    return parts, has_repeat, index_map, index_vars
+
+
 
 
 def _generate_ad_subroutine(routine, indent, filename, warnings):
@@ -553,20 +553,14 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         return "  " if intent == "in" else " "
 
     def _grad_type(typ):
-        typ = str(typ).lower()
-        if "dimension" in typ:
-            dim = typ.split("dimension", 1)[1]
-            return f"real, dimension{dim}"
-        return "real"
+        dims = _dims_spec(typ)
+        return f"real, dimension{dims}" if dims else "real"
 
     def _sized_dims(typ, name):
-        typ = str(typ).lower()
-        if "dimension" not in typ:
+        dims = _dims_spec(typ)
+        if not dims:
             return None
-        dim = typ.split("dimension", 1)[1].strip()
-        if not dim.startswith("(") or not dim.endswith(")"):
-            return None
-        parts = [p.strip() for p in dim[1:-1].split(",")]
+        parts = [p.strip() for p in dims[1:-1].split(",")]
         new = []
         for i, p in enumerate(parts, 1):
             if ":" in p or p == "":
