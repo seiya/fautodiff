@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff import generator
 from fautodiff import parser
-from fautodiff.generator import _collect_names, _parse_decls, _routine_parts
+from fautodiff.generator import _collect_names
 
 
 def _validate_no_undefined(code):
@@ -19,8 +19,8 @@ def _validate_no_undefined(code):
     ast = p(reader)
     errors = []
     for sub in parser.walk(ast, Fortran2003.Subroutine_Subprogram):
-        spec, exec_part = _routine_parts(sub)
-        decl_map = _parse_decls(spec)
+        spec, exec_part = parser._routine_parts(sub)
+        decl_map = parser._parse_decls(spec)
         declared = set(decl_map.keys())
         intents = {n: i for n, (_, i) in decl_map.items()}
         assigned = set()
@@ -51,8 +51,8 @@ def _check_inits(code):
     ast = p(reader)
     violations = []
     for sub in parser.walk(ast, Fortran2003.Subroutine_Subprogram):
-        spec, exec_part = _routine_parts(sub)
-        decl_map = _parse_decls(spec)
+        spec, exec_part = parser._routine_parts(sub)
+        decl_map = parser._parse_decls(spec)
         intents = {n: i for n, (_, i) in decl_map.items()}
         inits = set()
         for stmt in getattr(exec_part, "content", []):
