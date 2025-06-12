@@ -102,9 +102,9 @@ class TestRenderProgram(unittest.TestCase):
         )
         expected = (
             "IF (a > 0) THEN\n"
-            "b = 1\n"
+            "  b = 1\n"
             "ELSE\n"
-            "b = 2\n"
+            "  b = 2\n"
             "END IF\n"
         )
         self.assertEqual(code_tree.render_program(prog), expected)
@@ -124,11 +124,11 @@ class TestRenderProgram(unittest.TestCase):
         )
         expected = (
             "IF (a > 0) THEN\n"
-            "b = 1\n"
+            "  b = 1\n"
             "ELSE IF (a < 0) THEN\n"
-            "b = 2\n"
+            "  b = 2\n"
             "ELSE\n"
-            "b = 3\n"
+            "  b = 3\n"
             "END IF\n"
         )
         self.assertEqual(code_tree.render_program(prog), expected)
