@@ -119,6 +119,8 @@ contains
     real, intent(out) :: a_ad(n)
     real, intent(in)  :: b_ad(n)
     integer :: i
+    integer :: in
+    integer :: ip
     real :: db_da_in
     real :: db_da_i
     real :: db_da_ip
@@ -126,19 +128,19 @@ contains
     a_ad(:) = 0.0
 
     DO i = n, 1, -1
+      in = i - 1
+      ip = i + 1
+      IF (i == 1) THEN
+        in = n
+      ELSE IF (i == n) THEN
+        ip = 1
+      END IF
       db_da_in = 1.0 / 4.0
       db_da_i = 2.0 / 4.0
       db_da_ip = 1.0 / 4.0
       a_ad(in) = b_ad(i) * db_da_in + a_ad(in)
       a_ad(i) = b_ad(i) * db_da_i + a_ad(i)
       a_ad(ip) = b_ad(i) * db_da_ip + a_ad(ip)
-      IF (i == 1) THEN
-        in = n
-      ELSE IF (i == n) THEN
-        ip = 1
-      END IF
-      ip = i + 1
-      in = i - 1
     END DO
 
     return

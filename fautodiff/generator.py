@@ -882,6 +882,13 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         used_vars.update(rhs_names)
         used_vars.add(lhs_base)
 
+    for var in sorted(index_vars):
+        typ, _ = decl_map.get(var, (None, None))
+        if typ is not None and _is_integer_type(typ):
+            if var not in args and var not in outputs and var not in const_decl_names:
+                const_decl.append(Declaration("integer", var, None, None, indent + "  "))
+                const_decl_names.add(var)
+
     for cl in const_decl:
         lines.append(cl)
     for dname in decls:
@@ -950,6 +957,41 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         else:
             rev_step = f"-{step}" if re.fullmatch(r"[\w.]+", step) else f"-({step})"
         return f"DO {var} = {end}, {start}, {rev_step}"
+
+    def _only_int_assignments(node):
+        if isinstance(node, Fortran2003.Assignment_Stmt):
+            lhs = str(node.items[0]).split("(")[0]
+            typ, _ = decl_map.get(lhs, (None, None))
+            return _is_integer_type(typ)
+        if isinstance(node, (Fortran2003.If_Then_Stmt, Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
+            return True
+        has_child = False
+        for item in getattr(node, "content", []):
+            if isinstance(item, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
+                continue
+            if isinstance(item, str):
+                continue
+            if not _only_int_assignments(item):
+                return False
+            has_child = True
+        return has_child
+
+    def _reverse_loop_body(body, ind):
+        pre = []
+        main = []
+        for st in body:
+            if _only_int_assignments(st):
+                pre.append(st)
+            else:
+                main.append(st)
+        block = Block([])
+        for st in reversed(main):
+            block.extend(_reverse_stmt(st, ind))
+        pre_block = Block([])
+        for st in pre:
+            pre_block.extend(_reverse_stmt(st, ind))
+        block.children = pre_block.children + block.children
+        return block
 
     def _reverse_stmt(st, ind):
         if isinstance(st, Fortran2003.Assignment_Stmt):
@@ -1034,7 +1076,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             return Block([node])
         if isinstance(st, Block_Nonlabel_Do_Construct):
             do_line = _reverse_do_line(st.content[0])
-            body = _reverse_block(st.content[1:-1], ind + "  ")
+            body = _reverse_loop_body(st.content[1:-1], ind + "  ")
             res = DoLoop(do_line, body, ind)
             return Block([res])
         return Block([])
