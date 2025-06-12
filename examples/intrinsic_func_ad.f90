@@ -80,7 +80,7 @@ contains
     a_ad = z_ad * dz_da
     dq_dx = 1.0
     dq_dy = -real(int(x / y), kind(x))
-    y_ad = q_ad * dq_dy
+    y_ad = q_ad * dq_dy + y_ad
     x_ad = q_ad * dq_dx
     dp_dx = 2.0 / sqrt(acos(-1.0)) * exp(-(x)**2)
     dp_dy = -2.0 / sqrt(acos(-1.0)) * exp(-(y)**2)

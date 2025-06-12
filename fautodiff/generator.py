@@ -354,7 +354,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 continue
 
             var_pat = re.compile(rf"\b{re.escape(var)}\b")
-            assign_pat = re.compile(rf"^\s*{re.escape(var)}\s*=")
+            assign_pat = re.compile(rf"^\s*{re.escape(var)}(?:\s*\(.*?\))?\s*=")
             j = i + 1
             used = False
             assign_indices = []
@@ -387,7 +387,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 for idx, first in assign_indices:
                     if first:
                         result[idx] = re.sub(
-                            rf"\s*\+\s*{re.escape(var)}\b", "", result[idx]
+                            rf"\s*\+\s*{re.escape(var)}(?:\s*\(.*?\))?", "",
+                            result[idx],
                         )
                 del result[i]
                 continue
@@ -549,6 +550,13 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     for stmt in exec_part.content:
         _find_assignments(stmt, statements)
         _collect_do_indices(stmt, do_indices)
+
+    var_use_count = {}
+    for st, _, _ in statements:
+        names = []
+        _collect_names(st.items[2], names)
+        for n in set(names):
+            var_use_count[n] = var_use_count.get(n, 0) + 1
     const_vars.update(do_indices)
     defined = set(out_grad_args)
     grad_var = {v: f"{v}_ad" for v in outputs}
@@ -669,19 +677,27 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             if var == lhs:
                 continue
             update = f"{lhs_grad} * d{lhs}_d{var}"
-            if in_do and "dimension" in str(decl_map.get(var, ("",))[0]).lower():
+            var_typ, var_int = decl_map.get(var, ("", None))
+            is_array = "dimension" in str(var_typ).lower()
+            unique_loop = (
+                in_do
+                and is_array
+                and var_use_count.get(var, 0) == 1
+                and any(n in rhs_names for n in do_indices)
+            )
+            if in_do and is_array:
                 idx = next((n for n in rhs_names if n in do_indices), "i")
-                line = f"{var}_ad({idx}) = {update} + {var}_ad({idx})"
+                line = f"{var}_ad({idx}) = {update}"
+                if var_int == "inout" or ((var in defined or in_do) and not unique_loop):
+                    line += f" + {var}_ad({idx})"
             else:
                 line = f"{var}_ad = {update}"
-                if var in defined or in_do:
+                if var_int == "inout" or ((var in defined or in_do) and not unique_loop):
                     line += f" + {var}_ad"
-            if var in defined or in_do:
-                block.append(line + "\n")
-            else:
-                block.append(line + "\n")
+            block.append(line + "\n")
+            if not in_do and var not in defined:
                 defined.add(var)
-            if in_do:
+            if in_do and not unique_loop:
                 loop_grad_vars.add(var)
         if lhs in parts:
             new_grad = f"{lhs}_ad_"
