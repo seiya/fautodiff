@@ -133,5 +133,20 @@ class TestRenderProgram(unittest.TestCase):
         )
         self.assertEqual(code_tree.render_program(prog), expected)
 
+
+class TestNodeMethods(unittest.TestCase):
+    def test_block_empty(self):
+        blk = code_tree.Block([code_tree.EmptyLine()])
+        self.assertTrue(blk.is_effectively_empty())
+
+    def test_has_assignment_to(self):
+        blk = code_tree.Block([
+            code_tree.Assignment("a", "1"),
+            code_tree.EmptyLine(),
+        ])
+        self.assertTrue(blk.has_assignment_to("a"))
+        self.assertFalse(blk.has_assignment_to("b"))
+
+
 if __name__ == '__main__':
     unittest.main()
