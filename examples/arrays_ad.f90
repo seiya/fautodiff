@@ -42,19 +42,19 @@ contains
     real, intent(in)  :: d_ad(n, m)
     integer :: i
     integer :: j
-    real :: dd_da
-    real :: dd_db
+    real :: dd_da_i__j
+    real :: dd_db_i__j
     real :: dd_dc
 
     c_ad = 0.0
 
     DO j = m, 1, -1
       DO i = n, 1, -1
-        dd_da = 1.0
-        dd_db = c
+        dd_da_i__j = 1.0
+        dd_db_i__j = c
         dd_dc = b(i, j)
-        a_ad(i, j) = d_ad(i, j) * dd_da
-        b_ad(i, j) = d_ad(i, j) * dd_db
+        a_ad(i, j) = d_ad(i, j) * dd_da_i__j
+        b_ad(i, j) = d_ad(i, j) * dd_db_i__j
         c_ad = d_ad(i, j) * dd_dc + c_ad
       END DO
     END DO
@@ -72,18 +72,18 @@ contains
     integer :: i
     real :: res_ad_
     real :: dres_dres
-    real :: dres_da
-    real :: dres_db
+    real :: dres_da_i
+    real :: dres_db_i
 
 
     res_ad_ = res_ad
 
     DO i = n, 1, -1
       dres_dres = 1.0
-      dres_da = b(i)
-      dres_db = a(i)
-      a_ad(i) = res_ad_ * dres_da
-      b_ad(i) = res_ad_ * dres_db
+      dres_da_i = b(i)
+      dres_db_i = a(i)
+      a_ad(i) = res_ad_ * dres_da_i
+      b_ad(i) = res_ad_ * dres_db_i
       res_ad_ = res_ad_ * dres_dres
     END DO
 
@@ -98,16 +98,16 @@ contains
     real, intent(in)  :: c_ad(n)
     integer, intent(in)  :: idx(n)
     integer :: i
-    real :: dc_da
-    real :: db_da
+    real :: dc_da_idx_i_
+    real :: db_da_idx_i_
 
     a_ad(:) = 0.0
 
     DO i = n, 1, -1
-      dc_da = 2 * a(idx(i))
-      a_ad(idx(i)) = c_ad(idx(i)) * dc_da + a_ad(idx(i))
-      db_da = 1.0
-      a_ad(idx(i)) = b_ad(i) * db_da + a_ad(idx(i))
+      dc_da_idx_i_ = 2 * a(idx(i))
+      a_ad(idx(i)) = c_ad(idx(i)) * dc_da_idx_i_ + a_ad(idx(i))
+      db_da_idx_i_ = 1.0
+      a_ad(idx(i)) = b_ad(i) * db_da_idx_i_ + a_ad(idx(i))
     END DO
 
     return
@@ -119,15 +119,26 @@ contains
     real, intent(out) :: a_ad(n)
     real, intent(in)  :: b_ad(n)
     integer :: i
-    real :: db_da
+    real :: db_da_in
+    real :: db_da_i
+    real :: db_da_ip
 
+    a_ad(:) = 0.0
 
     DO i = n, 1, -1
-      db_da = 1.0 + 2.0 + 1.0 / 4.0
-      a_ad(i) = b_ad(i) * db_da
-      IF (i == 1) THEN
-      ELSE IF (i == n) THEN
-      END IF
+      db_da_in = 1.0 / 4.0
+      db_da_i = 2.0 / 4.0
+      db_da_ip = 1.0 / 4.0
+      a_ad(in) = b_ad(i) * db_da_in + a_ad(in)
+      a_ad(i) = b_ad(i) * db_da_i + a_ad(i)
+      a_ad(ip) = b_ad(i) * db_da_ip + a_ad(ip)
+      ip = i + 1
+            IF (i == 1) THEN
+              in = n
+            ELSE IF (i == n) THEN
+              ip = 1
+            END IF
+      in = i - 1
     END DO
 
     return
