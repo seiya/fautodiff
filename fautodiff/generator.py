@@ -2,6 +2,12 @@ from pathlib import Path
 import sys
 import re
 
+from packaging.version import Version, parse
+import fparser
+
+if parse(getattr(fparser, "__version__", "0")) < Version("0.2.0"):
+    raise RuntimeError("fautodiff requires fparser version 0.2.0 or later")
+
 from . import parser
 from .parser import Fortran2003, walk
 from fparser.two.Fortran2008 import Block_Nonlabel_Do_Construct
