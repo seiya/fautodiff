@@ -2,15 +2,8 @@ from pathlib import Path
 import sys
 import re
 
-from packaging.version import Version, parse
-import fparser
-
-if parse(getattr(fparser, "__version__", "0")) < Version("0.2.0"):
-    raise RuntimeError("fautodiff requires fparser version 0.2.0 or later")
-
 from . import parser
-from .parser import Fortran2003, walk
-from fparser.two.Fortran2008 import Block_Nonlabel_Do_Construct
+from .parser import Fortran2003, walk, Block_Nonlabel_Do_Construct
 from .intrinsic_rules import (
     DERIVATIVE_TEMPLATES,
     NONDIFF_INTRINSICS,
@@ -333,65 +326,11 @@ def _decl_line(indent, typ, var, intent=None, space_func=None):
     return line
 
 
-def _parse_decls(spec):
-    """Map variable names to their declared type and intent."""
-    decl_map = {}
-    if spec is None:
-        return decl_map
-    for decl in spec.content:
-        if not isinstance(decl, Fortran2003.Type_Declaration_Stmt):
-            continue
-        base_type = decl.items[0].tofortran().lower()
-        text = decl.tofortran().upper()
-        if "INTENT(INOUT)" in text:
-            intent = "inout"
-        elif "INTENT(OUT)" in text:
-            intent = "out"
-        elif "INTENT(IN)" in text:
-            intent = "in"
-        else:
-            intent = None
-
-        dim_attr = None
-        attrs = decl.items[1]
-        if attrs is not None:
-            for attr in attrs.items:
-                if hasattr(attr, "items") and str(attr.items[0]).upper() == "DIMENSION":
-                    dim_attr = attr.items[1].tofortran()
-                    break
-
-        for entity in decl.items[2].items:
-            name = str(entity.items[0])
-            arrspec = entity.items[1]
-            type_str = base_type
-            dims = None
-            if arrspec is not None:
-                dims = arrspec.tofortran()
-            elif dim_attr is not None:
-                dims = dim_attr
-            if dims is not None:
-                type_str = f"{type_str}, dimension({dims})"
-            decl_map[name] = (type_str, intent)
-    return decl_map
-
-
 def _is_integer_type(typ) -> bool:
     """Return ``True`` if ``typ`` represents an integer type."""
     if typ is None:
         return False
     return str(typ).strip().lower().startswith("integer")
-
-
-def _routine_parts(routine):
-    """Return the specification and execution parts of a routine."""
-    spec = None
-    exec_part = None
-    for part in routine.content:
-        if isinstance(part, Fortran2003.Specification_Part):
-            spec = part
-        elif isinstance(part, Fortran2003.Execution_Part):
-            exec_part = part
-    return spec, exec_part
 
 
 def _sanitize_var(name: str) -> str:
@@ -578,8 +517,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
         result = None
 
-    spec, exec_part = _routine_parts(routine)
-    decl_map = _parse_decls(spec)
+    spec, exec_part = parser._routine_parts(routine)
+    decl_map = parser._parse_decls(spec)
     used_vars = set()
     pre_lines = []
     const_vars = set()
