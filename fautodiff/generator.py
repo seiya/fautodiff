@@ -113,6 +113,8 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
         ),
     ):
         name = expr.items[0].tofortran().lower()
+        if isinstance(expr, Fortran2003.Part_Ref) and name == var.lower():
+            return "1.0"
         items = [a for a in getattr(expr.items[1], "items", []) if not isinstance(a, str)]
         if name in DERIVATIVE_TEMPLATES:
             templates = DERIVATIVE_TEMPLATES[name]
@@ -554,6 +556,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     decl_set = set()
     stmt_blocks = {}
 
+    scalar_derivs = set()
+
     loop_grad_vars = set()
 
     loop_lhs = {str(s.items[0]) for s, _, in_do in statements if in_do}
@@ -642,6 +646,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             if name_d not in decl_set:
                 decls.append(name_d)
                 decl_set.add(name_d)
+            if in_do and "dimension" in str(decl_map.get(var, ("",))[0]).lower():
+                scalar_derivs.add(name_d)
             if var not in args and var not in outputs and not _is_integer_type(decl_map.get(var, ("",))[0]):
                 name_ad = f"{var}_ad"
                 if name_ad not in decl_set:
@@ -663,10 +669,17 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             if var == lhs:
                 continue
             update = f"{lhs_grad} * d{lhs}_d{var}"
-            if var in defined or in_do:
-                block.append(f"{var}_ad = {update} + {var}_ad\n")
+            if in_do and "dimension" in str(decl_map.get(var, ("",))[0]).lower():
+                idx = next((n for n in rhs_names if n in do_indices), "i")
+                line = f"{var}_ad({idx}) = {update} + {var}_ad({idx})"
             else:
-                block.append(f"{var}_ad = {update}\n")
+                line = f"{var}_ad = {update}"
+                if var in defined or in_do:
+                    line += f" + {var}_ad"
+            if var in defined or in_do:
+                block.append(line + "\n")
+            else:
+                block.append(line + "\n")
                 defined.add(var)
             if in_do:
                 loop_grad_vars.add(var)
@@ -701,6 +714,9 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             base = dname.split("_d", 1)[1]
             typ = _grad_type(decl_map.get(base, ("real",))[0])
             dims = _sized_dims(decl_map.get(base, ("real",))[0], base)
+        if dname in scalar_derivs:
+            dims = None
+            typ = "real"
         if dims is not None:
             typ = f"real, dimension{dims}"
         lines.append(f"{indent}  {typ} :: {dname}\n")

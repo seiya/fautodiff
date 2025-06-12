@@ -38,6 +38,8 @@ contains
     integer, intent(in)  :: n
     real, intent(in)  :: res_ad
     real :: dres_dres
+    real :: dres_da
+    real :: dres_db
     real :: res_ad_
 
     a_ad = 0.0
@@ -47,6 +49,10 @@ contains
 
     DO i = n, 1, -1
       dres_dres = 1.0
+      dres_da = b(i)
+      dres_db = a(i)
+      a_ad(i) = res_ad_ * dres_da + a_ad(i)
+      b_ad(i) = res_ad_ * dres_db + b_ad(i)
       res_ad_ = res_ad_ * dres_dres
     END DO
 
