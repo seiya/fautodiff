@@ -59,51 +59,36 @@ class Assignment(Node):
 
 @dataclass
 class Subroutine(Node):
-    """A ``subroutine`` statement."""
+    """A ``subroutine`` with its body."""
 
     name: str
     args: str = ""
-    indent: str = ""
+    body: Block = field(default_factory=Block)
 
     def render(self, indent: int = 0) -> List[str]:
-        space = "  " * (indent-1)
+        space = "  " * indent
         args = f"({self.args})" if self.args else "()"
-        return [f"{space}subroutine {self.name}{args}\n"]
-
-
-@dataclass
-class EndSubroutine(Node):
-    """An ``end subroutine`` statement."""
-
-    name: str
-
-    def render(self, indent: int = 0) -> List[str]:
-        space = "  " * (indent-1)
-        return [f"{space}end subroutine {self.name}\n"]
+        lines = [f"{space}subroutine {self.name}{args}\n"]
+        lines.extend(self.body.render(indent + 1))
+        lines.append(f"{space}end subroutine {self.name}\n")
+        return lines
 
 
 @dataclass
 class Function(Node):
-    """A ``function`` statement."""
+    """A ``function`` with its body."""
 
     name: str
     args: str = ""
+    body: Block = field(default_factory=Block)
 
     def render(self, indent: int = 0) -> List[str]:
-        space = "  " * (indent-1)
+        space = "  " * indent
         args = f"({self.args})" if self.args else "()"
-        return [f"{space}function {self.name}{args}\n"]
-
-
-@dataclass
-class EndFunction(Node):
-    """An ``end function`` statement."""
-
-    name: str
-
-    def render(self, indent: int = 0) -> List[str]:
-        space = "  " * (indent-1)
-        return [f"{space}end function {self.name}\n"]
+        lines = [f"{space}function {self.name}{args}\n"]
+        lines.extend(self.body.render(indent + 1))
+        lines.append(f"{space}end function {self.name}\n")
+        return lines
 
 
 @dataclass

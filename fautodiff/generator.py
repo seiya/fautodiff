@@ -10,9 +10,7 @@ from .code_tree import (
     IfBlock,
     Assignment,
     Subroutine,
-    EndSubroutine,
     Function,
-    EndFunction,
     DoLoop,
     SelectBlock,
     Return,
@@ -423,8 +421,8 @@ def _assignment_parts(stmt, warn_info=None, warnings=None):
 
 
 def _generate_ad_subroutine(routine, filename, warnings):
-    # blocks of code_tree nodes representing statements
-    lines = Block([])
+    # block of code_tree nodes representing the subroutine body
+    body = Block([])
 
     def _optimize_lines(raw_lines, keep=None):
         """Remove redundant initializations and unused assignments."""
@@ -551,7 +549,7 @@ def _generate_ad_subroutine(routine, filename, warnings):
         if outv not in args:
             ad_args.append(f"{outv}_ad")
 
-    lines.append(Subroutine(f"{name}_ad", ", ".join(ad_args)))
+    sub = Subroutine(f"{name}_ad", ", ".join(ad_args), body)
 
     def _space(intent):
         return "  " if intent == "in" else " "
@@ -584,18 +582,18 @@ def _generate_ad_subroutine(routine, filename, warnings):
         if arg_int == "out":
             if not is_char and not is_int:
                 base, dims = _split_type(gtyp)
-                lines.append(Declaration(base, f"{arg}_ad", "in", dims))
+                body.append(Declaration(base, f"{arg}_ad", "in", dims))
                 has_grad_input = True
         else:
             base, dims = _split_type(typ)
-            lines.append(Declaration(base, arg, arg_int, dims))
+            body.append(Declaration(base, arg, arg_int, dims))
             if not is_char and not is_int:
                 grad_int = {
                     "in": "out",
                     "inout": "inout",
                 }.get(arg_int, "out")
                 gbase, gdims = _split_type(gtyp)
-                lines.append(Declaration(gbase, f"{arg}_ad", grad_int, gdims))
+                body.append(Declaration(gbase, f"{arg}_ad", grad_int, gdims))
                 if grad_int == "out":
                     out_grad_args.append(arg)
                 else:
@@ -605,29 +603,27 @@ def _generate_ad_subroutine(routine, filename, warnings):
         if outv not in args:
             out_typ = _grad_type(decl_map.get(outv, ("real",))[0])
             base, dims = _split_type(out_typ)
-            lines.append(Declaration(base, f"{outv}_ad", "in", dims))
+            body.append(Declaration(base, f"{outv}_ad", "in", dims))
             has_grad_input = True
 
     # If no derivative inputs exist, all output gradients remain zero
     if not has_grad_input:
-        lines.append(EmptyLine())
+        body.append(EmptyLine())
         for arg in out_grad_args:
             t, _ = decl_map.get(arg, ("real", None))
             _, dims = _split_type(t)
             suffix = "(:)" if dims else ""
-            lines.append(Assignment(f"{arg}_ad{suffix}", "0.0"))
+            body.append(Assignment(f"{arg}_ad{suffix}", "0.0"))
         if out_grad_args:
-            lines.append(EmptyLine())
-        lines.append(Return())
-        lines.append(EndSubroutine(f"{name}_ad"))
-        return render_program(lines, 2)
+            body.append(EmptyLine())
+        body.append(Return())
+        return render_program(sub, 1)
 
     # If there are no input gradients to propagate we can exit early
     if not out_grad_args:
-        lines.append(EmptyLine())
-        lines.append(Return())
-        lines.append(EndSubroutine(f"{name}_ad"))
-        return render_program(lines, 2)
+        body.append(EmptyLine())
+        body.append(Return())
+        return render_program(sub, 1)
 
     def _find_assignments(node, out_list, top=True, in_do=False):
         if isinstance(node, Fortran2003.Assignment_Stmt):
@@ -889,7 +885,7 @@ def _generate_ad_subroutine(routine, filename, warnings):
                 const_decl_names.add(var)
 
     for cl in const_decl:
-        lines.append(cl)
+        body.append(cl)
     for dname in decls:
         typ = "real"
         dims = None
@@ -915,7 +911,7 @@ def _generate_ad_subroutine(routine, filename, warnings):
         if dims is not None:
             typ = f"real, dimension{dims}"
         base, ldims = _split_type(typ)
-        lines.append(Declaration(base, dname, None, ldims))
+        body.append(Declaration(base, dname, None, ldims))
 
     init_lines = Block([])  # initialization statements as nodes
     for arg in out_grad_args:
@@ -925,15 +921,15 @@ def _generate_ad_subroutine(routine, filename, warnings):
         init_lines.append(Assignment(f"{arg}_ad{suf}", 0.0))
     # only intent(out) argument gradients need initialization
 
-    lines.append(EmptyLine())
+    body.append(EmptyLine())
     for il in init_lines:
-        lines.append(il)
+        body.append(il)
     if len(init_lines):
-        lines.append(EmptyLine())
+        body.append(EmptyLine())
     for pl in pre_lines:
-        lines.append(pl)
+        body.append(pl)
     if len(pre_lines):
-        lines.append(EmptyLine())
+        body.append(EmptyLine())
     def _reverse_block(body):
         block = Block([])
         for st in reversed(body):
@@ -1081,13 +1077,12 @@ def _generate_ad_subroutine(routine, filename, warnings):
         return Block([])
 
     for l in _reverse_block(exec_part.content):
-        lines.append(l)
-    lines.append(EmptyLine())
-    lines.append(Return())
+        body.append(l)
+    body.append(EmptyLine())
+    body.append(Return())
 
-    lines.append(EndSubroutine(f"{name}_ad"))
     keep = {f"{v}_ad" for v in loop_grad_vars}
-    raw_lines = render_program(lines, 2).splitlines(keepends=True)
+    raw_lines = render_program(sub, 1).splitlines(keepends=True)
     optimized = _optimize_lines(raw_lines, keep)
 
     return "".join(optimized)
