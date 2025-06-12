@@ -42,8 +42,6 @@ contains
     real :: dres_db
     real :: res_ad_
 
-    a_ad = 0.0
-    b_ad = 0.0
 
     res_ad_ = res_ad
 
@@ -51,8 +49,8 @@ contains
       dres_dres = 1.0
       dres_da = b(i)
       dres_db = a(i)
-      a_ad(i) = res_ad_ * dres_da + a_ad(i)
-      b_ad(i) = res_ad_ * dres_db + b_ad(i)
+      a_ad(i) = res_ad_ * dres_da
+      b_ad(i) = res_ad_ * dres_db
       res_ad_ = res_ad_ * dres_dres
     END DO
 
