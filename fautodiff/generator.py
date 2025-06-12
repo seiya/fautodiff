@@ -77,6 +77,13 @@ def _collect_names(expr, names, unique=True):
                     subexpr = arg
                 _collect_names(subexpr, names, unique=unique)
             return
+        if isinstance(expr, Fortran2003.Part_Ref):
+            if unique:
+                if name not in names:
+                    names.append(name)
+            else:
+                names.append(name)
+            return
     if isinstance(expr, Fortran2003.Name):
         name = str(expr)
         if unique:
@@ -614,6 +621,10 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         for n in set(names):
             var_use_count[n] = var_use_count.get(n, 0) + 1
     const_vars.update(do_indices)
+    for idx in sorted(do_indices):
+        if idx not in const_decl_names:
+            const_decl.append(_decl_line(f"{indent}  ", "integer", idx))
+            const_decl_names.add(idx)
     defined = set(out_grad_args)
     grad_var = {v: f"{v}_ad" for v in outputs}
     decls = []
@@ -624,12 +635,12 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
 
     loop_grad_vars = set()
 
-    loop_lhs = {str(s.items[0]) for s, _, in_do in statements if in_do}
+    loop_lhs = {str(s.items[0]).split('(')[0] for s, _, in_do in statements if in_do}
 
 
     const_map = {}
     for stmt, _, _ in statements:
-        lhs = str(stmt.items[0])
+        lhs = str(stmt.items[0]).split('(')[0]
         rhs_names = []
         _collect_names(stmt.items[2], rhs_names)
         if lhs not in const_map:
@@ -647,9 +658,13 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             suf = "(:)" if dims else ""
             pre_lines.append(f"{indent}  {var}_ad_{suf} = {var}_ad{suf}\n")
             grad_var[var] = f"{var}_ad_"
+            if f"{var}_ad_" not in decl_set:
+                decls.append(f"{var}_ad_")
+                decl_set.add(f"{var}_ad_")
 
     for stmt, top, in_do in reversed(statements):
         lhs = str(stmt.items[0])
+        lhs_base = lhs.split('(')[0]
         line_no = None
         if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
             line_no = stmt.item.span[0]
@@ -679,12 +694,12 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         rhs_names = []
         _collect_names(stmt.items[2], rhs_names)
 
-        if lhs not in used_vars and lhs not in outputs:
+        if lhs_base not in used_vars and lhs_base not in outputs:
             # The value of ``lhs`` does not contribute to any output so we do
             # not need to propagate a gradient through this assignment.
             continue
 
-        lhs_typ = decl_map.get(lhs, ("",))[0]
+        lhs_typ = decl_map.get(lhs_base, ("",))[0]
         if str(lhs_typ).strip().lower().startswith("character") or _is_integer_type(lhs_typ):
             used_vars.update(rhs_names)
             continue
@@ -695,21 +710,21 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             and not _is_integer_type(decl_map.get(v, ("",))[0])
             and v not in const_vars
         }
-        if not parts and lhs in used_vars and not rhs_names and lhs not in outputs:
+        if not parts and lhs_base in used_vars and not rhs_names and lhs_base not in outputs:
             if top:
                 pre_lines.insert(0, f"{indent}  {stmt.tofortran().strip()}\n")
             else:
                 stmt_blocks[id(stmt)] = [f"{stmt.tofortran().strip()}\n"]
             used_vars.update(rhs_names)
-            used_vars.add(lhs)
-            if lhs not in args and lhs not in outputs and lhs not in const_decl_names:
-                typ = decl_map.get(lhs, ("real", None))[0]
+            used_vars.add(lhs_base)
+            if lhs_base not in args and lhs_base not in outputs and lhs_base not in const_decl_names:
+                typ = decl_map.get(lhs_base, ("real", None))[0]
                 if not str(typ).strip().lower().startswith("character") and not _is_integer_type(typ):
-                    const_decl.append(_decl_line(f"{indent}  ", typ, lhs))
-                    const_decl_names.add(lhs)
+                    const_decl.append(_decl_line(f"{indent}  ", typ, lhs_base))
+                    const_decl_names.add(lhs_base)
             continue
         for var in parts:
-            name_d = f"d{lhs}_d{var}"
+            name_d = f"d{lhs_base}_d{var}"
             if name_d not in decl_set:
                 decls.append(name_d)
                 decl_set.add(name_d)
@@ -720,26 +735,26 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 if name_ad not in decl_set:
                     decls.append(name_ad)
                     decl_set.add(name_ad)
-        if lhs in parts:
+        if lhs_base in parts:
             if not _is_integer_type(lhs_typ):
-                name_ad = f"{lhs}_ad_"
+                name_ad = f"{lhs_base}_ad_"
                 if name_ad not in decl_set:
                     decls.append(name_ad)
                     decl_set.add(name_ad)
 
         block = []
         for var, expr in parts.items():
-            name_d = f"d{lhs}_d{var}"
+            name_d = f"d{lhs_base}_d{var}"
             var_typ = decl_map.get(var, ("", None))[0]
             _, dims = _split_type(var_typ)
             suffix = "(:)" if dims and name_d not in scalar_derivs else ""
-            block.append(f"d{lhs}_d{var}{suffix} = {expr}\n")
-        lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
+            block.append(f"{name_d}{suffix} = {expr}\n")
+        lhs_grad = grad_var.get(lhs_base, f"{lhs_base}_ad")
         order = list(parts.keys()) if has_repeat else list(reversed(list(parts.keys())))
         for var in order:
-            if var == lhs:
+            if var == lhs_base:
                 continue
-            update = f"{lhs_grad} * d{lhs}_d{var}"
+            update = f"{lhs_grad} * d{lhs_base}_d{var}"
             var_typ, var_int = decl_map.get(var, ("", None))
             is_array = "dimension" in str(var_typ).lower()
             unique_loop = (
@@ -763,18 +778,18 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 defined.add(var)
             if in_do and not unique_loop:
                 loop_grad_vars.add(var)
-        if lhs in parts:
-            new_grad = f"{lhs}_ad_"
-            ltyp = decl_map.get(lhs, ("real",))[0]
+        if lhs_base in parts:
+            new_grad = f"{lhs_base}_ad_"
+            ltyp = decl_map.get(lhs_base, ("real",))[0]
             _, ldims = _split_type(ltyp)
             suf = "(:)" if ldims else ""
-            block.append(f"{new_grad}{suf} = {lhs_grad} * d{lhs}_d{lhs}{suf}\n")
-            grad_var[lhs] = new_grad
+            block.append(f"{new_grad}{suf} = {lhs_grad} * d{lhs_base}_d{lhs_base}{suf}\n")
+            grad_var[lhs_base] = new_grad
             if in_do:
-                loop_grad_vars.add(lhs)
+                loop_grad_vars.add(lhs_base)
         stmt_blocks[id(stmt)] = block
         used_vars.update(rhs_names)
-        used_vars.add(lhs)
+        used_vars.add(lhs_base)
 
     for cl in const_decl:
         lines.append(cl)
