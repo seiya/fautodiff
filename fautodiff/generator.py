@@ -433,6 +433,7 @@ def _assignment_parts(stmt, warn_info=None, warnings=None):
     _collect_names(rhs, names)
     parts = {}
     index_map = {}
+    index_vars = set()
     for name in names:
         idx_list = _find_index_exprs(rhs, name)
         if idx_list:
@@ -442,13 +443,15 @@ def _assignment_parts(stmt, warn_info=None, warnings=None):
                     key = f"{name}@{idx}"
                     parts[key] = deriv
                     index_map[key] = (name, idx)
+                for var in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", idx):
+                    index_vars.add(var)
         else:
             deriv = _derivative(rhs, name, None, warn_info, warnings)
             if deriv != "0.0":
                 parts[name] = deriv
                 index_map[name] = (name, None)
     has_repeat = len(all_names) != len(set(all_names))
-    return parts, has_repeat, index_map
+    return parts, has_repeat, index_map, index_vars
 
 
 def _find_index_expr(expr, var):
@@ -545,6 +548,23 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 continue
             i += 1
 
+        # remove unused integer assignments
+        int_vars = {n for n, (t, _) in decl_map.items() if _is_integer_type(t)}
+        assign_pat = re.compile(r"^\s*(\w+)\s*=.*$")
+        i = 0
+        while i < len(result):
+            m = assign_pat.match(result[i].strip())
+            if not m:
+                i += 1
+                continue
+            var = m.group(1)
+            if var in int_vars and var not in index_vars:
+                later_use = any(re.search(rf"\b{re.escape(var)}\b", l) for l in result[i+1:])
+                if not later_use:
+                    del result[i]
+                    continue
+            i += 1
+
         return result
 
     if isinstance(routine, Fortran2003.Function_Subprogram):
@@ -565,6 +585,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     const_vars = set()
     const_decl = []
     const_decl_names = set()
+    index_vars = set()
     ad_args = []
     outputs = []
     if result is not None:
@@ -787,7 +808,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             used_vars.update(names)
             continue
 
-        parts, has_repeat, idx_map = _assignment_parts(stmt, info, warnings)
+        parts, has_repeat, idx_map, idx_vars = _assignment_parts(stmt, info, warnings)
+        index_vars.update(idx_vars)
 
         rhs_names = []
         _collect_names(stmt.items[2], rhs_names)
@@ -1048,9 +1070,6 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 else:
                     i += 1
             if has_body:
-                if last_block is not None:
-                    last_block[:0] = res
-                    return []
                 return res
             return []
         if isinstance(st, Fortran2003.Case_Construct):

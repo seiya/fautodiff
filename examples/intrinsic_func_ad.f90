@@ -173,7 +173,6 @@ contains
 
     dd_dr = 1.0
     r_ad = d_ad * dd_dr
-    i2 = INT(r)
 
     return
   end subroutine casting_intrinsics_ad

@@ -11,8 +11,15 @@ contains
     real, intent(in)  :: z_ad
     real :: dz_dx
 
-    x_ad = 0.0
 
+    IF (x > 0.0) THEN
+      dz_dx = 1.0
+      x_ad = z_ad * dz_dx
+    ELSE IF (x < 0.0) THEN
+      dz_dx = - 1.0
+      x_ad = z_ad * dz_dx
+    ELSE
+    END IF
 
     return
   end subroutine if_example_ad

@@ -132,12 +132,12 @@ contains
       a_ad(in) = b_ad(i) * db_da_in + a_ad(in)
       a_ad(i) = b_ad(i) * db_da_i + a_ad(i)
       a_ad(ip) = b_ad(i) * db_da_ip + a_ad(ip)
+      IF (i == 1) THEN
+        in = n
+      ELSE IF (i == n) THEN
+        ip = 1
+      END IF
       ip = i + 1
-            IF (i == 1) THEN
-              in = n
-            ELSE IF (i == n) THEN
-              ip = 1
-            END IF
       in = i - 1
     END DO
 
