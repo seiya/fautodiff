@@ -51,32 +51,97 @@ class Assignment(Node):
 
     lhs: str
     rhs: str
+    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = " " * indent
+        space = self.indent
         return [f"{space}{self.lhs} = {self.rhs}\n"]
 
 
 @dataclass
-class Statement(Node):
-    """A generic statement line."""
+class Subroutine(Node):
+    """A ``subroutine`` statement."""
 
-    text: str
+    name: str
+    args: str = ""
+    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = " " * indent
-        return [f"{space}{self.text}\n"]
+        space = self.indent
+        args = f"({self.args})" if self.args else "()"
+        return [f"{space}subroutine {self.name}{args}\n"]
+
+
+@dataclass
+class EndSubroutine(Node):
+    """An ``end subroutine`` statement."""
+
+    name: str
+    indent: str = ""
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = self.indent
+        return [f"{space}end subroutine {self.name}\n"]
+
+
+@dataclass
+class Function(Node):
+    """A ``function`` statement."""
+
+    name: str
+    args: str = ""
+    indent: str = ""
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = self.indent
+        args = f"({self.args})" if self.args else "()"
+        return [f"{space}function {self.name}{args}\n"]
+
+
+@dataclass
+class EndFunction(Node):
+    """An ``end function`` statement."""
+
+    name: str
+    indent: str = ""
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = self.indent
+        return [f"{space}end function {self.name}\n"]
+
+
+@dataclass
+class EmptyLine(Node):
+    """Represents a blank line."""
+
+    indent: str = ""
+
+    def render(self, indent: int = 0) -> List[str]:
+        return ["\n"]
 
 
 @dataclass
 class Declaration(Node):
-    """A declaration statement."""
+    """A variable declaration."""
 
-    text: str
+    typename: str
+    name: str
+    intent: Optional[str] = None
+    shape: Optional[str] = None
+    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = " " * indent
-        return [f"{space}{self.text}\n"]
+        space = self.indent
+        line = f"{space}{self.typename}"
+        if self.intent is not None:
+            pad = "  " if self.intent == "in" else " "
+            line += f", intent({self.intent})" + pad + f":: {self.name}"
+        else:
+            line += f" :: {self.name}"
+        if self.shape:
+            line += self.shape
+        line += "\n"
+        return [line]
 
 
 @dataclass
@@ -110,17 +175,18 @@ class SelectBlock(Node):
     expr: str
     cases: List[Tuple[str, Block]] = field(default_factory=list)
     default: Optional[Block] = None
+    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = " " * indent
-        lines = [f"{space}select case ({self.expr})\n"]
+        space = self.indent
+        lines = [f"{space}SELECT CASE ({self.expr})\n"]
         for cond, block in self.cases:
-            lines.append(f"{space}case ({cond})\n")
-            lines.extend(block.render(indent + 2))
+            lines.append(f"{space}CASE ({cond})\n")
+            lines.extend(block.render(len(space) + 2))
         if self.default is not None:
-            lines.append(f"{space}case default\n")
-            lines.extend(self.default.render(indent + 2))
-        lines.append(f"{space}end select\n")
+            lines.append(f"{space}CASE DEFAULT\n")
+            lines.extend(self.default.render(len(space) + 2))
+        lines.append(f"{space}END SELECT\n")
         return lines
 
 
@@ -130,21 +196,24 @@ class DoLoop(Node):
 
     header: str
     body: Block
+    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = " " * indent
-        lines = [f"{space}do {self.header}\n"]
-        lines.extend(self.body.render(indent + 2))
-        lines.append(f"{space}end do\n")
+        space = self.indent
+        lines = [f"{space}{self.header}\n"]
+        lines.extend(self.body.render(len(space) + 2))
+        lines.append(f"{space}END DO\n")
         return lines
 
 
+@dataclass
 class Return(Node):
     """A ``return`` statement."""
 
+    indent: str = ""
+
     def render(self, indent: int = 0) -> List[str]:
-        space = " " * indent
-        return [f"{space}return\n"]
+        return [f"{self.indent}return\n"]
 
 
 def render_program(node: Node, indent: int = 0) -> str:
