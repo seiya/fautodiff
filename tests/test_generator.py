@@ -147,6 +147,25 @@ class TestNodeMethods(unittest.TestCase):
         self.assertTrue(blk.has_assignment_to("a"))
         self.assertFalse(blk.has_assignment_to("b"))
 
+    def test_ids_and_clone(self):
+        blk = code_tree.Block([code_tree.Assignment("a", "1")])
+        child_id = blk.children[0].get_id()
+        clone = blk.deep_clone()
+        self.assertNotEqual(clone.get_id(), blk.get_id())
+        self.assertNotEqual(clone.children[0].get_id(), child_id)
+        self.assertEqual(
+            code_tree.render_program(clone), code_tree.render_program(blk)
+        )
+
+    def test_find_and_remove(self):
+        a = code_tree.Assignment("a", "1")
+        b = code_tree.Assignment("b", "2")
+        blk = code_tree.Block([a, b])
+        self.assertIs(blk.find_by_id(b.get_id()), b)
+        blk.remove_by_id(a.get_id())
+        self.assertEqual(len(blk.children), 1)
+        self.assertIs(blk.children[0], b)
+
 
 if __name__ == '__main__':
     unittest.main()
