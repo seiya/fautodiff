@@ -166,6 +166,32 @@ class TestNodeMethods(unittest.TestCase):
         self.assertEqual(len(blk.children), 1)
         self.assertIs(blk.children[0], b)
 
+    def test_var_analysis(self):
+        blk = code_tree.Block([
+            code_tree.Assignment("a", "1"),
+            code_tree.Assignment("b", "a"),
+            code_tree.IfBlock(
+                "a > 0",
+                code_tree.Block([code_tree.Assignment("c", "b")]),
+                else_body=code_tree.Block([code_tree.Assignment("b", "c")]),
+            ),
+        ])
+        self.assertEqual(blk.assigned_vars(), ["a", "b", "c"])
+        self.assertEqual(blk.required_vars(), ["c"])
+
+        sub = code_tree.Subroutine(
+            "foo",
+            "",
+            decls=code_tree.Block([
+                code_tree.Declaration("real", "a", "in"),
+                code_tree.Declaration("real", "b"),
+            ]),
+            body=code_tree.Block([code_tree.Assignment("b", "a")]),
+        )
+        self.assertEqual(sub.defined_var_names(), ["a", "b"])
+        self.assertEqual(sub.assigned_vars(), ["a", "b"])
+        self.assertEqual(sub.required_vars(), [])
+
 
 if __name__ == '__main__':
     unittest.main()
