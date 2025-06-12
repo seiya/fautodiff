@@ -646,6 +646,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
 
 
     const_map = {}
+    lhs_counts = {}
+    self_use = set()
     for stmt, _, _ in statements:
         lhs = str(stmt.items[0]).split('(')[0]
         rhs_names = []
@@ -654,12 +656,15 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             const_map[lhs] = True
         if rhs_names:
             const_map[lhs] = False
+        lhs_counts[lhs] = lhs_counts.get(lhs, 0) + 1
+        if lhs in rhs_names:
+            self_use.add(lhs)
     for var, is_const in const_map.items():
         if is_const:
             const_vars.add(var)
 
     for var in sorted(loop_lhs):
-        if var in outputs:
+        if var in outputs and (lhs_counts.get(var, 0) > 1 or var in self_use):
             vtyp = decl_map.get(var, ("real",))[0]
             _, dims = _split_type(vtyp)
             suf = "(:)" if dims else ""

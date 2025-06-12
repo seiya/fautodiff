@@ -42,23 +42,20 @@ contains
     real, intent(in)  :: d_ad(n, m)
     integer :: i
     integer :: j
-    real :: d_ad_(n, m)
     real :: dd_da
     real :: dd_db
     real :: dd_dc
 
     c_ad = 0.0
 
-    d_ad_(:) = d_ad(:)
-
     DO j = m, 1, -1
       DO i = n, 1, -1
         dd_da = 1.0
         dd_db = c
         dd_dc = b(i, j)
-        a_ad(i, j) = d_ad_(i, j) * dd_da
-        b_ad(i, j) = d_ad_(i, j) * dd_db
-        c_ad = d_ad_(i, j) * dd_dc + c_ad
+        a_ad(i, j) = d_ad(i, j) * dd_da
+        b_ad(i, j) = d_ad(i, j) * dd_db
+        c_ad = d_ad(i, j) * dd_dc + c_ad
       END DO
     END DO
 
@@ -101,21 +98,16 @@ contains
     real, intent(in)  :: c_ad(n)
     integer, intent(in)  :: idx(n)
     integer :: i
-    real :: b_ad_(n)
-    real :: c_ad_(n)
     real :: dc_da
     real :: db_da
 
     a_ad(:) = 0.0
 
-    b_ad_(:) = b_ad(:)
-    c_ad_(:) = c_ad(:)
-
     DO i = n, 1, -1
       dc_da = 2 * a(idx(i))**1
-      a_ad(i) = c_ad_(i) * dc_da + a_ad(i)
+      a_ad(i) = c_ad(i) * dc_da + a_ad(i)
       db_da = 1.0
-      a_ad(i) = b_ad_(i) * db_da + a_ad(i)
+      a_ad(i) = b_ad(i) * db_da + a_ad(i)
     END DO
 
     return
@@ -127,15 +119,12 @@ contains
     real, intent(out) :: a_ad(n)
     real, intent(in)  :: b_ad(n)
     integer :: i
-    real :: b_ad_(n)
     real :: db_da
 
 
-    b_ad_(:) = b_ad(:)
-
     DO i = n, 1, -1
       db_da = 1.0 + 2.0 + 1.0 / 4.0
-      a_ad(i) = b_ad_(i) * db_da
+      a_ad(i) = b_ad(i) * db_da
       IF (i == 1) THEN
       ELSE IF (i == n) THEN
       END IF
