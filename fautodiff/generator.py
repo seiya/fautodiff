@@ -77,6 +77,20 @@ def _collect_names(expr, names, unique=True):
                     subexpr = arg
                 _collect_names(subexpr, names, unique=unique)
             return
+        if isinstance(expr, Fortran2003.Part_Ref):
+            if unique:
+                if name not in names:
+                    names.append(name)
+            else:
+                names.append(name)
+            # also collect index variable names
+            for arg in getattr(expr.items[1], "items", []):
+                if isinstance(arg, Fortran2003.Actual_Arg_Spec):
+                    subexpr = arg.items[1]
+                else:
+                    subexpr = arg
+                _collect_names(subexpr, names, unique=unique)
+            return
     if isinstance(expr, Fortran2003.Name):
         name = str(expr)
         if unique:
@@ -98,18 +112,24 @@ def _parenthesize_if_needed(text: str) -> str:
     return text
 
 
-def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
-    """Return derivative of ``expr`` with respect to ``var`` as a string.
+def _derivative(expr, var: str, index=None, warn_info=None, warnings=None) -> str:
+    """Return derivative of ``expr`` with respect to ``var``.
+
+    ``index`` can be an index expression string for array elements. When
+    provided the derivative is taken with respect to the specific indexed
+    element ``var(index)``.
 
     ``warn_info`` should contain context (file, line, stmt) for warning messages.
     ``warnings`` is a list that collects formatted warning strings.
     """
     if isinstance(expr, Fortran2003.Name):
+        if index is not None:
+            return "0.0"
         return "1.0" if str(expr) == var else "0.0"
     if isinstance(expr, (Fortran2003.Int_Literal_Constant, Fortran2003.Real_Literal_Constant)):
         return "0.0"
     if isinstance(expr, Fortran2003.Parenthesis):
-        return _derivative(expr.items[1], var, warn_info, warnings)
+        return _derivative(expr.items[1], var, index, warn_info, warnings)
     if isinstance(
         expr,
         (
@@ -120,7 +140,15 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
     ):
         name = expr.items[0].tofortran().lower()
         if isinstance(expr, Fortran2003.Part_Ref) and name == var.lower():
-            return "1.0"
+            if index is None:
+                return "1.0"
+            items = []
+            for arg in getattr(expr.items[1], "items", []):
+                if isinstance(arg, Fortran2003.Actual_Arg_Spec):
+                    arg = arg.items[1]
+                items.append(arg.tofortran())
+            idx = ", ".join(items)
+            return "1.0" if idx == index else "0.0"
         items = [a for a in getattr(expr.items[1], "items", []) if not isinstance(a, str)]
         if name in DERIVATIVE_TEMPLATES:
             templates = DERIVATIVE_TEMPLATES[name]
@@ -135,7 +163,7 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
                     reason = f"unsupported intrinsic '{name}'"
                     _warn(warnings, warn_info, expr.tofortran(), reason)
                     return "0.0"
-                d_arg = _derivative(args[0], var, warn_info, warnings)
+                d_arg = _derivative(args[0], var, index, warn_info, warnings)
                 deriv = templates.format(arg=arg_strs[0])
                 if d_arg == "0.0":
                     return "0.0"
@@ -150,7 +178,7 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
                 placeholder = {f"arg{i+1}": s for i, s in enumerate(arg_strs)}
                 terms = []
                 for arg, tmpl in zip(args, templates):
-                    d_arg = _derivative(arg, var, warn_info, warnings)
+                    d_arg = _derivative(arg, var, index, warn_info, warnings)
                     if d_arg == "0.0":
                         continue
                     deriv = tmpl.format(**placeholder)
@@ -168,7 +196,7 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
             return "0.0"
     if isinstance(expr, Fortran2003.Level_2_Unary_Expr):
         sign = expr.items[0]
-        d = _derivative(expr.items[1], var, warn_info, warnings)
+        d = _derivative(expr.items[1], var, index, warn_info, warnings)
         if sign == "-":
             if d == "0.0":
                 return "0.0"
@@ -179,16 +207,16 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
     if isinstance(expr, Fortran2003.Level_2_Expr) and len(expr.items) == 3 and isinstance(expr.items[1], str):
         left, op, right = expr.items
         if op == "+":
-            d1 = _derivative(left, var, warn_info, warnings)
-            d2 = _derivative(right, var, warn_info, warnings)
+            d1 = _derivative(left, var, index, warn_info, warnings)
+            d2 = _derivative(right, var, index, warn_info, warnings)
             if d1 == "0.0":
                 return d2
             if d2 == "0.0":
                 return d1
             return f"{d1} + {d2}"
         if op == "-":
-            d1 = _derivative(left, var, warn_info, warnings)
-            d2 = _derivative(right, var, warn_info, warnings)
+            d1 = _derivative(left, var, index, warn_info, warnings)
+            d2 = _derivative(right, var, index, warn_info, warnings)
             if d1 == "0.0" and d2 == "0.0":
                 return "0.0"
             if d2 == "0.0":
@@ -199,8 +227,8 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
     if isinstance(expr, Fortran2003.Add_Operand) and len(expr.items) == 3:
         left, op, right = expr.items
         if op == "*":
-            d1 = _derivative(left, var, warn_info, warnings)
-            d2 = _derivative(right, var, warn_info, warnings)
+            d1 = _derivative(left, var, index, warn_info, warnings)
+            d2 = _derivative(right, var, index, warn_info, warnings)
             left_s = left.tofortran()
             right_s = right.tofortran()
             terms = []
@@ -213,12 +241,14 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
             u = left.tofortran()
             v = right.tofortran()
             vsq = v if v.startswith("(") else f"({v})"
-            d1 = _derivative(left, var, warn_info, warnings)
-            d2 = _derivative(right, var, warn_info, warnings)
+            d1 = _derivative(left, var, index, warn_info, warnings)
+            d2 = _derivative(right, var, index, warn_info, warnings)
             if d1 == "0.0" and d2 == "0.0":
                 return "0.0"
             if d2 == "0.0":
-                return f"{d1} / {v}" if d1 != "1.0" else f"1.0 / {v}"
+                num = d1 if d1 != "1.0" else "1.0"
+                num = _parenthesize_if_needed(num)
+                return f"{num} / {v}"
             if d1 == "0.0":
                 fac = "" if d2 == "1.0" else f" * {d2}"
                 return f"- {u}{fac} / {vsq}**2"
@@ -229,12 +259,13 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
         base, _, exponent = expr.items
         base_s = base.tofortran()
         exp_s = exponent.tofortran()
-        d_base = _derivative(base, var, warn_info, warnings)
-        d_exp = _derivative(exponent, var, warn_info, warnings)
+        d_base = _derivative(base, var, index, warn_info, warnings)
+        d_exp = _derivative(exponent, var, index, warn_info, warnings)
         terms = []
         if d_base != "0.0":
             minus = _parenthesize_if_needed(_minus_one(exponent))
-            term = f"{exp_s} * {base_s}**{minus}"
+            base_term = base_s if minus in ("1", "1.0", "(1)", "(1.0)") else f"{base_s}**{minus}"
+            term = f"{exp_s} * {base_term}"
             if d_base != "1.0":
                 term += f" * {d_base}"
             terms.append(term)
@@ -363,20 +394,90 @@ def _routine_parts(routine):
     return spec, exec_part
 
 
+def _sanitize_var(name: str) -> str:
+    """Return a string safe for use in generated variable names."""
+    return re.sub(r"[^0-9A-Za-z_]", "_", name)
+
+
+def _find_index_exprs(expr, var):
+    """Return list of unique index expressions for ``var`` in ``expr``."""
+    result = []
+
+    def _walk(node):
+        if isinstance(node, Fortran2003.Part_Ref):
+            name = node.items[0].tofortran().lower()
+            if name == var.lower():
+                items = []
+                for arg in getattr(node.items[1], "items", []):
+                    if isinstance(arg, Fortran2003.Actual_Arg_Spec):
+                        arg = arg.items[1]
+                    items.append(arg.tofortran())
+                idx = ", ".join(items)
+                if idx not in result:
+                    result.append(idx)
+                return
+        for itm in getattr(node, "items", []):
+            if not isinstance(itm, str):
+                _walk(itm)
+
+    _walk(expr)
+    return result
+
+
 def _assignment_parts(stmt, warn_info=None, warnings=None):
-    """Return mapping of variables to partial derivative expressions and whether any variable is used twice."""
+    """Return mapping of variables to partial derivatives and index info."""
     rhs = stmt.items[2]
     all_names = []
     _collect_names(rhs, all_names, unique=False)
     names = []
     _collect_names(rhs, names)
     parts = {}
+    index_map = {}
+    index_vars = set()
     for name in names:
-        deriv = _derivative(rhs, name, warn_info, warnings)
-        if deriv != "0.0":
-            parts[name] = deriv
+        idx_list = _find_index_exprs(rhs, name)
+        if idx_list:
+            for idx in idx_list:
+                deriv = _derivative(rhs, name, idx, warn_info, warnings)
+                if deriv != "0.0":
+                    key = f"{name}@{idx}"
+                    parts[key] = deriv
+                    index_map[key] = (name, idx)
+                for var in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", idx):
+                    index_vars.add(var)
+        else:
+            deriv = _derivative(rhs, name, None, warn_info, warnings)
+            if deriv != "0.0":
+                parts[name] = deriv
+                index_map[name] = (name, None)
     has_repeat = len(all_names) != len(set(all_names))
-    return parts, has_repeat
+    return parts, has_repeat, index_map, index_vars
+
+
+def _find_index_expr(expr, var):
+    """Return the unique index expression string for ``var`` if present."""
+    found = []
+
+    def _walk(node):
+        if isinstance(node, Fortran2003.Part_Ref):
+            name = node.items[0].tofortran().lower()
+            if name == var.lower():
+                items = []
+                for arg in getattr(node.items[1], "items", []):
+                    if isinstance(arg, Fortran2003.Actual_Arg_Spec):
+                        arg = arg.items[1]
+                    items.append(arg.tofortran())
+                found.append(", ".join(items))
+                return
+        for itm in getattr(node, "items", []):
+            if not isinstance(itm, str):
+                _walk(itm)
+
+    _walk(expr)
+    uniq = set(found)
+    if len(uniq) == 1:
+        return uniq.pop()
+    return None
 
 
 def _generate_ad_subroutine(routine, indent, filename, warnings):
@@ -447,6 +548,23 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 continue
             i += 1
 
+        # remove unused integer assignments
+        int_vars = {n for n, (t, _) in decl_map.items() if _is_integer_type(t)}
+        assign_pat = re.compile(r"^\s*(\w+)\s*=.*$")
+        i = 0
+        while i < len(result):
+            m = assign_pat.match(result[i].strip())
+            if not m:
+                i += 1
+                continue
+            var = m.group(1)
+            if var in int_vars and var not in index_vars:
+                later_use = any(re.search(rf"\b{re.escape(var)}\b", l) for l in result[i+1:])
+                if not later_use:
+                    del result[i]
+                    continue
+            i += 1
+
         return result
 
     if isinstance(routine, Fortran2003.Function_Subprogram):
@@ -467,6 +585,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     const_vars = set()
     const_decl = []
     const_decl_names = set()
+    index_vars = set()
     ad_args = []
     outputs = []
     if result is not None:
@@ -610,10 +729,14 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     var_use_count = {}
     for st, _, _ in statements:
         names = []
-        _collect_names(st.items[2], names)
-        for n in set(names):
+        _collect_names(st.items[2], names, unique=False)
+        for n in names:
             var_use_count[n] = var_use_count.get(n, 0) + 1
     const_vars.update(do_indices)
+    for idx in sorted(do_indices):
+        if idx not in const_decl_names:
+            const_decl.append(_decl_line(f"{indent}  ", "integer", idx))
+            const_decl_names.add(idx)
     defined = set(out_grad_args)
     grad_var = {v: f"{v}_ad" for v in outputs}
     decls = []
@@ -624,32 +747,42 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
 
     loop_grad_vars = set()
 
-    loop_lhs = {str(s.items[0]) for s, _, in_do in statements if in_do}
+    loop_lhs = {str(s.items[0]).split('(')[0] for s, _, in_do in statements if in_do}
 
 
     const_map = {}
+    lhs_counts = {}
+    self_use = set()
     for stmt, _, _ in statements:
-        lhs = str(stmt.items[0])
+        lhs = str(stmt.items[0]).split('(')[0]
         rhs_names = []
         _collect_names(stmt.items[2], rhs_names)
         if lhs not in const_map:
             const_map[lhs] = True
         if rhs_names:
             const_map[lhs] = False
+        lhs_counts[lhs] = lhs_counts.get(lhs, 0) + 1
+        if lhs in rhs_names:
+            self_use.add(lhs)
     for var, is_const in const_map.items():
         if is_const:
             const_vars.add(var)
 
     for var in sorted(loop_lhs):
-        if var in outputs:
+        if var in outputs and (lhs_counts.get(var, 0) > 1 or var in self_use):
             vtyp = decl_map.get(var, ("real",))[0]
             _, dims = _split_type(vtyp)
             suf = "(:)" if dims else ""
             pre_lines.append(f"{indent}  {var}_ad_{suf} = {var}_ad{suf}\n")
             grad_var[var] = f"{var}_ad_"
+            if f"{var}_ad_" not in decl_set:
+                decls.append(f"{var}_ad_")
+                decl_set.add(f"{var}_ad_")
 
+    last_block = None
     for stmt, top, in_do in reversed(statements):
         lhs = str(stmt.items[0])
+        lhs_base = lhs.split('(')[0]
         line_no = None
         if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
             line_no = stmt.item.span[0]
@@ -671,110 +804,148 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         if handler:
             block, names = handler(lhs, items, grad_var, defined, decls, decl_set)
             stmt_blocks[id(stmt)] = block
+            last_block = block
             used_vars.update(names)
             continue
 
-        parts, has_repeat = _assignment_parts(stmt, info, warnings)
+        parts, has_repeat, idx_map, idx_vars = _assignment_parts(stmt, info, warnings)
+        index_vars.update(idx_vars)
 
         rhs_names = []
         _collect_names(stmt.items[2], rhs_names)
 
-        if lhs not in used_vars and lhs not in outputs:
+        if lhs_base not in used_vars and lhs_base not in outputs:
             # The value of ``lhs`` does not contribute to any output so we do
             # not need to propagate a gradient through this assignment.
             continue
 
-        lhs_typ = decl_map.get(lhs, ("",))[0]
+        lhs_typ = decl_map.get(lhs_base, ("",))[0]
         if str(lhs_typ).strip().lower().startswith("character") or _is_integer_type(lhs_typ):
             used_vars.update(rhs_names)
+            if lhs_base in used_vars:
+                stmt_blocks[id(stmt)] = [f"{stmt.tofortran().strip()}\n"]
+                last_block = stmt_blocks[id(stmt)]
+                used_vars.add(lhs_base)
             continue
         parts = {
             v: e
             for v, e in parts.items()
-            if not str(decl_map.get(v, ("",))[0]).strip().lower().startswith("character")
-            and not _is_integer_type(decl_map.get(v, ("",))[0])
-            and v not in const_vars
+            if not str(decl_map.get(idx_map.get(v, (v, None))[0], ("",))[0])
+            .strip()
+            .lower()
+            .startswith("character")
+            and not _is_integer_type(decl_map.get(idx_map.get(v, (v, None))[0], ("",))[0])
+            and idx_map.get(v, (v, None))[0] not in const_vars
         }
-        if not parts and lhs in used_vars and not rhs_names and lhs not in outputs:
+        if not parts and lhs_base in used_vars and not rhs_names and lhs_base not in outputs:
             if top:
                 pre_lines.insert(0, f"{indent}  {stmt.tofortran().strip()}\n")
+                last_block = None
             else:
                 stmt_blocks[id(stmt)] = [f"{stmt.tofortran().strip()}\n"]
+                last_block = stmt_blocks[id(stmt)]
             used_vars.update(rhs_names)
-            used_vars.add(lhs)
-            if lhs not in args and lhs not in outputs and lhs not in const_decl_names:
-                typ = decl_map.get(lhs, ("real", None))[0]
+            used_vars.add(lhs_base)
+            if lhs_base not in args and lhs_base not in outputs and lhs_base not in const_decl_names:
+                typ = decl_map.get(lhs_base, ("real", None))[0]
                 if not str(typ).strip().lower().startswith("character") and not _is_integer_type(typ):
-                    const_decl.append(_decl_line(f"{indent}  ", typ, lhs))
-                    const_decl_names.add(lhs)
+                    const_decl.append(_decl_line(f"{indent}  ", typ, lhs_base))
+                    const_decl_names.add(lhs_base)
             continue
         for var in parts:
-            name_d = f"d{lhs}_d{var}"
+            base, idx = idx_map.get(var, (var, None))
+            safe = _sanitize_var(var)
+            name_d = f"d{lhs_base}_d{safe}"
             if name_d not in decl_set:
                 decls.append(name_d)
                 decl_set.add(name_d)
-            if in_do and "dimension" in str(decl_map.get(var, ("",))[0]).lower():
+            if in_do and "dimension" in str(decl_map.get(base, ("",))[0]).lower():
                 scalar_derivs.add(name_d)
-            if var not in args and var not in outputs and not _is_integer_type(decl_map.get(var, ("",))[0]):
-                name_ad = f"{var}_ad"
+            if base not in args and base not in outputs and not _is_integer_type(decl_map.get(base, ("",))[0]):
+                name_ad = f"{base}_ad"
                 if name_ad not in decl_set:
                     decls.append(name_ad)
                     decl_set.add(name_ad)
-        if lhs in parts:
+        if lhs_base in parts:
             if not _is_integer_type(lhs_typ):
-                name_ad = f"{lhs}_ad_"
+                name_ad = f"{lhs_base}_ad_"
                 if name_ad not in decl_set:
                     decls.append(name_ad)
                     decl_set.add(name_ad)
 
         block = []
         for var, expr in parts.items():
-            name_d = f"d{lhs}_d{var}"
-            var_typ = decl_map.get(var, ("", None))[0]
+            base, idx = idx_map.get(var, (var, None))
+            safe = _sanitize_var(var)
+            name_d = f"d{lhs_base}_d{safe}"
+            var_typ = decl_map.get(base, ("", None))[0]
             _, dims = _split_type(var_typ)
             suffix = "(:)" if dims and name_d not in scalar_derivs else ""
-            block.append(f"d{lhs}_d{var}{suffix} = {expr}\n")
-        lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
+            block.append(f"{name_d}{suffix} = {expr}\n")
+        lhs_grad = grad_var.get(lhs_base, f"{lhs_base}_ad")
+        lhs_typ = decl_map.get(lhs_base, ("",))[0]
+        lhs_is_array = in_do and "dimension" in str(lhs_typ).lower()
+        lhs_indices = None
+        if isinstance(stmt.items[0], Fortran2003.Part_Ref):
+            lhs_indices = []
+            for arg in getattr(stmt.items[0].items[1], "items", []):
+                if isinstance(arg, Fortran2003.Actual_Arg_Spec):
+                    arg = arg.items[1]
+                lhs_indices.append(arg.tofortran())
+        if lhs_is_array:
+            if lhs_indices:
+                lhs_grad = f"{lhs_grad}({', '.join(lhs_indices)})"
+            else:
+                idx_list = [n for n in rhs_names if n in do_indices]
+                if idx_list:
+                    lhs_grad = f"{lhs_grad}({', '.join(idx_list)})"
         order = list(parts.keys()) if has_repeat else list(reversed(list(parts.keys())))
         for var in order:
-            if var == lhs:
+            base, idx = idx_map.get(var, (var, None))
+            if base == lhs_base and idx is None:
                 continue
-            update = f"{lhs_grad} * d{lhs}_d{var}"
-            var_typ, var_int = decl_map.get(var, ("", None))
+            safe = _sanitize_var(var)
+            update = f"{lhs_grad} * d{lhs_base}_d{safe}"
+            var_typ, var_int = decl_map.get(base, ("", None))
             is_array = "dimension" in str(var_typ).lower()
             unique_loop = (
                 in_do
                 and is_array
-                and var_use_count.get(var, 0) == 1
+                and var_use_count.get(base, 0) == 1
                 and any(n in rhs_names for n in do_indices)
             )
             if in_do and is_array:
-                idx = next((n for n in rhs_names if n in do_indices), "i")
-                line = f"{var}_ad({idx}) = {update}"
-                if var_int == "inout" or ((var in defined or in_do) and not unique_loop):
-                    line += f" + {var}_ad({idx})"
+                var_idx = idx if idx is not None else _find_index_expr(rhs, base)
+                if var_idx is None:
+                    idx_list = [n for n in rhs_names if n in do_indices]
+                    var_idx = ", ".join(idx_list) if idx_list else "i"
+                line = f"{base}_ad({var_idx}) = {update}"
+                if var_int == "inout" or ((base in defined or in_do) and not unique_loop):
+                    line += f" + {base}_ad({var_idx})"
             else:
                 suffix = "(:)" if is_array else ""
-                line = f"{var}_ad{suffix} = {update}"
-                if var_int == "inout" or ((var in defined or in_do) and not unique_loop):
-                    line += f" + {var}_ad{suffix}"
+                line = f"{base}_ad{suffix} = {update}"
+                if var_int == "inout" or ((base in defined or in_do) and not unique_loop):
+                    line += f" + {base}_ad{suffix}"
             block.append(line + "\n")
-            if not in_do and var not in defined:
-                defined.add(var)
+            if not in_do and base not in defined:
+                defined.add(base)
             if in_do and not unique_loop:
-                loop_grad_vars.add(var)
-        if lhs in parts:
-            new_grad = f"{lhs}_ad_"
-            ltyp = decl_map.get(lhs, ("real",))[0]
+                loop_grad_vars.add(base)
+        if any(idx_map.get(v, (v, None))[0] == lhs_base and idx_map.get(v, (v, None))[1] is None for v in parts):
+            new_grad = f"{lhs_base}_ad_"
+            ltyp = decl_map.get(lhs_base, ("real",))[0]
             _, ldims = _split_type(ltyp)
             suf = "(:)" if ldims else ""
-            block.append(f"{new_grad}{suf} = {lhs_grad} * d{lhs}_d{lhs}{suf}\n")
-            grad_var[lhs] = new_grad
+            expr = f"{lhs_grad} * d{lhs_base}_d{lhs_base}{suf}"
+            block.append(f"{new_grad}{suf} = {expr}\n")
+            grad_var[lhs_base] = new_grad
             if in_do:
-                loop_grad_vars.add(lhs)
+                loop_grad_vars.add(lhs_base)
         stmt_blocks[id(stmt)] = block
+        last_block = block
         used_vars.update(rhs_names)
-        used_vars.add(lhs)
+        used_vars.add(lhs_base)
 
     for cl in const_decl:
         lines.append(cl)
@@ -852,13 +1023,17 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             res = [f"{ind}{st.content[0].tofortran()}\n"]
             i = 1
             seg = []
+            has_body = False
             while i < len(st.content):
                 itm = st.content[i]
                 if isinstance(itm, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
                     break
                 seg.append(itm)
                 i += 1
-            res.extend(_reverse_block(seg, ind + "  "))
+            body = _reverse_block(seg, ind + "  ")
+            if body:
+                has_body = True
+            res.extend(body)
             while i < len(st.content):
                 itm = st.content[i]
                 if isinstance(itm, Fortran2003.Else_If_Stmt):
@@ -871,7 +1046,10 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                             break
                         seg.append(j)
                         i += 1
-                    res.extend(_reverse_block(seg, ind + "  "))
+                    body = _reverse_block(seg, ind + "  ")
+                    if body:
+                        has_body = True
+                    res.extend(body)
                 elif isinstance(itm, Fortran2003.Else_Stmt):
                     res.append(f"{ind}{itm.tofortran()}\n")
                     i += 1
@@ -882,13 +1060,18 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                             break
                         seg.append(j)
                         i += 1
-                    res.extend(_reverse_block(seg, ind + "  "))
+                    body = _reverse_block(seg, ind + "  ")
+                    if body:
+                        has_body = True
+                    res.extend(body)
                 elif isinstance(itm, Fortran2003.End_If_Stmt):
                     res.append(f"{ind}{itm.tofortran()}\n")
                     i += 1
                 else:
                     i += 1
-            return res
+            if has_body:
+                return res
+            return []
         if isinstance(st, Fortran2003.Case_Construct):
             res = [f"{ind}{st.content[0].tofortran()}\n"]
             i = 1

@@ -50,9 +50,10 @@ contains
     real, intent(in)  :: x
     real, intent(out) :: x_ad
     real, intent(in)  :: sum_ad
+    integer :: i
+    real :: sum_ad_
     real :: dsum_dsum
     real :: dsum_dx
-    real :: sum_ad_
 
     x_ad = 0.0
 
