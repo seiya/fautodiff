@@ -13,6 +13,14 @@ class Node:
         """Return the formatted Fortran code lines for this node."""
         raise NotImplementedError
 
+    def is_effectively_empty(self) -> bool:
+        """Return ``True`` if removing this node does not change execution."""
+        return False
+
+    def has_assignment_to(self, var: str) -> bool:
+        """Return ``True`` if ``var`` is assigned within this node."""
+        return False
+
 
 @dataclass
 class Block(Node):
@@ -44,6 +52,12 @@ class Block(Node):
             lines.extend(child.render(indent))
         return lines
 
+    def is_effectively_empty(self) -> bool:
+        return all(child.is_effectively_empty() for child in self.children)
+
+    def has_assignment_to(self, var: str) -> bool:
+        return any(child.has_assignment_to(var) for child in self.children)
+
 
 @dataclass
 class Assignment(Node):
@@ -55,6 +69,10 @@ class Assignment(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         return [f"{space}{self.lhs} = {self.rhs}\n"]
+
+    def has_assignment_to(self, var: str) -> bool:
+        lhs_name = self.lhs.split("(")[0].strip().lower()
+        return lhs_name == var.lower()
 
 
 @dataclass
@@ -73,6 +91,12 @@ class Subroutine(Node):
         lines.append(f"{space}end subroutine {self.name}\n")
         return lines
 
+    def is_effectively_empty(self) -> bool:
+        return self.body.is_effectively_empty()
+
+    def has_assignment_to(self, var: str) -> bool:
+        return self.body.has_assignment_to(var)
+
 
 @dataclass
 class Function(Node):
@@ -90,6 +114,12 @@ class Function(Node):
         lines.append(f"{space}end function {self.name}\n")
         return lines
 
+    def is_effectively_empty(self) -> bool:
+        return self.body.is_effectively_empty()
+
+    def has_assignment_to(self, var: str) -> bool:
+        return self.body.has_assignment_to(var)
+
 
 @dataclass
 class EmptyLine(Node):
@@ -97,6 +127,9 @@ class EmptyLine(Node):
 
     def render(self, indent: int = 0) -> List[str]:
         return ["\n"]
+
+    def is_effectively_empty(self) -> bool:
+        return True
 
 
 @dataclass
@@ -121,6 +154,9 @@ class Declaration(Node):
         line += "\n"
         return [line]
 
+    def has_assignment_to(self, var: str) -> bool:
+        return False
+
 
 @dataclass
 class IfBlock(Node):
@@ -144,6 +180,26 @@ class IfBlock(Node):
         lines.append(f"{space}END IF\n")
         return lines
 
+    def is_effectively_empty(self) -> bool:
+        if not self.body.is_effectively_empty():
+            return False
+        for _, blk in self.elif_blocks:
+            if not blk.is_effectively_empty():
+                return False
+        if self.else_body is not None and not self.else_body.is_effectively_empty():
+            return False
+        return True
+
+    def has_assignment_to(self, var: str) -> bool:
+        if self.body.has_assignment_to(var):
+            return True
+        for _, blk in self.elif_blocks:
+            if blk.has_assignment_to(var):
+                return True
+        if self.else_body is not None and self.else_body.has_assignment_to(var):
+            return True
+        return False
+
 
 @dataclass
 class SelectBlock(Node):
@@ -165,6 +221,22 @@ class SelectBlock(Node):
         lines.append(f"{space}END SELECT\n")
         return lines
 
+    def is_effectively_empty(self) -> bool:
+        for _, blk in self.cases:
+            if not blk.is_effectively_empty():
+                return False
+        if self.default is not None and not self.default.is_effectively_empty():
+            return False
+        return True
+
+    def has_assignment_to(self, var: str) -> bool:
+        for _, blk in self.cases:
+            if blk.has_assignment_to(var):
+                return True
+        if self.default is not None and self.default.has_assignment_to(var):
+            return True
+        return False
+
 
 @dataclass
 class DoLoop(Node):
@@ -180,6 +252,12 @@ class DoLoop(Node):
         lines.append(f"{space}END DO\n")
         return lines
 
+    def is_effectively_empty(self) -> bool:
+        return self.body.is_effectively_empty()
+
+    def has_assignment_to(self, var: str) -> bool:
+        return self.body.has_assignment_to(var)
+
 
 @dataclass
 class Return(Node):
@@ -188,6 +266,9 @@ class Return(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         return [f"{space}return\n"]
+
+    def has_assignment_to(self, var: str) -> bool:
+        return False
 
 
 def render_program(node: Node, indent: int = 0) -> str:
