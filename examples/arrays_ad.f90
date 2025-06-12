@@ -104,10 +104,10 @@ contains
     a_ad(:) = 0.0
 
     DO i = n, 1, -1
-      dc_da = 2 * a(idx(i))**1
-      a_ad(i) = c_ad(i) * dc_da + a_ad(i)
+      dc_da = 2 * a(idx(i))
+      a_ad(idx(i)) = c_ad(idx(i)) * dc_da + a_ad(idx(i))
       db_da = 1.0
-      a_ad(i) = b_ad(i) * db_da + a_ad(i)
+      a_ad(idx(i)) = b_ad(i) * db_da + a_ad(idx(i))
     END DO
 
     return

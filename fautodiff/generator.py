@@ -248,7 +248,8 @@ def _derivative(expr, var: str, warn_info=None, warnings=None) -> str:
         terms = []
         if d_base != "0.0":
             minus = _parenthesize_if_needed(_minus_one(exponent))
-            term = f"{exp_s} * {base_s}**{minus}"
+            base_term = base_s if minus in ("1", "1.0", "(1)", "(1.0)") else f"{base_s}**{minus}"
+            term = f"{exp_s} * {base_term}"
             if d_base != "1.0":
                 term += f" * {d_base}"
             terms.append(term)
@@ -391,6 +392,32 @@ def _assignment_parts(stmt, warn_info=None, warnings=None):
             parts[name] = deriv
     has_repeat = len(all_names) != len(set(all_names))
     return parts, has_repeat
+
+
+def _find_index_expr(expr, var):
+    """Return the unique index expression string for ``var`` if present."""
+    found = []
+
+    def _walk(node):
+        if isinstance(node, Fortran2003.Part_Ref):
+            name = node.items[0].tofortran().lower()
+            if name == var.lower():
+                items = []
+                for arg in getattr(node.items[1], "items", []):
+                    if isinstance(arg, Fortran2003.Actual_Arg_Spec):
+                        arg = arg.items[1]
+                    items.append(arg.tofortran())
+                found.append(", ".join(items))
+                return
+        for itm in getattr(node, "items", []):
+            if not isinstance(itm, str):
+                _walk(itm)
+
+    _walk(expr)
+    uniq = set(found)
+    if len(uniq) == 1:
+        return uniq.pop()
+    return None
 
 
 def _generate_ad_subroutine(routine, indent, filename, warnings):
@@ -764,10 +791,20 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         lhs_grad = grad_var.get(lhs_base, f"{lhs_base}_ad")
         lhs_typ = decl_map.get(lhs_base, ("",))[0]
         lhs_is_array = in_do and "dimension" in str(lhs_typ).lower()
+        lhs_indices = None
+        if isinstance(stmt.items[0], Fortran2003.Part_Ref):
+            lhs_indices = []
+            for arg in getattr(stmt.items[0].items[1], "items", []):
+                if isinstance(arg, Fortran2003.Actual_Arg_Spec):
+                    arg = arg.items[1]
+                lhs_indices.append(arg.tofortran())
         if lhs_is_array:
-            idx_list = [n for n in rhs_names if n in do_indices]
-            if idx_list:
-                lhs_grad = f"{lhs_grad}({', '.join(idx_list)})"
+            if lhs_indices:
+                lhs_grad = f"{lhs_grad}({', '.join(lhs_indices)})"
+            else:
+                idx_list = [n for n in rhs_names if n in do_indices]
+                if idx_list:
+                    lhs_grad = f"{lhs_grad}({', '.join(idx_list)})"
         order = list(parts.keys()) if has_repeat else list(reversed(list(parts.keys())))
         for var in order:
             if var == lhs_base:
@@ -782,11 +819,13 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 and any(n in rhs_names for n in do_indices)
             )
             if in_do and is_array:
-                idx_list = [n for n in rhs_names if n in do_indices]
-                idx = ", ".join(idx_list) if idx_list else "i"
-                line = f"{var}_ad({idx}) = {update}"
+                var_idx = _find_index_expr(rhs, var)
+                if var_idx is None:
+                    idx_list = [n for n in rhs_names if n in do_indices]
+                    var_idx = ", ".join(idx_list) if idx_list else "i"
+                line = f"{var}_ad({var_idx}) = {update}"
                 if var_int == "inout" or ((var in defined or in_do) and not unique_loop):
-                    line += f" + {var}_ad({idx})"
+                    line += f" + {var}_ad({var_idx})"
             else:
                 suffix = "(:)" if is_array else ""
                 line = f"{var}_ad{suffix} = {update}"
