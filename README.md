@@ -7,10 +7,10 @@ the ``fparser.two`` API).
 
 ## Installation
 
-The parser relies on the `fparser` package which can be installed via pip:
+The parser relies on the `fparser` package (version **0.2.0 or later**) which can be installed via pip:
 
 ```bash
-pip install fparser
+pip install "fparser>=0.2.0"
 ```
 
 ## Parsing Fortran
