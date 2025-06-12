@@ -28,19 +28,21 @@ def _validate_no_undefined(code):
             if not isinstance(stmt, Fortran2003.Assignment_Stmt):
                 continue
             lhs = str(stmt.items[0])
+            lhs_name = lhs.split('(')[0]
             rhs = stmt.items[2]
             names = []
             _collect_names(rhs, names)
             for name in names:
-                if name not in declared:
-                    errors.append(f"{name} used but not declared")
-                elif name not in assigned:
-                    intent = intents.get(name)
+                base = name.split('(')[0]
+                if base not in declared:
+                    errors.append(f"{base} used but not declared")
+                elif base not in assigned:
+                    intent = intents.get(base)
                     if intent == "out":
                         errors.append(f"intent(out) variable {name} used before assignment")
                     elif intent not in ("in", "inout"):
                         errors.append(f"local variable {name} used before assignment")
-            assigned.add(lhs)
+            assigned.add(lhs_name)
     return errors
 
 def _check_inits(code):
@@ -57,9 +59,10 @@ def _check_inits(code):
             if not isinstance(stmt, Fortran2003.Assignment_Stmt):
                 continue
             lhs = str(stmt.items[0])
+            lhs_name = lhs.split('(')[0]
             rhs = stmt.items[2].tofortran().strip()
             if rhs == "0.0":
-                inits.add(lhs)
+                inits.add(lhs_name)
         for lhs in inits:
             intent = intents.get(lhs)
             if intent not in ("out", None):
