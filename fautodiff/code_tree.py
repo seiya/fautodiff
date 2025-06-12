@@ -58,6 +58,17 @@ class Assignment(Node):
 
 
 @dataclass
+class Statement(Node):
+    """A generic statement line."""
+
+    text: str
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = " " * indent
+        return [f"{space}{self.text}\n"]
+
+
+@dataclass
 class Declaration(Node):
     """A declaration statement."""
 
