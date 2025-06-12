@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff import generator
 from fautodiff import parser
+from fautodiff import code_tree
 from fautodiff.generator import _collect_names
 
 
@@ -82,6 +83,31 @@ class TestGenerator(unittest.TestCase):
             self.assertEqual(errors, [], msg=f"Undefined variables in {src.name}: {errors}")
             violations = _check_inits(generated)
             self.assertEqual(violations, [], msg=f"Unexpected init in {src.name}: {violations}")
+
+
+class TestRenderProgram(unittest.TestCase):
+    def test_simple_assignment(self):
+        prog = code_tree.Block([code_tree.Assignment("a", "1")])
+        self.assertEqual(code_tree.render_program(prog), "a = 1\n")
+
+    def test_if_else_block(self):
+        prog = code_tree.Block(
+            [
+                code_tree.IfBlock(
+                    "a > 0",
+                    code_tree.Block([code_tree.Assignment("b", "1")]),
+                    else_body=code_tree.Block([code_tree.Assignment("b", "2")]),
+                )
+            ]
+        )
+        expected = (
+            "if (a > 0) then\n"
+            "  b = 1\n"
+            "else\n"
+            "  b = 2\n"
+            "end if\n"
+        )
+        self.assertEqual(code_tree.render_program(prog), expected)
 
 if __name__ == '__main__':
     unittest.main()

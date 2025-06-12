@@ -113,3 +113,10 @@ class Return(Node):
         return [f"{space}return\n"]
 
 
+def render_program(node: Node) -> str:
+    """Return formatted Fortran code for the entire ``node`` tree."""
+
+    lines = node.render()
+    return "".join(lines)
+
+
