@@ -421,7 +421,8 @@ def _assignment_parts(stmt, warn_info=None, warnings=None):
 
 
 def _generate_ad_subroutine(routine, filename, warnings):
-    # block of code_tree nodes representing the subroutine body
+    # blocks representing declarations and the executable body
+    decl_block = Block([])
     body = Block([])
 
     def _optimize_lines(raw_lines, keep=None):
@@ -549,7 +550,7 @@ def _generate_ad_subroutine(routine, filename, warnings):
         if outv not in args:
             ad_args.append(f"{outv}_ad")
 
-    sub = Subroutine(f"{name}_ad", ", ".join(ad_args), body)
+    sub = Subroutine(f"{name}_ad", ", ".join(ad_args), decl_block, body)
 
     def _space(intent):
         return "  " if intent == "in" else " "
@@ -582,18 +583,18 @@ def _generate_ad_subroutine(routine, filename, warnings):
         if arg_int == "out":
             if not is_char and not is_int:
                 base, dims = _split_type(gtyp)
-                body.append(Declaration(base, f"{arg}_ad", "in", dims))
+                decl_block.append(Declaration(base, f"{arg}_ad", "in", dims))
                 has_grad_input = True
         else:
             base, dims = _split_type(typ)
-            body.append(Declaration(base, arg, arg_int, dims))
+            decl_block.append(Declaration(base, arg, arg_int, dims))
             if not is_char and not is_int:
                 grad_int = {
                     "in": "out",
                     "inout": "inout",
                 }.get(arg_int, "out")
                 gbase, gdims = _split_type(gtyp)
-                body.append(Declaration(gbase, f"{arg}_ad", grad_int, gdims))
+                decl_block.append(Declaration(gbase, f"{arg}_ad", grad_int, gdims))
                 if grad_int == "out":
                     out_grad_args.append(arg)
                 else:
@@ -603,12 +604,11 @@ def _generate_ad_subroutine(routine, filename, warnings):
         if outv not in args:
             out_typ = _grad_type(decl_map.get(outv, ("real",))[0])
             base, dims = _split_type(out_typ)
-            body.append(Declaration(base, f"{outv}_ad", "in", dims))
+            decl_block.append(Declaration(base, f"{outv}_ad", "in", dims))
             has_grad_input = True
 
     # If no derivative inputs exist, all output gradients remain zero
     if not has_grad_input:
-        body.append(EmptyLine())
         for arg in out_grad_args:
             t, _ = decl_map.get(arg, ("real", None))
             _, dims = _split_type(t)
@@ -621,7 +621,6 @@ def _generate_ad_subroutine(routine, filename, warnings):
 
     # If there are no input gradients to propagate we can exit early
     if not out_grad_args:
-        body.append(EmptyLine())
         body.append(Return())
         return render_program(sub, 1)
 
@@ -668,7 +667,7 @@ def _generate_ad_subroutine(routine, filename, warnings):
             const_decl_names.add(idx)
     defined = set(out_grad_args)
     grad_var = {v: f"{v}_ad" for v in outputs}
-    decls = []
+    decl_names = []
     decl_set = set()
     stmt_blocks = {}
 
@@ -705,7 +704,7 @@ def _generate_ad_subroutine(routine, filename, warnings):
             pre_lines.append(Assignment(f"{var}_ad_{suf}", f"{var}_ad{suf}"))
             grad_var[var] = f"{var}_ad_"
             if f"{var}_ad_" not in decl_set:
-                decls.append(f"{var}_ad_")
+                decl_names.append(f"{var}_ad_")
                 decl_set.add(f"{var}_ad_")
 
     last_block = None
@@ -731,7 +730,7 @@ def _generate_ad_subroutine(routine, filename, warnings):
 
         handler = SPECIAL_HANDLERS.get(intr_name)
         if handler:
-            block, names = handler(lhs, items, grad_var, defined, decls, decl_set)
+            block, names = handler(lhs, items, grad_var, defined, decl_names, decl_set)
             stmt_blocks[id(stmt)] = block
             last_block = block
             used_vars.update(names)
@@ -787,20 +786,20 @@ def _generate_ad_subroutine(routine, filename, warnings):
             safe = _sanitize_var(var)
             name_d = f"d{lhs_base}_d{safe}"
             if name_d not in decl_set:
-                decls.append(name_d)
+                decl_names.append(name_d)
                 decl_set.add(name_d)
             if in_do and "dimension" in str(decl_map.get(base, ("",))[0]).lower():
                 scalar_derivs.add(name_d)
             if base not in args and base not in outputs and not _is_integer_type(decl_map.get(base, ("",))[0]):
                 name_ad = f"{base}_ad"
                 if name_ad not in decl_set:
-                    decls.append(name_ad)
+                    decl_names.append(name_ad)
                     decl_set.add(name_ad)
         if lhs_base in parts:
             if not _is_integer_type(lhs_typ):
                 name_ad = f"{lhs_base}_ad_"
                 if name_ad not in decl_set:
-                    decls.append(name_ad)
+                    decl_names.append(name_ad)
                     decl_set.add(name_ad)
 
         block = []
@@ -885,8 +884,8 @@ def _generate_ad_subroutine(routine, filename, warnings):
                 const_decl_names.add(var)
 
     for cl in const_decl:
-        body.append(cl)
-    for dname in decls:
+        decl_block.append(cl)
+    for dname in decl_names:
         typ = "real"
         dims = None
         if dname.endswith("_ad"):
@@ -911,7 +910,7 @@ def _generate_ad_subroutine(routine, filename, warnings):
         if dims is not None:
             typ = f"real, dimension{dims}"
         base, ldims = _split_type(typ)
-        body.append(Declaration(base, dname, None, ldims))
+        decl_block.append(Declaration(base, dname, None, ldims))
 
     init_lines = Block([])  # initialization statements as nodes
     for arg in out_grad_args:
@@ -921,11 +920,8 @@ def _generate_ad_subroutine(routine, filename, warnings):
         init_lines.append(Assignment(f"{arg}_ad{suf}", 0.0))
     # only intent(out) argument gradients need initialization
 
-    body.append(EmptyLine())
     for il in init_lines:
         body.append(il)
-    if len(init_lines):
-        body.append(EmptyLine())
     for pl in pre_lines:
         body.append(pl)
     if len(pre_lines):

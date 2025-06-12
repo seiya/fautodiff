@@ -77,48 +77,54 @@ class Assignment(Node):
 
 @dataclass
 class Subroutine(Node):
-    """A ``subroutine`` with its body."""
+    """A ``subroutine`` with declaration and execution blocks."""
 
     name: str
     args: str = ""
+    decls: Block = field(default_factory=Block)
     body: Block = field(default_factory=Block)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         args = f"({self.args})" if self.args else "()"
         lines = [f"{space}subroutine {self.name}{args}\n"]
+        lines.extend(self.decls.render(indent + 1))
+        lines.append("\n")
         lines.extend(self.body.render(indent + 1))
         lines.append(f"{space}end subroutine {self.name}\n")
         return lines
 
     def is_effectively_empty(self) -> bool:
-        return self.body.is_effectively_empty()
+        return self.decls.is_effectively_empty() and self.body.is_effectively_empty()
 
     def has_assignment_to(self, var: str) -> bool:
-        return self.body.has_assignment_to(var)
+        return self.decls.has_assignment_to(var) or self.body.has_assignment_to(var)
 
 
 @dataclass
 class Function(Node):
-    """A ``function`` with its body."""
+    """A ``function`` with declaration and execution blocks."""
 
     name: str
     args: str = ""
+    decls: Block = field(default_factory=Block)
     body: Block = field(default_factory=Block)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         args = f"({self.args})" if self.args else "()"
         lines = [f"{space}function {self.name}{args}\n"]
+        lines.extend(self.decls.render(indent + 1))
+        lines.append("\n")
         lines.extend(self.body.render(indent + 1))
         lines.append(f"{space}end function {self.name}\n")
         return lines
 
     def is_effectively_empty(self) -> bool:
-        return self.body.is_effectively_empty()
+        return self.decls.is_effectively_empty() and self.body.is_effectively_empty()
 
     def has_assignment_to(self, var: str) -> bool:
-        return self.body.has_assignment_to(var)
+        return self.decls.has_assignment_to(var) or self.body.has_assignment_to(var)
 
 
 @dataclass

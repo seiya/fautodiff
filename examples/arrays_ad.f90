@@ -13,7 +13,6 @@ contains
     real :: dc_da(n)
     real :: dc_db(n)
 
-
     dc_da(:) = 1.0
     dc_db(:) = 1.0
     b_ad(:) = c_ad * dc_db
@@ -47,7 +46,6 @@ contains
     real :: dd_dc
 
     c_ad = 0.0
-
     DO j = m, 1, -1
       DO i = n, 1, -1
         dd_da_i__j = 1.0
@@ -75,7 +73,6 @@ contains
     real :: dres_da_i
     real :: dres_db_i
 
-
     res_ad_ = res_ad
 
     DO i = n, 1, -1
@@ -102,7 +99,6 @@ contains
     real :: db_da_idx_i_
 
     a_ad(:) = 0.0
-
     DO i = n, 1, -1
       dc_da_idx_i_ = 2 * a(idx(i))
       a_ad(idx(i)) = c_ad(idx(i)) * dc_da_idx_i_ + a_ad(idx(i))
@@ -126,7 +122,6 @@ contains
     real :: db_da_ip
 
     a_ad(:) = 0.0
-
     DO i = n, 1, -1
       in = i - 1
       ip = i + 1

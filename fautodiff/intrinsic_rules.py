@@ -67,7 +67,7 @@ NONDIFF_INTRINSICS = {
 }
 
 
-def _handle_transpose(lhs, items, grad_var, defined, decls, decl_set):
+def _handle_transpose(lhs, items, grad_var, defined, decl_names, decl_set):
     """Propagate gradient through ``transpose``."""
     arg = items[0].tofortran()
     lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
@@ -80,7 +80,7 @@ def _handle_transpose(lhs, items, grad_var, defined, decls, decl_set):
     return block, {lhs, arg}
 
 
-def _handle_cshift(lhs, items, grad_var, defined, decls, decl_set):
+def _handle_cshift(lhs, items, grad_var, defined, decl_names, decl_set):
     """Propagate gradient through ``cshift``."""
     arr = items[0].tofortran()
     shift = items[1].tofortran()
@@ -93,7 +93,7 @@ def _handle_cshift(lhs, items, grad_var, defined, decls, decl_set):
         block.append(f"{new_grad} = {update}\n")
         grad_var[lhs] = new_grad
         if new_grad not in decl_set:
-            decls.append(new_grad)
+            decl_names.append(new_grad)
             decl_set.add(new_grad)
     else:
         if arr in defined:

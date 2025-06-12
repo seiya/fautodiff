@@ -11,7 +11,6 @@ contains
     real, intent(in)  :: z_ad
     real :: dz_dx
 
-
     IF (x > 0.0) THEN
       dz_dx = 1.0
       x_ad = z_ad * dz_dx
@@ -30,7 +29,6 @@ contains
     real, intent(out) :: x_ad
     real, intent(in)  :: z_ad
     real :: dz_dx
-
 
     SELECT CASE (i)
     CASE (1)
@@ -56,7 +54,6 @@ contains
     real :: dsum_dx
 
     x_ad = 0.0
-
     sum_ad_ = sum_ad
 
     DO i = n, 1, -1

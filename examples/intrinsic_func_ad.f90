@@ -53,7 +53,6 @@ contains
     real :: db_dy
     real :: da_dx
 
-
     pi = ACOS(- 1.0)
 
     dz_da = 1.0
@@ -138,7 +137,6 @@ contains
 
     arr_ad(:) = 0.0
     x_ad = 0.0
-
     dy_da = 1.0
     dy_db = 1.0
     dy_dc = 1.0
@@ -155,7 +153,6 @@ contains
     real, intent(in)  :: mat_out_ad(:, :)
     real :: mat_out_ad_(size(mat_out_ad, 1), size(mat_out_ad, 2))
 
-
     mat_out_ad_ = cshift(mat_out_ad, -1, 2)
     mat_in_ad = transpose(mat_out_ad_)
 
@@ -169,7 +166,6 @@ contains
     real, intent(in)  :: d_ad
     character(len = 1), intent(inout) :: c
     real :: dd_dr
-
 
     dd_dr = 1.0
     r_ad = d_ad * dd_dr
