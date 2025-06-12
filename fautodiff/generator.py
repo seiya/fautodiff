@@ -249,6 +249,53 @@ def _decl_names(stmt):
     return [str(ed.items[0]) for ed in stmt.items[2].items]
 
 
+def _split_type(typ):
+    """Return base type and dimension spec from a declaration string."""
+    text = str(typ).strip()
+    low = text.lower()
+    idx = low.find("dimension")
+    if idx != -1:
+        start = low.find("(", idx)
+        if start != -1:
+            depth = 0
+            end = None
+            for i in range(start, len(text)):
+                if text[i] == "(":
+                    depth += 1
+                elif text[i] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        end = i
+                        break
+            if end is not None:
+                dims = text[start:end + 1]
+                base = text[:idx].rstrip().rstrip(',')
+                remainder = text[end + 1:].strip()
+                if remainder.startswith(','):
+                    remainder = remainder[1:].strip()
+                if remainder:
+                    base = f"{base}, {remainder}" if base else remainder
+                return base.strip(), dims
+    return text, None
+
+
+def _decl_line(indent, typ, var, intent=None, space_func=None):
+    """Format a declaration line using ``typ`` and ``var``."""
+    base, dims = _split_type(typ)
+    line = f"{indent}{base}"
+    if intent is not None:
+        line += f", intent({intent})"
+        if space_func:
+            line += space_func(intent)
+        line += f":: {var}"
+    else:
+        line += f" :: {var}"
+    if dims:
+        line += dims
+    line += "\n"
+    return line
+
+
 def _parse_decls(spec):
     """Map variable names to their declared type and intent."""
     decl_map = {}
@@ -335,7 +382,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             keep = set()
         result = list(raw_lines)
 
-        init_pat = re.compile(r"^\s*(\w+_ad)\s*=\s*0\.0\s*$")
+        init_pat = re.compile(r"^\s*(\w+_ad)(?:\s*\([^)]*\))?\s*=\s*0\.0\s*$")
         branch_start = re.compile(
             r"^\s*(?:IF\b.*THEN|ELSE\s*IF|ELSEIF|ELSE\b|SELECT\s+CASE|CASE\b)",
             re.IGNORECASE,
@@ -475,12 +522,12 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         if arg_int == "out":
             if not is_char and not is_int:
                 lines.append(
-                    f"{indent}  {gtyp}, intent(in){_space('in')}:: {arg}_ad\n"
+                    _decl_line(f"{indent}  ", gtyp, f"{arg}_ad", "in", _space)
                 )
                 has_grad_input = True
         else:
             lines.append(
-                f"{indent}  {typ}, intent({arg_int}){_space(arg_int)}:: {arg}\n"
+                _decl_line(f"{indent}  ", typ, arg, arg_int, _space)
             )
             if not is_char and not is_int:
                 grad_int = {
@@ -488,7 +535,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                     "inout": "inout",
                 }.get(arg_int, "out")
                 lines.append(
-                    f"{indent}  {gtyp}, intent({grad_int}){_space(grad_int)}:: {arg}_ad\n"
+                    _decl_line(f"{indent}  ", gtyp, f"{arg}_ad", grad_int, _space)
                 )
                 if grad_int == "out":
                     out_grad_args.append(arg)
@@ -499,7 +546,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
         if outv not in args:
             out_typ = _grad_type(decl_map.get(outv, ("real",))[0])
             lines.append(
-                f"{indent}  {out_typ}, intent(in){_space('in')}:: {outv}_ad\n"
+                _decl_line(f"{indent}  ", out_typ, f"{outv}_ad", "in", _space)
             )
             has_grad_input = True
 
@@ -507,7 +554,10 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
     if not has_grad_input:
         lines.append("\n")
         for arg in out_grad_args:
-            lines.append(f"{indent}  {arg}_ad = 0.0\n")
+            t, _ = decl_map.get(arg, ("real", None))
+            _, dims = _split_type(t)
+            suffix = "(:)" if dims else ""
+            lines.append(f"{indent}  {arg}_ad{suffix} = 0.0\n")
         if out_grad_args:
             lines.append("\n")
         lines.append(f"{indent}  return\n")
@@ -586,7 +636,10 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
 
     for var in sorted(loop_lhs):
         if var in outputs:
-            pre_lines.append(f"{indent}  {var}_ad_ = {var}_ad\n")
+            vtyp = decl_map.get(var, ("real",))[0]
+            _, dims = _split_type(vtyp)
+            suf = "(:)" if dims else ""
+            pre_lines.append(f"{indent}  {var}_ad_{suf} = {var}_ad{suf}\n")
             grad_var[var] = f"{var}_ad_"
 
     for stmt, top, in_do in reversed(statements):
@@ -646,7 +699,7 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             if lhs not in args and lhs not in outputs and lhs not in const_decl_names:
                 typ = decl_map.get(lhs, ("real", None))[0]
                 if not str(typ).strip().lower().startswith("character") and not _is_integer_type(typ):
-                    const_decl.append(f"{indent}  {typ} :: {lhs}\n")
+                    const_decl.append(_decl_line(f"{indent}  ", typ, lhs))
                     const_decl_names.add(lhs)
             continue
         for var in parts:
@@ -670,7 +723,11 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
 
         block = []
         for var, expr in parts.items():
-            block.append(f"d{lhs}_d{var} = {expr}\n")
+            name_d = f"d{lhs}_d{var}"
+            var_typ = decl_map.get(var, ("", None))[0]
+            _, dims = _split_type(var_typ)
+            suffix = "(:)" if dims and name_d not in scalar_derivs else ""
+            block.append(f"d{lhs}_d{var}{suffix} = {expr}\n")
         lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
         order = list(parts.keys()) if has_repeat else list(reversed(list(parts.keys())))
         for var in order:
@@ -691,9 +748,10 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 if var_int == "inout" or ((var in defined or in_do) and not unique_loop):
                     line += f" + {var}_ad({idx})"
             else:
-                line = f"{var}_ad = {update}"
+                suffix = "(:)" if is_array else ""
+                line = f"{var}_ad{suffix} = {update}"
                 if var_int == "inout" or ((var in defined or in_do) and not unique_loop):
-                    line += f" + {var}_ad"
+                    line += f" + {var}_ad{suffix}"
             block.append(line + "\n")
             if not in_do and var not in defined:
                 defined.add(var)
@@ -701,7 +759,10 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 loop_grad_vars.add(var)
         if lhs in parts:
             new_grad = f"{lhs}_ad_"
-            block.append(f"{new_grad} = {lhs_grad} * d{lhs}_d{lhs}\n")
+            ltyp = decl_map.get(lhs, ("real",))[0]
+            _, ldims = _split_type(ltyp)
+            suf = "(:)" if ldims else ""
+            block.append(f"{new_grad}{suf} = {lhs_grad} * d{lhs}_d{lhs}{suf}\n")
             grad_var[lhs] = new_grad
             if in_do:
                 loop_grad_vars.add(lhs)
@@ -735,11 +796,14 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             typ = "real"
         if dims is not None:
             typ = f"real, dimension{dims}"
-        lines.append(f"{indent}  {typ} :: {dname}\n")
+        lines.append(_decl_line(f"{indent}  ", typ, dname))
 
     init_lines = []
     for arg in out_grad_args:
-        init_lines.append(f"{indent}  {arg}_ad = 0.0\n")
+        t, _ = decl_map.get(arg, ("real", None))
+        _, dims = _split_type(t)
+        suf = "(:)" if dims else ""
+        init_lines.append(f"{indent}  {arg}_ad{suf} = 0.0\n")
     # only intent(out) argument gradients need initialization
 
     lines.append("\n")

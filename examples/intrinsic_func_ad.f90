@@ -124,8 +124,8 @@ contains
 
   subroutine non_differentiable_intrinsics_ad(str, arr, arr_ad, x, x_ad, y_ad)
     character(len = *), intent(in)  :: str
-    real, dimension(:), intent(in)  :: arr
-    real, dimension(:), intent(out) :: arr_ad
+    real, intent(in)  :: arr(:)
+    real, intent(out) :: arr_ad(:)
     real, intent(in)  :: x
     real, intent(out) :: x_ad
     real, intent(in)  :: y_ad
@@ -136,7 +136,7 @@ contains
     real :: dy_dc
     real :: c_ad
 
-    arr_ad = 0.0
+    arr_ad(:) = 0.0
     x_ad = 0.0
 
     dy_da = 1.0
@@ -150,10 +150,10 @@ contains
   end subroutine non_differentiable_intrinsics_ad
 
   subroutine special_intrinsics_ad(mat_in, mat_in_ad, mat_out_ad)
-    real, dimension(:, :), intent(in)  :: mat_in
-    real, dimension(:, :), intent(out) :: mat_in_ad
-    real, dimension(:, :), intent(in)  :: mat_out_ad
-    real, dimension(size(mat_out_ad, 1), size(mat_out_ad, 2)) :: mat_out_ad_
+    real, intent(in)  :: mat_in(:, :)
+    real, intent(out) :: mat_in_ad(:, :)
+    real, intent(in)  :: mat_out_ad(:, :)
+    real :: mat_out_ad_(size(mat_out_ad, 1), size(mat_out_ad, 2))
 
 
     mat_out_ad_ = cshift(mat_out_ad, -1, 2)

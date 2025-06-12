@@ -4,37 +4,37 @@ module array_examples_ad
 contains
 
   subroutine elementwise_add_ad(a, a_ad, b, b_ad, c_ad, n)
-    real, dimension(n), intent(in)  :: a
-    real, dimension(n), intent(out) :: a_ad
-    real, dimension(n), intent(in)  :: b
-    real, dimension(n), intent(out) :: b_ad
-    real, dimension(n), intent(in)  :: c_ad
+    real, intent(in)  :: a(n)
+    real, intent(out) :: a_ad(n)
+    real, intent(in)  :: b(n)
+    real, intent(out) :: b_ad(n)
+    real, intent(in)  :: c_ad(n)
     integer, intent(in)  :: n
-    real, dimension(n) :: dc_da
-    real, dimension(n) :: dc_db
+    real :: dc_da(n)
+    real :: dc_db(n)
 
 
-    dc_da = 1.0
-    dc_db = 1.0
-    b_ad = c_ad * dc_db
-    a_ad = c_ad * dc_da
+    dc_da(:) = 1.0
+    dc_db(:) = 1.0
+    b_ad(:) = c_ad * dc_db
+    a_ad(:) = c_ad * dc_da
 
     return
   end subroutine elementwise_add_ad
 
   subroutine scale_array_ad(a, a_ad, n)
-    real, dimension(n), intent(inout) :: a
-    real, dimension(n), intent(inout) :: a_ad
+    real, intent(inout) :: a(n)
+    real, intent(inout) :: a_ad(n)
     integer, intent(in)  :: n
 
     return
   end subroutine scale_array_ad
 
   subroutine dot_product_ad(a, a_ad, b, b_ad, n, res_ad)
-    real, dimension(n), intent(in)  :: a
-    real, dimension(n), intent(out) :: a_ad
-    real, dimension(n), intent(in)  :: b
-    real, dimension(n), intent(out) :: b_ad
+    real, intent(in)  :: a(n)
+    real, intent(out) :: a_ad(n)
+    real, intent(in)  :: b(n)
+    real, intent(out) :: b_ad(n)
     integer, intent(in)  :: n
     real, intent(in)  :: res_ad
     real :: dres_dres
