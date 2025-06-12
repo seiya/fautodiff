@@ -61,3 +61,14 @@ Run the included tests with:
 ```bash
 python tests/test_generator.py
 ```
+
+## Code tree structure
+
+Automatic differentiation output is built from a tree of nodes defined in
+``fautodiff.code_tree``. Each node represents a Fortran construct such as a
+``Block``, ``Assignment`` or ``IfBlock`` and provides a ``render`` method that
+returns formatted source lines. The generator populates this tree while walking
+the parsed input and then renders it to produce the final AD code.
+
+Contributors adding new features should rely on these new node classes instead of
+creating raw strings so that the tree remains consistent.
