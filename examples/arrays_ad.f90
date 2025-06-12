@@ -10,9 +10,12 @@ contains
     real, intent(in)  :: b(n)
     real, intent(out) :: b_ad(n)
     real, intent(in)  :: c_ad(n)
+    real :: c(n)
     real :: dc_da(n)
     real :: dc_db(n)
 
+
+    c = a + b
 
     dc_da(:) = 1.0
     dc_db(:) = 1.0
@@ -42,11 +45,18 @@ contains
     real, intent(in)  :: d_ad(n, m)
     integer :: i
     integer :: j
+    real :: d(n, m)
     real :: dd_da_i__j
     real :: dd_db_i__j
     real :: dd_dc
 
     c_ad = 0.0
+
+    DO j = 1, m
+      DO i = 1, n
+        d(i, j) = a(i, j) + b(i, j) * c
+      END DO
+    END DO
 
     DO j = m, 1, -1
       DO i = n, 1, -1
@@ -70,11 +80,17 @@ contains
     real, intent(out) :: b_ad(n)
     real, intent(in)  :: res_ad
     integer :: i
+    real :: res
     real :: res_ad_
     real :: dres_dres
     real :: dres_da_i
     real :: dres_db_i
 
+
+    res = 0.0
+    DO i = 1, n
+      res = res + a(i) * b(i)
+    END DO
 
     res_ad_ = res_ad
 
@@ -98,10 +114,17 @@ contains
     real, intent(in)  :: c_ad(n)
     integer, intent(in)  :: idx(n)
     integer :: i
+    real :: b(n)
+    real :: c(n)
     real :: dc_da_idx_i_
     real :: db_da_idx_i_
 
     a_ad(:) = 0.0
+
+    DO i = 1, n
+      b(i) = a(idx(i)) + 1.0
+      c(idx(i)) = a(idx(i)) ** 2
+    END DO
 
     DO i = n, 1, -1
       dc_da_idx_i_ = 2 * a(idx(i))
@@ -119,11 +142,25 @@ contains
     real, intent(out) :: a_ad(n)
     real, intent(in)  :: b_ad(n)
     integer :: i
+    real :: b(n)
+    integer :: in
+    integer :: ip
     real :: db_da_in
     real :: db_da_i
     real :: db_da_ip
 
     a_ad(:) = 0.0
+
+    DO i = 1, n
+      in = i - 1
+      ip = i + 1
+      IF (i == 1) THEN
+        in = n
+      ELSE IF (i == n) THEN
+        ip = 1
+      END IF
+      b(i) = (a(in) + 2.0 * a(i) + a(ip)) / 4.0
+    END DO
 
     DO i = n, 1, -1
       db_da_in = 1.0 / 4.0

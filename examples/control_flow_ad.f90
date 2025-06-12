@@ -9,8 +9,17 @@ contains
     real, intent(inout) :: y
     real, intent(inout) :: y_ad
     real, intent(in)  :: z_ad
+    real :: z
     real :: dz_dx
 
+
+    IF (x > 0.0) THEN
+      z = x
+    ELSE IF (x < 0.0) THEN
+      z = - x
+    ELSE
+      z = 0.0
+    END IF
 
     IF (x > 0.0) THEN
       dz_dx = 1.0
@@ -29,8 +38,18 @@ contains
     real, intent(in)  :: x
     real, intent(out) :: x_ad
     real, intent(in)  :: z_ad
+    real :: z
     real :: dz_dx
 
+
+    SELECT CASE (i)
+    CASE (1)
+      z = x + 1.0
+    CASE (2)
+      z = x - 1.0
+    CASE DEFAULT
+      z = 0.0
+    END SELECT
 
     SELECT CASE (i)
     CASE (1)
@@ -51,11 +70,17 @@ contains
     real, intent(out) :: x_ad
     real, intent(in)  :: sum_ad
     integer :: i
+    real :: sum
     real :: sum_ad_
     real :: dsum_dsum
     real :: dsum_dx
 
     x_ad = 0.0
+
+    sum = 0.0
+    DO i = 1, n
+      sum = sum + i * x
+    END DO
 
     sum_ad_ = sum_ad
 

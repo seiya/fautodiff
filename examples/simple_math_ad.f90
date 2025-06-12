@@ -9,6 +9,8 @@ contains
     real, intent(in)  :: b
     real, intent(out) :: b_ad
     real, intent(in)  :: c_ad
+    real :: c
+    real :: work
     real :: dc_dc
     real :: dc_dwork
     real :: work_ad
@@ -17,6 +19,10 @@ contains
     real :: dwork_da
     real :: dwork_db
 
+
+    work = a + b
+    c = a + 1.0
+    c = c + 2.0 + work
 
     dc_dc = 1.0
     dc_dwork = 1.0
@@ -38,11 +44,15 @@ contains
     real, intent(in)  :: b
     real, intent(out) :: b_ad
     real, intent(in)  :: c_ad
+    real :: c
     real :: dc_dc
     real :: dc_db
     real :: c_ad_
     real :: dc_da
 
+
+    c = a - b
+    c = - c + b
 
     dc_dc = - 1.0
     dc_db = 1.0
@@ -62,11 +72,15 @@ contains
     real, intent(in)  :: b
     real, intent(out) :: b_ad
     real, intent(in)  :: c_ad
+    real :: c
     real :: dc_dc
     real :: dc_da
     real :: c_ad_
     real :: dc_db
 
+
+    c = a * b + a
+    c = c * 3.0 + a
 
     dc_dc = 3.0
     dc_da = 1.0
@@ -86,11 +100,15 @@ contains
     real, intent(in)  :: b
     real, intent(out) :: b_ad
     real, intent(in)  :: c_ad
+    real :: c
     real :: dc_dc
     real :: dc_da
     real :: c_ad_
     real :: dc_db
 
+
+    c = a / (b + 1.5)
+    c = c / 2.0 + a
 
     dc_dc = 1.0 / 2.0
     dc_da = 1.0
@@ -110,11 +128,15 @@ contains
     real, intent(in)  :: b
     real, intent(out) :: b_ad
     real, intent(in)  :: c_ad
+    real :: c
     real :: dc_dc
     real :: dc_da
     real :: dc_db
     real :: c_ad_
 
+
+    c = a ** 3 + b ** 5.5
+    c = c + a ** b + (4.0 * a + 2.0) ** b + a ** (b * 5.0 + 3.0)
 
     dc_dc = 1.0
     dc_da = b * a**(b - 1.0) + b * (4.0 * a + 2.0)**(b - 1.0) * 4.0 + (b * 5.0 + 3.0) * a**(b * 5.0 + 2.0)
