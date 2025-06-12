@@ -114,6 +114,23 @@ class TestNodeMethods(unittest.TestCase):
         self.assertEqual(sub.assigned_vars(), ["a", "b"])
         self.assertEqual(sub.required_vars(), [])
 
+    def test_prune_for(self):
+        blk = code_tree.Block([
+            code_tree.Block([
+                code_tree.Assignment("a", "2"),
+                code_tree.Assignment("c", "a"),
+            ]),
+            code_tree.Block([
+                code_tree.Assignment("a", "1"),
+                code_tree.Assignment("b", "a"),
+            ]),
+        ])
+        pruned = blk.prune_for(["b"])
+        self.assertEqual(
+            code_tree.render_program(pruned),
+            "a = 1\n" "b = a\n",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
