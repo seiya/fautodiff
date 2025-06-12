@@ -51,10 +51,9 @@ class Assignment(Node):
 
     lhs: str
     rhs: str
-    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = self.indent
+        space = "  " * indent
         return [f"{space}{self.lhs} = {self.rhs}\n"]
 
 
@@ -67,7 +66,7 @@ class Subroutine(Node):
     indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = self.indent
+        space = "  " * (indent-1)
         args = f"({self.args})" if self.args else "()"
         return [f"{space}subroutine {self.name}{args}\n"]
 
@@ -77,10 +76,9 @@ class EndSubroutine(Node):
     """An ``end subroutine`` statement."""
 
     name: str
-    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = self.indent
+        space = "  " * (indent-1)
         return [f"{space}end subroutine {self.name}\n"]
 
 
@@ -90,10 +88,9 @@ class Function(Node):
 
     name: str
     args: str = ""
-    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = self.indent
+        space = "  " * (indent-1)
         args = f"({self.args})" if self.args else "()"
         return [f"{space}function {self.name}{args}\n"]
 
@@ -103,18 +100,15 @@ class EndFunction(Node):
     """An ``end function`` statement."""
 
     name: str
-    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = self.indent
+        space = "  " * (indent-1)
         return [f"{space}end function {self.name}\n"]
 
 
 @dataclass
 class EmptyLine(Node):
     """Represents a blank line."""
-
-    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
         return ["\n"]
@@ -128,10 +122,9 @@ class Declaration(Node):
     name: str
     intent: Optional[str] = None
     shape: Optional[str] = None
-    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = self.indent
+        space = "  " * indent
         line = f"{space}{self.typename}"
         if self.intent is not None:
             pad = "  " if self.intent == "in" else " "
@@ -152,18 +145,17 @@ class IfBlock(Node):
     body: Block
     elif_blocks: List[Tuple[str, Block]] = field(default_factory=list)
     else_body: Optional[Block] = None
-    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = self.indent
+        space = "  " * indent
         lines = [f"{space}IF ({self.condition}) THEN\n"]
-        lines.extend(self.body.render(0))
+        lines.extend(self.body.render(indent+1))
         for cond, blk in self.elif_blocks:
             lines.append(f"{space}ELSE IF ({cond}) THEN\n")
-            lines.extend(blk.render(0))
+            lines.extend(blk.render(indent+1))
         if self.else_body is not None:
             lines.append(f"{space}ELSE\n")
-            lines.extend(self.else_body.render(0))
+            lines.extend(self.else_body.render(indent+1))
         lines.append(f"{space}END IF\n")
         return lines
 
@@ -175,17 +167,16 @@ class SelectBlock(Node):
     expr: str
     cases: List[Tuple[str, Block]] = field(default_factory=list)
     default: Optional[Block] = None
-    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = self.indent
+        space = "  " * indent
         lines = [f"{space}SELECT CASE ({self.expr})\n"]
         for cond, block in self.cases:
             lines.append(f"{space}CASE ({cond})\n")
-            lines.extend(block.render(len(space) + 2))
+            lines.extend(block.render(indent+1))
         if self.default is not None:
             lines.append(f"{space}CASE DEFAULT\n")
-            lines.extend(self.default.render(len(space) + 2))
+            lines.extend(self.default.render(indent+1))
         lines.append(f"{space}END SELECT\n")
         return lines
 
@@ -196,12 +187,11 @@ class DoLoop(Node):
 
     header: str
     body: Block
-    indent: str = ""
 
     def render(self, indent: int = 0) -> List[str]:
-        space = self.indent
+        space = "  " * indent
         lines = [f"{space}{self.header}\n"]
-        lines.extend(self.body.render(len(space) + 2))
+        lines.extend(self.body.render(indent+1))
         lines.append(f"{space}END DO\n")
         return lines
 
@@ -210,10 +200,9 @@ class DoLoop(Node):
 class Return(Node):
     """A ``return`` statement."""
 
-    indent: str = ""
-
     def render(self, indent: int = 0) -> List[str]:
-        return [f"{self.indent}return\n"]
+        space = "  " * indent
+        return [f"{space}return\n"]
 
 
 def render_program(node: Node, indent: int = 0) -> str:
