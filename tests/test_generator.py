@@ -101,11 +101,35 @@ class TestRenderProgram(unittest.TestCase):
             ]
         )
         expected = (
-            "if (a > 0) then\n"
-            "  b = 1\n"
-            "else\n"
-            "  b = 2\n"
-            "end if\n"
+            "IF (a > 0) THEN\n"
+            "b = 1\n"
+            "ELSE\n"
+            "b = 2\n"
+            "END IF\n"
+        )
+        self.assertEqual(code_tree.render_program(prog), expected)
+
+    def test_if_elif_block(self):
+        prog = code_tree.Block(
+            [
+                code_tree.IfBlock(
+                    "a > 0",
+                    code_tree.Block([code_tree.Assignment("b", "1")]),
+                    elif_blocks=[
+                        ("a < 0", code_tree.Block([code_tree.Assignment("b", "2")]))
+                    ],
+                    else_body=code_tree.Block([code_tree.Assignment("b", "3")]),
+                )
+            ]
+        )
+        expected = (
+            "IF (a > 0) THEN\n"
+            "b = 1\n"
+            "ELSE IF (a < 0) THEN\n"
+            "b = 2\n"
+            "ELSE\n"
+            "b = 3\n"
+            "END IF\n"
         )
         self.assertEqual(code_tree.render_program(prog), expected)
 
