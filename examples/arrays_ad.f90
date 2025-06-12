@@ -47,8 +47,6 @@ contains
     real :: dd_db
     real :: dd_dc
 
-    a_ad(:) = 0.0
-    b_ad(:) = 0.0
     c_ad = 0.0
 
     d_ad_(:) = d_ad(:)
@@ -58,9 +56,9 @@ contains
         dd_da = 1.0
         dd_db = c
         dd_dc = b(i, j)
-        c_ad = d_ad_ * dd_dc + c_ad
-        b_ad(i) = d_ad_ * dd_db + b_ad(i)
-        a_ad(i) = d_ad_ * dd_da + a_ad(i)
+        a_ad(i, j) = d_ad_(i, j) * dd_da
+        b_ad(i, j) = d_ad_(i, j) * dd_db
+        c_ad = d_ad_(i, j) * dd_dc + c_ad
       END DO
     END DO
 
@@ -80,8 +78,6 @@ contains
     real :: dres_da
     real :: dres_db
 
-    a_ad(:) = 0.0
-    b_ad(:) = 0.0
 
     res_ad_ = res_ad
 
@@ -89,8 +85,8 @@ contains
       dres_dres = 1.0
       dres_da = b(i)
       dres_db = a(i)
-      b_ad(i) = res_ad_ * dres_db + b_ad(i)
-      a_ad(i) = res_ad_ * dres_da + a_ad(i)
+      a_ad(i) = res_ad_ * dres_da
+      b_ad(i) = res_ad_ * dres_db
       res_ad_ = res_ad_ * dres_dres
     END DO
 
@@ -117,9 +113,9 @@ contains
 
     DO i = n, 1, -1
       dc_da = 2 * a(idx(i))**1
-      a_ad(i) = c_ad_ * dc_da + a_ad(i)
+      a_ad(i) = c_ad_(i) * dc_da + a_ad(i)
       db_da = 1.0
-      a_ad(i) = b_ad_ * db_da + a_ad(i)
+      a_ad(i) = b_ad_(i) * db_da + a_ad(i)
     END DO
 
     return
@@ -134,13 +130,12 @@ contains
     real :: b_ad_(n)
     real :: db_da
 
-    a_ad(:) = 0.0
 
     b_ad_(:) = b_ad(:)
 
     DO i = n, 1, -1
       db_da = 1.0 + 2.0 + 1.0 / 4.0
-      a_ad(i) = b_ad_ * db_da + a_ad(i)
+      a_ad(i) = b_ad_(i) * db_da
       IF (i == 1) THEN
       ELSE IF (i == n) THEN
       END IF

@@ -83,6 +83,13 @@ def _collect_names(expr, names, unique=True):
                     names.append(name)
             else:
                 names.append(name)
+            # also collect index variable names
+            for arg in getattr(expr.items[1], "items", []):
+                if isinstance(arg, Fortran2003.Actual_Arg_Spec):
+                    subexpr = arg.items[1]
+                else:
+                    subexpr = arg
+                _collect_names(subexpr, names, unique=unique)
             return
     if isinstance(expr, Fortran2003.Name):
         name = str(expr)
@@ -750,6 +757,12 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             suffix = "(:)" if dims and name_d not in scalar_derivs else ""
             block.append(f"{name_d}{suffix} = {expr}\n")
         lhs_grad = grad_var.get(lhs_base, f"{lhs_base}_ad")
+        lhs_typ = decl_map.get(lhs_base, ("",))[0]
+        lhs_is_array = in_do and "dimension" in str(lhs_typ).lower()
+        if lhs_is_array:
+            idx_list = [n for n in rhs_names if n in do_indices]
+            if idx_list:
+                lhs_grad = f"{lhs_grad}({', '.join(idx_list)})"
         order = list(parts.keys()) if has_repeat else list(reversed(list(parts.keys())))
         for var in order:
             if var == lhs_base:
@@ -764,7 +777,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
                 and any(n in rhs_names for n in do_indices)
             )
             if in_do and is_array:
-                idx = next((n for n in rhs_names if n in do_indices), "i")
+                idx_list = [n for n in rhs_names if n in do_indices]
+                idx = ", ".join(idx_list) if idx_list else "i"
                 line = f"{var}_ad({idx}) = {update}"
                 if var_int == "inout" or ((var in defined or in_do) and not unique_loop):
                     line += f" + {var}_ad({idx})"
@@ -783,7 +797,8 @@ def _generate_ad_subroutine(routine, indent, filename, warnings):
             ltyp = decl_map.get(lhs_base, ("real",))[0]
             _, ldims = _split_type(ltyp)
             suf = "(:)" if ldims else ""
-            block.append(f"{new_grad}{suf} = {lhs_grad} * d{lhs_base}_d{lhs_base}{suf}\n")
+            expr = f"{lhs_grad} * d{lhs_base}_d{lhs_base}{suf}"
+            block.append(f"{new_grad}{suf} = {expr}\n")
             grad_var[lhs_base] = new_grad
             if in_do:
                 loop_grad_vars.add(lhs_base)
