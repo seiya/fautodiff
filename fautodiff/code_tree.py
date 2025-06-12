@@ -118,8 +118,22 @@ class Node:
         return list(names or [])
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        """Return variables referenced before assignment within this node."""
+        """Return variables needed before executing this node.
+
+        ``names`` is the list of variables that must be defined *after* this
+        node has executed.  The default implementation simply returns ``names``
+        unchanged.  Subclasses override this to remove variables that are
+        assigned and to add any variables referenced by this node.
+        """
         return list(names or [])
+
+    # ------------------------------------------------------------------
+    # optimization helpers
+    # ------------------------------------------------------------------
+
+    def prune_for(self, targets: Iterable[str]) -> "Node":
+        """Return a copy of this node with only code needed for ``targets``."""
+        return self.deep_clone()
 
 
 @dataclass
@@ -171,15 +185,21 @@ class Block(Node):
         return res
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        assigned: List[str] = []
-        for child in self.children:
-            req = child.required_vars([])
-            for n in req:
-                if n not in assigned and n not in res:
-                    res.append(n)
-            assigned = child.assigned_vars(assigned)
-        return res
+        needed = list(names or [])
+        for child in reversed(self.children):
+            needed = child.required_vars(needed)
+        return needed
+
+    def prune_for(self, targets: Iterable[str]) -> "Block":
+        needed = list(targets)
+        new_children: List[Node] = []
+        for child in reversed(self.children):
+            assigned = child.assigned_vars([])
+            if any(v in needed for v in assigned):
+                pruned = child.prune_for(needed)
+                new_children.insert(0, pruned)
+                needed = pruned.required_vars(needed)
+        return Block(new_children)
 
 
 @dataclass
@@ -204,11 +224,11 @@ class Assignment(Node):
         return res
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
+        needed = [n for n in (names or []) if n != self.lhs.split("(")[0].strip()]
         for n in _extract_names(self.rhs):
-            if n != self.lhs.split("(")[0].strip():
-                _append_unique(res, n)
-        return res
+            if n not in needed:
+                needed.append(n)
+        return needed
 
 
 @dataclass
@@ -244,16 +264,18 @@ class Subroutine(Node):
         return self.body.assigned_vars(res)
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        res = self.decls.required_vars(res)
-        assigned = self.decls.assigned_vars([])
-        for child in self.body.children:
-            req = child.required_vars([])
-            for n in req:
-                if n not in assigned and n not in res:
-                    res.append(n)
-            assigned = child.assigned_vars(assigned)
-        return res
+        needed = list(names or [])
+        needed = self.body.required_vars(needed)
+        needed = self.decls.required_vars(needed)
+        return needed
+
+    def prune_for(self, targets: Iterable[str]) -> "Subroutine":
+        return Subroutine(
+            self.name,
+            self.args,
+            self.decls.prune_for(targets),
+            self.body.prune_for(targets),
+        )
 
     def defined_var_names(self) -> List[str]:
         names: List[str] = []
@@ -296,16 +318,18 @@ class Function(Node):
         return self.body.assigned_vars(res)
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        res = self.decls.required_vars(res)
-        assigned = self.decls.assigned_vars([])
-        for child in self.body.children:
-            req = child.required_vars([])
-            for n in req:
-                if n not in assigned and n not in res:
-                    res.append(n)
-            assigned = child.assigned_vars(assigned)
-        return res
+        needed = list(names or [])
+        needed = self.body.required_vars(needed)
+        needed = self.decls.required_vars(needed)
+        return needed
+
+    def prune_for(self, targets: Iterable[str]) -> "Function":
+        return Function(
+            self.name,
+            self.args,
+            self.decls.prune_for(targets),
+            self.body.prune_for(targets),
+        )
 
     def defined_var_names(self) -> List[str]:
         names: List[str] = []
@@ -358,6 +382,8 @@ class Declaration(Node):
         return res
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
+        if self.intent in ("in", "inout"):
+            return [n for n in (names or []) if n != self.name]
         return list(names or [])
 
 
@@ -420,17 +446,37 @@ class IfBlock(Node):
         return res
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        for n in _extract_names(self.condition):
-            _append_unique(res, n)
+        needed = list(names or [])
         branches = [self.body] + [blk for _, blk in self.elif_blocks]
         if self.else_body is not None:
             branches.append(self.else_body)
+
+        if branches:
+            common_assigned = set(branches[0].assigned_vars([]))
+            for blk in branches[1:]:
+                common_assigned &= set(blk.assigned_vars([]))
+            needed = [n for n in needed if n not in common_assigned]
+
+        res: List[str] = []
+        for n in _extract_names(self.condition):
+            _append_unique(res, n)
         for blk in branches:
-            req = blk.required_vars([])
+            req = blk.required_vars(needed)
             for n in req:
                 _append_unique(res, n)
         return res
+
+    def prune_for(self, targets: Iterable[str]) -> "Node":
+        new_body = self.body.prune_for(targets)
+        new_elifs = [(c, blk.prune_for(targets)) for c, blk in self.elif_blocks]
+        new_else = self.else_body.prune_for(targets) if self.else_body is not None else None
+        if (
+            new_body.is_effectively_empty()
+            and all(b.is_effectively_empty() for _, b in new_elifs)
+            and (new_else is None or new_else.is_effectively_empty())
+        ):
+            return Block([])
+        return IfBlock(self.condition, new_body, new_elifs, new_else)
 
 
 @dataclass
@@ -484,17 +530,34 @@ class SelectBlock(Node):
         return res
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        for n in _extract_names(self.expr):
-            _append_unique(res, n)
+        needed = list(names or [])
         blocks = [blk for _, blk in self.cases]
         if self.default is not None:
             blocks.append(self.default)
+
+        if blocks:
+            common_assigned = set(blocks[0].assigned_vars([]))
+            for blk in blocks[1:]:
+                common_assigned &= set(blk.assigned_vars([]))
+            needed = [n for n in needed if n not in common_assigned]
+
+        res: List[str] = []
+        for n in _extract_names(self.expr):
+            _append_unique(res, n)
         for blk in blocks:
-            req = blk.required_vars([])
+            req = blk.required_vars(needed)
             for n in req:
                 _append_unique(res, n)
         return res
+
+    def prune_for(self, targets: Iterable[str]) -> "Node":
+        new_cases = [(c, blk.prune_for(targets)) for c, blk in self.cases]
+        new_default = self.default.prune_for(targets) if self.default is not None else None
+        if all(blk.is_effectively_empty() for _, blk in new_cases) and (
+            new_default is None or new_default.is_effectively_empty()
+        ):
+            return Block([])
+        return SelectBlock(self.expr, new_cases, new_default)
 
 
 @dataclass
@@ -529,18 +592,18 @@ class DoLoop(Node):
         return res
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
+        needed = self.body.required_vars(list(names or []))
         tokens = [t for t in _extract_names(self.header) if t.lower() != "do"]
-        if tokens:
-            for t in tokens[1:]:
-                _append_unique(res, t)
-        else:
-            for t in _extract_names(self.header):
-                _append_unique(res, t)
-        req = self.body.required_vars([])
-        for n in req:
-            _append_unique(res, n)
-        return res
+        for t in (tokens[1:] if tokens else _extract_names(self.header)):
+            if t not in needed:
+                needed.append(t)
+        return needed
+
+    def prune_for(self, targets: Iterable[str]) -> "Node":
+        new_body = self.body.prune_for(targets)
+        if new_body.is_effectively_empty():
+            return Block([])
+        return DoLoop(self.header, new_body)
 
 
 @dataclass
