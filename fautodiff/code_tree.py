@@ -3,11 +3,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Tuple, Optional
+from typing import Iterable, List, Tuple, Optional, Iterator
+import copy
 
 
+@dataclass
 class Node:
     """Abstract syntax tree node for Fortran code fragments."""
+
+    id: int = field(init=False, repr=False)
+
+    _id_counter = 0
+
+    def __post_init__(self):
+        self.id = Node._id_counter
+        Node._id_counter += 1
+
+    # ------------------------------------------------------------------
+    # basic node API
+    # ------------------------------------------------------------------
 
     def render(self, indent: int = 0) -> List[str]:
         """Return the formatted Fortran code lines for this node."""
@@ -21,12 +35,75 @@ class Node:
         """Return ``True`` if ``var`` is assigned within this node."""
         return False
 
+    # ------------------------------------------------------------------
+    # node tree helpers
+    # ------------------------------------------------------------------
+
+    def iter_children(self) -> Iterator["Node"]:
+        """Yield child nodes."""
+        return iter(())
+
+    # ------------------------------------------------------------------
+    # new features
+    # ------------------------------------------------------------------
+
+    def deep_clone(self) -> "Node":
+        """Return a deep clone of this node tree with new ids."""
+        clone = copy.deepcopy(self)
+        Node._assign_new_ids(clone)
+        return clone
+
+    @classmethod
+    def _assign_new_ids(cls, node: "Node") -> None:
+        node.id = cls._id_counter
+        cls._id_counter += 1
+        for child in node.iter_children():
+            cls._assign_new_ids(child)
+
+    def get_id(self) -> int:
+        """Return this node's unique id."""
+        return self.id
+
+    def find_by_id(self, node_id: int) -> Optional["Node"]:
+        """Return the node with ``node_id`` from this subtree or ``None``."""
+        if self.id == node_id:
+            return self
+        for child in self.iter_children():
+            found = child.find_by_id(node_id)
+            if found is not None:
+                return found
+        return None
+
+    def remove_by_id(self, node_id: int) -> bool:
+        """Remove the node with ``node_id`` from this subtree.
+
+        Returns ``True`` if a node was removed.
+        """
+        for child in list(self.iter_children()):
+            if child.id == node_id:
+                self._remove_child(child)
+                return True
+            if child.remove_by_id(node_id):
+                return True
+        return False
+
+    def _remove_child(self, child: "Node") -> None:
+        """Remove ``child`` from this node. Override in subclasses."""
+        # Only ``Block`` implements actual removal.
+        pass
+
 
 @dataclass
 class Block(Node):
     """A container for a sequence of nodes."""
 
     children: List[Node] = field(default_factory=list)
+
+    def iter_children(self) -> Iterator[Node]:
+        return iter(self.children)
+
+    def _remove_child(self, child: Node) -> None:
+        self.children.remove(child)
 
     def append(self, node: Node) -> None:
         """Append ``node`` to this block."""
@@ -84,6 +161,9 @@ class Subroutine(Node):
     decls: Block = field(default_factory=Block)
     body: Block = field(default_factory=Block)
 
+    def iter_children(self) -> Iterator[Node]:
+        return iter([self.decls, self.body])
+
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         args = f"({self.args})" if self.args else "()"
@@ -109,6 +189,9 @@ class Function(Node):
     args: str = ""
     decls: Block = field(default_factory=Block)
     body: Block = field(default_factory=Block)
+
+    def iter_children(self) -> Iterator[Node]:
+        return iter([self.decls, self.body])
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -173,6 +256,13 @@ class IfBlock(Node):
     elif_blocks: List[Tuple[str, Block]] = field(default_factory=list)
     else_body: Optional[Block] = None
 
+    def iter_children(self) -> Iterator[Node]:
+        yield self.body
+        for _, blk in self.elif_blocks:
+            yield blk
+        if self.else_body is not None:
+            yield self.else_body
+
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         lines = [f"{space}IF ({self.condition}) THEN\n"]
@@ -215,6 +305,12 @@ class SelectBlock(Node):
     cases: List[Tuple[str, Block]] = field(default_factory=list)
     default: Optional[Block] = None
 
+    def iter_children(self) -> Iterator[Node]:
+        for _, blk in self.cases:
+            yield blk
+        if self.default is not None:
+            yield self.default
+
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         lines = [f"{space}SELECT CASE ({self.expr})\n"]
@@ -250,6 +346,9 @@ class DoLoop(Node):
 
     header: str
     body: Block
+
+    def iter_children(self) -> Iterator[Node]:
+        yield self.body
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
