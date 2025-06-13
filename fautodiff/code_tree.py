@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Tuple, Optional, Iterator
+from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar
 import re
 import copy
 
@@ -308,13 +308,14 @@ class Assignment(Node):
 
 
 @dataclass
-class Subroutine(Node):
-    """A ``subroutine`` with declaration and execution blocks."""
+class Routine(Node):
+    """Common functionality for ``subroutine`` and ``function`` blocks."""
 
     name: str
     args: str = ""
     decls: Block = field(default_factory=Block)
     body: Block = field(default_factory=Block)
+    kind: ClassVar[str] = "subroutine"
 
     def iter_children(self) -> Iterator[Node]:
         return iter([self.decls, self.body])
@@ -322,11 +323,11 @@ class Subroutine(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         args = f"({self.args})" if self.args else "()"
-        lines = [f"{space}subroutine {self.name}{args}\n"]
+        lines = [f"{space}{self.kind} {self.name}{args}\n"]
         lines.extend(self.decls.render(indent + 1))
         lines.append("\n")
         lines.extend(self.body.render(indent + 1))
-        lines.append(f"{space}end subroutine {self.name}\n")
+        lines.append(f"{space}end {self.kind} {self.name}\n")
         return lines
 
     def is_effectively_empty(self) -> bool:
@@ -345,8 +346,8 @@ class Subroutine(Node):
         needed = self.decls.required_vars(needed)
         return needed
 
-    def prune_for(self, targets: Iterable[str]) -> "Subroutine":
-        return Subroutine(
+    def prune_for(self, targets: Iterable[str]) -> "Routine":
+        return type(self)(
             self.name,
             self.args,
             self.decls.prune_for(targets),
@@ -365,57 +366,19 @@ class Subroutine(Node):
 
 
 @dataclass
-class Function(Node):
+class Subroutine(Routine):
+    """A ``subroutine`` with declaration and execution blocks."""
+
+    kind: ClassVar[str] = "subroutine"
+
+
+@dataclass
+class Function(Routine):
     """A ``function`` with declaration and execution blocks."""
 
-    name: str
-    args: str = ""
-    decls: Block = field(default_factory=Block)
-    body: Block = field(default_factory=Block)
+    kind: ClassVar[str] = "function"
 
-    def iter_children(self) -> Iterator[Node]:
-        return iter([self.decls, self.body])
 
-    def render(self, indent: int = 0) -> List[str]:
-        space = "  " * indent
-        args = f"({self.args})" if self.args else "()"
-        lines = [f"{space}function {self.name}{args}\n"]
-        lines.extend(self.decls.render(indent + 1))
-        lines.append("\n")
-        lines.extend(self.body.render(indent + 1))
-        lines.append(f"{space}end function {self.name}\n")
-        return lines
-
-    def is_effectively_empty(self) -> bool:
-        return self.decls.is_effectively_empty() and self.body.is_effectively_empty()
-
-    def has_assignment_to(self, var: str) -> bool:
-        return self.decls.has_assignment_to(var) or self.body.has_assignment_to(var)
-
-    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = self.decls.assigned_vars(names)
-        return self.body.assigned_vars(res)
-
-    def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        needed = list(names or [])
-        needed = self.body.required_vars(needed)
-        needed = self.decls.required_vars(needed)
-        return needed
-
-    def prune_for(self, targets: Iterable[str]) -> "Function":
-        return Function(
-            self.name,
-            self.args,
-            self.decls.prune_for(targets),
-            self.body.prune_for(targets),
-        )
-
-    def defined_var_names(self) -> List[str]:
-        names: List[str] = []
-        for node in self.decls.children:
-            if isinstance(node, Declaration):
-                names.append(node.name)
-        return names
 
 
 @dataclass
