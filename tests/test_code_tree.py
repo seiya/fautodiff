@@ -131,6 +131,22 @@ class TestNodeMethods(unittest.TestCase):
             "a = 1\n" "b = a\n",
         )
 
+    def test_assignment_accumulate(self):
+        # detection without flag
+        a = code_tree.Assignment("x_da", "x_da + y")
+        self.assertEqual(a.required_vars(["x_da"]), ["y"])
+
+        # explicit accumulate
+        b = code_tree.Assignment("x_da", "y", accumulate=True)
+        self.assertEqual(
+            code_tree.render_program(code_tree.Block([b])),
+            "x_da = y + x_da\n",
+        )
+        self.assertEqual(b.required_vars(["x_da"]), ["y"])
+
+        with self.assertRaises(ValueError):
+            code_tree.Assignment("x_da", "x_da + y", accumulate=True)
+
 
 if __name__ == "__main__":
     unittest.main()
