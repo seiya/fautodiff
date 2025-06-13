@@ -208,10 +208,28 @@ class Assignment(Node):
 
     lhs: str
     rhs: str
+    accumulate: bool = False
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.accumulate and self._detect_self_add():
+            raise ValueError("rhs must not reference lhs when accumulate=True")
+
+    def _detect_self_add(self) -> bool:
+        lhs_base = self.lhs.split("(")[0].strip().lower()
+        parts = [p.strip().lower() for p in self.rhs.split("+")]
+        if len(parts) != 2:
+            return False
+        left_base = parts[0].split("(")[0].strip()
+        right_base = parts[1].split("(")[0].strip()
+        return lhs_base in (left_base, right_base)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        return [f"{space}{self.lhs} = {self.rhs}\n"]
+        rhs = self.rhs
+        if self.accumulate:
+            rhs = f"{rhs} + {self.lhs}"
+        return [f"{space}{self.lhs} = {rhs}\n"]
 
     def has_assignment_to(self, var: str) -> bool:
         lhs_name = self.lhs.split("(")[0].strip().lower()
@@ -224,8 +242,12 @@ class Assignment(Node):
         return res
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        needed = [n for n in (names or []) if n != self.lhs.split("(")[0].strip()]
+        lhs_base = self.lhs.split("(")[0].strip()
+        needed = [n for n in (names or []) if n != lhs_base]
+        ignore_self = self.accumulate or self._detect_self_add()
         for n in _extract_names(self.rhs):
+            if ignore_self and n == lhs_base:
+                continue
             if n not in needed:
                 needed.append(n)
         return needed

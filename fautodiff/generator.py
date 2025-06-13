@@ -917,7 +917,7 @@ def _generate_ad_subroutine(routine, filename, warnings):
         t, _ = decl_map.get(arg, ("real", None))
         _, dims = _split_type(t)
         suf = "(:)" if dims else ""
-        init_lines.append(Assignment(f"{arg}_ad{suf}", 0.0))
+        init_lines.append(Assignment(f"{arg}_ad{suf}", "0.0"))
     # only intent(out) argument gradients need initialization
 
     for il in init_lines:
