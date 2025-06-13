@@ -468,6 +468,8 @@ def _generate_ad_subroutine(routine, filename, warnings):
         result = None
 
     spec, exec_part = parser._routine_parts(routine)
+    # Convert execution part to a forward node block for later use
+    fwd_block = parser.exec_part_to_block(exec_part)
     decl_map = parser._parse_decls(spec)
     used_vars = set()
     pre_lines = Block([])  # nodes inserted before the main reversed body

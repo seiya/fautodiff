@@ -13,6 +13,8 @@ from fparser.two import Fortran2003
 from fparser.two.Fortran2008 import Block_Nonlabel_Do_Construct
 from fparser.two.utils import walk
 
+from .code_tree import Block, Assignment, IfBlock, DoLoop, SelectBlock, Return
+
 if parse(getattr(fparser, "__version__", "0")) < Version("0.2.0"):
     raise RuntimeError("fautodiff requires fparser version 0.2.0 or later")
 
@@ -43,6 +45,7 @@ __all__ = [
     "Block_Nonlabel_Do_Construct",
     "_parse_decls",
     "_routine_parts",
+    "exec_part_to_block",
 ]
 
 
@@ -114,3 +117,94 @@ def _routine_parts(routine):
         elif isinstance(part, Fortran2003.Execution_Part):
             exec_part = part
     return spec, exec_part
+
+
+def exec_part_to_block(exec_part):
+    """Convert an ``Execution_Part`` node into a :class:`Block` of nodes."""
+
+    def _stmt_to_block(stmt):
+        if isinstance(stmt, Fortran2003.Assignment_Stmt):
+            lhs = stmt.items[0].tofortran().strip()
+            rhs = stmt.items[2].tofortran().strip()
+            return Block([Assignment(lhs, rhs)])
+        if isinstance(stmt, Fortran2003.If_Construct):
+            cond = stmt.content[0].items[0].tofortran()
+            i = 1
+            seg = []
+            while i < len(stmt.content):
+                itm = stmt.content[i]
+                if isinstance(itm, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
+                    break
+                seg.append(itm)
+                i += 1
+            body = _block(seg)
+            elif_blocks = []
+            else_block = None
+            while i < len(stmt.content):
+                itm = stmt.content[i]
+                if isinstance(itm, Fortran2003.Else_If_Stmt):
+                    cond2 = itm.items[0].tofortran()
+                    i += 1
+                    seg = []
+                    while i < len(stmt.content):
+                        j = stmt.content[i]
+                        if isinstance(j, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
+                            break
+                        seg.append(j)
+                        i += 1
+                    blk = _block(seg)
+                    elif_blocks.append((cond2, blk))
+                elif isinstance(itm, Fortran2003.Else_Stmt):
+                    i += 1
+                    seg = []
+                    while i < len(stmt.content):
+                        j = stmt.content[i]
+                        if isinstance(j, Fortran2003.End_If_Stmt):
+                            break
+                        seg.append(j)
+                        i += 1
+                    else_block = _block(seg)
+                elif isinstance(itm, Fortran2003.End_If_Stmt):
+                    i += 1
+                else:
+                    i += 1
+            node = IfBlock(cond, body, elif_blocks=elif_blocks, else_body=else_block)
+            return Block([node])
+        if isinstance(stmt, Fortran2003.Case_Construct):
+            expr = stmt.content[0].items[0].tofortran()
+            cases = []
+            default = None
+            i = 1
+            while i < len(stmt.content) - 1:
+                cs = stmt.content[i]
+                cond = cs.tofortran().split(None, 1)[1]
+                i += 1
+                seg = []
+                while i < len(stmt.content) - 1 and not isinstance(stmt.content[i], Fortran2003.Case_Stmt):
+                    seg.append(stmt.content[i])
+                    i += 1
+                blk = _block(seg)
+                if cond.lower().startswith("default"):
+                    default = blk
+                else:
+                    cond = cond.strip()
+                    if cond.startswith("(") and cond.endswith(")"):
+                        cond = cond[1:-1]
+                    cases.append((cond, blk))
+            node = SelectBlock(expr, cases, default=default)
+            return Block([node])
+        if isinstance(stmt, Block_Nonlabel_Do_Construct):
+            header = stmt.content[0].tofortran().strip()
+            body = _block(stmt.content[1:-1])
+            return Block([DoLoop(header, body)])
+        if isinstance(stmt, Fortran2003.Return_Stmt):
+            return Block([Return()])
+        return Block([])
+
+    def _block(body_list):
+        blk = Block([])
+        for st in body_list:
+            blk.extend(_stmt_to_block(st))
+        return blk
+
+    return _block(getattr(exec_part, "content", []))
