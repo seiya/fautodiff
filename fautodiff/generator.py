@@ -19,6 +19,7 @@ from .code_tree import (
     InitBlock,
     AdBlock,
     render_program,
+    Variable,
 )
 
 from . import parser
@@ -564,7 +565,8 @@ def _generate_ad_subroutine(routine, filename, warnings):
             t, _ = decl_map.get(arg, ("real", None))
             _, dims = _split_type(t)
             suffix = "(:)" if dims else ""
-            body.append(Assignment(f"{arg}_ad{suffix}", "0.0"))
+            dim = suffix or None
+            body.append(Assignment(Variable(f"{arg}_ad", "real", dimension=dim), "0.0"))
         if out_grad_args:
             body.append(EmptyLine())
         body.append(Return())
@@ -652,7 +654,8 @@ def _generate_ad_subroutine(routine, filename, warnings):
             vtyp = decl_map.get(var, ("real",))[0]
             _, dims = _split_type(vtyp)
             suf = "(:)" if dims else ""
-            pre_lines.append(Assignment(f"{var}_ad_{suf}", f"{var}_ad{suf}"))
+            dim = suf or None
+            pre_lines.append(Assignment(Variable(f"{var}_ad_", "real", dimension=dim), f"{var}_ad{suf}"))
             grad_var[var] = f"{var}_ad_"
             if f"{var}_ad_" not in decl_set:
                 decl_names.append(f"{var}_ad_")
@@ -718,7 +721,12 @@ def _generate_ad_subroutine(routine, filename, warnings):
         }
         if not parts and lhs_base in used_vars and not rhs_names and lhs_base not in outputs:
             if top:
-                pre_lines.insert(0, Assignment(str(stmt.items[0]), stmt.items[2].tofortran().strip()))
+                lhs_text = str(stmt.items[0])
+                dim = None
+                if "(" in lhs_text:
+                    dim = lhs_text[lhs_text.find("("):].strip()
+                lhs_var = Variable(lhs_text.split("(")[0].strip(), "", dimension=dim)
+                pre_lines.insert(0, Assignment(lhs_var, stmt.items[2].tofortran().strip()))
                 last_block = None
             else:
                 stmt_blocks[id(stmt)] = [f"{stmt.tofortran().strip()}\n"]
@@ -948,7 +956,11 @@ def _generate_ad_subroutine(routine, filename, warnings):
                         if lhs_base in (left_base, right_base):
                             accumulate = True
                             rhs = parts[0] if right_base == lhs_base else parts[1]
-                    nodes.append(Assignment(lhs, rhs, accumulate=accumulate))
+                    dim = None
+                    if "(" in lhs:
+                        dim = lhs[lhs.find("("):].strip()
+                    lhs_var = Variable(lhs.split("(")[0].strip(), "", dimension=dim)
+                    nodes.append(Assignment(lhs_var, rhs, accumulate=accumulate))
             return Block(nodes)
         if isinstance(st, Fortran2003.If_Construct):
             cond = st.content[0].items[0].tofortran()
@@ -1036,12 +1048,13 @@ def _generate_ad_subroutine(routine, filename, warnings):
         t, _ = decl_map.get(arg, ("real", None))
         _, dims = _split_type(t)
         suf = "(:)" if dims else ""
+        dim = suf or None
         if var_name in keep:
-            init_block.append(Assignment(f"{var_name}{suf}", "0.0"))
+            init_block.append(Assignment(Variable(var_name, "real", dimension=dim), "0.0"))
             continue
         res = ad_block.remove_initial_self_add(var_name)
         if res == 1:
-            init_block.append(Assignment(f"{var_name}{suf}", "0.0"))
+            init_block.append(Assignment(Variable(var_name, "real", dimension=dim), "0.0"))
 
     body.append(init_block)
     body.append(ad_block)
