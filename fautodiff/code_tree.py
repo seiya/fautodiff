@@ -220,6 +220,32 @@ class Block(Node):
                 return child.remove_initial_self_add(var)
         return 1
 
+    def remove_redundant_inits(self, init_block: "Block", keep: Iterable[str]) -> None:
+        """Remove redundant gradient initializations using node helpers."""
+        for idx, node in enumerate(list(init_block.children)):
+            base = node.lhs.split("(")[0].strip()
+            if base in keep:
+                continue
+            self.remove_by_id(node.get_id())
+            res = self.remove_initial_self_add(base)
+            if res == 1:
+                self.insert(idx, node)
+
+
+@dataclass
+class DeclBlock(Block):
+    """Block containing declarations."""
+
+
+@dataclass
+class InitBlock(Block):
+    """Block containing gradient initializations."""
+
+
+@dataclass
+class AdBlock(Block):
+    """Block containing AD computation statements."""
+
 
 @dataclass
 class Assignment(Node):
