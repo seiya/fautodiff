@@ -467,9 +467,11 @@ def _generate_ad_subroutine(routine, filename, warnings):
         args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
         result = None
 
-    spec, exec_part = parser._routine_parts(routine)
+    spec, exec_part_node = parser._routine_parts(routine)
     # Convert execution part to a forward node block for later use
-    fwd_block = parser.exec_part_to_block(exec_part)
+    fwd_block = parser.exec_part_to_block(exec_part_node)
+    # Use the forward block to obtain a fresh execution part for AD generation
+    exec_part = parser.block_to_exec_part(fwd_block)
     decl_map = parser._parse_decls(spec)
     used_vars = set()
     pre_lines = Block([])  # nodes inserted before the main reversed body

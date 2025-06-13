@@ -7,7 +7,7 @@ rest of the package does not rely on the underlying parser implementation.
 from packaging.version import Version, parse
 import fparser
 
-from fparser.common.readfortran import FortranFileReader
+from fparser.common.readfortran import FortranFileReader, FortranStringReader
 from fparser.two.parser import ParserFactory
 from fparser.two import Fortran2003
 from fparser.two.Fortran2008 import Block_Nonlabel_Do_Construct
@@ -46,6 +46,7 @@ __all__ = [
     "_parse_decls",
     "_routine_parts",
     "exec_part_to_block",
+    "block_to_exec_part",
 ]
 
 
@@ -208,3 +209,17 @@ def exec_part_to_block(exec_part):
         return blk
 
     return _block(getattr(exec_part, "content", []))
+
+
+def block_to_exec_part(block):
+    """Convert a :class:`Block` back into an ``Execution_Part`` node."""
+
+    from .code_tree import render_program
+
+    prog = "subroutine tmp_blk()\n" + render_program(block) + "end subroutine tmp_blk\n"
+    reader = FortranStringReader(prog)
+    parser = ParserFactory().create(std="f2008")
+    ast = parser(reader)
+    sub = walk(ast, Fortran2003.Subroutine_Subprogram)[0]
+    _, exec_part = _routine_parts(sub)
+    return exec_part
