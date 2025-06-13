@@ -254,9 +254,11 @@ class Assignment(Node):
     lhs: str
     rhs: str
     accumulate: bool = False
+    rhs_names: List[str] = field(init=False, repr=False)
 
     def __post_init__(self):
         super().__post_init__()
+        self.rhs_names = _extract_names(self.rhs)
         if self.accumulate and self._detect_self_add():
             raise ValueError("rhs must not reference lhs when accumulate=True")
 
@@ -290,7 +292,7 @@ class Assignment(Node):
         lhs_base = self.lhs.split("(")[0].strip()
         needed = [n for n in (names or []) if n != lhs_base]
         ignore_self = self.accumulate or self._detect_self_add()
-        for n in _extract_names(self.rhs):
+        for n in self.rhs_names:
             if ignore_self and n == lhs_base:
                 continue
             if n not in needed:

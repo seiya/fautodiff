@@ -147,6 +147,15 @@ class TestNodeMethods(unittest.TestCase):
         with self.assertRaises(ValueError):
             code_tree.Assignment("x_da", "x_da + y", accumulate=True)
 
+    def test_assignment_rhs_names(self):
+        assign = code_tree.Assignment("a", "b + c")
+        self.assertEqual(assign.rhs_names, ["b", "c"])
+
+    def test_required_vars_uses_cached_names(self):
+        assign = code_tree.Assignment("a", "b + c")
+        assign.rhs = "d"
+        self.assertEqual(assign.required_vars(), ["b", "c"])
+
     def test_remove_initial_self_add(self):
         blk = code_tree.Block([
             code_tree.Assignment("x_da", "x_da + y"),
