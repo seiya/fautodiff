@@ -20,6 +20,15 @@ class TestExecPartToBlock(unittest.TestCase):
         self.assertIsInstance(blk.children[1], Assignment)
         self.assertIsInstance(blk.children[2], Return)
 
+    def test_block_roundtrip(self):
+        ast = parser.parse_file('examples/simple_math.f90')
+        sub = parser.walk(ast, Fortran2003.Subroutine_Subprogram)[0]
+        _, exec_part = parser._routine_parts(sub)
+        blk = parser.exec_part_to_block(exec_part)
+        new_exec = parser.block_to_exec_part(blk)
+        self.assertIsNotNone(new_exec)
+        self.assertEqual(len(new_exec.content), len(exec_part.content))
+
 
 if __name__ == '__main__':
     unittest.main()
