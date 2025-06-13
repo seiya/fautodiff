@@ -198,5 +198,18 @@ class TestNodeMethods(unittest.TestCase):
         self.assertEqual(cond_blk2.remove_initial_self_add("x_da"), 2)
 
 
+class TestVariable(unittest.TestCase):
+    def test_scalar(self):
+        var = code_tree.Variable("x", "real")
+        self.assertEqual(var.name, "x")
+        self.assertEqual(var.typename, "real")
+        self.assertFalse(var.is_array())
+
+    def test_array(self):
+        var = code_tree.Variable("a", "real", dimension="(n)")
+        self.assertTrue(var.is_array())
+        self.assertEqual(var.dimension, "(n)")
+
+
 if __name__ == "__main__":
     unittest.main()
