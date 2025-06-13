@@ -13,7 +13,16 @@ from fparser.two import Fortran2003
 from fparser.two.Fortran2008 import Block_Nonlabel_Do_Construct
 from fparser.two.utils import walk
 
-from .code_tree import Block, Assignment, IfBlock, DoLoop, SelectBlock, Return
+from .code_tree import (
+    Block,
+    Assignment,
+    IfBlock,
+    DoLoop,
+    SelectBlock,
+    Return,
+    Variable,
+    variable_from_expr,
+)
 
 if parse(getattr(fparser, "__version__", "0")) < Version("0.2.0"):
     raise RuntimeError("fautodiff requires fparser version 0.2.0 or later")
@@ -127,7 +136,7 @@ def exec_part_to_block(exec_part):
         if isinstance(stmt, Fortran2003.Assignment_Stmt):
             lhs = stmt.items[0].tofortran().strip()
             rhs = stmt.items[2].tofortran().strip()
-            return Block([Assignment(lhs, rhs)])
+            return Block([Assignment(variable_from_expr(lhs), rhs)])
         if isinstance(stmt, Fortran2003.If_Construct):
             cond = stmt.content[0].items[0].tofortran()
             i = 1

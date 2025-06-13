@@ -24,6 +24,16 @@ def _extract_names(text: str) -> List[str]:
     return names
 
 
+def variable_from_expr(expr: str, typename: str = "") -> "Variable":
+    """Create :class:`Variable` from ``expr`` splitting any indexing part."""
+    base = expr.split("(", 1)[0].strip()
+    dim = ""
+    idx = expr.find("(")
+    if idx != -1:
+        dim = expr[idx:].strip()
+    return Variable(base, typename, dimension=dim or None)
+
+
 @dataclass
 class Node:
     """Abstract syntax tree node for Fortran code fragments."""
@@ -161,10 +171,15 @@ class Variable:
     def __post_init__(self) -> None:
         if self.dimension is not None and self.dimension == "":
             raise ValueError("dimension must not be empty")
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", self.name):
+            raise ValueError(f"invalid Fortran variable name: {self.name}")
 
     def is_array(self) -> bool:
         """Return ``True`` if this variable represents an array."""
         return self.dimension is not None
+
+    def __str__(self) -> str:
+        return self.name + (self.dimension or "")
 
 
 @dataclass
@@ -241,7 +256,7 @@ class Block(Node):
     def remove_redundant_inits(self, init_block: "Block", keep: Iterable[str]) -> None:
         """Remove redundant gradient initializations using node helpers."""
         for idx, node in enumerate(list(init_block.children)):
-            base = node.lhs.split("(")[0].strip()
+            base = node.lhs.name
             if base in keep:
                 continue
             self.remove_by_id(node.get_id())
@@ -269,7 +284,7 @@ class AdBlock(Block):
 class Assignment(Node):
     """An assignment statement ``lhs = rhs``."""
 
-    lhs: str
+    lhs: Variable
     rhs: str
     accumulate: bool = False
     rhs_names: List[str] = field(init=False, repr=False)
@@ -281,7 +296,7 @@ class Assignment(Node):
             raise ValueError("rhs must not reference lhs when accumulate=True")
 
     def _detect_self_add(self) -> bool:
-        lhs_base = self.lhs.split("(")[0].strip().lower()
+        lhs_base = self.lhs.name.lower()
         parts = [p.strip().lower() for p in self.rhs.split("+")]
         if len(parts) != 2:
             return False
@@ -297,17 +312,17 @@ class Assignment(Node):
         return [f"{space}{self.lhs} = {rhs}\n"]
 
     def has_assignment_to(self, var: str) -> bool:
-        lhs_name = self.lhs.split("(")[0].strip().lower()
+        lhs_name = self.lhs.name.lower()
         return lhs_name == var.lower()
 
     def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
         res = list(names or [])
-        lhs_name = self.lhs.split("(")[0].strip()
+        lhs_name = self.lhs.name
         _append_unique(res, lhs_name)
         return res
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        lhs_base = self.lhs.split("(")[0].strip()
+        lhs_base = self.lhs.name
         needed = [n for n in (names or []) if n != lhs_base]
         ignore_self = self.accumulate or self._detect_self_add()
         for n in self.rhs_names:
@@ -318,7 +333,7 @@ class Assignment(Node):
         return needed
 
     def remove_initial_self_add(self, var: str) -> int:
-        lhs_base = self.lhs.split("(")[0].strip()
+        lhs_base = self.lhs.name
         if lhs_base != var:
             return 1
         if not self.accumulate:
