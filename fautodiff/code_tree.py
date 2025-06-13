@@ -150,6 +150,24 @@ class Node:
 
 
 @dataclass
+class Variable:
+    """Representation of a Fortran variable."""
+
+    name: str
+    typename: str
+    kind: Optional[str] = None
+    dimension: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.dimension is not None and self.dimension == "":
+            raise ValueError("dimension must not be empty")
+
+    def is_array(self) -> bool:
+        """Return ``True`` if this variable represents an array."""
+        return self.dimension is not None
+
+
+@dataclass
 class Block(Node):
     """A container for a sequence of nodes."""
 
