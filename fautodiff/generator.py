@@ -15,6 +15,9 @@ from .code_tree import (
     SelectBlock,
     Return,
     EmptyLine,
+    DeclBlock,
+    InitBlock,
+    AdBlock,
     render_program,
 )
 
@@ -421,74 +424,17 @@ def _assignment_parts(stmt, warn_info=None, warnings=None):
 
 
 def _generate_ad_subroutine(routine, filename, warnings):
-    # blocks representing declarations and the executable body
-    decl_block = Block([])
+    # blocks representing declarations, initialization and AD statements
+    decl_block = DeclBlock([])
+    init_block = InitBlock([])
+    ad_block = AdBlock([])
     body = Block([])
 
     def _optimize_lines(raw_lines, keep=None):
-        """Remove redundant initializations and unused assignments."""
+        """Remove unused integer assignments."""
         if keep is None:
             keep = set()
         result = list(raw_lines)
-
-        init_pat = re.compile(r"^\s*(\w+_ad)(?:\s*\([^)]*\))?\s*=\s*0\.0\s*$")
-        branch_start = re.compile(
-            r"^\s*(?:IF\b.*THEN|ELSE\s*IF|ELSEIF|ELSE\b|SELECT\s+CASE|CASE\b)",
-            re.IGNORECASE,
-        )
-        branch_end = re.compile(r"^\s*END\s*(?:IF|SELECT)", re.IGNORECASE)
-
-        i = 0
-        while i < len(result):
-            m = init_pat.match(result[i].strip())
-            if not m:
-                i += 1
-                continue
-            var = m.group(1)
-            if var in keep:
-                i += 1
-                continue
-
-            var_pat = re.compile(rf"\b{re.escape(var)}\b")
-            assign_pat = re.compile(rf"^\s*{re.escape(var)}(?:\s*\(.*?\))?\s*=")
-            j = i + 1
-            used = False
-            assign_indices = []
-            branch_stack = [True]
-
-            while j < len(result):
-                line = result[j]
-                if branch_start.match(line):
-                    branch_stack.append(True)
-                    j += 1
-                    continue
-                if branch_end.match(line):
-                    if branch_stack:
-                        branch_stack.pop()
-                        if not branch_stack:
-                            branch_stack = [False]
-                    j += 1
-                    continue
-                if assign_pat.match(line):
-                    assign_indices.append((j, branch_stack[-1]))
-                    branch_stack[-1] = False
-                    j += 1
-                    continue
-                if var_pat.search(line):
-                    used = True
-                    break
-                j += 1
-
-            if assign_indices and not used:
-                for idx, first in assign_indices:
-                    if first:
-                        result[idx] = re.sub(
-                            rf"\s*\+\s*{re.escape(var)}(?:\s*\(.*?\))?", "",
-                            result[idx],
-                        )
-                del result[i]
-                continue
-            i += 1
 
         # remove unused integer assignments
         int_vars = {n for n, (t, _) in decl_map.items() if _is_integer_type(t)}
@@ -508,6 +454,7 @@ def _generate_ad_subroutine(routine, filename, warnings):
             i += 1
 
         return result
+
 
     if isinstance(routine, Fortran2003.Function_Subprogram):
         stmt = routine.content[0]
@@ -912,20 +859,11 @@ def _generate_ad_subroutine(routine, filename, warnings):
         base, ldims = _split_type(typ)
         decl_block.append(Declaration(base, dname, None, ldims))
 
-    init_lines = Block([])  # initialization statements as nodes
-    for arg in out_grad_args:
-        t, _ = decl_map.get(arg, ("real", None))
-        _, dims = _split_type(t)
-        suf = "(:)" if dims else ""
-        init_lines.append(Assignment(f"{arg}_ad{suf}", "0.0"))
-    # only intent(out) argument gradients need initialization
-
-    for il in init_lines:
-        body.append(il)
+    # initialization assignments will be decided after AD code generation
     for pl in pre_lines:
-        body.append(pl)
+        ad_block.append(pl)
     if len(pre_lines):
-        body.append(EmptyLine())
+        ad_block.append(EmptyLine())
     def _reverse_block(body):
         block = Block([])
         for st in reversed(body):
@@ -995,7 +933,18 @@ def _generate_ad_subroutine(routine, filename, warnings):
                     continue
                 if "=" in text:
                     lhs, rhs = text.split("=", 1)
-                    nodes.append(Assignment(lhs.strip(), rhs.strip()))
+                    lhs = lhs.strip()
+                    rhs = rhs.strip()
+                    accumulate = False
+                    parts = [p.strip() for p in rhs.split("+")]
+                    if len(parts) == 2:
+                        lhs_base = lhs.split("(")[0].strip()
+                        left_base = parts[0].split("(")[0].strip()
+                        right_base = parts[1].split("(")[0].strip()
+                        if lhs_base in (left_base, right_base):
+                            accumulate = True
+                            rhs = parts[0] if right_base == lhs_base else parts[1]
+                    nodes.append(Assignment(lhs, rhs, accumulate=accumulate))
             return Block(nodes)
         if isinstance(st, Fortran2003.If_Construct):
             cond = st.content[0].items[0].tofortran()
@@ -1073,11 +1022,26 @@ def _generate_ad_subroutine(routine, filename, warnings):
         return Block([])
 
     for l in _reverse_block(exec_part.content):
-        body.append(l)
-    body.append(EmptyLine())
-    body.append(Return())
+        ad_block.append(l)
+    ad_block.append(EmptyLine())
+    ad_block.append(Return())
 
     keep = {f"{v}_ad" for v in loop_grad_vars}
+    for arg in out_grad_args:
+        var_name = f"{arg}_ad"
+        t, _ = decl_map.get(arg, ("real", None))
+        _, dims = _split_type(t)
+        suf = "(:)" if dims else ""
+        if var_name in keep:
+            init_block.append(Assignment(f"{var_name}{suf}", "0.0"))
+            continue
+        res = ad_block.remove_initial_self_add(var_name)
+        if res == 1:
+            init_block.append(Assignment(f"{var_name}{suf}", "0.0"))
+
+    body.append(init_block)
+    body.append(ad_block)
+
     raw_lines = render_program(sub, 1).splitlines(keepends=True)
     optimized = _optimize_lines(raw_lines, keep)
 
