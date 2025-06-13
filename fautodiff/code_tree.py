@@ -135,6 +135,19 @@ class Node:
         """Return a copy of this node with only code needed for ``targets``."""
         return self.deep_clone()
 
+    # ------------------------------------------------------------------
+    # initialization optimization helper
+    # ------------------------------------------------------------------
+
+    def remove_initial_self_add(self, var: str) -> int:
+        """Remove self-add from the first assignment to ``var`` if safe.
+
+        Returns ``1`` for pattern1, ``2`` for pattern2 and ``3`` for pattern3
+        as defined in the documentation. ``3`` indicates that a self-add was
+        removed.
+        """
+        return 1
+
 
 @dataclass
 class Block(Node):
@@ -201,6 +214,12 @@ class Block(Node):
                 needed = pruned.required_vars(needed)
         return Block(new_children)
 
+    def remove_initial_self_add(self, var: str) -> int:
+        for child in self.children:
+            if child.has_assignment_to(var):
+                return child.remove_initial_self_add(var)
+        return 1
+
 
 @dataclass
 class Assignment(Node):
@@ -208,10 +227,28 @@ class Assignment(Node):
 
     lhs: str
     rhs: str
+    accumulate: bool = False
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.accumulate and self._detect_self_add():
+            raise ValueError("rhs must not reference lhs when accumulate=True")
+
+    def _detect_self_add(self) -> bool:
+        lhs_base = self.lhs.split("(")[0].strip().lower()
+        parts = [p.strip().lower() for p in self.rhs.split("+")]
+        if len(parts) != 2:
+            return False
+        left_base = parts[0].split("(")[0].strip()
+        right_base = parts[1].split("(")[0].strip()
+        return lhs_base in (left_base, right_base)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        return [f"{space}{self.lhs} = {self.rhs}\n"]
+        rhs = self.rhs
+        if self.accumulate:
+            rhs = f"{rhs} + {self.lhs}"
+        return [f"{space}{self.lhs} = {rhs}\n"]
 
     def has_assignment_to(self, var: str) -> bool:
         lhs_name = self.lhs.split("(")[0].strip().lower()
@@ -224,11 +261,24 @@ class Assignment(Node):
         return res
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        needed = [n for n in (names or []) if n != self.lhs.split("(")[0].strip()]
+        lhs_base = self.lhs.split("(")[0].strip()
+        needed = [n for n in (names or []) if n != lhs_base]
+        ignore_self = self.accumulate or self._detect_self_add()
         for n in _extract_names(self.rhs):
+            if ignore_self and n == lhs_base:
+                continue
             if n not in needed:
                 needed.append(n)
         return needed
+
+    def remove_initial_self_add(self, var: str) -> int:
+        lhs_base = self.lhs.split("(")[0].strip()
+        if lhs_base != var:
+            return 1
+        if not self.accumulate:
+            return 2
+        self.accumulate = False
+        return 3
 
 
 @dataclass
@@ -283,6 +333,9 @@ class Subroutine(Node):
             if isinstance(node, Declaration):
                 names.append(node.name)
         return names
+
+    def remove_initial_self_add(self, var: str) -> int:
+        return self.body.remove_initial_self_add(var)
 
 
 @dataclass
@@ -478,6 +531,17 @@ class IfBlock(Node):
             return Block([])
         return IfBlock(self.condition, new_body, new_elifs, new_else)
 
+    def remove_initial_self_add(self, var: str) -> int:
+        branches = [self.body] + [blk for _, blk in self.elif_blocks]
+        if self.else_body is not None:
+            branches.append(self.else_body)
+        results = [b.remove_initial_self_add(var) for b in branches]
+        if all(r == 3 for r in results):
+            return 3
+        if any(r != 1 for r in results):
+            return 2
+        return 1
+
 
 @dataclass
 class SelectBlock(Node):
@@ -559,6 +623,19 @@ class SelectBlock(Node):
             return Block([])
         return SelectBlock(self.expr, new_cases, new_default)
 
+    def remove_initial_self_add(self, var: str) -> int:
+        blocks = [blk for _, blk in self.cases]
+        if self.default is not None:
+            blocks.append(self.default)
+        if not blocks:
+            return 1
+        results = [b.remove_initial_self_add(var) for b in blocks]
+        if all(r == 3 for r in results):
+            return 3
+        if any(r != 1 for r in results):
+            return 2
+        return 1
+
 
 @dataclass
 class DoLoop(Node):
@@ -604,6 +681,11 @@ class DoLoop(Node):
         if new_body.is_effectively_empty():
             return Block([])
         return DoLoop(self.header, new_body)
+
+    def remove_initial_self_add(self, var: str) -> int:
+        if self.body.has_assignment_to(var):
+            return 2
+        return 1
 
 
 @dataclass

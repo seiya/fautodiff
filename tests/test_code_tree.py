@@ -131,6 +131,72 @@ class TestNodeMethods(unittest.TestCase):
             "a = 1\n" "b = a\n",
         )
 
+    def test_assignment_accumulate(self):
+        # detection without flag
+        a = code_tree.Assignment("x_da", "x_da + y")
+        self.assertEqual(a.required_vars(["x_da"]), ["y"])
+
+        # explicit accumulate
+        b = code_tree.Assignment("x_da", "y", accumulate=True)
+        self.assertEqual(
+            code_tree.render_program(code_tree.Block([b])),
+            "x_da = y + x_da\n",
+        )
+        self.assertEqual(b.required_vars(["x_da"]), ["y"])
+
+        with self.assertRaises(ValueError):
+            code_tree.Assignment("x_da", "x_da + y", accumulate=True)
+
+    def test_remove_initial_self_add(self):
+        blk = code_tree.Block([
+            code_tree.Assignment("x_da", "x_da + y"),
+        ])
+        res = blk.remove_initial_self_add("x_da")
+        self.assertEqual(res, 2)
+        self.assertEqual(code_tree.render_program(blk), "x_da = x_da + y\n")
+
+        blk = code_tree.Block([
+            code_tree.Assignment("x_da", "y", accumulate=True),
+        ])
+        res = blk.remove_initial_self_add("x_da")
+        self.assertEqual(res, 3)
+        self.assertEqual(code_tree.render_program(blk), "x_da = y\n")
+
+        loop = code_tree.Block([
+            code_tree.DoLoop("DO i=1,n", code_tree.Block([
+                code_tree.Assignment("x_da", "x_da + y")
+            ]))
+        ])
+        self.assertEqual(loop.remove_initial_self_add("x_da"), 2)
+        self.assertEqual(
+            code_tree.render_program(loop),
+            "DO i=1,n\n  x_da = x_da + y\nEND DO\n",
+        )
+
+        cond_blk = code_tree.Block([
+            code_tree.IfBlock(
+                "a>0",
+                code_tree.Block([code_tree.Assignment("x_da", "x_da + a")]),
+                else_body=code_tree.Block([
+                    code_tree.Assignment("x_da", "x_da + b")
+                ]),
+            )
+        ])
+        self.assertEqual(cond_blk.remove_initial_self_add("x_da"), 2)
+        self.assertEqual(
+            code_tree.render_program(cond_blk),
+            "IF (a>0) THEN\n  x_da = x_da + a\nELSE\n  x_da = x_da + b\nEND IF\n",
+        )
+
+        cond_blk2 = code_tree.Block([
+            code_tree.IfBlock(
+                "a>0",
+                code_tree.Block([code_tree.Assignment("x_da", "x_da + a")]),
+                else_body=code_tree.Block([]),
+            )
+        ])
+        self.assertEqual(cond_blk2.remove_initial_self_add("x_da"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
