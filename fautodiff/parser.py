@@ -14,12 +14,16 @@ from fparser.two.Fortran2008 import Block_Nonlabel_Do_Construct
 from fparser.two.utils import walk
 
 from .code_tree import (
+    Module,
+    Subroutine,
+    Function,
+    Return,
     Block,
+    Declaration,
     Assignment,
     IfBlock,
     DoLoop,
     SelectBlock,
-    Return,
     Variable,
     variable_from_expr,
 )
@@ -48,89 +52,70 @@ def _stmt_name(stmt):
 
 __all__ = [
     "parse_file",
-    "find_subroutines",
-    "Fortran2003",
-    "walk",
-    "Block_Nonlabel_Do_Construct",
-    "_parse_decls",
-    "_routine_parts",
-    "exec_part_to_block",
-    "block_to_exec_part",
+    "_parse_routine",
 ]
 
 
 def parse_file(path):
     """Parse a Fortran source file and return the ``fparser`` AST."""
     reader = FortranFileReader(path)
-    parser = ParserFactory().create(std="f2008")
-    return parser(reader)
+    factory = ParserFactory().create(std="f2008")
+    ast = factory(reader)
+    output = []
+    warnings = []
+    for module in walk(ast, Fortran2003.Module):
+        name = _stmt_name(module.content[0])
+        mod_node = Module(name)
+        output.append(mod_node)
+        for part in module.content:
+            if isinstance(part, Fortran2003.Module_Subprogram_Part):
+                for c in part.content:
+                    if isinstance(c, (Fortran2003.Function_Subprogram, Fortran2003.Subroutine_Subprogram)):
+                        mod_node.routines.append(_parse_routine(c))
+                break
+    return output
 
 
-def find_subroutines(ast):
-    """Return a list of subroutine names defined in the given AST."""
-    names = []
-    for node in walk(ast, Fortran2003.Subroutine_Subprogram):
-        stmt = node.children[0]  # Subroutine_Stmt
-        names.append(_stmt_name(stmt))
-    return names
+def _parse_routine(content):
+    """Return node tree correspoinding to the input AST"""
+    def _parse_decls(spec):
+        """Return mapping of variable names to ``(type, intent)``."""
+        decls = Block([])
+        if spec is None:
+            return decls
+        for decl in spec.content:
+            if not isinstance(decl, Fortran2003.Type_Declaration_Stmt):
+                continue
+            base_type = decl.items[0].tofortran().lower()
+            text = decl.tofortran().upper()
+            if "INTENT(INOUT)" in text:
+                intent = "inout"
+            elif "INTENT(OUT)" in text:
+                intent = "out"
+            elif "INTENT(IN)" in text:
+                intent = "in"
+            else:
+                intent = None
 
+            dim_attr = None
+            attrs = decl.items[1]
+            if attrs is not None:
+                for attr in attrs.items:
+                    if hasattr(attr, "items") and str(attr.items[0]).upper() == "DIMENSION":
+                        dim_attr = attr.items[1].tofortran()
+                        break
 
-def _parse_decls(spec):
-    """Return mapping of variable names to ``(type, intent)``."""
-    decl_map = {}
-    if spec is None:
-        return decl_map
-    for decl in spec.content:
-        if not isinstance(decl, Fortran2003.Type_Declaration_Stmt):
-            continue
-        base_type = decl.items[0].tofortran().lower()
-        text = decl.tofortran().upper()
-        if "INTENT(INOUT)" in text:
-            intent = "inout"
-        elif "INTENT(OUT)" in text:
-            intent = "out"
-        elif "INTENT(IN)" in text:
-            intent = "in"
-        else:
-            intent = None
-
-        dim_attr = None
-        attrs = decl.items[1]
-        if attrs is not None:
-            for attr in attrs.items:
-                if hasattr(attr, "items") and str(attr.items[0]).upper() == "DIMENSION":
-                    dim_attr = attr.items[1].tofortran()
-                    break
-
-        for entity in decl.items[2].items:
-            name = str(entity.items[0])
-            arrspec = entity.items[1]
-            type_str = base_type
-            dims = None
-            if arrspec is not None:
-                dims = arrspec.tofortran()
-            elif dim_attr is not None:
-                dims = dim_attr
-            if dims is not None:
-                type_str = f"{type_str}, dimension({dims})"
-            decl_map[name] = (type_str, intent)
-    return decl_map
-
-
-def _routine_parts(routine):
-    """Return the specification and execution parts of a routine node."""
-    spec = None
-    exec_part = None
-    for part in routine.content:
-        if isinstance(part, Fortran2003.Specification_Part):
-            spec = part
-        elif isinstance(part, Fortran2003.Execution_Part):
-            exec_part = part
-    return spec, exec_part
-
-
-def exec_part_to_block(exec_part):
-    """Convert an ``Execution_Part`` node into a :class:`Block` of nodes."""
+            for entity in decl.items[2].items:
+                name = str(entity.items[0])
+                arrspec = entity.items[1]
+                type_str = base_type
+                dims = None
+                if arrspec is not None:
+                    dims = arrspec.tofortran()
+                elif dim_attr is not None:
+                    dims = dim_attr
+                decls.append(Declaration(type_str, name, intent, dims))
+        return decls
 
     def _stmt_to_block(stmt):
         if isinstance(stmt, Fortran2003.Assignment_Stmt):
@@ -209,26 +194,26 @@ def exec_part_to_block(exec_part):
             return Block([DoLoop(header, body)])
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return Block([Return()])
-        return Block([])
+        return None
 
-    def _block(body_list):
-        blk = Block([])
-        for st in body_list:
-            blk.extend(_stmt_to_block(st))
-        return blk
+    stmt = content.content[0]
+    name = _stmt_name(stmt)
+    args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
+    if isinstance(content, Fortran2003.Subroutine_Subprogram):
+        routine = Subroutine(name, args)
+    elif isinstance(content, Fortran2003.Function_Subprogram):
+        result = str(stmt.items[3].items[0])
+        routine = Function(name, args, result)
+    else:
+        raise AttributeError("content must be Subroutine of Function")
 
-    return _block(getattr(exec_part, "content", []))
+    for part in content.content:
+        if isinstance(part, Fortran2003.Specification_Part):
+            routine.decls = _parse_decls(part)
+        elif isinstance(part, Fortran2003.Execution_Part):
+            for stmt in part.content:
+                node = _stmt_to_block(stmt)
+                if node is not None:
+                    routine.content.append(node)
 
-
-def block_to_exec_part(block):
-    """Convert a :class:`Block` back into an ``Execution_Part`` node."""
-
-    from .code_tree import render_program
-
-    prog = "subroutine tmp_blk()\n" + render_program(block) + "end subroutine tmp_blk\n"
-    reader = FortranStringReader(prog)
-    parser = ParserFactory().create(std="f2008")
-    ast = parser(reader)
-    sub = walk(ast, Fortran2003.Subroutine_Subprogram)[0]
-    _, exec_part = _routine_parts(sub)
-    return exec_part
+    return routine

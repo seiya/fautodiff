@@ -149,7 +149,7 @@ class Node:
     # initialization optimization helper
     # ------------------------------------------------------------------
 
-    def remove_initial_self_add(self, var: str) -> int:
+    def check_initial(self, var: str) -> int:
         """Remove self-add from the first assignment to ``var`` if safe.
 
         Returns ``1`` for pattern1, ``2`` for pattern2 and ``3`` for pattern3
@@ -190,6 +190,12 @@ class Block(Node):
 
     def iter_children(self) -> Iterator[Node]:
         return iter(self.children)
+
+    def find_by_name(self, name: str) -> None:
+        for child in self.iter_children():
+            if child.name == name:
+                return child
+        return None
 
     def _remove_child(self, child: Node) -> None:
         self.children.remove(child)
@@ -247,10 +253,10 @@ class Block(Node):
                 needed = pruned.required_vars(needed)
         return Block(new_children)
 
-    def remove_initial_self_add(self, var: str) -> int:
+    def check_initial(self, var: str) -> int:
         for child in self.children:
             if child.has_assignment_to(var):
-                return child.remove_initial_self_add(var)
+                return child.check_initial(var)
         return 1
 
     def remove_redundant_inits(self, init_block: "Block", keep: Iterable[str]) -> None:
@@ -260,24 +266,147 @@ class Block(Node):
             if base in keep:
                 continue
             self.remove_by_id(node.get_id())
-            res = self.remove_initial_self_add(base)
+            res = self.check_initial(base)
             if res == 1:
                 self.insert(idx, node)
 
 
 @dataclass
-class DeclBlock(Block):
-    """Block containing declarations."""
+class Statement(Node):
+    """Representation of a Fortran statement."""
+    body: str
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        lines = [f"{space}{self.body}"]
+        return lines
 
 
 @dataclass
-class InitBlock(Block):
-    """Block containing gradient initializations."""
+class Module(Node):
+    """Representation of a Fortran module."""
+    name: str
+    body: Block = field(default_factory=Block)
+    routines: Block = field(default_factory=Block)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.body.append(Statement("implicit none"))
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        lines = [f"{space}module {self.name}\n"]
+        lines.extend(self.body.render(indent+1))
+        lines.append("\n")
+        lines.append(f"{space}contains\n")
+        lines.append("\n")
+        for routine in self.routines:
+            lines.extend(routinerender(indent+1))
+        lines.append(f"{space}end module {self.name}\n")
+        return lines
 
 
 @dataclass
-class AdBlock(Block):
-    """Block containing AD computation statements."""
+class Routine(Node):
+    """Common functionality for ``subroutine`` and ``function`` blocks."""
+
+    name: str
+    args: List[str]
+    result: Optional[str] = None
+    decls: Block = field(default_factory=Block)
+    content: Block = field(default_factory=Block)
+    ad_init: Optional[Block] = None
+    ad_content: Optional[Block] = None
+    kind: ClassVar[str] = "subroutine"
+
+    def iter_children(self) -> Iterator[Node]:
+        return iter([self.decls, self.body])
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        args = f"({self.args})" if self.args else "()"
+        lines = [f"{space}{self.kind} {self.name}{args}\n"]
+        lines.extend(self.decls.render(indent+1))
+        lines.append("\n")
+        if not self.content.is_effectively_empty:
+            lines.extend(self.content.render(indent+1))
+            lines.append("\n")
+        if self.ad_init is not None and not self.ad_init.is_effectively_empty:
+            lines.extend(self.ad_init.render(indent+1))
+            lines.append("\n")
+        if self.ad_content is not None and not self.ad_content.is_effectively_empty:
+            lines.extend(self.ad_content.render(indent+1))
+            lines.append("\n")
+        lines.append(f"{space}  return\n")
+        lines.append(f"{space}end {self.kind} {self.name}\n")
+        return lines
+
+    def iter_args(self) -> Iterator[Declaration]:
+        return self.decls.iter_children()
+
+    def _all_blocks():
+        blocks = [self.decls, self.content]
+        if self.ad_init is not None:
+            blocks.append(self.ad_init)
+        if self.ad_content is not None:
+            blocks.append(self.ad_content)
+
+    def is_effectively_empty(self) -> bool:
+        return all(block.is_effectively_empty() for block in self._all_blocks())
+
+    def has_assignment_to(self, var: str) -> bool:
+        return any(block.has_assignment_to(var) for block in self._all_blocks())
+
+    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
+        res = name
+        for block in self._all_blocks():
+            res = block.assigned_vars(res)
+        return res
+
+    def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
+        res = name
+        for block in self._all_blocks():
+            res = block.required_vars(res)
+        return res
+
+    def prune_for(self, targets: Iterable[str]) -> "Routine":
+        return type(self)(
+            self.name,
+            self.args,
+            self.decls.prune_for(targets),
+            self.content.prune_for(targets),
+            self.ad_init or self.ad_init.prune_for(targets),
+            self.ad_content or self.ad_content.prune_for(targets),
+        )
+
+    def defined_var_names(self) -> List[str]:
+        names: List[str] = []
+        for node in self.decls.children:
+            if isinstance(node, Declaration):
+                names.append(node.name)
+        return names
+
+    def expand_decls(self, decls: Block) -> "Routine":
+        self.decls.expand(decls)
+        return self
+
+    def check_initial(self, var: str) -> int:
+        return self.body.check_initial(var)
+
+
+@dataclass
+class Subroutine(Routine):
+    """A ``subroutine`` with declaration and execution blocks."""
+
+    kind: ClassVar[str] = "subroutine"
+
+
+@dataclass
+class Function(Routine):
+    """A ``function`` with declaration and execution blocks."""
+
+    result: str
+    kind: ClassVar[str] = "function"
 
 
 @dataclass
@@ -332,7 +461,7 @@ class Assignment(Node):
                 needed.append(n)
         return needed
 
-    def remove_initial_self_add(self, var: str) -> int:
+    def check_initial(self, var: str) -> int:
         lhs_base = self.lhs.name
         if lhs_base != var:
             return 1
@@ -343,91 +472,6 @@ class Assignment(Node):
 
 
 @dataclass
-class Routine(Node):
-    """Common functionality for ``subroutine`` and ``function`` blocks."""
-
-    name: str
-    args: str = ""
-    decls: Block = field(default_factory=Block)
-    body: Block = field(default_factory=Block)
-    kind: ClassVar[str] = "subroutine"
-
-    def iter_children(self) -> Iterator[Node]:
-        return iter([self.decls, self.body])
-
-    def render(self, indent: int = 0) -> List[str]:
-        space = "  " * indent
-        args = f"({self.args})" if self.args else "()"
-        lines = [f"{space}{self.kind} {self.name}{args}\n"]
-        lines.extend(self.decls.render(indent + 1))
-        lines.append("\n")
-        lines.extend(self.body.render(indent + 1))
-        lines.append(f"{space}end {self.kind} {self.name}\n")
-        return lines
-
-    def is_effectively_empty(self) -> bool:
-        return self.decls.is_effectively_empty() and self.body.is_effectively_empty()
-
-    def has_assignment_to(self, var: str) -> bool:
-        return self.decls.has_assignment_to(var) or self.body.has_assignment_to(var)
-
-    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = self.decls.assigned_vars(names)
-        return self.body.assigned_vars(res)
-
-    def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        needed = list(names or [])
-        needed = self.body.required_vars(needed)
-        needed = self.decls.required_vars(needed)
-        return needed
-
-    def prune_for(self, targets: Iterable[str]) -> "Routine":
-        return type(self)(
-            self.name,
-            self.args,
-            self.decls.prune_for(targets),
-            self.body.prune_for(targets),
-        )
-
-    def defined_var_names(self) -> List[str]:
-        names: List[str] = []
-        for node in self.decls.children:
-            if isinstance(node, Declaration):
-                names.append(node.name)
-        return names
-
-    def remove_initial_self_add(self, var: str) -> int:
-        return self.body.remove_initial_self_add(var)
-
-
-@dataclass
-class Subroutine(Routine):
-    """A ``subroutine`` with declaration and execution blocks."""
-
-    kind: ClassVar[str] = "subroutine"
-
-
-@dataclass
-class Function(Routine):
-    """A ``function`` with declaration and execution blocks."""
-
-    kind: ClassVar[str] = "function"
-
-
-
-
-@dataclass
-class EmptyLine(Node):
-    """Represents a blank line."""
-
-    def render(self, indent: int = 0) -> List[str]:
-        return ["\n"]
-
-    def is_effectively_empty(self) -> bool:
-        return True
-
-
-@dataclass
 class Declaration(Node):
     """A variable declaration."""
 
@@ -435,6 +479,9 @@ class Declaration(Node):
     name: str
     intent: Optional[str] = None
     shape: Optional[str] = None
+
+    def __post_init__(self):
+        self.str = self.str.strip().lower()
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -555,11 +602,11 @@ class IfBlock(Node):
             return Block([])
         return IfBlock(self.condition, new_body, new_elifs, new_else)
 
-    def remove_initial_self_add(self, var: str) -> int:
+    def check_initial(self, var: str) -> int:
         branches = [self.body] + [blk for _, blk in self.elif_blocks]
         if self.else_body is not None:
             branches.append(self.else_body)
-        results = [b.remove_initial_self_add(var) for b in branches]
+        results = [b.check_initial(var) for b in branches]
         if all(r == 3 for r in results):
             return 3
         if any(r != 1 for r in results):
@@ -647,13 +694,13 @@ class SelectBlock(Node):
             return Block([])
         return SelectBlock(self.expr, new_cases, new_default)
 
-    def remove_initial_self_add(self, var: str) -> int:
+    def check_initial(self, var: str) -> int:
         blocks = [blk for _, blk in self.cases]
         if self.default is not None:
             blocks.append(self.default)
         if not blocks:
             return 1
-        results = [b.remove_initial_self_add(var) for b in blocks]
+        results = [b.check_initial(var) for b in blocks]
         if all(r == 3 for r in results):
             return 3
         if any(r != 1 for r in results):
@@ -706,7 +753,7 @@ class DoLoop(Node):
             return Block([])
         return DoLoop(self.header, new_body)
 
-    def remove_initial_self_add(self, var: str) -> int:
+    def check_initial(self, var: str) -> int:
         if self.body.has_assignment_to(var):
             return 2
         return 1

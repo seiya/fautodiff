@@ -14,10 +14,6 @@ from .code_tree import (
     DoLoop,
     SelectBlock,
     Return,
-    EmptyLine,
-    DeclBlock,
-    InitBlock,
-    AdBlock,
     render_program,
     Variable,
 )
@@ -424,200 +420,69 @@ def _assignment_parts(stmt, warn_info=None, warnings=None):
 
 
 
-def _generate_ad_subroutine(routine, filename, warnings):
+def _generate_ad_subroutine!(routine_org, warnings):
     # blocks representing declarations, initialization and AD statements
-    decl_block = DeclBlock([])
-    init_block = InitBlock([])
-    ad_block = AdBlock([])
-    body = Block([])
-
-    def _optimize_lines(raw_lines, keep=None):
-        """Remove unused integer assignments."""
-        if keep is None:
-            keep = set()
-        result = list(raw_lines)
-
-        # remove unused integer assignments
-        int_vars = {n for n, (t, _) in decl_map.items() if _is_integer_type(t)}
-        assign_pat = re.compile(r"^\s*(\w+)\s*=.*$")
-        i = 0
-        while i < len(result):
-            m = assign_pat.match(result[i].strip())
-            if not m:
-                i += 1
-                continue
-            var = m.group(1)
-            if var in int_vars and var not in index_vars:
-                later_use = any(re.search(rf"\b{re.escape(var)}\b", l) for l in result[i+1:])
-                if not later_use:
-                    del result[i]
-                    continue
-            i += 1
-
-        return result
-
-
-    if isinstance(routine, Fortran2003.Function_Subprogram):
-        stmt = routine.content[0]
-        name = parser._stmt_name(stmt)
-        args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
-        result = str(stmt.items[3].items[0])
-    else:
-        stmt = routine.content[0]
-        name = parser._stmt_name(stmt)
-        args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
-        result = None
-
-    spec, exec_part_node = parser._routine_parts(routine)
-    # Convert execution part to a forward node block for later use
-    fwd_block = parser.exec_part_to_block(exec_part_node)
-    # Use the forward block to obtain a fresh execution part for AD generation
-    exec_part = parser.block_to_exec_part(fwd_block)
-    decl_map = parser._parse_decls(spec)
-    used_vars = set()
-    pre_lines = Block([])  # nodes inserted before the main reversed body
-    const_vars = set()
-    const_decl = Block([])  # constant declarations as nodes
-    const_decl_names = set()
-    index_vars = set()
+    args = []
+    fw_args = []
     ad_args = []
-    outputs = []
-    if result is not None:
-        r_typ = decl_map.get(result, ("real", None))[0]
-        if not r_typ.strip().lower().startswith("character") and not _is_integer_type(r_typ):
-            outputs.append(result)
-    for arg in args:
-        typ, intent = decl_map.get(arg, (None, None))
-        is_char = str(typ).strip().lower().startswith("character")
-        is_int = _is_integer_type(typ)
-        if intent == "out":
-            if not is_char and not is_int:
-                outputs.append(arg)
-                ad_args.append(f"{arg}_ad")
-        else:
-            ad_args.append(arg)
-            if not is_char and not is_int:
-                ad_args.append(f"{arg}_ad")
-    for outv in outputs:
-        if outv not in args:
-            ad_args.append(f"{outv}_ad")
-
-    sub = Subroutine(f"{name}_ad", ", ".join(ad_args), decl_block, body)
-
-    def _space(intent):
-        return "  " if intent == "in" else " "
-
-    def _grad_type(typ):
-        dims = _dims_spec(typ)
-        return f"real, dimension{dims}" if dims else "real"
-
-    def _sized_dims(typ, name):
-        dims = _dims_spec(typ)
-        if not dims:
-            return None
-        parts = [p.strip() for p in dims[1:-1].split(",")]
-        new = []
-        for i, p in enumerate(parts, 1):
-            if ":" in p or p == "":
-                new.append(f"size({name}, {i})")
-            else:
-                new.append(p)
-        return "(" + ", ".join(new) + ")"
-
     out_grad_args = []
     has_grad_input = False
-    for arg in args:
-        typ, intent = decl_map.get(arg, ("real", "in"))
-        arg_int = intent or "in"
-        is_char = str(typ).strip().lower().startswith("character")
-        is_int = _is_integer_type(typ)
-        gtyp = _grad_type(typ)
-        if arg_int == "out":
+    for arg in routine_org.itr_args():
+        name = arg.name
+        typ = arg.typename
+        dims = arg.dims
+        intent = arg.intent
+        is_char = typ == "character"
+        is_int = typ == "integer"
+        args.append(name)
+        if intent == "out":
             if not is_char and not is_int:
-                base, dims = _split_type(gtyp)
-                decl_block.append(Declaration(base, f"{arg}_ad", "in", dims))
+                ad_name = f"{name}_ad"
+                args.append(ad_name)
+                decl_ad = Declaration(typ, ad_name, "in", dims)
+                ad_args.append(decl_ad)
                 has_grad_input = True
         else:
-            base, dims = _split_type(typ)
-            decl_block.append(Declaration(base, arg, arg_int, dims))
+            fw_args.append(arg.clone)
             if not is_char and not is_int:
+                ad_name = f"{name}_ad"
+                args.append(ad_name)
                 grad_int = {
                     "in": "out",
                     "inout": "inout",
-                }.get(arg_int, "out")
-                gbase, gdims = _split_type(gtyp)
-                decl_block.append(Declaration(gbase, f"{arg}_ad", grad_int, gdims))
+                }.get(intent, "out")
+                decl_ad = Declaration(typ, ad_name, grad_int, dims)
+                ad_args.append(decl_ad)
                 if grad_int == "out":
                     out_grad_args.append(arg)
                 else:
                     has_grad_input = True
 
-    for outv in outputs:
-        if outv not in args:
-            out_typ = _grad_type(decl_map.get(outv, ("real",))[0])
-            base, dims = _split_type(out_typ)
-            decl_block.append(Declaration(base, f"{outv}_ad", "in", dims))
-            has_grad_input = True
+    name = routine_org.name
+    ad_name = f"{name}_ad"
+    subroutine = Subroutine(ad_name, args)
+
+    init_block = Block([])
+    ad_block = Block([])
+    subroutine.expand_decls(fw_args)
+    subroutine.expand_decls(ad_args)
+    subroutine.ad_init = init_block
+    subroutine.ad_content = ad_block
 
     # If no derivative inputs exist, all output gradients remain zero
     if not has_grad_input:
         for arg in out_grad_args:
-            t, _ = decl_map.get(arg, ("real", None))
-            _, dims = _split_type(t)
-            suffix = "(:)" if dims else ""
-            dim = suffix or None
-            body.append(Assignment(Variable(f"{arg}_ad", "real", dimension=dim), "0.0"))
-        if out_grad_args:
-            body.append(EmptyLine())
-        body.append(Return())
-        return render_program(sub, 1)
+            ad_block.append(Assignment(Variable(f"{arg}_ad", "real", dimension=arg.dims), "0.0"))
+        ad_block.append(Return())
+        routine.ad_content = ad_block
+        return
 
     # If there are no input gradients to propagate we can exit early
     if not out_grad_args:
-        body.append(Return())
-        return render_program(sub, 1)
+        ad_block.append(Return())
+        routine.ad_content = ad_block
+        return
 
-    def _find_assignments(node, out_list, top=True, in_do=False):
-        if isinstance(node, Fortran2003.Assignment_Stmt):
-            out_list.append((node, top, in_do))
-        for item in getattr(node, "content", []):
-            if not isinstance(item, str):
-                _find_assignments(
-                    item,
-                    out_list,
-                    top=False,
-                    in_do=in_do or isinstance(node, Block_Nonlabel_Do_Construct),
-                )
-
-    def _collect_do_indices(node, out_set):
-        if isinstance(node, Block_Nonlabel_Do_Construct):
-            stmt = node.content[0]
-            ctrl = stmt.items[1]
-            if ctrl is not None:
-                lc = ctrl.items[1]
-                if isinstance(lc, tuple) and lc and isinstance(lc[0], Fortran2003.Name):
-                    out_set.add(str(lc[0]))
-        for item in getattr(node, "content", []):
-            if not isinstance(item, str):
-                _collect_do_indices(item, out_set)
-
-    statements = []
-    do_indices = set()
-    for stmt in exec_part.content:
-        _find_assignments(stmt, statements)
-        _collect_do_indices(stmt, do_indices)
-
-    var_use_count = {}
-    for st, _, _ in statements:
-        names = []
-        _collect_names(st.items[2], names, unique=False)
-        for n in names:
-            var_use_count[n] = var_use_count.get(n, 0) + 1
-    const_vars.update(do_indices)
-    for idx in sorted(do_indices):
-        if idx not in const_decl_names:
-            const_decl.append(Declaration("integer", idx))
-            const_decl_names.add(idx)
     defined = set(out_grad_args)
     grad_var = {v: f"{v}_ad" for v in outputs}
     decl_names = []
@@ -628,27 +493,13 @@ def _generate_ad_subroutine(routine, filename, warnings):
 
     loop_grad_vars = set()
 
-    loop_lhs = {str(s.items[0]).split('(')[0] for s, _, in_do in statements if in_do}
-
+    used_vars = set()
+    const_vars = set()
+    index_vars = set()
 
     const_map = {}
     lhs_counts = {}
     self_use = set()
-    for stmt, _, _ in statements:
-        lhs = str(stmt.items[0]).split('(')[0]
-        rhs_names = []
-        _collect_names(stmt.items[2], rhs_names)
-        if lhs not in const_map:
-            const_map[lhs] = True
-        if rhs_names:
-            const_map[lhs] = False
-        lhs_counts[lhs] = lhs_counts.get(lhs, 0) + 1
-        if lhs in rhs_names:
-            self_use.add(lhs)
-    for var, is_const in const_map.items():
-        if is_const:
-            const_vars.add(var)
-
     for var in sorted(loop_lhs):
         if var in outputs and (lhs_counts.get(var, 0) > 1 or var in self_use):
             vtyp = decl_map.get(var, ("real",))[0]
@@ -841,6 +692,19 @@ def _generate_ad_subroutine(routine, filename, warnings):
             if var not in args and var not in outputs and var not in const_decl_names:
                 const_decl.append(Declaration("integer", var))
                 const_decl_names.add(var)
+
+    def _sized_dims(dims, name):
+        if not dims:
+            return None
+        parts = [p.strip() for p in dims[1:-1].split(",")]
+        new = []
+        for i, p in enumerate(parts, 1):
+            if ":" in p or p == "":
+                new.append(f"size({name}, {i})")
+            else:
+                new.append(p)
+        return "(" + ", ".join(new) + ")"
+
 
     for cl in const_decl:
         decl_block.append(cl)
@@ -1059,10 +923,7 @@ def _generate_ad_subroutine(routine, filename, warnings):
     body.append(init_block)
     body.append(ad_block)
 
-    raw_lines = render_program(sub, 1).splitlines(keepends=True)
-    optimized = _optimize_lines(raw_lines, keep)
-
-    return "".join(optimized)
+    return sub
 
 
 def generate_ad(in_file, out_file=None, warn=True):
@@ -1071,36 +932,18 @@ def generate_ad(in_file, out_file=None, warn=True):
     If ``out_file`` is ``None`` the generated code is returned as a string.
     When ``out_file`` is provided the code is also written to that path.
     """
-    ast = parser.parse_file(in_file)
-    output = []
+    modules_org = parser.parse_file(in_file)
+    modules = []
     warnings = []
-    for module in walk(ast, Fortran2003.Module):
-        name = parser._stmt_name(module.content[0])
-        output.append(f"module {name}_ad\n")
-        output.append("  implicit none\n\n")
-        output.append("contains\n\n")
-        children = []
-        for part in module.content:
-            if isinstance(part, Fortran2003.Module_Subprogram_Part):
-                children = [
-                    c
-                    for c in part.content
-                    if isinstance(
-                        c,
-                        (
-                            Fortran2003.Function_Subprogram,
-                            Fortran2003.Subroutine_Subprogram,
-                        ),
-                    )
-                ]
-                break
-        for child in children:
-            sub_code = _generate_ad_subroutine(child, in_file, warnings)
-            output.append(sub_code)
-            output.append("\n")
-        output.append(f"end module {name}_ad\n")
+    for mod_org in modules_org:
+        name = mod_org.name
+        mod = Module(f"{name}_ad")
+        #mod.body = mod_org.body
+        for routine in mod_org.routines:
+            mod.routines.append(_generate_ad_subroutine(routine, warnings))
+        modules.append(mod)
 
-    code = "".join(output)
+    code = "\n".join(render_program(modules))
     if out_file:
         Path(out_file).write_text(code)
     if warn and warnings:
