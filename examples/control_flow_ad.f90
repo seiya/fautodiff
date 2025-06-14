@@ -8,17 +8,19 @@ contains
     real, intent(out) :: x_ad
     real, intent(inout) :: y
     real, intent(inout) :: y_ad
-    real, intent(in)  :: z_ad
-    real :: dz_dx
+    real, intent(inout) :: z_ad
 
-    IF (x > 0.0) THEN
-      dz_dx = 1.0
-      x_ad = z_ad * dz_dx
-    ELSE IF (x < 0.0) THEN
-      dz_dx = - 1.0
-      x_ad = z_ad * dz_dx
-    ELSE
-    END IF
+    x_ad = 0.0
+
+    if (x > 0.0) then
+      x_ad = z_ad
+      z_ad = 0.0
+    else if (x < 0.0) then
+      x_ad = - z_ad
+      z_ad = 0.0
+    else
+      z_ad = 0.0
+    end if
 
     return
   end subroutine if_example_ad
@@ -27,18 +29,20 @@ contains
     integer, intent(in)  :: i
     real, intent(in)  :: x
     real, intent(out) :: x_ad
-    real, intent(in)  :: z_ad
-    real :: dz_dx
+    real, intent(inout) :: z_ad
 
-    SELECT CASE (i)
-    CASE (1)
-      dz_dx = 1.0
-      x_ad = z_ad * dz_dx
-    CASE (2)
-      dz_dx = 1.0
-      x_ad = z_ad * dz_dx
-    CASE DEFAULT
-    END SELECT
+    x_ad = 0.0
+
+    select case (i)
+    case (1)
+      x_ad = z_ad
+      z_ad = 0.0
+    case (2, 3)
+      x_ad = z_ad
+      z_ad = 0.0
+    case default
+      z_ad = 0.0
+    end select
 
     return
   end subroutine select_example_ad
@@ -47,21 +51,15 @@ contains
     integer, intent(in)  :: n
     real, intent(in)  :: x
     real, intent(out) :: x_ad
-    real, intent(in)  :: sum_ad
+    real, intent(inout) :: sum_ad
     integer :: i
-    real :: sum_ad_
-    real :: dsum_dsum
-    real :: dsum_dx
 
     x_ad = 0.0
-    sum_ad_ = sum_ad
 
-    DO i = n, 1, -1
-      dsum_dsum = 1.0
-      dsum_dx = i
-      x_ad = sum_ad_ * dsum_dx + x_ad
-      sum_ad_ = sum_ad_ * dsum_dsum
-    END DO
+    do i = n, 1, - 1
+      x_ad = sum_ad * i + x_ad
+    end do
+    sum_ad = 0.0
 
     return
   end subroutine do_example_ad

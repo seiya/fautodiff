@@ -29,7 +29,7 @@ contains
     select case(i)
     case(1)
       z = x + 1.0
-    case(2)
+    case(2, 3)
       z = x - 1.0
     case default
       z = 0.0
