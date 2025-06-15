@@ -7,6 +7,9 @@ from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar
 import re
 import copy
 
+from .operators import (
+    OpVar,
+)
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -31,7 +34,35 @@ def variable_from_expr(expr: str, typename: str = "") -> "Variable":
     idx = expr.find("(")
     if idx != -1:
         dim = expr[idx:].strip()
-    return Variable(base, typename, dimension=dim or None)
+    return Variable(base, typename, None, dim or None)
+
+
+@dataclass
+class Variable:
+    """Representation of a Fortran variable."""
+
+    name: str
+    typename: str
+    kind: Optional[str] = None
+    dims: Optional[str] = None
+    intent: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.dims is not None and self.dims == "":
+            raise ValueError("dimension must not be empty")
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", self.name):
+            raise ValueError(f"invalid Fortran variable name: {self.name}")
+
+    def is_array(self) -> bool:
+        """Return ``True`` if this variable represents an array."""
+        return self.dims is not None
+
+    def to_decl(self) -> Declaration:
+        """Return declaration node corresponding to self."""
+        return Declaration(self.name, self.typename, self.kind, self.dims, self.intent)
+
+    def __str__(self) -> str:
+        return self.name + (self.dims or "")
 
 
 @dataclass
@@ -69,6 +100,10 @@ class Node:
     def iter_children(self) -> Iterator["Node"]:
         """Yield child nodes."""
         return iter(())
+
+    def convert_assignments(self, func, reverse= False) -> Node:
+        """New with converted assignment nodes."""
+        return None
 
     # ------------------------------------------------------------------
     # new features
@@ -160,29 +195,6 @@ class Node:
 
 
 @dataclass
-class Variable:
-    """Representation of a Fortran variable."""
-
-    name: str
-    typename: str
-    kind: Optional[str] = None
-    dimension: Optional[str] = None
-
-    def __post_init__(self) -> None:
-        if self.dimension is not None and self.dimension == "":
-            raise ValueError("dimension must not be empty")
-        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", self.name):
-            raise ValueError(f"invalid Fortran variable name: {self.name}")
-
-    def is_array(self) -> bool:
-        """Return ``True`` if this variable represents an array."""
-        return self.dimension is not None
-
-    def __str__(self) -> str:
-        return self.name + (self.dimension or "")
-
-
-@dataclass
 class Block(Node):
     """A container for a sequence of nodes."""
 
@@ -190,6 +202,17 @@ class Block(Node):
 
     def iter_children(self) -> Iterator[Node]:
         return iter(self.children)
+
+    def convert_assignments(self, func, reverse=False) -> Node:
+        children = []
+        iterator = self.children
+        if reverse:
+            iterator = reversed(iterator)
+        for node in iterator:
+            res = node.convert_assignments(func, reverse)
+            if res is not None:
+                children.append(res)
+        return Block(children)
 
     def find_by_name(self, name: str) -> None:
         for child in self.iter_children():
@@ -301,7 +324,8 @@ class Module(Node):
         lines.append(f"{space}contains\n")
         lines.append("\n")
         for routine in self.routines:
-            lines.extend(routinerender(indent+1))
+            lines.extend(routine.render(indent+1))
+            lines.append("\n")
         lines.append(f"{space}end module {self.name}\n")
         return lines
 
@@ -319,37 +343,61 @@ class Routine(Node):
     ad_content: Optional[Block] = None
     kind: ClassVar[str] = "subroutine"
 
-    def iter_children(self) -> Iterator[Node]:
-        return iter([self.decls, self.body])
-
-    def render(self, indent: int = 0) -> List[str]:
-        space = "  " * indent
-        args = f"({self.args})" if self.args else "()"
-        lines = [f"{space}{self.kind} {self.name}{args}\n"]
-        lines.extend(self.decls.render(indent+1))
-        lines.append("\n")
-        if not self.content.is_effectively_empty:
-            lines.extend(self.content.render(indent+1))
-            lines.append("\n")
-        if self.ad_init is not None and not self.ad_init.is_effectively_empty:
-            lines.extend(self.ad_init.render(indent+1))
-            lines.append("\n")
-        if self.ad_content is not None and not self.ad_content.is_effectively_empty:
-            lines.extend(self.ad_content.render(indent+1))
-            lines.append("\n")
-        lines.append(f"{space}  return\n")
-        lines.append(f"{space}end {self.kind} {self.name}\n")
-        return lines
-
-    def iter_args(self) -> Iterator[Declaration]:
-        return self.decls.iter_children()
-
     def _all_blocks():
         blocks = [self.decls, self.content]
         if self.ad_init is not None:
             blocks.append(self.ad_init)
         if self.ad_content is not None:
             blocks.append(self.ad_content)
+
+    def iter_children(self) -> Iterator[Node]:
+        return iter(_all_blocks())
+
+    def convert_assignments(self: T, func, reverse=False) -> T:
+        name = self.name.copy
+        args = self.args.copy
+        result = self.result.copy
+        decls = self.decls.deep_copy
+        content = self.content.convert_assignments(func, reverse)
+        ad_init = self.ad_init.convert_assignments(func, reverse)
+        ad_content = self.ad_content.convert_assignments(func, reverse)
+        return type(self)(name, args, result, decls, content, ad_init, ad_content)
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        args = ", ".join(self.args)
+        lines = [f"{space}{self.kind} {self.name}({args})\n"]
+        lines.extend(self.decls.render(indent+1))
+        lines.append("\n")
+        if not self.content.is_effectively_empty():
+            lines.extend(self.content.render(indent+1))
+            lines.append("\n")
+        if self.ad_init is not None and not self.ad_init.is_effectively_empty():
+            lines.extend(self.ad_init.render(indent+1))
+            lines.append("\n")
+        if self.ad_content is not None and not self.ad_content.is_effectively_empty():
+            lines.extend(self.ad_content.render(indent+1))
+            lines.append("\n")
+        lines.append(f"{space}  return\n")
+        lines.append(f"{space}end {self.kind} {self.name}\n")
+        return lines
+
+    def get_var(self, name: str) -> Variable:
+        decl = self.decls.find_by_name(name)
+        if decl is None:
+            raise ValueError(f"variable ({name}) is not found in declarations")
+        intent = decl.intent
+        if self.result == name:
+            intent = "out"
+        return Variable(name, decl.typename, decl.kind, decl.dims, intent)
+
+    def arg_vars(self) -> List[Variable]:
+        vars = []
+        for arg in self.args:
+            vars.append(self.get_var(arg))
+        if self.result is not None:
+            vars.append(self.get_var(self.result))
+        return vars
 
     def is_effectively_empty(self) -> bool:
         return all(block.is_effectively_empty() for block in self._all_blocks())
@@ -413,16 +461,17 @@ class Function(Routine):
 class Assignment(Node):
     """An assignment statement ``lhs = rhs``."""
 
-    lhs: Variable
-    rhs: str
+    lhs: OpVar
+    rhs: Operation
     accumulate: bool = False
+    info: Optional[dict] = None
     rhs_names: List[str] = field(init=False, repr=False)
 
     def __post_init__(self):
         super().__post_init__()
-        self.rhs_names = _extract_names(self.rhs)
-        if self.accumulate and self._detect_self_add():
-            raise ValueError("rhs must not reference lhs when accumulate=True")
+        if not isinstance(self.lhs, OpVar):
+            raise ValueError(f"lhs must be OpVar: {type(self.lhs)}")
+        self.rhs_names = self.rhs.collect_vars
 
     def _detect_self_add(self) -> bool:
         lhs_base = self.lhs.name.lower()
@@ -432,6 +481,9 @@ class Assignment(Node):
         left_base = parts[0].split("(")[0].strip()
         right_base = parts[1].split("(")[0].strip()
         return lhs_base in (left_base, right_base)
+
+    def convert_assignments(self, func, reverse=False) -> List[Assignment]:
+        return func(self.lhs, self.rhs, self.info)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -475,24 +527,24 @@ class Assignment(Node):
 class Declaration(Node):
     """A variable declaration."""
 
-    typename: str
     name: str
+    typename: str
+    kind: Optional[str] = None
+    dims: Optional[str] = None
     intent: Optional[str] = None
-    shape: Optional[str] = None
-
-    def __post_init__(self):
-        self.str = self.str.strip().lower()
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         line = f"{space}{self.typename}"
+        if self.kind is not None:
+            line += f"({self.kind})"
         if self.intent is not None:
             pad = "  " if self.intent == "in" else " "
             line += f", intent({self.intent})" + pad + f":: {self.name}"
         else:
             line += f" :: {self.name}"
-        if self.shape:
-            line += self.shape
+        if self.dims:
+            line += self.dims
         line += "\n"
         return [line]
 
@@ -520,12 +572,29 @@ class IfBlock(Node):
     elif_blocks: List[Tuple[str, Block]] = field(default_factory=list)
     else_body: Optional[Block] = None
 
-    def iter_children(self) -> Iterator[Node]:
-        yield self.body
-        for _, blk in self.elif_blocks:
-            yield blk
+    def _all_blocks() -> List[Block]:
+        blocks = [self.body]
+        for _, block in self.elif_blocks:
+            blocks.append(block)
         if self.else_body is not None:
-            yield self.else_body
+            blocks.append(self.else_body)
+
+    def iter_children(self) -> Iterator[Node]:
+        iter(_all_blocks)
+
+    def convert_assignments(self, func, reverse=False) -> Node:
+        condition = self.condition.copy
+        body = self.body.convert_assignments(func, reverse)
+        elif_blocks = Block([])
+        for cond, block in self.elif_blocks:
+            res = block.convert_assignments(func, reverse)
+            if res is None:
+                res = Block([])
+            elif_blocks.append((cond, res))
+        else_block = None
+        if self.else_block is not None:
+            else_block = self.else_block.convert_assignments(func, reverse)
+        return IfBlock(condition, body, elif_blocks, else_block)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -541,54 +610,32 @@ class IfBlock(Node):
         return lines
 
     def is_effectively_empty(self) -> bool:
-        if not self.body.is_effectively_empty():
-            return False
-        for _, blk in self.elif_blocks:
-            if not blk.is_effectively_empty():
+        for block in _all_blocks():
+            if not bolock.is_effectively_empty():
                 return False
-        if self.else_body is not None and not self.else_body.is_effectively_empty():
-            return False
         return True
 
     def has_assignment_to(self, var: str) -> bool:
-        if self.body.has_assignment_to(var):
-            return True
-        for _, blk in self.elif_blocks:
-            if blk.has_assignment_to(var):
+        for block in _all_blocks():
+            if block.has_assignment_to(var):
                 return True
-        if self.else_body is not None and self.else_body.has_assignment_to(var):
-            return True
         return False
 
     def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
         res = list(names or [])
-        res = self.body.assigned_vars(res)
-        for _, blk in self.elif_blocks:
-            res = blk.assigned_vars(res)
-        if self.else_body is not None:
-            res = self.else_body.assigned_vars(res)
+        for block in _all_blocks():
+            res = block.assigned_vars(res)
         return res
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
         needed = list(names or [])
-        branches = [self.body] + [blk for _, blk in self.elif_blocks]
-        if self.else_body is not None:
-            branches.append(self.else_body)
-
-        if branches:
-            common_assigned = set(branches[0].assigned_vars([]))
-            for blk in branches[1:]:
-                common_assigned &= set(blk.assigned_vars([]))
-            needed = [n for n in needed if n not in common_assigned]
-
-        res: List[str] = []
-        for n in _extract_names(self.condition):
-            _append_unique(res, n)
-        for blk in branches:
-            req = blk.required_vars(needed)
-            for n in req:
-                _append_unique(res, n)
-        return res
+        reqs = []
+        for branch in _all_blocks():
+            for var in branch.required_vars(needed):
+                _append_unique(reqs, var)
+        for var in _extract_names(self.condition):
+            _append_unique(reqs, var)
+        return reqs
 
     def prune_for(self, targets: Iterable[str]) -> "Node":
         new_body = self.body.prune_for(targets)
@@ -627,6 +674,16 @@ class SelectBlock(Node):
             yield blk
         if self.default is not None:
             yield self.default
+
+    def convert_assignments(self, func, reverse=False) -> Node:
+        expr = self.expr.copy
+        cases = []
+        for cond, block in self.cases:
+            cases.append((cond, block.convert_assignments(func, reverse)))
+        default = None
+        if self.default is not None:
+            default = default.convert_assignments(func, reverse)
+        return SelectBlock(expr, cases, default)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -712,17 +769,33 @@ class SelectBlock(Node):
 class DoLoop(Node):
     """A ``do`` loop."""
 
-    header: str
     body: Block
+    index: str
+    start: str
+    end: str
+    step: Optional[str] = None
 
     def iter_children(self) -> Iterator[Node]:
         yield self.body
 
+    def convert_assignments(self, func, reverse=False) -> Node:
+        body = self.body.convert_assignments(func, reverse)
+        index = self.index.copy
+        start = self.end.copy
+        end = self.start.copy
+        step = None
+        if self.step is not None:
+            step = f"-({step.copy})"
+        return DoLoop(body, index, start, end, step)
+
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        lines = [f"{space}{self.header}\n"]
+        header = f"{space}do {self.index} = {self.start}, {self.end}"
+        if self.step is not None:
+            header = f"{header}, #{self.step}"
+        lines = [ f"{header}\n"]
         lines.extend(self.body.render(indent+1))
-        lines.append(f"{space}END DO\n")
+        lines.append(f"{space}end do\n")
         return lines
 
     def is_effectively_empty(self) -> bool:
@@ -782,5 +855,3 @@ def render_program(node: Node, indent: int = 0) -> str:
 
     lines = node.render(indent)
     return "".join(lines)
-
-

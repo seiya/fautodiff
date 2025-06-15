@@ -4,22 +4,26 @@ from pathlib import Path
 import sys
 import re
 
+from .operators import (
+    OpVar,
+    OpFunc,
+)
+
 from .code_tree import (
-    Block,
-    Declaration,
-    IfBlock,
-    Assignment,
+    Variable,
+    Module,
     Subroutine,
     Function,
-    DoLoop,
+    Block,
+    IfBlock,
     SelectBlock,
-    Return,
+    DoLoop,
+    Declaration,
+    Assignment,
     render_program,
-    Variable,
 )
 
 from . import parser
-from .parser import Fortran2003, walk, Block_Nonlabel_Do_Construct
 from .intrinsic_rules import (
     DERIVATIVE_TEMPLATES,
     NONDIFF_INTRINSICS,
@@ -34,260 +38,6 @@ def _warn(warnings, info, code, reason):
         line = info.get("line", "?")
         msg = f"{filename}:{line}: {code} - {reason}"
         warnings.append(msg)
-
-
-def _strip_paren(text: str) -> str:
-    """Remove a single pair of parentheses from ``text`` if present."""
-    if text.startswith("(") and text.endswith(")"):
-        return text[1:-1]
-    return text
-
-
-def _to_number(val: float, keep_decimal: bool = False) -> str:
-    """Return ``val`` as a Fortran number string."""
-    if val.is_integer():
-        return f"{int(val)}.0" if keep_decimal else str(int(val))
-    return str(val)
-
-
-def _minus_one(expr) -> str:
-    """Return a Fortran expression for ``expr - 1``."""
-    if isinstance(expr, Fortran2003.Parenthesis):
-        inner = _minus_one(expr.items[1])
-        return f"({_strip_paren(inner)})"
-    if isinstance(expr, Fortran2003.Int_Literal_Constant):
-        val = int(expr.items[0]) - 1
-        return str(val)
-    if isinstance(expr, Fortran2003.Real_Literal_Constant):
-        val = float(expr.items[0]) - 1.0
-        keep = "." in expr.items[0]
-        return _to_number(val, keep_decimal=keep)
-    if (
-        isinstance(expr, Fortran2003.Level_2_Expr)
-        and len(expr.items) == 3
-        and expr.items[1] == "+"
-        and isinstance(expr.items[2], (Fortran2003.Int_Literal_Constant, Fortran2003.Real_Literal_Constant))
-    ):
-        left, _, right = expr.items
-        return f"{left.tofortran()} + {_minus_one(right)}"
-    return f"{expr.tofortran()} - 1.0"
-
-
-def _collect_names(expr, names, unique=True):
-    """Collect variable names found in ``expr`` preserving order."""
-    if isinstance(expr, (Fortran2003.Intrinsic_Function_Reference, Fortran2003.Part_Ref)):
-        name = expr.items[0].tofortran().lower()
-        if name in DERIVATIVE_TEMPLATES:
-            args = expr.items[1]
-            for arg in getattr(args, "items", []):
-                if isinstance(arg, Fortran2003.Actual_Arg_Spec):
-                    subexpr = arg.items[1]
-                else:
-                    subexpr = arg
-                _collect_names(subexpr, names, unique=unique)
-            return
-        if isinstance(expr, Fortran2003.Part_Ref):
-            if unique:
-                if name not in names:
-                    names.append(name)
-            else:
-                names.append(name)
-            # also collect index variable names
-            for arg in getattr(expr.items[1], "items", []):
-                if isinstance(arg, Fortran2003.Actual_Arg_Spec):
-                    subexpr = arg.items[1]
-                else:
-                    subexpr = arg
-                _collect_names(subexpr, names, unique=unique)
-            return
-    if isinstance(expr, Fortran2003.Name):
-        name = str(expr)
-        if unique:
-            if name not in names:
-                names.append(name)
-        else:
-            names.append(name)
-    for item in getattr(expr, "items", []):
-        if not isinstance(item, str):
-            _collect_names(item, names, unique=unique)
-
-
-def _parenthesize_if_needed(text: str) -> str:
-    """Add parentheses to ``text`` if it contains operators."""
-    if text.startswith("(") and text.endswith(")"):
-        return text
-    if any(op in text for op in (" ", "+", "-", "*", "/")):
-        return f"({text})"
-    return text
-
-
-def _derivative(expr, var: str, index=None, warn_info=None, warnings=None) -> str:
-    """Return derivative of ``expr`` with respect to ``var``.
-
-    ``index`` can be an index expression string for array elements. When
-    provided the derivative is taken with respect to the specific indexed
-    element ``var(index)``.
-
-    ``warn_info`` should contain context (file, line, stmt) for warning messages.
-    ``warnings`` is a list that collects formatted warning strings.
-    """
-    if isinstance(expr, Fortran2003.Name):
-        if index is not None:
-            return "0.0"
-        return "1.0" if str(expr) == var else "0.0"
-    if isinstance(expr, (Fortran2003.Int_Literal_Constant, Fortran2003.Real_Literal_Constant)):
-        return "0.0"
-    if isinstance(expr, Fortran2003.Parenthesis):
-        return _derivative(expr.items[1], var, index, warn_info, warnings)
-    if isinstance(
-        expr,
-        (
-            Fortran2003.Intrinsic_Function_Reference,
-            Fortran2003.Function_Reference,
-            Fortran2003.Part_Ref,
-        ),
-    ):
-        name = expr.items[0].tofortran().lower()
-        if isinstance(expr, Fortran2003.Part_Ref) and name == var.lower():
-            if index is None:
-                return "1.0"
-            items = []
-            for arg in getattr(expr.items[1], "items", []):
-                if isinstance(arg, Fortran2003.Actual_Arg_Spec):
-                    arg = arg.items[1]
-                items.append(arg.tofortran())
-            idx = ", ".join(items)
-            return "1.0" if idx == index else "0.0"
-        items = [a for a in getattr(expr.items[1], "items", []) if not isinstance(a, str)]
-        if name in DERIVATIVE_TEMPLATES:
-            templates = DERIVATIVE_TEMPLATES[name]
-            args = []
-            for item in items:
-                if isinstance(item, Fortran2003.Actual_Arg_Spec):
-                    item = item.items[1]
-                args.append(item)
-            arg_strs = [a.tofortran() for a in args]
-            if isinstance(templates, str):
-                if len(args) != 1:
-                    reason = f"unsupported intrinsic '{name}'"
-                    _warn(warnings, warn_info, expr.tofortran(), reason)
-                    return "0.0"
-                d_arg = _derivative(args[0], var, index, warn_info, warnings)
-                deriv = templates.format(arg=arg_strs[0])
-                if d_arg == "0.0":
-                    return "0.0"
-                if d_arg == "1.0":
-                    return deriv
-                return f"{deriv} * {d_arg}"
-            else:
-                if len(args) != len(templates):
-                    reason = f"unsupported intrinsic '{name}'"
-                    _warn(warnings, warn_info, expr.tofortran(), reason)
-                    return "0.0"
-                placeholder = {f"arg{i+1}": s for i, s in enumerate(arg_strs)}
-                terms = []
-                for arg, tmpl in zip(args, templates):
-                    d_arg = _derivative(arg, var, index, warn_info, warnings)
-                    if d_arg == "0.0":
-                        continue
-                    deriv = tmpl.format(**placeholder)
-                    if d_arg != "1.0":
-                        deriv = f"{deriv} * {d_arg}"
-                    terms.append(deriv)
-                if not terms:
-                    return "0.0"
-                return " + ".join(terms)
-        if name in NONDIFF_INTRINSICS:
-            return "0.0"
-        if isinstance(expr, Fortran2003.Intrinsic_Function_Reference):
-            reason = f"unsupported intrinsic '{name}'"
-            _warn(warnings, warn_info, expr.tofortran(), reason)
-            return "0.0"
-    if isinstance(expr, Fortran2003.Level_2_Unary_Expr):
-        sign = expr.items[0]
-        d = _derivative(expr.items[1], var, index, warn_info, warnings)
-        if sign == "-":
-            if d == "0.0":
-                return "0.0"
-            if d.startswith("-"):
-                return d[2:]
-            return f"- {d}"
-        return d
-    if isinstance(expr, Fortran2003.Level_2_Expr) and len(expr.items) == 3 and isinstance(expr.items[1], str):
-        left, op, right = expr.items
-        if op == "+":
-            d1 = _derivative(left, var, index, warn_info, warnings)
-            d2 = _derivative(right, var, index, warn_info, warnings)
-            if d1 == "0.0":
-                return d2
-            if d2 == "0.0":
-                return d1
-            return f"{d1} + {d2}"
-        if op == "-":
-            d1 = _derivative(left, var, index, warn_info, warnings)
-            d2 = _derivative(right, var, index, warn_info, warnings)
-            if d1 == "0.0" and d2 == "0.0":
-                return "0.0"
-            if d2 == "0.0":
-                return d1
-            if d1 == "0.0":
-                return f"- {d2}"
-            return f"{d1} - {d2}"
-    if isinstance(expr, Fortran2003.Add_Operand) and len(expr.items) == 3:
-        left, op, right = expr.items
-        if op == "*":
-            d1 = _derivative(left, var, index, warn_info, warnings)
-            d2 = _derivative(right, var, index, warn_info, warnings)
-            left_s = left.tofortran()
-            right_s = right.tofortran()
-            terms = []
-            if d1 != "0.0":
-                terms.append(right_s if d1 == "1.0" else f"{d1} * {right_s}")
-            if d2 != "0.0":
-                terms.append(left_s if d2 == "1.0" else f"{left_s} * {d2}")
-            return " + ".join(terms) if terms else "0.0"
-        if op == "/":
-            u = left.tofortran()
-            v = right.tofortran()
-            vsq = v if v.startswith("(") else f"({v})"
-            d1 = _derivative(left, var, index, warn_info, warnings)
-            d2 = _derivative(right, var, index, warn_info, warnings)
-            if d1 == "0.0" and d2 == "0.0":
-                return "0.0"
-            if d2 == "0.0":
-                num = d1 if d1 != "1.0" else "1.0"
-                num = _parenthesize_if_needed(num)
-                return f"{num} / {v}"
-            if d1 == "0.0":
-                fac = "" if d2 == "1.0" else f" * {d2}"
-                return f"- {u}{fac} / {vsq}**2"
-            num1 = v if d1 == "1.0" else f"{d1} * {v}"
-            num2 = f"- {u}" if d2 == "1.0" else f"- {u} * {d2}"
-            return f"({num1} + {num2}) / {vsq}**2"
-    if isinstance(expr, Fortran2003.Mult_Operand) and len(expr.items) == 3 and expr.items[1] == "**":
-        base, _, exponent = expr.items
-        base_s = base.tofortran()
-        exp_s = exponent.tofortran()
-        d_base = _derivative(base, var, index, warn_info, warnings)
-        d_exp = _derivative(exponent, var, index, warn_info, warnings)
-        terms = []
-        if d_base != "0.0":
-            minus = _parenthesize_if_needed(_minus_one(exponent))
-            base_term = base_s if minus in ("1", "1.0", "(1)", "(1.0)") else f"{base_s}**{minus}"
-            term = f"{exp_s} * {base_term}"
-            if d_base != "1.0":
-                term += f" * {d_base}"
-            terms.append(term)
-        if d_exp != "0.0":
-            log_base = _strip_paren(base_s)
-            term = f"{base_s}**{exp_s} * log({log_base})"
-            if d_exp != "1.0":
-                term += f" * {d_exp}"
-            terms.append(term)
-        return " + ".join(terms) if terms else "0.0"
-    reason = "unsupported expression"
-    _warn(warnings, warn_info, expr.tofortran(), reason)
-    return "0.0"
 
 
 def _dims_spec(typ) -> str | None:
@@ -420,510 +170,90 @@ def _assignment_parts(stmt, warn_info=None, warnings=None):
 
 
 
-def _generate_ad_subroutine!(routine_org, warnings):
-    # blocks representing declarations, initialization and AD statements
+def _generate_ad_subroutine(routine_org, warnings):
+    # Collect information of aruguments
     args = []
-    fw_args = []
-    ad_args = []
     out_grad_args = []
     has_grad_input = False
-    for arg in routine_org.itr_args():
+    for arg in routine_org.arg_vars():
         name = arg.name
         typ = arg.typename
         dims = arg.dims
         intent = arg.intent
         is_char = typ == "character"
         is_int = typ == "integer"
-        args.append(name)
         if intent == "out":
             if not is_char and not is_int:
                 ad_name = f"{name}_ad"
-                args.append(ad_name)
-                decl_ad = Declaration(typ, ad_name, "in", dims)
-                ad_args.append(decl_ad)
+                var = Variable(ad_name, typ, arg.kind, dims, "in")
+                args.append(var)
                 has_grad_input = True
         else:
-            fw_args.append(arg.clone)
+            args.append(arg)
             if not is_char and not is_int:
                 ad_name = f"{name}_ad"
-                args.append(ad_name)
                 grad_int = {
                     "in": "out",
                     "inout": "inout",
                 }.get(intent, "out")
-                decl_ad = Declaration(typ, ad_name, grad_int, dims)
-                ad_args.append(decl_ad)
+                var = Variable(ad_name, typ, arg.kind, dims, grad_int)
+                args.append(var)
                 if grad_int == "out":
-                    out_grad_args.append(arg)
+                    out_grad_args.append(var)
                 else:
                     has_grad_input = True
 
+    # Create Subroutine node for AD
     name = routine_org.name
     ad_name = f"{name}_ad"
-    subroutine = Subroutine(ad_name, args)
-
+    arg_names = []
+    for arg in args:
+        arg_names.append(arg.name)
+    subroutine = Subroutine(ad_name, arg_names)
+    for arg in args:
+        subroutine.decls.append(arg.to_decl())
     init_block = Block([])
     ad_block = Block([])
-    subroutine.expand_decls(fw_args)
-    subroutine.expand_decls(ad_args)
     subroutine.ad_init = init_block
     subroutine.ad_content = ad_block
 
     # If no derivative inputs exist, all output gradients remain zero
     if not has_grad_input:
         for arg in out_grad_args:
-            ad_block.append(Assignment(Variable(f"{arg}_ad", "real", dimension=arg.dims), "0.0"))
-        ad_block.append(Return())
+            ad_block.append(Assignment(arg, "0.0"))
+        ad_block.append(Statement("return"))
         routine.ad_content = ad_block
-        return
+        return subroutine
 
     # If there are no input gradients to propagate we can exit early
     if not out_grad_args:
-        ad_block.append(Return())
+        ad_block.append(Statment("return"))
         routine.ad_content = ad_block
-        return
+        return subroutine
 
-    defined = set(out_grad_args)
-    grad_var = {v: f"{v}_ad" for v in outputs}
-    decl_names = []
-    decl_set = set()
-    stmt_blocks = {}
+    def to_ad(lhs: OpVar, rhs: Operation, info) -> List[Assignment]:
+        if isinstance(rhs, OpFunc):
+            handler = SPECIAL_HANDLERS.get(rhs.name)
+            if handler:
+                return handler(lhs, rhs.name, rhs.args)
+            raise ValueError(f"Unsupported function: {rhs.name}")
+        assigs = []
+        grad_lhs = lhs.add_suffix("_ad")
+        vars = rhs.collect_vars()
+        for var in vars:
+            dev = rhs.derivative(var, info=info, warnings=warnings)
+            v = var.add_suffix("_ad")
+            assigs.append(Assignment(v, grad_lhs * dev, accumulate=True))
+        if not var in vars:
+            Assignment(grad_lhs, OpInt(0))
+        return Block(assigs)
 
-    scalar_derivs = set()
+        raise ValueError(f"Unsupported operation: {type(rhs)}")
 
-    loop_grad_vars = set()
-
-    used_vars = set()
-    const_vars = set()
-    index_vars = set()
-
-    const_map = {}
-    lhs_counts = {}
-    self_use = set()
-    for var in sorted(loop_lhs):
-        if var in outputs and (lhs_counts.get(var, 0) > 1 or var in self_use):
-            vtyp = decl_map.get(var, ("real",))[0]
-            _, dims = _split_type(vtyp)
-            suf = "(:)" if dims else ""
-            dim = suf or None
-            pre_lines.append(Assignment(Variable(f"{var}_ad_", "real", dimension=dim), f"{var}_ad{suf}"))
-            grad_var[var] = f"{var}_ad_"
-            if f"{var}_ad_" not in decl_set:
-                decl_names.append(f"{var}_ad_")
-                decl_set.add(f"{var}_ad_")
-
-    last_block = None
-    for stmt, top, in_do in reversed(statements):
-        lhs = str(stmt.items[0])
-        lhs_base = lhs.split('(')[0]
-        line_no = None
-        if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
-            line_no = stmt.item.span[0]
-        info = {
-            "file": filename,
-            "line": line_no,
-            "code": stmt.tofortran().strip(),
-        }
-
-        rhs = stmt.items[2]
-        if isinstance(rhs, Fortran2003.Intrinsic_Function_Reference):
-            intr_name = rhs.items[0].tofortran().lower()
-            items = [a for a in getattr(rhs.items[1], "items", []) if not isinstance(a, str)]
-        else:
-            intr_name = None
-            items = []
-
-        handler = SPECIAL_HANDLERS.get(intr_name)
-        if handler:
-            block, names = handler(lhs, items, grad_var, defined, decl_names, decl_set)
-            stmt_blocks[id(stmt)] = block
-            last_block = block
-            used_vars.update(names)
-            continue
-
-        parts, has_repeat, idx_map, idx_vars = _assignment_parts(stmt, info, warnings)
-        index_vars.update(idx_vars)
-
-        rhs_names = []
-        _collect_names(stmt.items[2], rhs_names)
-
-        if lhs_base not in used_vars and lhs_base not in outputs:
-            # The value of ``lhs`` does not contribute to any output so we do
-            # not need to propagate a gradient through this assignment.
-            continue
-
-        lhs_typ = decl_map.get(lhs_base, ("",))[0]
-        if str(lhs_typ).strip().lower().startswith("character") or _is_integer_type(lhs_typ):
-            used_vars.update(rhs_names)
-            if lhs_base in used_vars:
-                stmt_blocks[id(stmt)] = [f"{stmt.tofortran().strip()}\n"]
-                last_block = stmt_blocks[id(stmt)]
-                used_vars.add(lhs_base)
-            continue
-        parts = {
-            v: e
-            for v, e in parts.items()
-            if not str(decl_map.get(idx_map.get(v, (v, None))[0], ("",))[0])
-            .strip()
-            .lower()
-            .startswith("character")
-            and not _is_integer_type(decl_map.get(idx_map.get(v, (v, None))[0], ("",))[0])
-            and idx_map.get(v, (v, None))[0] not in const_vars
-        }
-        if not parts and lhs_base in used_vars and not rhs_names and lhs_base not in outputs:
-            if top:
-                lhs_text = str(stmt.items[0])
-                dim = None
-                if "(" in lhs_text:
-                    dim = lhs_text[lhs_text.find("("):].strip()
-                lhs_var = Variable(lhs_text.split("(")[0].strip(), "", dimension=dim)
-                pre_lines.insert(0, Assignment(lhs_var, stmt.items[2].tofortran().strip()))
-                last_block = None
-            else:
-                stmt_blocks[id(stmt)] = [f"{stmt.tofortran().strip()}\n"]
-                last_block = stmt_blocks[id(stmt)]
-            used_vars.update(rhs_names)
-            used_vars.add(lhs_base)
-            if lhs_base not in args and lhs_base not in outputs and lhs_base not in const_decl_names:
-                typ = decl_map.get(lhs_base, ("real", None))[0]
-                if not str(typ).strip().lower().startswith("character") and not _is_integer_type(typ):
-                    base, dims = _split_type(typ)
-                    const_decl.append(Declaration(base, lhs_base, None, dims))
-                    const_decl_names.add(lhs_base)
-            continue
-        for var in parts:
-            base, idx = idx_map.get(var, (var, None))
-            safe = _sanitize_var(var)
-            name_d = f"d{lhs_base}_d{safe}"
-            if name_d not in decl_set:
-                decl_names.append(name_d)
-                decl_set.add(name_d)
-            if in_do and "dimension" in str(decl_map.get(base, ("",))[0]).lower():
-                scalar_derivs.add(name_d)
-            if base not in args and base not in outputs and not _is_integer_type(decl_map.get(base, ("",))[0]):
-                name_ad = f"{base}_ad"
-                if name_ad not in decl_set:
-                    decl_names.append(name_ad)
-                    decl_set.add(name_ad)
-        if lhs_base in parts:
-            if not _is_integer_type(lhs_typ):
-                name_ad = f"{lhs_base}_ad_"
-                if name_ad not in decl_set:
-                    decl_names.append(name_ad)
-                    decl_set.add(name_ad)
-
-        block = []
-        for var, expr in parts.items():
-            base, idx = idx_map.get(var, (var, None))
-            safe = _sanitize_var(var)
-            name_d = f"d{lhs_base}_d{safe}"
-            var_typ = decl_map.get(base, ("", None))[0]
-            _, dims = _split_type(var_typ)
-            suffix = "(:)" if dims and name_d not in scalar_derivs else ""
-            block.append(f"{name_d}{suffix} = {expr}\n")
-        lhs_grad = grad_var.get(lhs_base, f"{lhs_base}_ad")
-        lhs_typ = decl_map.get(lhs_base, ("",))[0]
-        lhs_is_array = in_do and "dimension" in str(lhs_typ).lower()
-        lhs_indices = None
-        if isinstance(stmt.items[0], Fortran2003.Part_Ref):
-            lhs_indices = []
-            for arg in getattr(stmt.items[0].items[1], "items", []):
-                if isinstance(arg, Fortran2003.Actual_Arg_Spec):
-                    arg = arg.items[1]
-                lhs_indices.append(arg.tofortran())
-        if lhs_is_array:
-            if lhs_indices:
-                lhs_grad = f"{lhs_grad}({', '.join(lhs_indices)})"
-            else:
-                idx_list = [n for n in rhs_names if n in do_indices]
-                if idx_list:
-                    lhs_grad = f"{lhs_grad}({', '.join(idx_list)})"
-        order = list(parts.keys()) if has_repeat else list(reversed(list(parts.keys())))
-        for var in order:
-            base, idx = idx_map.get(var, (var, None))
-            if base == lhs_base and idx is None:
-                continue
-            safe = _sanitize_var(var)
-            update = f"{lhs_grad} * d{lhs_base}_d{safe}"
-            var_typ, var_int = decl_map.get(base, ("", None))
-            is_array = "dimension" in str(var_typ).lower()
-            unique_loop = (
-                in_do
-                and is_array
-                and var_use_count.get(base, 0) == 1
-                and any(n in rhs_names for n in do_indices)
-            )
-            if in_do and is_array:
-                var_idx = idx if idx is not None else _find_index_expr(rhs, base)
-                if var_idx is None:
-                    idx_list = [n for n in rhs_names if n in do_indices]
-                    var_idx = ", ".join(idx_list) if idx_list else "i"
-                line = f"{base}_ad({var_idx}) = {update}"
-                if var_int == "inout" or ((base in defined or in_do) and not unique_loop):
-                    line += f" + {base}_ad({var_idx})"
-            else:
-                suffix = "(:)" if is_array else ""
-                line = f"{base}_ad{suffix} = {update}"
-                if var_int == "inout" or ((base in defined or in_do) and not unique_loop):
-                    line += f" + {base}_ad{suffix}"
-            block.append(line + "\n")
-            if not in_do and base not in defined:
-                defined.add(base)
-            if in_do and not unique_loop:
-                loop_grad_vars.add(base)
-        if any(idx_map.get(v, (v, None))[0] == lhs_base and idx_map.get(v, (v, None))[1] is None for v in parts):
-            new_grad = f"{lhs_base}_ad_"
-            ltyp = decl_map.get(lhs_base, ("real",))[0]
-            _, ldims = _split_type(ltyp)
-            suf = "(:)" if ldims else ""
-            expr = f"{lhs_grad} * d{lhs_base}_d{lhs_base}{suf}"
-            block.append(f"{new_grad}{suf} = {expr}\n")
-            grad_var[lhs_base] = new_grad
-            if in_do:
-                loop_grad_vars.add(lhs_base)
-        stmt_blocks[id(stmt)] = block
-        last_block = block
-        used_vars.update(rhs_names)
-        used_vars.add(lhs_base)
-
-    for var in sorted(index_vars):
-        typ, _ = decl_map.get(var, (None, None))
-        if typ is not None and _is_integer_type(typ):
-            if var not in args and var not in outputs and var not in const_decl_names:
-                const_decl.append(Declaration("integer", var))
-                const_decl_names.add(var)
-
-    def _sized_dims(dims, name):
-        if not dims:
-            return None
-        parts = [p.strip() for p in dims[1:-1].split(",")]
-        new = []
-        for i, p in enumerate(parts, 1):
-            if ":" in p or p == "":
-                new.append(f"size({name}, {i})")
-            else:
-                new.append(p)
-        return "(" + ", ".join(new) + ")"
-
-
-    for cl in const_decl:
-        decl_block.append(cl)
-    for dname in decl_names:
-        typ = "real"
-        dims = None
-        if dname.endswith("_ad"):
-            base = dname[:-3]
-            typ = _grad_type(decl_map.get(base, ("real",))[0])
-            dims = _sized_dims(decl_map.get(base, ("real",))[0], base)
-        elif dname.endswith("_ad_"):
-            base = dname[:-4]
-            if base.endswith("_ad"):
-                base0 = base[:-3]
-            else:
-                base0 = base
-            typ = _grad_type(decl_map.get(base0, ("real",))[0])
-            dims = _sized_dims(decl_map.get(base0, ("real",))[0], f"{base0}_ad")
-        elif dname.startswith("d") and "_d" in dname:
-            base = dname.split("_d", 1)[1]
-            typ = _grad_type(decl_map.get(base, ("real",))[0])
-            dims = _sized_dims(decl_map.get(base, ("real",))[0], base)
-        if dname in scalar_derivs:
-            dims = None
-            typ = "real"
-        if dims is not None:
-            typ = f"real, dimension{dims}"
-        base, ldims = _split_type(typ)
-        decl_block.append(Declaration(base, dname, None, ldims))
-
-    # initialization assignments will be decided after AD code generation
-    for pl in pre_lines:
-        ad_block.append(pl)
-    if len(pre_lines):
-        ad_block.append(EmptyLine())
-    def _reverse_block(body):
-        block = Block([])
-        for st in reversed(body):
-            block.extend(_reverse_stmt(st))
-        return block
-
-    def _reverse_do_line(stmt):
-        s = stmt.tofortran().strip()
-        m = re.match(r"do\s+(\w+)\s*=\s*(.*?),\s*(.*?)(?:,\s*(.*?))?$", s, re.I)
-        if not m:
-            return s
-        var, start, end, step = m.groups()
-        start = start.strip()
-        end = end.strip()
-        if step is None:
-            step = "1"
-        step = step.strip()
-        if step.startswith("-"):
-            rev_step = step[1:].strip()
-        else:
-            rev_step = f"-{step}" if re.fullmatch(r"[\w.]+", step) else f"-({step})"
-        return f"DO {var} = {end}, {start}, {rev_step}"
-
-    def _only_int_assignments(node):
-        if isinstance(node, Fortran2003.Assignment_Stmt):
-            lhs = str(node.items[0]).split("(")[0]
-            typ, _ = decl_map.get(lhs, (None, None))
-            return _is_integer_type(typ)
-        if isinstance(node, (Fortran2003.If_Then_Stmt, Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
-            return True
-        has_child = False
-        for item in getattr(node, "content", []):
-            if isinstance(item, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
-                continue
-            if isinstance(item, str):
-                continue
-            if not _only_int_assignments(item):
-                return False
-            has_child = True
-        return has_child
-
-    def _reverse_loop_body(body):
-        pre = []
-        main = []
-        for st in body:
-            if _only_int_assignments(st):
-                pre.append(st)
-            else:
-                main.append(st)
-        block = Block([])
-        for st in reversed(main):
-            block.extend(_reverse_stmt(st))
-        pre_block = Block([])
-        for st in pre:
-            pre_block.extend(_reverse_stmt(st))
-        block.children = pre_block.children + block.children
-        return block
-
-    def _reverse_stmt(st):
-        if isinstance(st, Fortran2003.Assignment_Stmt):
-            block = stmt_blocks.get(id(st), [])
-            nodes = []
-            for line in block:
-                text = line.strip()
-                if not text:
-                    nodes.append(EmptyLine())
-                    continue
-                if "=" in text:
-                    lhs, rhs = text.split("=", 1)
-                    lhs = lhs.strip()
-                    rhs = rhs.strip()
-                    accumulate = False
-                    parts = [p.strip() for p in rhs.split("+")]
-                    if len(parts) == 2:
-                        lhs_base = lhs.split("(")[0].strip()
-                        left_base = parts[0].split("(")[0].strip()
-                        right_base = parts[1].split("(")[0].strip()
-                        if lhs_base in (left_base, right_base):
-                            accumulate = True
-                            rhs = parts[0] if right_base == lhs_base else parts[1]
-                    dim = None
-                    if "(" in lhs:
-                        dim = lhs[lhs.find("("):].strip()
-                    lhs_var = Variable(lhs.split("(")[0].strip(), "", dimension=dim)
-                    nodes.append(Assignment(lhs_var, rhs, accumulate=accumulate))
-            return Block(nodes)
-        if isinstance(st, Fortran2003.If_Construct):
-            cond = st.content[0].items[0].tofortran()
-            i = 1
-            seg = []
-            while i < len(st.content):
-                itm = st.content[i]
-                if isinstance(itm, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
-                    break
-                seg.append(itm)
-                i += 1
-            body = _reverse_block(seg)
-            elif_blocks = []
-            else_block = None
-            while i < len(st.content):
-                itm = st.content[i]
-                if isinstance(itm, Fortran2003.Else_If_Stmt):
-                    cond2 = itm.items[0].tofortran()
-                    i += 1
-                    seg = []
-                    while i < len(st.content):
-                        j = st.content[i]
-                        if isinstance(j, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
-                            break
-                        seg.append(j)
-                        i += 1
-                    blk = _reverse_block(seg)
-                    elif_blocks.append((cond2, blk))
-                elif isinstance(itm, Fortran2003.Else_Stmt):
-                    i += 1
-                    seg = []
-                    while i < len(st.content):
-                        j = st.content[i]
-                        if isinstance(j, Fortran2003.End_If_Stmt):
-                            break
-                        seg.append(j)
-                        i += 1
-                    else_block = _reverse_block(seg)
-                elif isinstance(itm, Fortran2003.End_If_Stmt):
-                    i += 1
-                else:
-                    i += 1
-            if len(body) or elif_blocks or else_block is not None:
-                node = IfBlock(cond, body, elif_blocks=elif_blocks, else_body=else_block)
-                return Block([node])
-            return Block([])
-        if isinstance(st, Fortran2003.Case_Construct):
-            expr = st.content[0].items[0].tofortran()
-            cases = []
-            default = None
-            i = 1
-            while i < len(st.content) - 1:
-                cs = st.content[i]
-                cond = cs.tofortran().split(None, 1)[1]
-                i += 1
-                seg = []
-                while i < len(st.content) - 1 and not isinstance(st.content[i], Fortran2003.Case_Stmt):
-                    seg.append(st.content[i])
-                    i += 1
-                blk = _reverse_block(seg)
-                if cond.lower().startswith("default"):
-                    default = blk
-                else:
-                    cond = cond.strip()
-                    if cond.startswith("(") and cond.endswith(")"):
-                        cond = cond[1:-1]
-                    cases.append((cond, blk))
-            node = SelectBlock(expr, cases, default=default)
-            return Block([node])
-        if isinstance(st, Block_Nonlabel_Do_Construct):
-            do_line = _reverse_do_line(st.content[0])
-            body = _reverse_loop_body(st.content[1:-1])
-            res = DoLoop(do_line, body)
-            return Block([res])
-        return Block([])
-
-    for l in _reverse_block(exec_part.content):
-        ad_block.append(l)
-    ad_block.append(EmptyLine())
-    ad_block.append(Return())
-
-    keep = {f"{v}_ad" for v in loop_grad_vars}
-    for arg in out_grad_args:
-        var_name = f"{arg}_ad"
-        t, _ = decl_map.get(arg, ("real", None))
-        _, dims = _split_type(t)
-        suf = "(:)" if dims else ""
-        dim = suf or None
-        if var_name in keep:
-            init_block.append(Assignment(Variable(var_name, "real", dimension=dim), "0.0"))
-            continue
-        res = ad_block.remove_initial_self_add(var_name)
-        if res == 1:
-            init_block.append(Assignment(Variable(var_name, "real", dimension=dim), "0.0"))
-
-    body.append(init_block)
-    body.append(ad_block)
-
-    return sub
+    ad_code = routine_org.content.convert_assignments(to_ad, reverse=True)
+    if (ad_code is not None) and (not ad_code.is_effectively_empty()):
+        ad_block.extend(ad_code)
+    return subroutine
 
 
 def generate_ad(in_file, out_file=None, warn=True):
@@ -941,9 +271,9 @@ def generate_ad(in_file, out_file=None, warn=True):
         #mod.body = mod_org.body
         for routine in mod_org.routines:
             mod.routines.append(_generate_ad_subroutine(routine, warnings))
-        modules.append(mod)
+        modules.append(render_program(mod))
 
-    code = "\n".join(render_program(modules))
+    code = "\n".join(modules)
     if out_file:
         Path(out_file).write_text(code)
     if warn and warnings:

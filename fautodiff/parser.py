@@ -13,7 +13,22 @@ from fparser.two import Fortran2003
 from fparser.two.Fortran2008 import Block_Nonlabel_Do_Construct
 from fparser.two.utils import walk
 
+from .operators import (
+    Operation,
+    OpInt,
+    OpReal,
+    OpVar,
+    OpAdd,
+    OpSub,
+    OpMul,
+    OpDiv,
+    OpPow,
+    OpNeg,
+    OpFunc,
+)
+
 from .code_tree import (
+    Variable,
     Module,
     Subroutine,
     Function,
@@ -24,7 +39,6 @@ from .code_tree import (
     IfBlock,
     DoLoop,
     SelectBlock,
-    Variable,
     variable_from_expr,
 )
 
@@ -46,6 +60,80 @@ def _stmt_name(stmt):
     if len(parts) >= 2:
         return parts[1].split("(")[0]
     raise AttributeError("Could not determine statement name")
+
+def _stmt2op(stmt):
+    """Return Operations from statement."""
+
+    if isinstance(stmt, Fortran2003.Int_Literal_Constant):
+        return OpInt(val=int(stmt.items[0]), kind=stmt.items[1])
+
+    if isinstance(stmt, Fortran2003.Real_Literal_Constant):
+        return OpReal(val=float(stmt.items[0]), kind=stmt.items[1])
+
+    if isinstance(stmt, Fortran2003.Name):
+        return OpVar(name=stmt.tofortran())
+
+    if isinstance(stmt, Fortran2003.Intrinsic_Function_Reference):
+        name = stmt.items[0].tofortran().lower()
+        args = [_stmt2op(arg) for arg in getattr(stmt.items[1], "items", []) if not isinstance(arg, str)]
+        return OpFunction(name, args)
+
+    if isinstance(stmt, Fortran2003.Mult_Operand):
+        if stmt.items[1] == "**":
+            args = [_stmt2op(stmt.items[0]), _stmt2op(stmt.items[2])]
+            return OpPow(args)
+        else:
+            raise ValueError("Unsupported Mult_operand type: f{stmt}")
+
+    if isinstance(stmt, Fortran2003.Level_1_Expr):
+        if stmt.items[0] == "-":
+            args = [_stmt2op(stmt.items[1])]
+            return OpNeg(args)
+        #elif stmt.items[1].items[1] == "**":
+        #    args = [_stmt2op(stmt.items[1].items[0]), _stmt2op(stmt.items[1].items[2])]
+        #    return OpPow(args)
+        else:
+            raise ValueError("Unsupported Level_1_expr type: f{stmt}")
+
+    if isinstance(stmt, Fortran2003.Level_2_Expr):
+        op = stmt.items[1]
+        args = [_stmt2op(stmt.items[0]), _stmt2op(stmt.items[2])]
+        if op == "+":
+            return OpAdd(args)
+        elif op == "-":
+            return OpSub(args)
+        else:
+            raise ValueError("Unsupported Level_2_Expr type: f{stmt}")
+
+    if isinstance(stmt, Fortran2003.Add_Operand):
+        op = stmt.items[1]
+        args = [_stmt2op(stmt.items[0]), _stmt2op(stmt.items[2])]
+        if op == "*":
+            return OpMul(args)
+        elif op == "/":
+            return OpDiv(args)
+        else:
+            raise ValueError("Unsupported Add_Operand type: f{stmt}")
+
+    if isinstance(stmt, Fortran2003.Level_2_Unary_Expr):
+        op = stmt.items[0]
+        args = [_stmt2op(stmt.items[1])]
+        if op == "-":
+            return OpNeg(args)
+        else:
+            raise ValueError("Unsupported Level_2_Unary_Expr type: f{stmt}")
+
+    if isinstance(stmt, Fortran2003.Parenthesis):
+        return _stmt2op(stmt.items[1])
+
+    print("other")
+    print(type(stmt))
+    print(stmt)
+    print(stmt.tofortran())
+    print(stmt.item)
+    print(stmt.items)
+    raise ValueError(f"Unsupported statement type: {type(stmt)}")
+
 
 # Re-export commonly used classes and utilities so other modules do not need
 # to import ``fparser2`` directly.
@@ -71,12 +159,12 @@ def parse_file(path):
             if isinstance(part, Fortran2003.Module_Subprogram_Part):
                 for c in part.content:
                     if isinstance(c, (Fortran2003.Function_Subprogram, Fortran2003.Subroutine_Subprogram)):
-                        mod_node.routines.append(_parse_routine(c))
+                        mod_node.routines.append(_parse_routine(c, path))
                 break
     return output
 
 
-def _parse_routine(content):
+def _parse_routine(content, filename):
     """Return node tree correspoinding to the input AST"""
     def _parse_decls(spec):
         """Return mapping of variable names to ``(type, intent)``."""
@@ -114,14 +202,22 @@ def _parse_routine(content):
                     dims = arrspec.tofortran()
                 elif dim_attr is not None:
                     dims = dim_attr
-                decls.append(Declaration(type_str, name, intent, dims))
+                decls.append(Declaration(name, type_str, None, dims, intent))
         return decls
 
     def _stmt_to_block(stmt):
         if isinstance(stmt, Fortran2003.Assignment_Stmt):
-            lhs = stmt.items[0].tofortran().strip()
-            rhs = stmt.items[2].tofortran().strip()
-            return Block([Assignment(variable_from_expr(lhs), rhs)])
+            lhs = _stmt2op(stmt.items[0])
+            rhs = _stmt2op(stmt.items[2])
+            line_no = None
+            if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
+                line_no = stmt.item.span[0]
+            info = {
+                "file": filename,
+                "line": line_no,
+                "code": stmt.tofortran().strip(),
+            }
+            return Block([Assignment(lhs, rhs, False, info)])
         if isinstance(stmt, Fortran2003.If_Construct):
             cond = stmt.content[0].items[0].tofortran()
             i = 1
@@ -191,7 +287,7 @@ def _parse_routine(content):
         if isinstance(stmt, Block_Nonlabel_Do_Construct):
             header = stmt.content[0].tofortran().strip()
             body = _block(stmt.content[1:-1])
-            return Block([DoLoop(header, body)])
+            return Block([DoLoop(body, index, start, end, step)])
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return Block([Return()])
         return None

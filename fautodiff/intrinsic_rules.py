@@ -67,41 +67,22 @@ NONDIFF_INTRINSICS = {
 }
 
 
-def _handle_transpose(lhs, items, grad_var, defined, decl_names, decl_set):
+def _handle_transpose(dsc, src, *args):
     """Propagate gradient through ``transpose``."""
-    arg = items[0].tofortran()
-    lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
-    block = []
-    if arg in defined:
-        block.append(f"{arg}_ad = transpose({lhs_grad}) + {arg}_ad\n")
-    else:
-        block.append(f"{arg}_ad = transpose({lhs_grad})\n")
-        defined.add(arg)
-    return block, {lhs, arg}
+    dsc_grad = grad_var.get(dsc)
+    src_grad = grad_var.get(src)
+    op = OpFunc(name="transpose", args=[dsc_grad.name])
+    return [Assignment(dsc_grad, op, accumulate=True)]
 
 
-def _handle_cshift(lhs, items, grad_var, defined, decl_names, decl_set):
+def _handle_cshift(dsc, src, *args):
     """Propagate gradient through ``cshift``."""
-    arr = items[0].tofortran()
-    shift = items[1].tofortran()
-    dim = items[2].tofortran() if len(items) > 2 else None
-    lhs_grad = grad_var.get(lhs, f"{lhs}_ad")
-    update = f"cshift({lhs_grad}, -{shift}" + (f", {dim})" if dim else ")")
-    block = []
-    if arr == lhs:
-        new_grad = f"{lhs}_ad_"
-        block.append(f"{new_grad} = {update}\n")
-        grad_var[lhs] = new_grad
-        if new_grad not in decl_set:
-            decl_names.append(new_grad)
-            decl_set.add(new_grad)
-    else:
-        if arr in defined:
-            block.append(f"{arr}_ad = {update} + {arr}_ad\n")
-        else:
-            block.append(f"{arr}_ad = {update}\n")
-            defined.add(arr)
-    return block, {lhs, arr}
+    shift = OpNeg(args[0]).tofortran()
+    dim = args[1].tofortran()
+    dsc_grad = grad_var.get(dsc)
+    src_grad = grad_var.get(src)
+    op = OpFunc(name="cshift", args=[dsc_grad.name, shift, dim])
+    return [Assignment(dsc_grad, op, accumulate=True)]
 
 
 SPECIAL_HANDLERS = {
