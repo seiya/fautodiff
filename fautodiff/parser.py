@@ -32,7 +32,6 @@ from .operators import (
 )
 
 from .code_tree import (
-    Variable,
     Node,
     Module,
     Subroutine,
@@ -290,6 +289,7 @@ def _parse_routine(content, filename):
             }
             return Assignment(lhs, rhs, False, info)
         if isinstance(stmt, Fortran2003.If_Construct):
+            cond_blocks = []
             cond = _stmt2op(stmt.content[0].items[0], decls)
             i = 1
             seg = []
@@ -300,8 +300,7 @@ def _parse_routine(content, filename):
                 seg.append(itm)
                 i += 1
             body = _block(seg, decls)
-            elif_bodies = []
-            else_body = None
+            cond_blocks.append((cond, body))
             while i < len(stmt.content):
                 itm = stmt.content[i]
                 if isinstance(itm, Fortran2003.Else_If_Stmt):
@@ -315,7 +314,7 @@ def _parse_routine(content, filename):
                         seg.append(j)
                         i += 1
                     blk = _block(seg, decls)
-                    elif_bodies.append((cond2, blk))
+                    cond_blocks.append((cond2, blk))
                 elif isinstance(itm, Fortran2003.Else_Stmt):
                     i += 1
                     seg = []
@@ -325,15 +324,15 @@ def _parse_routine(content, filename):
                             break
                         seg.append(j)
                         i += 1
-                    else_body = _block(seg, decls)
+                    cond_blocks.append((None, _block(seg, decls)))
                 elif isinstance(itm, Fortran2003.End_If_Stmt):
                     i += 1
                 else:
                     i += 1
-            return IfBlock(cond, body, elif_bodies=elif_bodies, else_body=else_body)
+            return IfBlock(cond_blocks)
         if isinstance(stmt, Fortran2003.Case_Construct):
             expr = _stmt2op(stmt.content[0].items[0], decls)
-            cases = []
+            cond_blocks = []
             default = None
             i = 1
             while i < len(stmt.content) - 1:
@@ -345,11 +344,11 @@ def _parse_routine(content, filename):
                     i += 1
                 blk = _block(seg, decls)
                 if stmt_cond.tofortran() == "CASE DEFAULT":
-                    default = blk
+                    conds = None
                 else:
                     conds = tuple(_stmt2op(cond, decls) for cond in stmt_cond.items[0].items[0].items)
-                    cases.append((conds, blk))
-            return SelectBlock(expr, cases, default=default)
+                cond_blocks.append((conds, blk))
+            return SelectBlock(cond_blocks, expr)
         if isinstance(stmt, Block_Nonlabel_Do_Construct):
             body = _block(stmt.content[1:-1], decls)
             if stmt.content[0].tofortran().startswith("DO WHILE"):
