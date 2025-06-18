@@ -14,15 +14,11 @@ class TestRenderProgram(unittest.TestCase):
         self.assertEqual(code_tree.render_program(prog), "a = 1\n")
 
     def test_if_else_block(self):
-        prog = code_tree.Block(
-            [
-                code_tree.IfBlock(
-                    "a > 0",
-                    code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpInt(1))]),
-                    else_body=code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpInt(2))]),
-                )
-            ]
-        )
+        cond1 = operators.OpVar("a") > operators.OpInt(0)
+        body1 = code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpInt(1))])
+        cond2 = None
+        body2 = code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpInt(2))])
+        prog = code_tree.Block([code_tree.IfBlock([(cond1, body1), (cond2, body2)])])
         expected = (
             "if (a > 0) then\n"
             "  b = 1\n"
@@ -33,18 +29,13 @@ class TestRenderProgram(unittest.TestCase):
         self.assertEqual(code_tree.render_program(prog), expected)
 
     def test_if_elif_block(self):
-        prog = code_tree.Block(
-            [
-                code_tree.IfBlock(
-                    operators.OpVar("a") > operators.OpInt(0),
-                    code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpInt(1))]),
-                    elif_bodies=[
-                        (operators.OpVar("a") < operators.OpInt(0), code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpInt(2))]))
-                    ],
-                    else_body=code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpInt(3))]),
-                )
-            ]
-        )
+        cond1 = operators.OpVar("a") > operators.OpInt(0)
+        body1 = code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpInt(1))])
+        cond2 = operators.OpVar("a") < operators.OpInt(0)
+        body2 = code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpInt(2))])
+        cond3 = None
+        body3 = code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpInt(3))])
+        prog = code_tree.Block([code_tree.IfBlock([(cond1, body1), (cond2, body2), (cond3, body3)])])
         expected = (
             "if (a > 0) then\n"
             "  b = 1\n"
@@ -71,10 +62,15 @@ class TestNodeMethods(unittest.TestCase):
 
     def test_ids_and_clone(self):
         blk = code_tree.Block([code_tree.Assignment(operators.OpVar("a"), operators.OpInt(1))])
-        child_id = blk.children[0].get_id()
+        for child in blk.iter_children():
+            child_id = child.get_id()
+            break
         clone = blk.deep_clone()
+        for child in clone.iter_children():
+            clone_child_id = child.get_id()
+            break
         self.assertNotEqual(clone.get_id(), blk.get_id())
-        self.assertNotEqual(clone.children[0].get_id(), child_id)
+        self.assertNotEqual(clone_child_id, child_id)
         self.assertEqual(
             code_tree.render_program(clone), code_tree.render_program(blk)
         )
@@ -85,18 +81,22 @@ class TestNodeMethods(unittest.TestCase):
         blk = code_tree.Block([a, b])
         self.assertIs(blk.find_by_id(b.get_id()), b)
         blk.remove_by_id(a.get_id())
-        self.assertEqual(len(blk.children), 1)
-        self.assertIs(blk.children[0], b)
+        self.assertEqual(len(blk), 1)
+        child0 = None
+        for child in blk.iter_children():
+            child0 = child
+            break
+        self.assertIs(child0, b)
 
     def test_var_analysis(self):
+        cond1 = operators.OpVar("a") > operators.OpInt(0)
+        body1 = code_tree.Block([code_tree.Assignment(operators.OpVar("c"), operators.OpVar("b"))])
+        cond2 = None
+        body2 = code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpVar("c"))])
         blk = code_tree.Block([
             code_tree.Assignment(operators.OpVar("a"), operators.OpInt(1)),
             code_tree.Assignment(operators.OpVar("b"), operators.OpVar("a")),
-            code_tree.IfBlock(
-                operators.OpVar("a") > operators.OpInt(0),
-                code_tree.Block([code_tree.Assignment(operators.OpVar("c"), operators.OpVar("b"))]),
-                else_body=code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpVar("c"))]),
-            ),
+            code_tree.IfBlock([(cond1, body1), (cond2, body2)])
         ])
         self.assertEqual(blk.assigned_vars(), ["a", "b", "c"])
         self.assertEqual(blk.required_vars(), ["c"])
@@ -110,7 +110,6 @@ class TestNodeMethods(unittest.TestCase):
             ]),
             content=code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpVar("a"))]),
         )
-        self.assertEqual(sub.defined_var_names(), ["a", "b"])
         self.assertEqual(sub.assigned_vars(), ["a", "b"])
         self.assertEqual(sub.required_vars(), [])
 
@@ -186,38 +185,38 @@ class TestNodeMethods(unittest.TestCase):
             "do i = 1, n\n  x_da = x_da + y\nend do\n",
         )
 
-        cond_blk = code_tree.Block([
-            code_tree.IfBlock(
-                "a>0",
-                code_tree.Block([code_tree.Assignment(operators.OpVar("x_da"), operators.OpVar("x_da") + operators.OpVar("a"))]),
-                else_body=code_tree.Block([
+        cond1 = operators.OpVar("a") > 0
+        body1 = code_tree.Block([code_tree.Assignment(operators.OpVar("x_da"), operators.OpVar("x_da") + operators.OpVar("a"))])
+        cond2 = None
+        body2 = code_tree.Block([
                     code_tree.Assignment(operators.OpVar("x_da"), operators.OpVar("x_da") + operators.OpVar("b"))
-                ]),
-            )
+                ])
+        cond_blk = code_tree.Block([
+            code_tree.IfBlock([(cond1, body1), (cond2, body2)])
         ])
         self.assertEqual(cond_blk.check_initial("x_da"), -1)
         self.assertEqual(
             code_tree.render_program(cond_blk),
-            "if (a>0) then\n  x_da = x_da + a\nelse\n  x_da = x_da + b\nend if\n",
+            "if (a > 0) then\n  x_da = x_da + a\nelse\n  x_da = x_da + b\nend if\n",
         )
 
+        cond1 = operators.OpVar("a") > 0
+        body1 = code_tree.Block([code_tree.Assignment(operators.OpVar("x_da"), operators.OpVar("x_da") + operators.OpVar("a"))])
+        cond2 = None
+        body2 = code_tree.Block([])
         cond_blk2 = code_tree.Block([
-            code_tree.IfBlock(
-                "a>0",
-                code_tree.Block([code_tree.Assignment(operators.OpVar("x_da"), operators.OpVar("x_da") + operators.OpVar("a"))]),
-                else_body=code_tree.Block([]),
-            )
+            code_tree.IfBlock([(cond1, body1), (cond2, body2)])
         ])
         self.assertEqual(cond_blk2.check_initial("x_da"), -1)
 
-        cond_blk3 = code_tree.Block([
-            code_tree.IfBlock(
-                "a>0",
-                code_tree.Block([code_tree.Assignment(operators.OpVar("x_da"), operators.OpVar("a"), accumulate=True)]),
-                else_body=code_tree.Block([
+        cond1 = operators.OpVar("a") > 0
+        body1 = code_tree.Block([code_tree.Assignment(operators.OpVar("x_da"), operators.OpVar("a"), accumulate=True)])
+        cond2 = None
+        body2 = code_tree.Block([
                     code_tree.Assignment(operators.OpVar("x_da"), operators.OpVar("b"), accumulate=True)
-                ]),
-            )
+                ])
+        cond_blk3 = code_tree.Block([
+            code_tree.IfBlock([(cond1, body1), (cond2, body2)])
         ])
         self.assertEqual(cond_blk3.check_initial("x_da"), 2)
 

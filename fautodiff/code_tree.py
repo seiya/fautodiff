@@ -20,6 +20,10 @@ def _append_unique(items: List[str], name: str) -> None:
     if name not in items:
         items.append(name)
 
+def _extend_unique(items: List[str], names: List[str]) -> None:
+    for name in names:
+        if name not in items:
+            items.append(name)
 
 @dataclass
 class Variable:
@@ -33,7 +37,7 @@ class Variable:
     ad_target: Optional[bool] = None
 
     def __post_init__(self) -> None:
-        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", self.name):
+        if not _NAME_RE.fullmatch(self.name):
             raise ValueError(f"invalid Fortran variable name: {self.name}")
         if self.dims is not None and not isinstance(self.dims, tuple):
             raise ValueError(f"dims must be tuple of str: {type(self.dims)}")
@@ -63,19 +67,15 @@ class Variable:
 class Node:
     """Abstract syntax tree node for Fortran code fragments."""
 
-    id: int = field(init=False, repr=False)
-    do_index_list: List[str] = field(init=False, default=None)
+    __id: int = field(init=False, repr=False)
+    __parent: "Node" = field(init=False, repr=False, default=None)
+    do_index_list: List[str] = field(init=False, repr=False, default=None)
 
     _id_counter = 0
 
     def __post_init__(self):
-        self.id = Node._id_counter
+        self.__id = Node._id_counter
         Node._id_counter += 1
-
-    def build_do_index_list(self, list: List[str]) -> None:
-        self.do_index_list = list
-        for child in self.iter_children():
-            child.build_do_index_list(list)
 
     # ------------------------------------------------------------------
     # basic node API
@@ -87,11 +87,15 @@ class Node:
 
     def is_effectively_empty(self) -> bool:
         """Return ``True`` if removing this node does not change execution."""
-        return False
+        return all(child.is_effectively_empty() for child in self.iter_children())
 
     def has_assignment_to(self, var: str) -> bool:
         """Return ``True`` if ``var`` is assigned within this node."""
-        return False
+        if any(var == v.name for v in self.iter_ref_vars()):
+            return True
+        if any(var == v.name for v in self.iter_assign_vars()):
+            return True
+        return any(child.has_assignment_to(var) for child in self.iter_children())
 
     # ------------------------------------------------------------------
     # node tree helpers
@@ -101,9 +105,24 @@ class Node:
         """Yield child nodes."""
         return iter(())
 
-    def convert_assignments(self, func, reverse= False) -> List["Node"]:
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        """Yield variables which is referenced in this node w/o children nodes."""
+        return iter(())
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        """Yield variables which is assigned in this node w/o children nodes."""
+        return iter(())
+
+    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False) -> List["Node"]:
         """New with converted assignment nodes."""
         return []
+
+    def _save_vars(self, var: OpVar, saved_vars: List[SaveAssignment]) -> SaveAssignment:
+        id = self.get_id()
+        save = SaveAssignment(var, id)
+        self.__parent.insert_before(id, save)
+        saved_vars.append(save)
+        return save.to_load()
 
     def deep_clone(self) -> "Node":
         """Return a deep clone of this node tree with new ids."""
@@ -112,19 +131,31 @@ class Node:
         return clone
 
     @classmethod
+    def reset(cls) -> None:
+        cls._id_counter = 0
+
+    @classmethod
     def _assign_new_ids(cls, node: "Node") -> None:
-        node.id = cls._id_counter
+        node.set_id(cls._id_counter)
         cls._id_counter += 1
         for child in node.iter_children():
             cls._assign_new_ids(child)
 
     def get_id(self) -> int:
         """Return this node's unique id."""
-        return self.id
+        return self.__id
+
+    def set_id(self, id: int) -> int:
+        """Set this node's unique id."""
+        self.__id = id
+        return self.__id
+
+    def set_parent(self, node: "Node") -> "Node":
+        self.__parent = node
 
     def find_by_id(self, node_id: int) -> Optional["Node"]:
         """Return the node with ``node_id`` from this subtree or ``None``."""
-        if self.id == node_id:
+        if self.__id == node_id:
             return self
         for child in self.iter_children():
             found = child.find_by_id(node_id)
@@ -132,20 +163,24 @@ class Node:
                 return found
         return None
 
+    def insert_before(self, id: int, node: "Node"):
+        """Insert node to the before of node with id"""
+        raise NotImplementedError
+
     def remove_by_id(self, node_id: int) -> bool:
         """Remove the node with ``node_id`` from this subtree.
 
         Returns ``True`` if a node was removed.
         """
-        for child in list(self.iter_children()):
-            if child.id == node_id:
-                self._remove_child(child)
+        for child in self.iter_children():
+            if child.get_id() == node_id:
+                self.remove_child(child)
                 return True
             if child.remove_by_id(node_id):
                 return True
         return False
 
-    def _remove_child(self, child: "Node") -> None:
+    def remove_child(self, child: "Node") -> None:
         """Remove ``child`` from this node. Override in subclasses."""
         # Only ``Block`` implements actual removal.
         pass
@@ -154,9 +189,14 @@ class Node:
     # variable analysis helpers
     # ------------------------------------------------------------------
 
-    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
+    def assigned_vars(self, names: Optional[List[str]] = None, without_savevar: bool = False) -> List[str]:
         """Return variables assigned within this node and children."""
-        return list(names or [])
+        res = list(names or [])
+        for var in self.iter_assign_vars(without_savevar=without_savevar):
+            _append_unique(res, var.name)
+        for child in self.iter_children():
+            res = child.assigned_vars(res, without_savevar=without_savevar)
+        return res
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
         """Return variables needed before executing this node.
@@ -170,7 +210,20 @@ class Node:
 
     def collect_vars(self) -> List[str]:
         """Return variables used in this node."""
-        return list([])
+        vars = []
+        for child in self.iter_children():
+            _extend_unique(vars, child.collect_vars())
+        for var in self.iter_ref_vars():
+            _append_unique(vars, var.name)
+        for var in self.iter_assign_vars():
+            _append_unique(vars, var.name)
+        return vars
+
+    def build_do_index_list(self, list: List[str]) -> None:
+        """Build index list of do loop."""
+        self.do_index_list = list
+        for child in self.iter_children():
+            child.build_do_index_list(list)
 
     # ------------------------------------------------------------------
     # optimization helpers
@@ -180,8 +233,17 @@ class Node:
         """Return a copy of this node with only code needed for ``targets``."""
         return self.deep_clone()
 
-    def check_array_index(var: str, index: str) -> bool:
+    def check_array_index(self, var: str, index: str) -> bool:
         """Check all the reference to array ``var`` are with the same index ``index``"""
+        for v in self.iter_ref_vars():
+            if v.name == var and (v.index is not None and v.index_str() != index):
+                return False
+        for v in self.iter_assign_vars():
+            if v.name == var and (v.index is not None and v.index_str() != index):
+                return False
+        for child in self.iter_children():
+            if not child.check_array_index(var, index):
+                return False
         return True
 
     def check_initial(self, var: str) -> int:
@@ -190,6 +252,10 @@ class Node:
         Returns ``0`` for not-found, ``1`` or ``2`` for assignment w/o self-reference and ``-1`` for assignment w/ self-reference.
         ``2`` indicates that a self-reference was removed.
         """
+        for child in self.iter_children():
+            ret = child.check_initial(var)
+            if ret != 0:
+                return ret
         return 0
 
 
@@ -197,18 +263,19 @@ class Node:
 class Block(Node):
     """A container for a sequence of nodes."""
 
-    children: List[Node] = field(default_factory=list)
+    __children: List[Node] = field(default_factory=list)
 
     def iter_children(self) -> Iterator[Node]:
-        return iter(self.children)
+        return iter(self.__children)
 
-    def convert_assignments(self, func, reverse=False) -> List[Node]:
+    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False) -> List[Node]:
         children = []
-        iterator = self.children
+        iterator = self.__children
         if reverse:
             iterator = reversed(iterator)
         for node in iterator:
-            for res in node.convert_assignments(func, reverse):
+            nodes = node.convert_assignments(saved_vars, func, reverse)
+            for res in nodes:
                 if res is not None and not res.is_effectively_empty():
                     children.append(res)
         return [Block(children)]
@@ -219,82 +286,74 @@ class Block(Node):
                 return child
         return None
 
-    def _remove_child(self, child: Node) -> None:
-        self.children.remove(child)
+    def remove_child(self, child: Node) -> None:
+        self.__children.remove(child)
+
+    def first(self) -> Node:
+        """Return the first element."""
+        if len(self.__children) > 0:
+            return self.__children[0]
+        return None
+
+    def last(self) -> Node:
+        """Return the last element."""
+        if len(self.__children) > 0:
+            return self.__children[-1]
+        return None
 
     def append(self, node: Node) -> None:
         """Append ``node`` to this block."""
-        self.children.append(node)
+        node.set_parent(self)
+        self.__children.append(node)
 
     def extend(self, nodes: Iterable[Node]) -> None:
         """Extend this block with ``nodes``."""
-        self.children.extend(nodes)
+        self.__children.extend(nodes)
 
-    def insert(self, index: int, node: Node) -> None:
-        """Insert ``node`` at ``index``."""
-        self.children.insert(index, node)
+    def insert_before(self, id: int, node:Node) -> Node:
+        for i, child in enumerate(self.__children):
+            if child.get_id() == id:
+                return self.__children.insert(i, node)
+        raise ValueError("id is not found")
 
     def __iter__(self):
-        return iter(self.children)
+        return self.iter_children()
 
     def __len__(self) -> int:
-        return len(self.children)
+        return len(self.__children)
 
     def render(self, indent: int = 0) -> List[str]:
         lines: List[str] = []
-        for child in self.children:
+        for child in self.iter_children():
             lines.extend(child.render(indent))
         return lines
 
-    def is_effectively_empty(self) -> bool:
-        return all(child.is_effectively_empty() for child in self.children)
-
-    def has_assignment_to(self, var: str) -> bool:
-        return any(child.has_assignment_to(var) for child in self.children)
-
-    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        for child in self.children:
-            res = child.assigned_vars(res)
-        return res
-
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
         needed = list(names or [])
-        for child in reversed(self.children):
+        for child in reversed(self.__children):
             needed = child.required_vars(needed)
         return needed
-
-    def collect_vars(self) -> List[str]:
-        vars = []
-        for child in self.children:
-            for var in child.collect_vars():
-                _append_unique(vars, var)
-        return vars
 
     def prune_for(self, targets: Iterable[str]) -> "Block":
         needed = list(targets)
         new_children: List[Node] = []
-        for child in reversed(self.children):
+        for child in reversed(self.__children):
+            if isinstance(child, Declaration):
+                if (child.intent is not None) or (child.name in needed):
+                    new_children.insert(0, child)
+                    continue
             assigned = child.assigned_vars([])
             if any(v in needed for v in assigned):
                 pruned = child.prune_for(needed)
                 new_children.insert(0, pruned)
                 needed = pruned.required_vars(needed)
+        last = None
+        for child in iter(new_children):
+            if isinstance(last, SaveAssignment) and isinstance(child, SaveAssignment) and last.var == child.var and last.load != child.load:
+                new_children.remove(last)
+                new_children.remove(child)
+            last = child
         return Block(new_children)
-
-    def check_array_index(self, var: str, index: str) -> bool:
-        for child in self.iter_children():
-            if not child.check_array_index(var, index):
-                return False
-        return True
-
-    def check_initial(self, var: str) -> int:
-        for child in self.children:
-            if child.has_assignment_to(var):
-                ret = child.check_initial(var)
-                if ret != 0:
-                    return ret
-        return 0
 
 
 @dataclass
@@ -307,6 +366,8 @@ class Statement(Node):
         lines = [f"{space}{self.body}\n"]
         return lines
 
+    def is_effectively_empty(self) -> bool:
+        return False
 
 @dataclass
 class Module(Node):
@@ -361,15 +422,8 @@ class Routine(Node):
     def iter_children(self) -> Iterator[Node]:
         return iter(self._all_blocks())
 
-    def convert_assignments(self: T, func, reverse=False) -> List[T]:
-        name = self.name
-        args = self.args.copy
-        result = self.result
-        decls = self.decls.deep_copy
-        content = self.content.convert_assignments(func, reverse)[0]
-        ad_init = self.ad_init.convert_assignments(func, reverse)[0]
-        ad_content = self.ad_content.convert_assignments(func, reverse)[0]
-        return [type(self)(name, args, result, decls, content, ad_init, ad_content)]
+    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False) -> List[Routine]:
+        raise RuntimeError("convert_assignments for Routine is not allowed")
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -399,13 +453,6 @@ class Routine(Node):
             intent = "out"
         return Variable(name, decl.typename, decl.kind, decl.dims, intent)
 
-    def get_nondiff_vars(self) -> List[str]:
-        vars = []
-        for decl in self.decls:
-            if decl.typename == "integer" or decl.typename == "character":
-                vars.append(decl.name)
-        return vars
-
     def arg_vars(self) -> List[Variable]:
         vars = []
         for arg in self.args:
@@ -414,56 +461,34 @@ class Routine(Node):
             vars.append(self.get_var(self.result))
         return vars
 
-    def is_effectively_empty(self) -> bool:
-        return all(block.is_effectively_empty() for block in self.iter_children())
-
-    def has_assignment_to(self, var: str) -> bool:
-        return any(block.has_assignment_to(var) for block in self.iter_children())
-
-    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = names
-        for block in self.iter_children():
-            res = block.assigned_vars(res)
-        return res
-
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
         res = names
         for block in reversed(self._all_blocks()):
             res = block.required_vars(res)
         return res
 
-    def collect_vars(self) -> List[str]:
-        vars = []
-        for block in self.iter_children():
-            for var in block.collect_vars():
-                _append_unique(vars, var)
-        return vars
-
-    def defined_var_names(self) -> List[str]:
-        names: List[str] = []
-        for node in self.decls.children:
-            if isinstance(node, Declaration):
-                names.append(node.name)
-        return names
-
     def expand_decls(self, decls: Block) -> "Routine":
         self.decls.expand(decls)
         return self
 
     def prune_for(self, targets: Iterable[str]) -> "Routine":
-        return type(self)(
-            self.name,
-            self.args,
-            self.decls.prune_for(targets),
-            self.body.prune_for(targets),
-        )
-
-    def check_initial(self, var: str) -> int:
-        for block in [self.content, self.ad_init, self.ad_content]:
-            ret = block.check_initial(var)
-            if ret != 0:
-                return ret
-        return 0
+        needed = list(targets)
+        ad_content = self.ad_content.prune_for(needed)
+        needed = ad_content.required_vars(needed)
+        ad_init = self.ad_init.prune_for(needed)
+        needed = ad_init.required_vars(needed)
+        content = self.content.prune_for(needed)
+        all_vars = content.collect_vars()
+        _extend_unique(all_vars, ad_init.collect_vars())
+        _extend_unique(all_vars, ad_content.collect_vars())
+        decls = self.decls.prune_for(all_vars)
+        return type(self)(name = self.name,
+                          args = self.args,
+                          result = self.result,
+                          decls = decls,
+                          content = content,
+                          ad_init = ad_init,
+                          ad_content = ad_content)
 
 
 @dataclass
@@ -488,7 +513,8 @@ class Assignment(Node):
     lhs: OpVar
     rhs: Operator
     accumulate: bool = False
-    info: Optional[dict] = None
+    info: Optional[dict] = field(repr=False, default=None)
+    ad_info: Optional[str] = field(repr=False, default=None)
     rhs_names: List[str] = field(init=False, repr=False)
 
     def __post_init__(self):
@@ -501,8 +527,22 @@ class Assignment(Node):
         for var in self.rhs.collect_vars():
             self.rhs_names.append(var.name)
 
-    def convert_assignments(self, func, reverse=False) -> List[Assignment]:
-        return func(self.lhs, self.rhs, self.info)
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        for var in self.rhs.collect_vars():
+            yield var
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        yield self.lhs
+
+    def is_effectively_empty(self) -> bool:
+        return self.lhs == self.rhs
+
+    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Assignment]:
+        if isinstance(self, SaveAssignment):
+            raise RuntimeError("AD code is beeing converted")
+        assigns = [self._save_vars(self.lhs, saved_vars)]
+        assigns.extend(func(self.lhs, self.rhs, self.info))
+        return assigns
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -511,16 +551,10 @@ class Assignment(Node):
             rhs = rhs + self.lhs
         if self.lhs == rhs:
             return []
-        return [f"{space}{self.lhs} = {rhs}\n"]
-
-    def has_assignment_to(self, var: str) -> bool:
-        lhs_name = self.lhs.name.lower()
-        return lhs_name == var.lower()
-
-    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        _append_unique(res, self.lhs.name)
-        return res
+        ad_comment = ""
+        if self.ad_info is not None:
+            ad_comment = f" ! {self.ad_info}"
+        return [f"{space}{self.lhs} = {rhs}{ad_comment}\n"]
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
         lhs_base = self.lhs.name
@@ -528,28 +562,10 @@ class Assignment(Node):
         for var in self.lhs.collect_vars():
             if var.name != lhs_base:
                 _append_unique(needed, var.name)
-        for var in self.rhs_names:
-            _append_unique(needed, var)
+        _extend_unique(needed, self.rhs_names)
         if self.accumulate:
             _append_unique(needed, lhs_base)
         return needed
-
-    def collect_vars(self) -> List[str]:
-        vars = []
-        for var in self.lhs.collect_vars():
-            _append_unique(vars, var.name)
-        for var in self.rhs_names:
-            _append_unique(vars, var)
-        return vars
-
-    def check_array_index(self, var: str, index: str) -> bool:
-        for v in self.lhs.collect_vars():
-            if v.name == var and v.index_str() != index:
-                return False
-        for v in self.rhs.collect_vars():
-            if v.name == var and v.index_str() != index:
-                return False
-        return True
 
     def check_initial(self, var: str) -> int:
         if self.lhs.name != var:
@@ -560,6 +576,65 @@ class Assignment(Node):
             return 1
         self.accumulate = False
         return 2
+
+
+@dataclass
+class SaveAssignment(Node):
+    """Store intermediate values into temporary variable."""
+
+    var: OpVar
+    id: int
+    load: bool = False
+    tmpvar: OpVar = field(repr=False, default=None)
+    lhs: OpVar = field(init=False, repr=False, default=None)
+    rhs: OpVar = field(init=False, repr=False, default=None)
+    scalar: bool = field(init=False, default=None)
+
+    def __post_init__(self):
+        super().__post_init__()
+        name = self.var.name
+        if re.search(r"save_\d+_ad", name):
+            raise RuntimeError(f"Variable has aleady saved: {name}")
+        if self.tmpvar is None:
+            self.tmpvar = OpVar(f"{name}_save_{self.id}_ad", index=self.var.index, is_real=self.var.is_real)
+        if self.load:
+            self.lhs = self.var
+            self.rhs = self.tmpvar
+        else:
+            self.lhs = self.tmpvar
+            self.rhs = self.var
+
+    def __deepcopy__(self, memo):
+        return self
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        yield self.rhs
+            
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        if without_savevar:
+            return iter(())
+        else:
+            yield self.lhs
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        return [f"{space}{self.lhs} = {self.rhs}\n"]
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
+        needed = [n for n in (names or []) if n != self.lhs.name]
+        _append_unique(needed, self.rhs.name)
+        return needed
+
+    def check_initial(self, var: str) -> int:
+        if self.lhs.name != var:
+            return 0
+        raise ValueError("This must not appeared at first time.")
+
+    def to_load(self) -> "SaveAssignment":
+        return SaveAssignment(self.var, tmpvar=self.tmpvar, id=self.id, load=True)
 
 
 @dataclass
@@ -576,6 +651,15 @@ class Declaration(Node):
         super().__post_init__()
         if self.dims is not None and not isinstance(self.dims, tuple):
             raise ValueError(f"dims must be tuple of str: {type(dims)}")
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        if self.intent in ("in", "inout"):
+            yield OpVar(name=self.name, is_real=self.is_real(), kind=self.kind)
+        else:
+            return iter(())
+
+    def is_effectively_empty(self) -> bool:
+        return False
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -597,15 +681,6 @@ class Declaration(Node):
         typename = self.typename.lower()
         return typename.startswith("real") or typename.startswith("double")
 
-    def has_assignment_to(self, var: str) -> bool:
-        return False
-
-    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        if self.intent in ("in", "inout"):
-            _append_unique(res, self.name)
-        return res
-
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
         needed = list(names or [])
         if self.intent in ("in", "inout"):
@@ -613,181 +688,67 @@ class Declaration(Node):
                 needed.remove(self.name)
         return needed
 
-@dataclass
-class IfBlock(Node):
-    """An ``if`` block with optional ``else if`` branches and ``else``."""
 
-    condition: Operator
-    body: Block
-    elif_bodies: List[Tuple[Operator, Block]] = field(default_factory=list)
-    else_body: Optional[Block] = None
+@dataclass
+class BranchBlock(Node):
+    """An abstract class for ``if`` and ``select case`` branch stracture."""
+
+    cond_blocks: List[Tuple[Operator, Block]] = field(default_factory=list)
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not isinstance(self.cond_blocks, list):
+            raise ValueError(f"cond_blocks must be a list: {type(self.cond_blocks)}")
+        for tup in self.cond_blocks:
+            if not isinstance(tup, tuple):
+                raise ValueError(f"item in cond_blocks must be a tuple: {type(tup)}")
+            cond, block = tup
+            if isinstance(self, IfBlock):
+                if not (isinstance(cond, Operator) or cond is None):
+                    raise ValueError(f"cond must be a Operator: {type(cond)}")
+            if isinstance(self, SelectBlock):
+                if not (isinstance(cond, tuple) or cond is None):
+                    raise ValueError(f"conds must be a tuple: {type(cond)}")
+                if cond is not None:
+                    for con in cond:
+                        if not isinstance(con, Operator):
+                            raise ValueError(f"cond must be a Operator: {type(con)}")
+            if not isinstance(block, Block):
+                raise ValueError(f"cond must be a Block: {type(block)}")
 
     def iter_children(self) -> Iterator[Node]:
-        yield self.body
-        for _, block in self.elif_bodies:
+        for _, block in self.cond_blocks:
             yield block
-        if self.else_body is not None:
-            yield self.else_body
 
-    def convert_assignments(self, func, reverse=False) -> [IfBlock]:
-        condition = self.condition
-        body = self.body.convert_assignments(func, reverse)[0]
-        elif_bodies = Block([])
-        for cond, block in self.elif_bodies:
-            res = block.convert_assignments(func, reverse)[0]
-            if res is None:
-                res = Block([])
-            elif_bodies.append((cond, res))
-        else_body = None
-        if self.else_body is not None:
-            else_body = self.else_body.convert_assignments(func, reverse)[0]
-        return [IfBlock(condition, body, elif_bodies, else_body)]
-
-    def render(self, indent: int = 0) -> List[str]:
-        space = "  " * indent
-        lines = [f"{space}if ({self.condition}) then\n"]
-        lines.extend(self.body.render(indent+1))
-        for cond, blk in self.elif_bodies:
-            lines.append(f"{space}else if ({cond}) then\n")
-            lines.extend(blk.render(indent+1))
-        if self.else_body is not None:
-            lines.append(f"{space}else\n")
-            lines.extend(self.else_body.render(indent+1))
-        lines.append(f"{space}end if\n")
-        return lines
-
-    def is_effectively_empty(self) -> bool:
-        for block in self.iter_children():
-            if not block.is_effectively_empty():
-                return False
-        return True
-
-    def has_assignment_to(self, var: str) -> bool:
-        for block in self.iter_children():
-            if block.has_assignment_to(var):
-                return True
-        return False
-
-    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        for block in self.iter_children():
-            res = block.assigned_vars(res)
-        return res
-
-    def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        needed = list(names or [])
-        reqs = []
-        for branch in self.iter_children():
-            for var in branch.required_vars(needed):
-                _append_unique(reqs, var)
-        for var in self.condition.collect_vars():
-            _append_unique(reqs, var.name)
-        return reqs
-
-    def collect_vars(self) -> List[str]:
-        vars = []
-        for branch in self.iter_children():
-            for var in branch.collect_vars():
-                _append_unique(vars, var)
-        for var in self.condition.collect_vars():
-            _append_unique(vars, var.name)
-        return vars
-
-    def prune_for(self, targets: Iterable[str]) -> Node:
-        new_body = self.body.prune_for(targets)
-        new_elifs = [(c, blk.prune_for(targets)) for c, blk in self.elif_bodies]
-        new_else = self.else_body.prune_for(targets) if self.else_body is not None else None
-        if (
-            new_body.is_effectively_empty()
-            and all(b.is_effectively_empty() for _, b in new_elifs)
-            and (new_else is None or new_else.is_effectively_empty())
-        ):
-            return Block([])
-        return IfBlock(self.condition, new_body, new_elifs, new_else)
-
-    def check_array_index(self, var: str, index: str) -> bool:
-        for v in self.condition.collect_vars():
-            if v.name == str and v.index_str() != index:
-                return False
-        if not self.body.check_array_index(var, index):
-            return False
-        for cond, block in self.elif_bodies:
-            for v in cond.collect_vars():
-                if v.name == str and v.index_str() != index:
-                    return False
-            if not block.check_array_index(var, index):
-                return False
-        if self.else_body is not None:
-            if not self.else_body.check_array_index(var, index):
-                return False
-        return True
-
-    def check_initial(self, var: str) -> int:
-        results = [b.check_initial(var) for b in self.iter_children()]
-        if all(r > 0 for r in results):
-            if any(r == 2 for r in results):
-                return 2
-            else:
-                return 1
-        if any(r < 0 for r in results):
-            return -1
-        return 0
-
-
-@dataclass
-class SelectBlock(Node):
-    """A ``select case`` construct."""
-
-    expr: Operator
-    cases: List[Tuple[Operator, Block]] = field(default_factory=list)
-    default: Optional[Block] = None
-
-    def iter_children(self) -> Iterator[Node]:
-        for _, blk in self.cases:
-            yield blk
-        if self.default is not None:
-            yield self.default
-
-    def convert_assignments(self, func, reverse=False) -> [SelectBlock]:
-        expr = self.expr
-        cases = []
-        for cond, block in self.cases:
-            cases.append((cond, block.convert_assignments(func, reverse)[0]))
-        default = None
-        if self.default is not None:
-            default = self.default.convert_assignments(func, reverse)[0]
-        return [SelectBlock(expr, cases, default)]
-
-    def render(self, indent: int = 0) -> List[str]:
-        space = "  " * indent
-        lines = [f"{space}select case ({self.expr})\n"]
-        for cond, block in self.cases:
-            conds = ', '.join([str(co) for co in cond])
-            lines.append(f"{space}case ({conds})\n")
-            lines.extend(block.render(indent+1))
-        if self.default is not None:
-            lines.append(f"{space}case default\n")
-            lines.extend(self.default.render(indent+1))
-        lines.append(f"{space}end select\n")
-        return lines
-
-    def is_effectively_empty(self) -> bool:
-        for block in self.iter_children():
-            if not block.is_effectively_empty():
-                return False
-        return True
-
-    def has_assignment_to(self, var: str) -> bool:
-        for block in self.iter_children():
-            if block.has_assignment_to(var):
-                return True
-        return False
-
-    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        for block in self.iter_children():
-            res = block.assigned_vars(res)
-        return res
+    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False) -> List[Node]:
+        cond_blocks = []
+        for cond, block in self.cond_blocks:
+            res = block.convert_assignments(saved_vars, func, reverse)[0]
+            required_vars = res.required_vars()
+            new_res = block.prune_for(required_vars)
+            if not new_res.is_effectively_empty():
+                for node in res.iter_children():
+                    new_res.append(node)
+                res = new_res
+            cond_blocks.append((cond, res))
+        if isinstance(self, IfBlock):
+            block = IfBlock(cond_blocks)
+        elif isinstance(self, SelectBlock):
+            block = SelectBlock(cond_blocks, self.expr)
+        else:
+            raise RuntimeError(f"Invalid class type: {type(self)}")
+        loads = []
+        for var in block.assigned_vars():
+            if not var.endswith("_ad"):
+                var = OpVar(var)
+                loads.append(self._save_vars(var, saved_vars))
+        blocks = []
+        for load in loads:
+            blocks.append(load)
+        blocks.append(block)
+        for load in loads:
+            blocks.append(load)
+        return blocks
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
         needed = list(names or [])
@@ -795,52 +756,92 @@ class SelectBlock(Node):
         for block in self.iter_children():
             common_assigned &= set(block.assigned_vars())
         needed = [n for n in needed if n not in common_assigned]
-
-        res = [var.name for var in self.expr.collect_vars()]
+        res = [var.name for var in self.iter_ref_vars()]
         for block in self.iter_children():
             req = block.required_vars(needed)
-            for n in req:
-                _append_unique(res, n)
+            _extend_unique(res, req)
         return res
 
-    def collect_vars(self) -> List[str]:
-        vars = [var.name for var in self.expr.collect_vars()]
-        for block in self.iter_children():
-            for var in block.collect_vars():
-                _append_unique(vars, var)
-        return vars
-
     def prune_for(self, targets: Iterable[str]) -> Node:
-        new_cases = [(c, blk.prune_for(targets)) for c, blk in self.cases]
-        new_default = self.default.prune_for(targets)
-        if all(b.is_effectively_empty() for _, b in new_cases) and new_default.is_effectively_empty():
+        new_condblocks = []
+        for cond, block in self.cond_blocks:
+            new_block = block.prune_for(targets)
+            if not new_block.is_effectively_empty():
+                new_condblocks.append((cond, new_block))
+        if len(new_condblocks) == 0:
             return Block([])
-        if new_default.is_effectively_empty():
-            new_default = None
-        return SelectBlock(self.expr, new_cases, new_default)
+        if isinstance(self, IfBlock):
+            return IfBlock(new_condblocks)
+        elif isinstance(self, SelectBlock):
+            return SelectBlock(new_condblocks, expr=self.expr)
+        else:
+            raise RuntimeError(f"Invalid class type: {type(self)}")
 
-    def check_array_index(self, var: str, index: str) -> bool:
-        for cond, block in self.cases:
-            for v in cond.collect_vars():
-                if cond.name == str and cond.index_str() != index:
-                    return False
-            if not block.check_array_index(var, index):
-                return False
-        if self.default is not None:
-            if not self.default.check_array_index(var, index):
-                return False
-        return True
-        
     def check_initial(self, var: str) -> int:
         results = [b.check_initial(var) for b in self.iter_children()]
-        if all(r > 0 for r in results):
-            if any(r == 2 for r in results):
-                return 2
-            else:
-                return 1
+        if all(r ==0 for r in results):
+            return 0
         if any(r < 0 for r in results):
             return -1
-        return 0
+        if any(r == 2 for r in results):
+            return 2
+        return 1
+
+
+@dataclass
+class IfBlock(BranchBlock):
+    """An ``if`` block with optional ``else if`` branches and ``else``."""
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        for cond, _ in self.cond_blocks:
+            if cond is not None:
+                for var in cond.collect_vars():
+                    yield var
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        first = True
+        for cond, block in self.cond_blocks:
+            if first or not block.is_effectively_empty():
+                if first:
+                    lines = [f"{space}if ({cond}) then\n"]
+                elif cond is None:
+                    lines.append(f"{space}else\n")
+                else:
+                    lines.append(f"{space}else if ({cond}) then\n")
+                lines.extend(block.render(indent+1))
+            first = False
+        lines.append(f"{space}end if\n")
+        return lines
+
+
+@dataclass
+class SelectBlock(BranchBlock):
+    """A ``select case`` construct."""
+
+    expr: Operator = field(default=None)
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        for var in self.expr.collect_vars():
+            yield var
+        for conds, _ in self.cond_blocks:
+            if conds is not None:
+                for cond in conds:
+                    for var in cond.collect_vars():
+                        yield var
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        lines = [f"{space}select case ({self.expr})\n"]
+        for cond, block in self.cond_blocks:
+            if cond is not None:
+                conds = ', '.join([str(co) for co in cond])
+                lines.append(f"{space}case ({conds})\n")
+            else:
+                lines.append(f"{space}case default\n")
+            lines.extend(block.render(indent+1))
+        lines.append(f"{space}end select\n")
+        return lines
 
 
 @dataclass
@@ -851,9 +852,6 @@ class DoAbst(Node):
     def iter_children(self) -> Iterator[Node]:
         yield self.body
 
-    def is_effectively_empty(self) -> bool:
-        return self.body.is_effectively_empty()
-
 @dataclass
 class DoLoop(DoAbst):
     """A ``do`` loop."""
@@ -863,20 +861,68 @@ class DoLoop(DoAbst):
     end: Operaion
     step: Optional[Operator] = None
 
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        for var in self.start.collect_vars():
+            yield var
+        for var in self.end.collect_vars():
+            yield var
+        if self.step is not None:
+            for var in self.step.collect_vars():
+                yield var
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[str]:
+        yield self.index
+
     def build_do_index_list(self, list: List[str]):
         self.do_index_list = [self.index.name]
         self.do_index_list.extend(list)
         self.body.build_do_index_list(self.do_index_list)
 
-    def convert_assignments(self, func, reverse=False) -> [DoLoop]:
-        body = self.body.convert_assignments(func, reverse)[0]
+    def is_independent(self) -> bool:
+        if self.do_index_list is None:
+            raise RuntimeError("Execute build_do_index_list first.")
+
+        index = ",".join(self.do_index_list)
+
+        def _check(node: Node) -> bool:
+            for var in node.iter_ref_vars():
+                if var.index is not None and var.index_str() != index:
+                    return False
+            for var in node.iter_assign_vars():
+                if var.index is not None and var.index_str() != index:
+                    return False
+            for child in node.iter_children():
+                if isinstance(child, DoLoop):
+                    if not child.is_independent():
+                        return False
+                else:
+                    if not _check(child):
+                        return False
+            return True
+
+        return _check(self.body)
+
+    def scalarize(self) -> None:
+        for child in self.body.iter_children():
+            if isinstance(child, SaveAssignment):
+                child.tmpvar.index = None
+                child.scalar = True
+            elif isinstance(child, DoLoop):
+                child.scalarize()
+
+    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
+        body = self.body.convert_assignments(saved_vars, func, reverse)[0]
         required_vars = body.required_vars()
         new_body = self.body.prune_for(required_vars)
         if not new_body.is_effectively_empty():
-            for node in body.children:
+            for node in body.iter_children():
+                last = new_body.last()
+                if isinstance(last, SaveAssignment) and isinstance(node, SaveAssignment) and last.var == node.var:
+                    new_body.remove_child(last)
+                    if last.load != node.load:
+                        continue
                 new_body.append(node)
             body = new_body
-
         index = self.index
         if reverse:
             start = self.end
@@ -889,7 +935,18 @@ class DoLoop(DoAbst):
             start = self.start
             end = self.end
             step = self.step
-        return [DoLoop(body, index, start, end, step)]
+        block = DoLoop(body, index, start, end, step)
+        block.build_do_index_list([])
+        if block.is_independent():
+            block.scalarize()
+        blocks = []
+        for var in set(block.required_vars()) & set(block.assigned_vars()):
+            if var == self.index.name or var.endswith("_ad"):
+                continue
+            var = OpVar(var)
+            blocks.append(self._save_vars(var, saved_vars))
+        blocks.append(block)
+        return blocks
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -901,16 +958,6 @@ class DoLoop(DoAbst):
         lines.append(f"{space}end do\n")
         return lines
 
-    def has_assignment_to(self, var: str) -> bool:
-        return self.body.has_assignment_to(var) or self.index.name==var
-
-    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        if not self.index.name in res:
-            res.append(self.index.name)
-        res = self.body.assigned_vars(res)
-        return res
-
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
         needed = self.body.required_vars(list(names or []))
         if self.index.name in needed:
@@ -921,15 +968,6 @@ class DoLoop(DoAbst):
                     _append_unique(needed, var.name)
         return needed
 
-    def collect_vars(self) -> List[str]:
-        vars = self.body.collect_vars()
-        _append_unique(vars, self.index.name)
-        for op in [self.start, self.end, self.step]:
-            if op is not None:
-                for var in op.collect_vars():
-                    _append_unique(vars, var.name)
-        return vars
-
     def prune_for(self, targets: Iterable[str]) -> Node:
         new_body = self.body.prune_for(targets)
         if new_body.is_effectively_empty():
@@ -939,11 +977,9 @@ class DoLoop(DoAbst):
     def check_array_index(self, var: str, index: str) -> bool:
         if self.do_index_list is None:
             raise RuntimeError("Execute build_do_index_list first.")
-        for op in [self.start, self.end, self.step]:
-            if op is not None:
-                for v in op.collect_vars():
-                    if v.name == var and v.index_str() != index:
-                        return False
+        for v in self.iter_ref_vars():
+            if v.name == var and (v.index is not None and v.index_str() != index):
+                return False
         index = ",".join(self.do_index_list)
         return self.body.check_array_index(str, index)
 
@@ -963,9 +999,26 @@ class DoWhile(DoAbst):
 
     cond: OpVar
 
-    def convert_assignments(self, func, reverse=False) -> [DoWhile]:
-        body = self.body.convert_assignments(func, reverse)[0]
-        return [DoWhile(body, self.cond)]
+    def iter_children(self) -> Iterator[Node]:
+        yield self.body
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        iter(self.cond.collect_vars())
+
+    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
+        body = self.body.convert_assignments(saved_vars, func, reverse)[0]
+        required_vars = body.required_vars()
+        new_body = self.body.prune_for(required_vars)
+        if not new_body.is_effectively_empty():
+            for node in body.children:
+                new_body.append(node)
+            body = new_body
+        block = DoWhile(body, self.cond)
+        blocks = [block]
+        for var in block.assigned_vars():
+            var = OpVar(var)
+            blocks.append(self._save_vars(var, saved_vars))
+        return blocks
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -974,37 +1027,17 @@ class DoWhile(DoAbst):
         lines.append(f"{space}end do\n")
         return lines
 
-    def has_assignment_to(self, var: str) -> bool:
-        return self.body.has_assignment_to(var)
-
-    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        res = list(names or [])
-        res = self.body.assigned_vars(res)
-        return res
-
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
         needed = self.body.required_vars(list(names or []))
         for var in self.cond.collect_vars():
             _append_unique(needed, var.name)
         return needed
 
-    def collect_vars(self) -> List[str]:
-        vars = self.body.collect_vars()
-        for var in self.cond.collect_vars():
-            _append_unique(vars, var.name)
-        return vars
-
     def prune_for(self, targets: Iterable[str]) -> Node:
         new_body = self.body.prune_for(targets)
         if new_body.is_effectively_empty():
             return Block([])
         return DoWhild(new_body, self.cond)
-
-    def check_array_index(self, var: str, index: str) -> bool:
-        for v in self.cond.collect_vars():
-            if v.name == var and v.index_str() != index:
-                return False
-        return self.body.check_array_index(str, index)
 
     def check_initial(self, var: str) -> int:
         if self.body.has_assignment_to(var):

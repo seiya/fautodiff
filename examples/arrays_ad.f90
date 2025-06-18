@@ -1,4 +1,4 @@
-module array_examples_ad
+module array_ad
   implicit none
 
 contains
@@ -11,10 +11,10 @@ contains
     real, intent(out) :: b_ad(n)
     real, intent(inout) :: c_ad(n)
 
-    b_ad(:n:1) = c_ad
-    a_ad = c_ad(:)
-    b_ad = c_ad(:) + b_ad
-    c_ad(:) = 0.0
+    b_ad(:n:1) = c_ad ! c = c(:) + b(:n:1)
+    a_ad = c_ad(:) ! c(:) = a + b
+    b_ad = c_ad(:) + b_ad ! c(:) = a + b
+    c_ad(:) = 0.0 ! c(:) = a + b
 
     return
   end subroutine elementwise_add_ad
@@ -44,10 +44,10 @@ contains
 
     do j = m, 1, - 1
       do i = n, 1, - 1
-        a_ad(i,j) = d_ad(i,j)
-        b_ad(i,j) = d_ad(i,j) * c
-        c_ad = d_ad(i,j) * b(i,j) + c_ad
-        d_ad(i,j) = 0.0
+        a_ad(i,j) = d_ad(i,j) ! d(i,j) = a(i,j) + b(i,j) * c
+        b_ad(i,j) = d_ad(i,j) * c ! d(i,j) = a(i,j) + b(i,j) * c
+        c_ad = d_ad(i,j) * b(i,j) + c_ad ! d(i,j) = a(i,j) + b(i,j) * c
+        d_ad(i,j) = 0.0 ! d(i,j) = a(i,j) + b(i,j) * c
       end do
     end do
 
@@ -64,10 +64,10 @@ contains
     integer :: i
 
     do i = n, 1, - 1
-      a_ad(i) = res_ad * b(i)
-      b_ad(i) = res_ad * a(i)
+      a_ad(i) = res_ad * b(i) ! res = res + a(i) * b(i)
+      b_ad(i) = res_ad * a(i) ! res = res + a(i) * b(i)
     end do
-    res_ad = 0.0
+    res_ad = 0.0 ! res = 0.0
 
     return
   end subroutine dot_product_ad
@@ -84,10 +84,10 @@ contains
     a_ad(:) = 0.0
 
     do i = n, 1, - 1
-      a_ad(idx(i)) = c_ad(idx(i)) * 2.0 * a(idx(i)) + a_ad(idx(i))
-      c_ad(idx(i)) = 0.0
-      a_ad(idx(i)) = b_ad(i) + a_ad(idx(i))
-      b_ad(i) = 0.0
+      a_ad(idx(i)) = c_ad(idx(i)) * 2.0 * a(idx(i)) + a_ad(idx(i)) ! c(idx(i)) = a(idx(i))**2
+      c_ad(idx(i)) = 0.0 ! c(idx(i)) = a(idx(i))**2
+      a_ad(idx(i)) = b_ad(i) + a_ad(idx(i)) ! b(i) = a(idx(i)) + 1.0
+      b_ad(i) = 0.0 ! b(i) = a(idx(i)) + 1.0
     end do
 
     return
@@ -98,8 +98,8 @@ contains
     real, intent(in)  :: a(n)
     real, intent(out) :: a_ad(n)
     real, intent(inout) :: b_ad(n)
-    integer :: in
     integer :: i
+    integer :: in
     integer :: ip
 
     a_ad(:) = 0.0
@@ -112,13 +112,13 @@ contains
       else if (i == n) then
         ip = 1
       end if
-      a_ad(i) = b_ad(i) * 2.0 / 4.0 + a_ad(i)
-      a_ad(in) = b_ad(i) / 4.0 + a_ad(in)
-      a_ad(ip) = b_ad(i) / 4.0 + a_ad(ip)
-      b_ad(i) = 0.0
+      a_ad(i) = b_ad(i) * 2.0 / 4.0 + a_ad(i) ! b(i) = (2.0 * a(i) + a(in) + a(ip)) / 4.0
+      a_ad(in) = b_ad(i) / 4.0 + a_ad(in) ! b(i) = (2.0 * a(i) + a(in) + a(ip)) / 4.0
+      a_ad(ip) = b_ad(i) / 4.0 + a_ad(ip) ! b(i) = (2.0 * a(i) + a(in) + a(ip)) / 4.0
+      b_ad(i) = 0.0 ! b(i) = (2.0 * a(i) + a(in) + a(ip)) / 4.0
     end do
 
     return
   end subroutine stencil_ad
 
-end module array_examples_ad
+end module array_ad

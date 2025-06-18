@@ -1,4 +1,4 @@
-module array_examples
+module array
   implicit none
 
 contains
@@ -92,4 +92,4 @@ contains
     return
   end subroutine stencil
 
-end module array_examples
+end module array
