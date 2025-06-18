@@ -8,7 +8,8 @@ contains
     real, intent(in) :: a(n), b(n)
     real, intent(out) :: c(n)
 
-    c = a + b
+    c(:) = a + b
+    c = c(:) + b(:n:1)
 
     return
   end subroutine elementwise_add
@@ -85,7 +86,7 @@ contains
        else if (i == n) then
           ip = 1
        end if
-       b(i) = (a(in) + 2.0 * a(i) + a(ip)) / 4.0
+       b(i) = (2.0 * a(i) + a(in) + a(ip)) / 4.0
     end do
 
     return
