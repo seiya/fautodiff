@@ -23,10 +23,14 @@ from Fortran code and for finding subroutines. These helpers rely on
 from fautodiff import parser
 
 # Parse a Fortran source file
-ast = parser.parse_file("example.f90")
+modules = parser.parse_file("example.f90")
 
-# List all subroutine names in the file
-print(parser.find_subroutines(ast))
+# List all routine names in the file
+print(parser.find_subroutines(modules))
+
+# Inspect the parsed modules
+for mod in modules:
+    print(mod.name, [r.name for r in mod.routines])
 ```
 
 ## Generating AD code

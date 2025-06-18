@@ -190,12 +190,13 @@ def _stmt2op(stmt, decls):
 
 __all__ = [
     "parse_file",
+    "find_subroutines",
     "_parse_routine",
 ]
 
 
 def parse_file(path):
-    """Parse a Fortran source file and return the ``fparser`` AST."""
+    """Parse ``path`` and return a list of :class:`Module` nodes."""
     reader = FortranFileReader(path)
     factory = ParserFactory().create(std="f2008")
     ast = factory(reader)
@@ -212,6 +213,27 @@ def parse_file(path):
                         mod_node.routines.append(_parse_routine(c, path))
                 break
     return output
+
+
+def find_subroutines(modules):
+    """Return the names of routines contained in ``modules``.
+
+    Parameters
+    ----------
+    modules : Iterable[Module]
+        Modules as returned by :func:`parse_file`.
+
+    Returns
+    -------
+    List[str]
+        Names of all subroutines and functions.
+    """
+
+    names = []
+    for mod in modules:
+        for routine in mod.routines:
+            names.append(routine.name)
+    return names
 
 
 def _parse_routine(content, filename):
