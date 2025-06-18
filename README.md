@@ -27,6 +27,10 @@ modules = parser.parse_file("example.f90")
 
 # List all routine names in the file
 print(parser.find_subroutines(modules))
+
+# Inspect the parsed modules
+for mod in modules:
+    print(mod.name, [r.name for r in mod.routines])
 ```
 
 ## Generating AD code
