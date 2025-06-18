@@ -24,10 +24,10 @@ class Operator:
         else:
             return f"{arg}"
 
-    def collect_vars(self) -> List[OpVar]:
+    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         vars = []
         for arg in self.args:
-            for var in arg.collect_vars():
+            for var in arg.collect_vars(without_index):
                 if var not in vars:
                     vars.append(var)
         return vars
@@ -44,6 +44,8 @@ class Operator:
         return OpNeg(args=[self])
 
     def __add__(self, other):
+        if isinstance(other, int):
+            return self + OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 0:
                 return other
@@ -79,6 +81,8 @@ class Operator:
         return NotImplemented
 
     def __sub__(self, other):
+        if isinstance(other, int):
+            return self - OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 0:
                 return - other
@@ -118,6 +122,8 @@ class Operator:
         return NotImplemented
 
     def __mul__(self, other):
+        if isinstance(other, int):
+            return other * OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 1:
                 return other
@@ -175,6 +181,8 @@ class Operator:
         return NotImplemented
 
     def __truediv__(self, other):
+        if isinstance(other, int):
+            return other / OpInt(other)
         if isinstance(other, Operator):
             if isinstance(other, OpInt) and other.val == 1:
                 return self
@@ -218,11 +226,7 @@ class Operator:
 
     def __pow__(self, other):
         if isinstance(other, int):
-            if other < 0:
-                other = - OpInt(abs(other))
-            else:
-                other = OpInt(other)
-            return OpPow(args=[self, other])
+            return OpPow(args=[self, OpInt(other)])
         if isinstance(other, Operator):
             if isinstance(other, OpInt) and other.val == 0:
                 return OpInt(1, target=other.target, kind=other.kind)
@@ -238,15 +242,23 @@ class Operator:
         return NotImplemented
 
     def __lt__(self, other):
+        if isinstance(other, int):
+            return self < OpInt(other)
         return OpLog("<", args=[self, other])
 
     def __le__(self, other):
+        if isinstance(other, int):
+            return self <= OpInt(other)
         return OpLog("<=", args=[self, other])
 
     def __gt__(self, other):
+        if isinstance(other, int):
+            return self > OpInt(other)
         return OpLog(">", args=[self, other])
 
     def __ge__(self, other):
+        if isinstance(other, int):
+            return self >= OpInt(other)
         return OpLog(">=", args=[self, other])
 
 @dataclass
@@ -258,7 +270,7 @@ class OpLeaf(Operator):
 @dataclass
 class OpNum(OpLeaf):
 
-    def collect_vars(self) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpLeaf]:
         return []
 
     def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
@@ -276,6 +288,17 @@ class OpInt(OpNum):
             raise ValueError(f"val must be >= 0: {val}")
         self.val = val
         self.target = target
+
+    def __new__(cls, val: int, kind: str = None, target: OpVar = None):
+        if val < 0:
+            instance = super().__new__(cls)
+            instance.__init__(- val, kind, target)
+            return -instance
+        else:
+            return super().__new__(cls)
+
+    def __reduce__(self):
+        return(self.__class__, (self.val, self.kind, self.target,))
 
     def __str__(self) -> str:
         kind = None
@@ -300,7 +323,7 @@ class OpChr(OpLeaf):
 
     name: str = field(default="")
 
-    def collect_vars(self) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpLeaf]:
         return []
 
 @dataclass
@@ -326,7 +349,7 @@ class OpVar(OpLeaf):
     name: str = field(default="")
     index: List[Operator] = None
     is_real: bool = None
-    index_vars: List[OpLear] = field(init=False, default=None)
+    index_vars: List[OpLear] = field(init=False, repr=False, default=None)
 
     def __init__(self, name: str, index: List[Operator] = None, is_real: bool = None, kind: str = None):
         super().__init__(args=[])
@@ -350,9 +373,9 @@ class OpVar(OpLeaf):
         name = f"{self.name}{suffix}"
         return OpVar(name, index=self.index, is_real=self.is_real, kind=self.kind)
 
-    def collect_vars(self) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpLeaf]:
         vars = [self]
-        if self.index_vars is not None:
+        if (not without_index) and self.index_vars is not None:
             for v in self.index_vars:
                 if not v in vars:
                     vars.append(v)
@@ -363,10 +386,23 @@ class OpVar(OpLeaf):
             return OpInt(1, target=target)
         return OpInt(0, target=target)
 
-    def index_str(self) -> str:
+    def is_partial_access(self) -> bool:
+        if self.index is None:
+            return False
+        for idx in self.index:
+            if isinstance(idx, OpVar) or isinstance(idx, OpInt):
+                return True
+            if isinstance(idx, OpRange):
+                return False
+
+    def index_list(self) -> List[str]:
         if self.index is not None and len(self.index) > 0:
-            index = ','.join([':' if v is None else str(v) for v in self.index])
+            index = [':' if v is None else str(v) for v in self.index]
             return index
+        return []
+
+    def index_str(self) -> str:
+        return ",".join(self.index_list())
 
     def __str__(self) -> str:
         if self.index is None or len(self.index) == 0:
@@ -378,10 +414,12 @@ class OpVar(OpLeaf):
         if isinstance(other, type(self)) and self.name == other.name:
             if self.index == other.index:
                 return True
-            if self.index is None and all(isinstance(idx, OpRange) for idx in other.index):
+            if self.index is None or other.index is None:
                 return True
-            if other.index is None and all(isinstance(idx, OpRange) for idx in self.index):
-                return True
+            #if self.index is None and all(isinstance(idx, OpRange) for idx in other.index):
+            #    return True
+            #if other.index is None and all(isinstance(idx, OpRange) for idx in self.index):
+            #    return True
         return False
 
 @dataclass
@@ -660,13 +698,14 @@ class OpRange(Operator):
         if len(self.args) > 3:
             raise ValueError(f"Length of args must be at most 3: {self.args}")
 
-    def collect_vars(self) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpLeaf]:
         vars = []
-        for arg in self.args:
-            if arg is not None:
-                for v in arg.collect_vars():
-                    if not v in vars:
-                        vars.append(v)
+        if not without_index:
+            for arg in self.args:
+                if arg is not None:
+                    for v in arg.collect_vars():
+                        if not v in vars:
+                            vars.append(v)
         return vars
 
     def __str__(self) -> str:

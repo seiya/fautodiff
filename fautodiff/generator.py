@@ -21,6 +21,7 @@ from .code_tree import (
     DoLoop,
     Declaration,
     Assignment,
+    SaveAssignment,
     Statement,
     render_program,
 )
@@ -195,55 +196,62 @@ def _generate_ad_subroutine(routine_org, warnings):
         subroutine.ad_content = ad_block
         return subroutine
 
-    def _backward(lhs: OpVar, rhs: Operator, info) -> List[Assignment]:
+    def _backward(lhs: OpVar, rhs: Operator, info: dict) -> List[Assignment]:
         if not lhs.is_real:
             return Block([])
         grad_lhs = lhs.add_suffix("_ad")
+
+        #ad_info = f"{lhs} = {rhs} @ line {info.get('line','?')}"
+        ad_info = f"{lhs} = {rhs}"
 
         if isinstance(rhs, OpFunc):
             handler = rhs.special_handler(grad_lhs, rhs.args)
             if handler is not None:
                 v = rhs.args[0].add_suffix("_ad")
-                return [Assignment(v, handler, accumulate=(not v==grad_lhs))]
+                return [Assignment(v, handler, accumulate=(not v==grad_lhs), ad_info=ad_info)]
 
-        assigs = []
         vars = rhs.collect_vars()
+        assigns = []
         for var in vars:
             if not var.is_real:
                 continue
             dev = rhs.derivative(var, target=grad_lhs, info=info, warnings=warnings)
             v = var.add_suffix("_ad")
             res = grad_lhs * dev
-            if not v == res:
-                assigs.append(Assignment(v, res, accumulate=(not v==grad_lhs)))
+            assigns.append(Assignment(v, res, accumulate=(not v==grad_lhs), ad_info=ad_info))
         if not lhs in vars:
-            assigs.append(Assignment(grad_lhs, OpReal(0.0, kind=grad_lhs.kind)))
-        return assigs
+            assigns.append(Assignment(grad_lhs, OpReal("0.0", kind=grad_lhs.kind), accumulate=False, ad_info=ad_info))
+        return assigns
 
         raise ValueError(f"Unsupported operation: {type(rhs)}")
 
-    ad_code = routine_org.content.convert_assignments(_backward, reverse=True)[0]
-    ad_code = ad_code.prune_for([arg.name for arg in grad_args])
+    saved_vars = []
+    ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True)[0]
+    #print("subroutine: ", subroutine.name) # for debug
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
         # check undefined reference
         vars = []
-        for var in ad_code.assigned_vars():
-            if not var.endswith("_ad"):
+        for var in ad_code.assigned_vars(without_savevar=True):
+            name = var.name
+            if name.endswith("_ad"):
+                name_org = name.removesuffix("_ad")
+                found = False
+                for arg in grad_args:
+                    if arg.name == name:
+                        found = True
+                        break
+                if found:
+                    continue
+            else:
                 continue
-            found = False
-            for arg in grad_args:
-                if arg.name == var:
-                    found = True
-                    break
-            if not found:
-                v_org = routine_org.get_var(var.removesuffix("_ad"))
-                v = Variable(name=var, typename=v_org.typename, kind=v_org.kind, dims=v_org.dims)
-                subroutine.decls.append(v.to_decl())
+            v_org = routine_org.get_var(name_org)
+            v = Variable(name=name, typename=v_org.typename, kind=v_org.kind, dims=v_org.dims)
+            if not v in vars:
                 vars.append(v)
+                subroutine.decls.append(v.to_decl())
         for var in out_grad_args:
             vars.append(var)
         for var in vars:
-            ad_code.build_do_index_list([])
             ret = ad_code.check_initial(var.name)
             if ret == -1:
                 if var.dims is not None and len(var.dims) > 0:
@@ -251,11 +259,16 @@ def _generate_ad_subroutine(routine_org, warnings):
                 else:
                     index = None
                 subroutine.ad_init.append(Assignment(OpVar(var.name, index=index), OpReal(0.0, kind=var.kind)))
+        ad_code = ad_code.prune_for([OpVar(var.name) for var in grad_args])
         # check undefined output variables
-        vars = ad_code.required_vars([var.name for var in out_grad_args])
+        vars = ad_code.required_vars([OpVar(var.name) for var in out_grad_args])
         vars = subroutine.ad_init.required_vars(vars)
-        for v in vars:
-            var = next((var for var in out_grad_args if var.name == v), None)
+        var_names = []
+        for var in vars:
+            if var.name not in vars:
+                var_names.append(var.name)
+        for name in var_names:
+            var = next((var for var in out_grad_args if var.name == name), None)
             if var is not None:
                 if var.dims is not None and len(var.dims) > 0:
                     index = (None,) * len(var.dims)
@@ -265,21 +278,46 @@ def _generate_ad_subroutine(routine_org, warnings):
         # now ad_code is completed
         ad_block.extend(ad_code)
 
-    required_vars = ad_block.required_vars()
-    fw_block = routine_org.content.prune_for(required_vars)
+    fw_block = routine_org.content.prune_for(ad_block.required_vars())
+    last = fw_block.last()
+    first = ad_block.first()
+    if isinstance(last, SaveAssignment) and isinstance(first, SaveAssignment) and last.var==first.var and last.load != first.load:
+        fw_block.remove_child(last)
+        ad_block.remove_child(first)
     if not fw_block.is_effectively_empty():
         subroutine.content.extend(fw_block)
 
+    vars = []
     for var in subroutine.collect_vars():
+        if var.name not in vars:
+            vars.append(var.name)
+    for var in vars:
         if subroutine.decls.find_by_name(var) is None:
             decl = routine_org.decls.find_by_name(var)
-            if decl is None:
-                raise ValueError(f"declaration does not found in the original code: {var} in {routine_org.name}")
-            subroutine.decls.append(decl)
+            if decl is not None:
+                if decl.intent is not None and decl.intent == "out":
+                    decl.intent = None
+                subroutine.decls.append(decl)
 
-    required_vars = subroutine.required_vars()
-    if len(required_vars) > 0:
-        raise RuntimeError(f"Required variables are remained: {required_vars} in {subroutine.name}")
+    for sa in reversed(saved_vars):
+        try:
+            v_org = routine_org.get_var(sa.var.name)
+        except ValueError as e:
+            ad_block.extend(ad_code)
+            print("".join(subroutine.render()))
+            raise
+        if sa.scalar:
+            dims = None
+        else:
+            dims = v_org.dims
+        v = Variable(name=sa.tmpvar.name, typename=v_org.typename, kind=v_org.kind, dims=dims)
+        subroutine.decls.append(v.to_decl())
+
+    subroutine = subroutine.prune_for([OpVar(var.name) for var in grad_args])
+
+    required_vnames = [str(var) for var in subroutine.required_vars()]
+    if len(required_vnames) > 0:
+        _warn(warnings, {}, f"{required_vnames} in {subroutine.name}", "Required variables are remained")
 
     return subroutine
 
