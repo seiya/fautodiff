@@ -44,6 +44,10 @@ class Operator:
         return OpNeg(args=[self])
 
     def __add__(self, other):
+        if isinstance(other, int):
+            if other < 0:
+                return self + OpNeg(OpInt(other))
+            return self + OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 0:
                 return other
@@ -79,6 +83,10 @@ class Operator:
         return NotImplemented
 
     def __sub__(self, other):
+        if isinstance(other, int):
+            if other < 0:
+                return self - OpNeg(OpInt(other))
+            return self - OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 0:
                 return - other
@@ -238,15 +246,31 @@ class Operator:
         return NotImplemented
 
     def __lt__(self, other):
+        if isinstance(other, int):
+            if other < 0:
+                return self < OpNeg(OpInt(other))
+            return self < OpInt(other)
         return OpLog("<", args=[self, other])
 
     def __le__(self, other):
+        if isinstance(other, int):
+            if other < 0:
+                return self <= OpNeg(OpInt(other))
+            return self <= OpInt(other)
         return OpLog("<=", args=[self, other])
 
     def __gt__(self, other):
+        if isinstance(other, int):
+            if other < 0:
+                return self > OpNeg(OpInt(other))
+            return self > OpInt(other)
         return OpLog(">", args=[self, other])
 
     def __ge__(self, other):
+        if isinstance(other, int):
+            if other < 0:
+                return self >= OpNeg(OpInt(other))
+            return self >= OpInt(other)
         return OpLog(">=", args=[self, other])
 
 @dataclass
