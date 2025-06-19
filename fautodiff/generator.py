@@ -134,6 +134,28 @@ def _find_index_expr(expr, var, all_indices=False):
         return uniq.pop()
     return None
 
+
+def _collect_assignment_counts(node, counts):
+    """Recursively count assignments to variables in ``node``."""
+    if isinstance(node, Assignment):
+        name = node.lhs.name
+        counts[name] = counts.get(name, 0) + 1
+    for child in node.iter_children():
+        _collect_assignment_counts(child, counts)
+    return counts
+
+
+def _find_saved_vars(routine_org, ad_block):
+    """Return mapping of variables whose previous values must be saved."""
+
+    required = set(ad_block.required_vars())
+    counts = _collect_assignment_counts(routine_org.content, {})
+    saved = {}
+    for var, cnt in counts.items():
+        if cnt > 1 and var in required:
+            saved[var] = f"{_sanitize_var(var)}_save"
+    return saved
+
 def _generate_ad_subroutine(routine_org, warnings):
     # Collect information of aruguments
     args = []
