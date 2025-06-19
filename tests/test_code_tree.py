@@ -13,6 +13,12 @@ class TestRenderProgram(unittest.TestCase):
         prog = code_tree.Block([code_tree.Assignment(operators.OpVar("a"), operators.OpInt(1))])
         self.assertEqual(code_tree.render_program(prog), "a = 1\n")
 
+    def test_save_assignment_render(self):
+        prog = code_tree.Block([
+            code_tree.SaveAssignment(operators.OpVar("tmp"), operators.OpVar("a"))
+        ])
+        self.assertEqual(code_tree.render_program(prog), "tmp = a\n")
+
     def test_if_else_block(self):
         prog = code_tree.Block(
             [
@@ -113,6 +119,19 @@ class TestNodeMethods(unittest.TestCase):
         self.assertEqual(sub.defined_var_names(), ["a", "b"])
         self.assertEqual(sub.assigned_vars(), ["a", "b"])
         self.assertEqual(sub.required_vars(), [])
+
+    def test_save_assignment_analysis(self):
+        node = code_tree.SaveAssignment(operators.OpVar("tmp"), operators.OpVar("a"))
+        self.assertEqual(node.assigned_vars(), ["tmp"])
+        self.assertEqual(node.required_vars(), ["a"])
+
+    def test_prune_for_save_assignment(self):
+        blk = code_tree.Block([
+            code_tree.SaveAssignment(operators.OpVar("t"), operators.OpVar("a")),
+            code_tree.Assignment(operators.OpVar("b"), operators.OpVar("t")),
+        ])
+        pruned = blk.prune_for(["b"])
+        self.assertEqual(code_tree.render_program(pruned), "t = a\n" "b = t\n")
 
     def test_prune_for(self):
         blk = code_tree.Block([
