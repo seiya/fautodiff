@@ -563,6 +563,68 @@ class Assignment(Node):
 
 
 @dataclass
+class SaveAssignment(Node):
+    """Store ``var`` into temporary ``tmp``."""
+
+    tmp: OpVar
+    var: OpVar
+    info: Optional[dict] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not isinstance(self.tmp, OpVar):
+            raise ValueError(f"tmp must be OpVar: {type(self.tmp)}")
+        if not isinstance(self.var, OpVar):
+            raise ValueError(f"var must be OpVar: {type(self.var)}")
+
+    def convert_assignments(self, func, reverse=False) -> List[Assignment]:
+        return func(self.tmp, self.var, self.info)
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        if self.tmp == self.var:
+            return []
+        return [f"{space}{self.tmp} = {self.var}\n"]
+
+    def has_assignment_to(self, var: str) -> bool:
+        return self.tmp.name.lower() == var.lower()
+
+    def assigned_vars(self, names: Optional[List[str]] = None) -> List[str]:
+        res = list(names or [])
+        _append_unique(res, self.tmp.name)
+        return res
+
+    def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
+        needed = [n for n in (names or []) if n != self.tmp.name]
+        for v in self.var.collect_vars():
+            _append_unique(needed, v.name)
+        return needed
+
+    def collect_vars(self) -> List[str]:
+        vars = []
+        for v in self.tmp.collect_vars():
+            _append_unique(vars, v.name)
+        for v in self.var.collect_vars():
+            _append_unique(vars, v.name)
+        return vars
+
+    def check_array_index(self, var: str, index: str) -> bool:
+        for v in self.tmp.collect_vars():
+            if v.name == var and v.index_str() != index:
+                return False
+        for v in self.var.collect_vars():
+            if v.name == var and v.index_str() != index:
+                return False
+        return True
+
+    def check_initial(self, var: str) -> int:
+        if self.tmp.name != var:
+            return 0
+        if self.var.name == var:
+            return -1
+        return 1
+
+@dataclass
 class Declaration(Node):
     """A variable declaration."""
 
