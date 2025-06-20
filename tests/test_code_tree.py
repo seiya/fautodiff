@@ -239,5 +239,65 @@ class TestVariable(unittest.TestCase):
             code_tree.Variable("a(i)", "real")
 
 
+class TestLoopRequiredVars(unittest.TestCase):
+    def test_simple_loop(self):
+        body = code_tree.Block([
+            code_tree.Assignment(
+                operators.OpVar("a", index=[operators.OpVar("i")]),
+                operators.OpVar("b", index=[operators.OpVar("i")]),
+            )
+        ])
+        loop = code_tree.DoLoop(
+            body=body,
+            index=operators.OpVar("i"),
+            start=operators.OpInt(1),
+            end=operators.OpVar("n"),
+        )
+        loop.build_do_index_list([])
+        self.assertEqual(loop.required_vars(), ["b", "n"])
+
+    def test_self_reference_loop(self):
+        body = code_tree.Block([
+            code_tree.Assignment(
+                operators.OpVar("a", index=[operators.OpVar("i")]),
+                operators.OpVar("a", index=[operators.OpVar("i")])
+                + operators.OpVar("c"),
+            )
+        ])
+        loop = code_tree.DoLoop(
+            body=body,
+            index=operators.OpVar("i"),
+            start=operators.OpInt(1),
+            end=operators.OpVar("n"),
+        )
+        loop.build_do_index_list([])
+        self.assertEqual(loop.required_vars(), ["a", "c", "n"])
+
+    def test_nested_loop(self):
+        inner = code_tree.DoLoop(
+            body=code_tree.Block([
+                code_tree.Assignment(
+                    operators.OpVar(
+                        "a", index=[operators.OpVar("i"), operators.OpVar("j")]
+                    ),
+                    operators.OpVar(
+                        "b", index=[operators.OpVar("i"), operators.OpVar("j")]
+                    ),
+                )
+            ]),
+            index=operators.OpVar("j"),
+            start=operators.OpInt(1),
+            end=operators.OpVar("m"),
+        )
+        outer = code_tree.DoLoop(
+            body=code_tree.Block([inner]),
+            index=operators.OpVar("i"),
+            start=operators.OpInt(1),
+            end=operators.OpVar("n"),
+        )
+        outer.build_do_index_list([])
+        self.assertEqual(outer.required_vars(), ["b", "m", "n"])
+
+
 if __name__ == "__main__":
     unittest.main()

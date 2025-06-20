@@ -981,7 +981,7 @@ class DoLoop(DoAbst):
             if v.name == var and (v.index is not None and v.index_str() != index):
                 return False
         index = ",".join(self.do_index_list)
-        return self.body.check_array_index(str, index)
+        return self.body.check_array_index(var, index)
 
     def check_initial(self, var: str) -> int:
         if self.do_index_list is None:
