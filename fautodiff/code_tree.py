@@ -76,6 +76,7 @@ class Node:
     def __post_init__(self):
         self.__id = Node._id_counter
         Node._id_counter += 1
+        self.do_index_list = []
 
     # ------------------------------------------------------------------
     # basic node API
@@ -91,11 +92,22 @@ class Node:
 
     def has_assignment_to(self, var: str) -> bool:
         """Return ``True`` if ``var`` is assigned within this node."""
-        if any(var == v.name for v in self.iter_ref_vars()):
-            return True
         if any(var == v.name for v in self.iter_assign_vars()):
             return True
         return any(child.has_assignment_to(var) for child in self.iter_children())
+
+    def has_partial_access_to(self, var: str) -> bool:
+        """Return ``True`` if ``var`` is accessed with index within this node."""
+        for v in self.iter_ref_vars():
+            if v.name==var and v.index is not None:
+                return True
+        for v in self.iter_assign_vars():
+            if v.name==var and v.index is not None:
+                return True
+        for child in self.iter_children():
+            if child.has_partial_access_to(var):
+                return True
+        return False
 
     # ------------------------------------------------------------------
     # node tree helpers
@@ -236,10 +248,10 @@ class Node:
     def check_array_index(self, var: str, index: str) -> bool:
         """Check all the reference to array ``var`` are with the same index ``index``"""
         for v in self.iter_ref_vars():
-            if v.name == var and (v.index is not None and v.index_str() != index):
+            if v.name == var and v.index_str() != index:
                 return False
         for v in self.iter_assign_vars():
-            if v.name == var and (v.index is not None and v.index_str() != index):
+            if v.name == var and v.index_str() != index:
                 return False
         for child in self.iter_children():
             if not child.check_array_index(var, index):
@@ -304,15 +316,19 @@ class Block(Node):
     def append(self, node: Node) -> None:
         """Append ``node`` to this block."""
         node.set_parent(self)
+        node.build_do_index_list(self.do_index_list)
         self.__children.append(node)
 
     def extend(self, nodes: Iterable[Node]) -> None:
         """Extend this block with ``nodes``."""
+        for node in nodes:
+            node.build_do_index_list(self.do_index_list)
         self.__children.extend(nodes)
 
     def insert_before(self, id: int, node:Node) -> Node:
         for i, child in enumerate(self.__children):
             if child.get_id() == id:
+                node.build_do_index_list(self.do_index_list)
                 return self.__children.insert(i, node)
         raise ValueError("id is not found")
 
@@ -558,8 +574,11 @@ class Assignment(Node):
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
         lhs_base = self.lhs.name
-        needed = [n for n in (names or []) if n != lhs_base]
-        for var in self.lhs.collect_vars():
+        needed = (names or [])
+        do_index = ",".join(self.do_index_list)
+        if self.lhs.index is None or do_index in self.lhs.index_str():
+            needed = [n for n in needed if n != lhs_base]
+        for var in self.lhs.collect_vars(): # variables in indexes
             if var.name != lhs_base:
                 _append_unique(needed, var.name)
         _extend_unique(needed, self.rhs_names)
@@ -847,10 +866,10 @@ class SelectBlock(BranchBlock):
 @dataclass
 class DoAbst(Node):
 
-    body: Block
+    _body: Block
 
     def iter_children(self) -> Iterator[Node]:
-        yield self.body
+        yield self._body
 
 @dataclass
 class DoLoop(DoAbst):
@@ -860,6 +879,10 @@ class DoLoop(DoAbst):
     start: Operaion
     end: Operaion
     step: Optional[Operator] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.build_do_index_list([])
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.start.collect_vars():
@@ -876,21 +899,21 @@ class DoLoop(DoAbst):
     def build_do_index_list(self, list: List[str]):
         self.do_index_list = [self.index.name]
         self.do_index_list.extend(list)
-        self.body.build_do_index_list(self.do_index_list)
+        self._body.build_do_index_list(self.do_index_list)
 
     def is_independent(self) -> bool:
-        if self.do_index_list is None:
-            raise RuntimeError("Execute build_do_index_list first.")
-
-        index = ",".join(self.do_index_list)
+        do_index = ",".join(self.do_index_list)
 
         def _check(node: Node) -> bool:
             for var in node.iter_ref_vars():
-                if var.index is not None and var.index_str() != index:
+                if var.index is not None and (not do_index in var.index_str()):
                     return False
             for var in node.iter_assign_vars():
-                if var.index is not None and var.index_str() != index:
+                if var.index is not None and (not do_index in var.index_str()):
                     return False
+            reqs = node.required_vars()
+            if isinstance(node, DoLoop):
+                reqs.remove(node.index.name)
             for child in node.iter_children():
                 if isinstance(child, DoLoop):
                     if not child.is_independent():
@@ -898,12 +921,15 @@ class DoLoop(DoAbst):
                 else:
                     if not _check(child):
                         return False
+                for var in node.required_vars():
+                    if not child.has_partial_access_to(var):
+                        return False
             return True
 
-        return _check(self.body)
+        return _check(self._body)
 
     def scalarize(self) -> None:
-        for child in self.body.iter_children():
+        for child in self._body.iter_children():
             if isinstance(child, SaveAssignment):
                 child.tmpvar.index = None
                 child.scalar = True
@@ -911,9 +937,9 @@ class DoLoop(DoAbst):
                 child.scalarize()
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
-        body = self.body.convert_assignments(saved_vars, func, reverse)[0]
+        body = self._body.convert_assignments(saved_vars, func, reverse)[0]
         required_vars = body.required_vars()
-        new_body = self.body.prune_for(required_vars)
+        new_body = self._body.prune_for(required_vars)
         if not new_body.is_effectively_empty():
             for node in body.iter_children():
                 last = new_body.last()
@@ -954,12 +980,12 @@ class DoLoop(DoAbst):
         if self.step is not None:
             header = f"{header}, {self.step}"
         lines = [f"{header}\n"]
-        lines.extend(self.body.render(indent+1))
+        lines.extend(self._body.render(indent+1))
         lines.append(f"{space}end do\n")
         return lines
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        needed = self.body.required_vars(list(names or []))
+        needed = self._body.required_vars(names)
         if self.index.name in needed:
             needed.remove(self.index.name)
         for op in [self.start, self.end, self.step]:
@@ -969,27 +995,32 @@ class DoLoop(DoAbst):
         return needed
 
     def prune_for(self, targets: Iterable[str]) -> Node:
-        new_body = self.body.prune_for(targets)
+        new_body = self._body.prune_for(targets)
         if new_body.is_effectively_empty():
             return Block([])
         return DoLoop(new_body, self.index, self.start, self.end, self.step)
 
     def check_array_index(self, var: str, index: str) -> bool:
-        if self.do_index_list is None:
-            raise RuntimeError("Execute build_do_index_list first.")
         for v in self.iter_ref_vars():
-            if v.name == var and (v.index is not None and v.index_str() != index):
+            if v.name == var and v.index_str() != index:
                 return False
-        index = ",".join(self.do_index_list)
-        return self.body.check_array_index(str, index)
+        for v in self.iter_assign_vars():
+            if v.name == var and v.index_str() != index:
+                return False
+        do_index = ",".join(self.do_index_list)
+        if self._body.check_array_index(var, do_index):
+            return True
+        if var in self._body.required_vars():
+            return False
+        return True
 
     def check_initial(self, var: str) -> int:
-        if self.do_index_list is None:
-            raise RuntimeError("Execute build_do_index_list first.")
-        if self.body.has_assignment_to(var):
-            index = ",".join(self.do_index_list)
-            if self.body.check_array_index(var, index):
-                return self.body.check_initial(var)
+        if self._body.has_assignment_to(var):
+            if var in self.required_vars():
+                return -1
+            do_index = ",".join(self.do_index_list)
+            if self._body.check_array_index(var, do_index):
+                return self._body.check_initial(var)
             return -1
         return 0
 
@@ -999,16 +1030,13 @@ class DoWhile(DoAbst):
 
     cond: OpVar
 
-    def iter_children(self) -> Iterator[Node]:
-        yield self.body
-
     def iter_ref_vars(self) -> Iterator[OpVar]:
         iter(self.cond.collect_vars())
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
-        body = self.body.convert_assignments(saved_vars, func, reverse)[0]
+        body = self._body.convert_assignments(saved_vars, func, reverse)[0]
         required_vars = body.required_vars()
-        new_body = self.body.prune_for(required_vars)
+        new_body = self._body.prune_for(required_vars)
         if not new_body.is_effectively_empty():
             for node in body.children:
                 new_body.append(node)
@@ -1023,24 +1051,24 @@ class DoWhile(DoAbst):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         lines = [f"{space}do while ({self.cond})\n"]
-        lines.extend(self.body.render(indent+1))
+        lines.extend(self._body.render(indent+1))
         lines.append(f"{space}end do\n")
         return lines
 
     def required_vars(self, names: Optional[List[str]] = None) -> List[str]:
-        needed = self.body.required_vars(list(names or []))
+        needed = self._body.required_vars(list(names or []))
         for var in self.cond.collect_vars():
             _append_unique(needed, var.name)
         return needed
 
     def prune_for(self, targets: Iterable[str]) -> Node:
-        new_body = self.body.prune_for(targets)
+        new_body = self._body.prune_for(targets)
         if new_body.is_effectively_empty():
             return Block([])
         return DoWhild(new_body, self.cond)
 
     def check_initial(self, var: str) -> int:
-        if self.body.has_assignment_to(var):
+        if self._body.has_assignment_to(var):
             return -1
         return 0
 

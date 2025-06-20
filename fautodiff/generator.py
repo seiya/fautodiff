@@ -227,8 +227,8 @@ def _generate_ad_subroutine(routine_org, warnings):
         raise ValueError(f"Unsupported operation: {type(rhs)}")
 
     saved_vars = []
-    ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True)
-    ad_code = ad_code[0].prune_for([arg.name for arg in grad_args])
+    ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True)[0]
+    ad_code = ad_code.prune_for([arg.name for arg in grad_args])
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
         # check undefined reference
         vars = []
@@ -251,7 +251,6 @@ def _generate_ad_subroutine(routine_org, warnings):
         for var in out_grad_args:
             vars.append(var)
         for var in vars:
-            ad_code.build_do_index_list([])
             ret = ad_code.check_initial(var.name)
             if ret == -1:
                 if var.dims is not None and len(var.dims) > 0:

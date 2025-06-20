@@ -45,8 +45,6 @@ class Operator:
 
     def __add__(self, other):
         if isinstance(other, int):
-            if other < 0:
-                return self + OpNeg(OpInt(other))
             return self + OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 0:
@@ -84,8 +82,6 @@ class Operator:
 
     def __sub__(self, other):
         if isinstance(other, int):
-            if other < 0:
-                return self - OpNeg(OpInt(other))
             return self - OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 0:
@@ -126,6 +122,8 @@ class Operator:
         return NotImplemented
 
     def __mul__(self, other):
+        if isinstance(other, int):
+            return other * OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 1:
                 return other
@@ -183,6 +181,8 @@ class Operator:
         return NotImplemented
 
     def __truediv__(self, other):
+        if isinstance(other, int):
+            return other / OpInt(other)
         if isinstance(other, Operator):
             if isinstance(other, OpInt) and other.val == 1:
                 return self
@@ -226,11 +226,7 @@ class Operator:
 
     def __pow__(self, other):
         if isinstance(other, int):
-            if other < 0:
-                other = - OpInt(abs(other))
-            else:
-                other = OpInt(other)
-            return OpPow(args=[self, other])
+            return OpPow(args=[self, OpInt(other)])
         if isinstance(other, Operator):
             if isinstance(other, OpInt) and other.val == 0:
                 return OpInt(1, target=other.target, kind=other.kind)
@@ -247,29 +243,21 @@ class Operator:
 
     def __lt__(self, other):
         if isinstance(other, int):
-            if other < 0:
-                return self < OpNeg(OpInt(other))
             return self < OpInt(other)
         return OpLog("<", args=[self, other])
 
     def __le__(self, other):
         if isinstance(other, int):
-            if other < 0:
-                return self <= OpNeg(OpInt(other))
             return self <= OpInt(other)
         return OpLog("<=", args=[self, other])
 
     def __gt__(self, other):
         if isinstance(other, int):
-            if other < 0:
-                return self > OpNeg(OpInt(other))
             return self > OpInt(other)
         return OpLog(">", args=[self, other])
 
     def __ge__(self, other):
         if isinstance(other, int):
-            if other < 0:
-                return self >= OpNeg(OpInt(other))
             return self >= OpInt(other)
         return OpLog(">=", args=[self, other])
 
@@ -300,6 +288,17 @@ class OpInt(OpNum):
             raise ValueError(f"val must be >= 0: {val}")
         self.val = val
         self.target = target
+
+    def __new__(cls, val):
+        if val < 0:
+            instance = super().__new__(cls)
+            instance.__init__(-val)
+            return -instance
+        else:
+            return super().__new__(cls)
+
+    def __reduce__(self):
+        return(self.__class__, (self.val,))
 
     def __str__(self) -> str:
         kind = None
@@ -391,6 +390,7 @@ class OpVar(OpLeaf):
         if self.index is not None and len(self.index) > 0:
             index = ','.join([':' if v is None else str(v) for v in self.index])
             return index
+        return ""
 
     def __str__(self) -> str:
         if self.index is None or len(self.index) == 0:
