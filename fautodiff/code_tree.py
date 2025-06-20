@@ -865,7 +865,28 @@ class DoLoop(DoAbst):
         yield self.index
 
     def is_independent(self) -> bool:
-        raise NotImplementedError
+        if self.do_index_list is None:
+            raise RuntimeError("Execute build_do_index_list first.")
+
+        index = ",".join(self.do_index_list)
+
+        def _check(node: Node) -> bool:
+            for var in node.iter_ref_vars():
+                if var.index is not None and var.index_str() != index:
+                    return False
+            for var in node.iter_assign_vars():
+                if var.index is not None and var.index_str() != index:
+                    return False
+            for child in node.iter_children():
+                if isinstance(child, DoLoop):
+                    if not child.is_independent():
+                        return False
+                else:
+                    if not _check(child):
+                        return False
+            return True
+
+        return _check(self.body)
 
     def build_do_index_list(self, list: List[str]):
         self.do_index_list = [self.index.name]
