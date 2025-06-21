@@ -256,7 +256,7 @@ class Node:
             ret = child.check_initial(var, independent, not_change)
             if ret == -1:
                 return -1
-            if len(self.do_index_list) == 0 and (not not_change) and ret != 0:
+            if (len(self.do_index_list) == 0 or (not not_change)) and ret != 0:
                 return ret
             ret_total = max(ret, ret_total)
         return ret_total
