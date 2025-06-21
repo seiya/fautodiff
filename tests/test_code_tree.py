@@ -207,9 +207,29 @@ class TestNodeMethods(unittest.TestCase):
         self.assertEqual([v.name for v in b.required_vars()], ["x_da", "y"])
 
     def test_required_vars(self):
-        assign = code_tree.Assignment(operators.OpVar("a"), operators.OpVar("b") + operators.OpVar("c"))
-        assign.rhs = "d"
+        a = operators.OpVar("a")
+        b = operators.OpVar("b")
+        c = operators.OpVar("c")
+        assign = code_tree.Assignment(a, b + c)
         self.assertEqual([v.name for v in assign.required_vars()], ["b", "c"])
+
+        blk = code_tree.Block([
+            code_tree.Assignment(a, c),
+            code_tree.Assignment(b, a)
+        ])
+        self.assertEqual([v.name for v in blk.required_vars()], ["c"])
+        
+        x = operators.OpVar("x")
+        cond1 = x < 0
+        block1 = code_tree.Block([code_tree.Assignment(a, c)])
+        cond2 = x > 0
+        block2 = code_tree.Block([code_tree.Assignment(a, b)])
+        cond3 = None
+        block3 = code_tree.Block([code_tree.Assignment(b, c)])
+        ifblk = code_tree.IfBlock([
+            (cond1, block1), (cond2, block2), (cond3, block3)
+        ])
+        self.assertEqual([v.name for v in ifblk.required_vars([a])], ["x", "c", "b", "a"])
 
     def test_check_initial(self):
         x_da = operators.OpVar("x_da")

@@ -346,7 +346,7 @@ class Block(Node):
         new_children: List[Node] = []
         for child in reversed(self.__children):
             if isinstance(child, Declaration):
-                if (child.intent is not None) or (child.name in needed):
+                if (child.intent is not None) or any(child.name==var.name for var in needed):
                     new_children.insert(0, child)
                     continue
             if set(var.name for var in child.assigned_vars([])) & set(var.name for var in needed):
@@ -566,7 +566,7 @@ class Assignment(Node):
         needed = (names or [])
         lhs = self.lhs
         if lhs.index is None or set(self.do_index_list) <= set(lhs.index_list()):
-            needed = [var for var in needed if (var != lhs and (var.name == lhs.name and lhs.index is None))]
+            needed = [var for var in needed if not (var == lhs or (var.name == lhs.name and (lhs.index is not None and all(i==None for i in lhs.index))))]
         for var in lhs.collect_vars(): # variables in indexes
             if var != lhs:
                 _append_unique(needed, var)
@@ -730,7 +730,7 @@ class BranchBlock(Node):
                         if not isinstance(con, Operator):
                             raise ValueError(f"cond must be a Operator: {type(con)}")
             if not isinstance(block, Block):
-                raise ValueError(f"cond must be a Block: {type(block)}")
+                raise ValueError(f"block must be a Block: {type(block)}")
 
     def iter_children(self) -> Iterator[Node]:
         for _, block in self.cond_blocks:
@@ -766,10 +766,36 @@ class BranchBlock(Node):
 
     def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         needed = list(names or [])
-        common_assigned = []
+        common_assigned = None
         for block in self.iter_children():
-            _extend_unique(common_assigned, block.assigned_vars())
+            vars = block.assigned_vars()
+            if common_assigned is None:
+                common_assigned = vars
+                continue
+            common_assigned_new = []
+            for var in vars:
+                for v in common_assigned:
+                    if var == v:
+                        common_assigned_new.append(v)
+                        continue
+                    if var.name == v.name:
+                        if var.index is None or all(i == None for i in var.index):
+                            common_assigned_new.append(v)
+                            continue
+                        if v.index is None or all(i == None for i in v.index):
+                            common_assigned_new.append(var)
+            common_assigned = common_assigned_new
         needed = [n for n in needed if n not in common_assigned]
+        needed_new = []
+        for var in needed:
+            for v in common_assigned:
+                if var == v:
+                    continue
+                if var.index is None or all(i == None for i in var.index):
+                    continue
+            needed_new.append(var)
+            
+        needed = needed_new
         res = []
         for var in self.iter_ref_vars():
             _append_unique(res, var)

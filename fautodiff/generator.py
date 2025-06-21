@@ -228,7 +228,7 @@ def _generate_ad_subroutine(routine_org, warnings):
 
     saved_vars = []
     ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True)[0]
-    ad_code = ad_code.prune_for(grad_args)
+    ad_code = ad_code.prune_for([OpVar(var.name) for var in grad_args])
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
         # check undefined reference
         vars = []
@@ -259,10 +259,14 @@ def _generate_ad_subroutine(routine_org, warnings):
                     index = None
                 subroutine.ad_init.append(Assignment(OpVar(var.name, index=index), OpReal(0.0, kind=var.kind)))
         # check undefined output variables
-        vars = ad_code.required_vars(out_grad_args)
+        vars = ad_code.required_vars([OpVar(var.name) for var in out_grad_args])
         vars = subroutine.ad_init.required_vars(vars)
-        for v in vars:
-            var = next((var for var in out_grad_args if var.name == v.name), None)
+        var_names = []
+        for var in vars:
+            if var.name not in vars:
+                var_names.append(var.name)
+        for name in var_names:
+            var = next((var for var in out_grad_args if var.name == name), None)
             if var is not None:
                 if var.dims is not None and len(var.dims) > 0:
                     index = (None,) * len(var.dims)
@@ -281,7 +285,11 @@ def _generate_ad_subroutine(routine_org, warnings):
     if not fw_block.is_effectively_empty():
         subroutine.content.extend(fw_block)
 
+    vars = []
     for var in subroutine.collect_vars():
+        if var.name not in vars:
+            vars.append(var.name)
+    for var in vars:
         if subroutine.decls.find_by_name(var) is None:
             decl = routine_org.decls.find_by_name(var)
             if decl is not None:
@@ -303,7 +311,7 @@ def _generate_ad_subroutine(routine_org, warnings):
         v = Variable(name=sa.tmpvar.name, typename=v_org.typename, kind=v_org.kind, dims=dims)
         subroutine.decls.append(v.to_decl())
 
-    subroutine = subroutine.prune_for(grad_args)
+    subroutine = subroutine.prune_for([OpVar(var.name) for var in grad_args])
 
     required_vnames = [var.name for var in subroutine.required_vars()]
     if len(required_vnames) > 0:

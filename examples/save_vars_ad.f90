@@ -99,7 +99,8 @@ contains
   end subroutine if_example_ad
 
   subroutine do_with_array_ad(n, m, x, x_ad, y, y_ad, z_ad)
-    integer, intent(in) :: n, m
+    integer, intent(in) :: n
+    integer, intent(in) :: m
     real, intent(in)  :: x(n,m)
     real, intent(out) :: x_ad(n,m)
     real, intent(in)  :: y(n,m)
@@ -113,7 +114,7 @@ contains
     real :: z(n,m)
     real :: scalar
     real :: ary_save_58_ad
-    real ::z_save_60_ad
+    real :: z_save_60_ad
     real :: scalar_save_62_ad
 
     ary(:,:) = x(:,:)
@@ -127,7 +128,7 @@ contains
           z_save_60_ad = z(i,j)
           z(i,j) = x(i,j) + scalar
           z(i,j) = y(i,j) * scalar + z(i,j)
-          scalar_save_62_ad = z(i,j)
+          scalar_save_62_ad = scalar
           scalar = z(i,j) * y(i,j)
           z_ad(i,j) = z_ad(i,j) * scalar ! z(i,j) = z(i,j) * scalar
           scalar_ad = z_ad(i,j) * z(i,j) ! z(i,j) = z(i,j) * scalar
