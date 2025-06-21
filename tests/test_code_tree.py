@@ -325,6 +325,28 @@ class TestLoopAnalysis(unittest.TestCase):
         self.assertEqual(loop.check_initial("a"), 1)
         self.assertEqual(loop.check_initial("b"), 0)
 
+    def test_loop_with_accumulate(self):
+        i = operators.OpVar("i")
+        a = operators.OpVar("a", index=[i])
+        b = operators.OpVar("b", index=[i])
+        c = operators.OpVar("c")
+        body = code_tree.Block([
+            code_tree.Assignment(a, c, accumulate=True),
+            code_tree.Assignment(b, c, accumulate=True)
+        ])
+        loop = code_tree.DoLoop(
+            body,
+            index=i,
+            start=operators.OpInt(1),
+            end=operators.OpVar("n"),
+        )
+        self.assertEqual(loop.required_vars(), ["c", "b", "a", "n"])
+        self.assertEqual(loop.required_vars(no_accumulate=True), ["c", "n"])
+        self.assertEqual(loop.is_independent(), True)
+        self.assertEqual(loop.check_initial("a"), 2)
+        self.assertEqual(loop.check_initial("b"), 2)
+
+
     def test_self_reference_loop(self):
         i = operators.OpVar("i")
         a = operators.OpVar("a", index=[i])

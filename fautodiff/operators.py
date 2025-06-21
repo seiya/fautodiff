@@ -349,7 +349,7 @@ class OpVar(OpLeaf):
     name: str = field(default="")
     index: List[Operator] = None
     is_real: bool = None
-    index_vars: List[OpLear] = field(init=False, default=None)
+    index_vars: List[OpLear] = field(init=False, repr=False, default=None)
 
     def __init__(self, name: str, index: List[Operator] = None, is_real: bool = None, kind: str = None):
         super().__init__(args=[])
@@ -386,11 +386,14 @@ class OpVar(OpLeaf):
             return OpInt(1, target=target)
         return OpInt(0, target=target)
 
-    def index_str(self) -> str:
+    def index_list(self) -> List[str]:
         if self.index is not None and len(self.index) > 0:
-            index = ','.join([':' if v is None else str(v) for v in self.index])
+            index = [':' if v is None else str(v) for v in self.index]
             return index
-        return ""
+        return []
+
+    def index_str(self) -> str:
+        return ",".join(self.index_list())
 
     def __str__(self) -> str:
         if self.index is None or len(self.index) == 0:
