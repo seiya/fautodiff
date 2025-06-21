@@ -565,13 +565,17 @@ class Assignment(Node):
     def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         needed = (names or [])
         lhs = self.lhs
-
-        if (not lhs.is_partial_access()) or set(self.do_index_list) <= set(lhs.index_list()):
-            needed_new = []
-            for var in needed:
-                if not (var == lhs or (var.name == lhs.name and not lhs.is_partial_access())):
-                    needed_new.append(var)
-            needed = needed_new
+        if lhs.name=="x_ad":
+            print(self.render()[0])
+        needed_new = []
+        entire = not lhs.is_partial_access()
+        for var in needed:
+            if var == lhs:
+                continue
+            if var.name == lhs.name and (not var.is_partial_access()) and entire:
+                continue
+            needed_new.append(var)
+        needed = needed_new
         for var in lhs.collect_vars(): # variables in indexes
             if var != lhs:
                 _append_unique(needed, var)
