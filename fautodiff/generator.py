@@ -228,16 +228,16 @@ def _generate_ad_subroutine(routine_org, warnings):
 
     saved_vars = []
     ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True)[0]
-    ad_code = ad_code.prune_for([arg.name for arg in grad_args])
+    ad_code = ad_code.prune_for(grad_args)
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
         # check undefined reference
         vars = []
         for var in ad_code.assigned_vars(without_savevar=True):
-            if var.endswith("_ad"):
-                name_org = var.removesuffix("_ad")
+            if var.name.endswith("_ad"):
+                name_org = var.name.removesuffix("_ad")
                 found = False
                 for arg in grad_args:
-                    if arg.name == var:
+                    if arg.name == var.name:
                         found = True
                         break
                 if found:
@@ -245,7 +245,7 @@ def _generate_ad_subroutine(routine_org, warnings):
             else:
                 continue
             v_org = routine_org.get_var(name_org)
-            v = Variable(name=var, typename=v_org.typename, kind=v_org.kind, dims=v_org.dims)
+            v = Variable(name=var.name, typename=v_org.typename, kind=v_org.kind, dims=v_org.dims)
             subroutine.decls.append(v.to_decl())
             vars.append(v)
         for var in out_grad_args:
@@ -259,10 +259,10 @@ def _generate_ad_subroutine(routine_org, warnings):
                     index = None
                 subroutine.ad_init.append(Assignment(OpVar(var.name, index=index), OpReal(0.0, kind=var.kind)))
         # check undefined output variables
-        vars = ad_code.required_vars([var.name for var in out_grad_args])
+        vars = ad_code.required_vars(out_grad_args)
         vars = subroutine.ad_init.required_vars(vars)
         for v in vars:
-            var = next((var for var in out_grad_args if var.name == v), None)
+            var = next((var for var in out_grad_args if var.name == v.name), None)
             if var is not None:
                 if var.dims is not None and len(var.dims) > 0:
                     index = (None,) * len(var.dims)
@@ -272,8 +272,7 @@ def _generate_ad_subroutine(routine_org, warnings):
         # now ad_code is completed
         ad_block.extend(ad_code)
 
-    required_vars = ad_block.required_vars()
-    fw_block = routine_org.content.prune_for(required_vars)
+    fw_block = routine_org.content.prune_for(ad_block.required_vars())
     last = fw_block.last()
     first = ad_block.first()
     if isinstance(last, SaveAssignment) and isinstance(first, SaveAssignment) and last.var==first.var and last.load != first.load:
@@ -304,11 +303,11 @@ def _generate_ad_subroutine(routine_org, warnings):
         v = Variable(name=sa.tmpvar.name, typename=v_org.typename, kind=v_org.kind, dims=dims)
         subroutine.decls.append(v.to_decl())
 
-    subroutine = subroutine.prune_for([arg.name for arg in grad_args])
+    subroutine = subroutine.prune_for(grad_args)
 
-    required_vars = subroutine.required_vars()
-    if len(required_vars) > 0:
-        _warn(warnings, {}, f"{required_vars} in {subroutine.name}", "Required variables are remained")
+    required_vnames = [var.name for var in subroutine.required_vars()]
+    if len(required_vnames) > 0:
+        _warn(warnings, {}, f"{required_vnames} in {subroutine.name}", "Required variables are remained")
 
     return subroutine
 

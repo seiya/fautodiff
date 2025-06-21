@@ -405,10 +405,12 @@ class OpVar(OpLeaf):
         if isinstance(other, type(self)) and self.name == other.name:
             if self.index == other.index:
                 return True
-            if self.index is None and all(isinstance(idx, OpRange) for idx in other.index):
+            if self.index is None or other.index is None:
                 return True
-            if other.index is None and all(isinstance(idx, OpRange) for idx in self.index):
-                return True
+            #if self.index is None and all(isinstance(idx, OpRange) for idx in other.index):
+            #    return True
+            #if other.index is None and all(isinstance(idx, OpRange) for idx in self.index):
+            #    return True
         return False
 
 @dataclass

@@ -201,16 +201,16 @@ class Node:
     # variable analysis helpers
     # ------------------------------------------------------------------
 
-    def assigned_vars(self, names: Optional[List[str]] = None, without_savevar: bool = False) -> List[str]:
+    def assigned_vars(self, names: Optional[List[OpVar]] = None, without_savevar: bool = False) -> List[OpVar]:
         """Return variables assigned within this node and children."""
         res = list(names or [])
         for var in self.iter_assign_vars(without_savevar=without_savevar):
-            _append_unique(res, var.name)
+            _append_unique(res, var)
         for child in self.iter_children():
             res = child.assigned_vars(res, without_savevar=without_savevar)
         return res
 
-    def required_vars(self, names: Optional[List[str]] = None, no_accumulate: Optional[bool] = None) -> List[str]:
+    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         """Return variables needed before executing this node.
 
         ``names`` is the list of variables that must be defined *after* this
@@ -220,15 +220,15 @@ class Node:
         """
         return list(names or [])
 
-    def collect_vars(self) -> List[str]:
+    def collect_vars(self) -> List[OpVar]:
         """Return variables used in this node."""
         vars = []
         for child in self.iter_children():
             _extend_unique(vars, child.collect_vars())
         for var in self.iter_ref_vars():
-            _append_unique(vars, var.name)
+            _append_unique(vars, var)
         for var in self.iter_assign_vars():
-            _append_unique(vars, var.name)
+            _append_unique(vars, var)
         return vars
 
     def build_do_index_list(self, list: List[str]) -> None:
@@ -241,7 +241,7 @@ class Node:
     # optimization helpers
     # ------------------------------------------------------------------
 
-    def prune_for(self, targets: Iterable[str]) -> "Node":
+    def prune_for(self, targets: Iterable[OpVar]) -> "Node":
         """Return a copy of this node with only code needed for ``targets``."""
         return self.deep_clone()
 
@@ -335,22 +335,21 @@ class Block(Node):
             lines.extend(child.render(indent))
         return lines
 
-    def required_vars(self, names: Optional[List[str]] = None, no_accumulate: Optional[bool] = None) -> List[str]:
+    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         needed = list(names or [])
         for child in reversed(self.__children):
             needed = child.required_vars(needed, no_accumulate)
         return needed
 
-    def prune_for(self, targets: Iterable[str]) -> "Block":
-        needed = list(targets)
+    def prune_for(self, targets: Iterable[OpVar]) -> "Block":
+        needed = targets
         new_children: List[Node] = []
         for child in reversed(self.__children):
             if isinstance(child, Declaration):
                 if (child.intent is not None) or (child.name in needed):
                     new_children.insert(0, child)
                     continue
-            assigned = child.assigned_vars([])
-            if any(v in needed for v in assigned):
+            if set(var.name for var in child.assigned_vars([])) & set(var.name for var in needed):
                 pruned = child.prune_for(needed)
                 new_children.insert(0, pruned)
                 needed = pruned.required_vars(needed)
@@ -468,7 +467,7 @@ class Routine(Node):
             vars.append(self.get_var(self.result))
         return vars
 
-    def required_vars(self, names: Optional[List[str]] = None, no_accumulate: Optional[bool] = None) -> List[str]:
+    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         res = names
         for block in reversed(self._all_blocks()):
             res = block.required_vars(res, no_accumulate)
@@ -522,7 +521,7 @@ class Assignment(Node):
     accumulate: bool = False
     info: Optional[dict] = field(repr=False, default=None)
     ad_info: Optional[str] = field(repr=False, default=None)
-    rhs_names: List[str] = field(init=False, repr=False)
+    _rhs_vars: List[OpVar] = field(init=False, repr=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -530,12 +529,12 @@ class Assignment(Node):
             raise ValueError(f"lhs must be OpVar: {type(self.lhs)}")
         if not isinstance(self.rhs, Operator):
             raise ValueError(f"rhs must be Operator: {type(self.rhs)}")
-        self.rhs_names = []
+        self._rhs_vars = []
         for var in self.rhs.collect_vars():
-            self.rhs_names.append(var.name)
+            self._rhs_vars.append(var)
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
-        for var in self.rhs.collect_vars():
+        for var in self._rhs_vars:
             yield var
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
@@ -563,21 +562,17 @@ class Assignment(Node):
             ad_comment = f" ! {self.ad_info}"
         return [f"{space}{self.lhs} = {rhs}{ad_comment}\n"]
 
-    def required_vars(self, names: Optional[List[str]] = None, no_accumulate: Optional[bool] = None) -> List[str]:
-        lhs_base = self.lhs.name
+    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         needed = (names or [])
-        print(self.render()[0])
-        if self.lhs.index is None or set(self.do_index_list) <= set(self.lhs.index_list()):
-            needed = [n for n in needed if n != lhs_base]
-        else:
-            _append_unique(needed, lhs_base)
-        for var in self.lhs.collect_vars(): # variables in indexes
-            if var.name != lhs_base:
-                _append_unique(needed, var.name)
-        print(needed)
-        _extend_unique(needed, self.rhs_names)
+        lhs = self.lhs
+        if lhs.index is None or set(self.do_index_list) <= set(lhs.index_list()):
+            needed = [var for var in needed if (var != lhs and (var.name == lhs.name and lhs.index is None))]
+        for var in lhs.collect_vars(): # variables in indexes
+            if var != lhs:
+                _append_unique(needed, var)
+        _extend_unique(needed, self._rhs_vars)
         if not no_accumulate and self.accumulate:
-            _append_unique(needed, lhs_base)
+            _append_unique(needed, lhs)
         return needed
 
     def check_initial(self, var: str, independent: Optional[bool] = None, not_change: Optional[bool] = None) -> int:
@@ -590,7 +585,7 @@ class Assignment(Node):
                 return -1
         if self.lhs.index is not None and not do_index <= lhs_index:
             return -1
-        for v in self.rhs.collect_vars():
+        for v in self._rhs_vars:
             if v.name == var and (v.index is None or do_index <= lhs_index):
                 return -1
         if not self.accumulate:
@@ -645,9 +640,9 @@ class SaveAssignment(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
-    def required_vars(self, names: Optional[List[str]] = None, no_accumulate: Optional[bool] = None) -> List[str]:
-        needed = [n for n in (names or []) if n != self.lhs.name]
-        _append_unique(needed, self.rhs.name)
+    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
+        needed = [n for n in (names or []) if n != self.lhs]
+        _append_unique(needed, self.rhs)
         return needed
 
     def check_initial(self, var: str, independent: Optional[bool] = None, not_change: Optional[bool] = None) -> int:
@@ -703,11 +698,10 @@ class Declaration(Node):
         typename = self.typename.lower()
         return typename.startswith("real") or typename.startswith("double")
 
-    def required_vars(self, names: Optional[List[str]] = None, no_accumulate: Optional[bool] = None) -> List[str]:
+    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         needed = list(names or [])
         if self.intent in ("in", "inout"):
-            if self.name in needed:
-                needed.remove(self.name)
+            needed = [var for var in needed if self.name != var.name]
         return needed
 
 
@@ -746,8 +740,7 @@ class BranchBlock(Node):
         cond_blocks = []
         for cond, block in self.cond_blocks:
             res = block.convert_assignments(saved_vars, func, reverse)[0]
-            required_vars = res.required_vars()
-            new_res = block.prune_for(required_vars)
+            new_res = block.prune_for(res.required_vars())
             if not new_res.is_effectively_empty():
                 for node in res.iter_children():
                     new_res.append(node)
@@ -761,8 +754,7 @@ class BranchBlock(Node):
             raise RuntimeError(f"Invalid class type: {type(self)}")
         loads = []
         for var in block.assigned_vars():
-            if not var.endswith("_ad"):
-                var = OpVar(var)
+            if not var.name.endswith("_ad"):
                 loads.append(self._save_vars(var, saved_vars))
         blocks = []
         for load in loads:
@@ -772,21 +764,21 @@ class BranchBlock(Node):
             blocks.append(load)
         return blocks
 
-    def required_vars(self, names: Optional[List[str]] = None, no_accumulate: Optional[bool] = None) -> List[str]:
+    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         needed = list(names or [])
-        common_assigned = set()
+        common_assigned = []
         for block in self.iter_children():
-            common_assigned &= set(block.assigned_vars())
+            _extend_unique(common_assigned, block.assigned_vars())
         needed = [n for n in needed if n not in common_assigned]
         res = []
         for var in self.iter_ref_vars():
-            _append_unique(res, var.name)
+            _append_unique(res, var)
         for block in self.iter_children():
             req = block.required_vars(needed, no_accumulate)
             _extend_unique(res, req)
         return res
 
-    def prune_for(self, targets: Iterable[str]) -> Node:
+    def prune_for(self, targets: Iterable[OpVar]) -> Node:
         new_condblocks = []
         for cond, block in self.cond_blocks:
             new_block = block.prune_for(targets)
@@ -913,7 +905,8 @@ class DoLoop(DoAbst):
             for var in node.iter_assign_vars():
                 if var.index is not None and (not do_index <= set(var.index_list())):
                     return False
-            reqs = [v for v in node.required_vars(no_accumulate=True) if ((not v in do_index) and node.has_assignment_to(v))]
+            vars = [v.name for v in node.required_vars(no_accumulate=True)]
+            reqs = [v for v in vars if ((not v in do_index) and node.has_assignment_to(v))]
             for child in node.iter_children():
                 if isinstance(child, DoLoop):
                     if not child.is_independent():
@@ -938,8 +931,7 @@ class DoLoop(DoAbst):
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
-        required_vars = body.required_vars()
-        new_body = self._body.prune_for(required_vars)
+        new_body = self._body.prune_for(body.required_vars())
         if not new_body.is_effectively_empty():
             for node in body.iter_children():
                 last = new_body.last()
@@ -965,11 +957,15 @@ class DoLoop(DoAbst):
         block.build_do_index_list([])
         if block.is_independent():
             block.scalarize()
+        common_vars = []
+        required_vars = block.required_vars()
+        for var in block.assigned_vars():
+            if var in required_vars:
+                _append_unique(common_vars, var)
         blocks = []
-        for var in set(block.required_vars()) & set(block.assigned_vars()):
-            if var == self.index.name or var.endswith("_ad"):
+        for var in common_vars:
+            if var == self.index or var.name.endswith("_ad"):
                 continue
-            var = OpVar(var)
             blocks.append(self._save_vars(var, saved_vars))
         blocks.append(block)
         return blocks
@@ -984,17 +980,17 @@ class DoLoop(DoAbst):
         lines.append(f"{space}end do\n")
         return lines
 
-    def required_vars(self, names: Optional[List[str]] = None, no_accumulate: Optional[bool] = None) -> List[str]:
+    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         needed = self._body.required_vars(names, no_accumulate)
-        if self.index.name in needed:
-            needed.remove(self.index.name)
+        if self.index in needed:
+            needed.remove(self.index)
         for op in [self.start, self.end, self.step]:
             if op is not None:
                 for var in op.collect_vars():
-                    _append_unique(needed, var.name)
+                    _append_unique(needed, var)
         return needed
 
-    def prune_for(self, targets: Iterable[str]) -> Node:
+    def prune_for(self, targets: Iterable[OpVar]) -> Node:
         new_body = self._body.prune_for(targets)
         if new_body.is_effectively_empty():
             return Block([])
@@ -1002,8 +998,9 @@ class DoLoop(DoAbst):
 
     def check_initial(self, var: str, independent: Optional[bool] = None, not_change: Optional[bool] = None) -> int:
         if self._body.has_assignment_to(var):
-            if var in self.required_vars(no_accumulate=True):
-                return -1
+            for v in self.required_vars(no_accumulate=True):
+                if v.name == var:
+                    return -1
         ret = self._body.check_initial(var, independent, not_change=True)
         if ret == 2:
             self._body.check_initial(var, independent, not_change=False)
@@ -1027,8 +1024,7 @@ class DoWhile(DoAbst):
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
-        required_vars = body.required_vars()
-        new_body = self._body.prune_for(required_vars)
+        new_body = self._body.prune_for(body.required_vars())
         if not new_body.is_effectively_empty():
             for node in body.children:
                 new_body.append(node)
@@ -1047,13 +1043,13 @@ class DoWhile(DoAbst):
         lines.append(f"{space}end do\n")
         return lines
 
-    def required_vars(self, names: Optional[List[str]] = None, no_accumulate: Optional[bool] = None) -> List[str]:
+    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         needed = self._body.required_vars(names, no_accumulate)
         for var in self.cond.collect_vars():
-            _append_unique(needed, var.name)
+            _append_unique(needed, var)
         return needed
 
-    def prune_for(self, targets: Iterable[str]) -> Node:
+    def prune_for(self, targets: Iterable[OpVar]) -> Node:
         new_body = self._body.prune_for(targets)
         if new_body.is_effectively_empty():
             return Block([])
