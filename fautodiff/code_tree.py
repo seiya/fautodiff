@@ -565,8 +565,13 @@ class Assignment(Node):
     def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         needed = (names or [])
         lhs = self.lhs
-        if lhs.index is None or set(self.do_index_list) <= set(lhs.index_list()):
-            needed = [var for var in needed if not (var == lhs or (var.name == lhs.name and (lhs.index is not None and all(i==None for i in lhs.index))))]
+
+        if (not lhs.is_partial_access()) or set(self.do_index_list) <= set(lhs.index_list()):
+            needed_new = []
+            for var in needed:
+                if not (var == lhs or (var.name == lhs.name and not lhs.is_partial_access())):
+                    needed_new.append(var)
+            needed = needed_new
         for var in lhs.collect_vars(): # variables in indexes
             if var != lhs:
                 _append_unique(needed, var)
@@ -779,10 +784,10 @@ class BranchBlock(Node):
                         common_assigned_new.append(v)
                         continue
                     if var.name == v.name:
-                        if var.index is None or all(i == None for i in var.index):
+                        if not var.is_partial_access():
                             common_assigned_new.append(v)
                             continue
-                        if v.index is None or all(i == None for i in v.index):
+                        if not v.is_partial_access():
                             common_assigned_new.append(var)
             common_assigned = common_assigned_new
         needed = [n for n in needed if n not in common_assigned]
@@ -791,7 +796,7 @@ class BranchBlock(Node):
             for v in common_assigned:
                 if var == v:
                     continue
-                if var.index is None or all(i == None for i in var.index):
+                if not var.is_partial_access():
                     continue
             needed_new.append(var)
             

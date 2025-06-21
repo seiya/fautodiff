@@ -386,6 +386,15 @@ class OpVar(OpLeaf):
             return OpInt(1, target=target)
         return OpInt(0, target=target)
 
+    def is_partial_access(self) -> bool:
+        if self.index is None:
+            return False
+        for idx in self.index:
+            if isinstance(idx, OpVar) or isinstance(idx, OpInt):
+                return True
+            if isinstance(idx, OpRange):
+                return False
+
     def index_list(self) -> List[str]:
         if self.index is not None and len(self.index) > 0:
             index = [':' if v is None else str(v) for v in self.index]
