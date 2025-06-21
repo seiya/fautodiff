@@ -1,11 +1,30 @@
 import sys
 from pathlib import Path
 import unittest
+import textwrap
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff import code_tree
 from fautodiff import operators
+
+
+class TestVariable(unittest.TestCase):
+    def test_scalar(self):
+        var = code_tree.Variable("x", "real")
+        self.assertEqual(var.name, "x")
+        self.assertEqual(var.typename, "real")
+        self.assertFalse(var.is_array())
+
+    def test_array(self):
+        var = code_tree.Variable("a", "real", dims=("n",))
+        self.assertTrue(var.is_array())
+        self.assertEqual(var.dims, ("n",))
+        self.assertEqual(str(var), "a(n)")
+
+    def test_invalid_name(self):
+        with self.assertRaises(ValueError):
+            code_tree.Variable("a(i)", "real")
 
 
 class TestRenderProgram(unittest.TestCase):
@@ -227,16 +246,14 @@ class TestNodeMethods(unittest.TestCase):
         )
 
         index = [operators.OpVar("i"), operators.OpVar("j")]
+        a_ad = operators.OpVar("a_ad", index=index)
+        b_ad = operators.OpVar("b_ad", index=index)
+        c = operators.OpVar("c")
+        c_ad = operators.OpVar("c_ad")
         inner = code_tree.DoLoop(
             code_tree.Block([
-                code_tree.Assignment(
-                    operators.OpVar("a_ad", index=index),
-                    operators.OpVar("b_ad", index=index) + operators.OpVar("c")
-                ),
-                code_tree.Assignment(
-                    operators.OpVar("c_ad"),
-                    operators.OpVar("b_ad", index=index) + operators.OpVar("c")
-                )
+                code_tree.Assignment(a_ad, b_ad + c),
+                code_tree.Assignment(c_ad, b_ad + c)
             ]),
             index=operators.OpVar("i"),
             start=operators.OpInt(1),
@@ -288,24 +305,6 @@ class TestNodeMethods(unittest.TestCase):
         self.assertEqual(cond_blk3.check_initial("x_da"), 2)
 
 
-class TestVariable(unittest.TestCase):
-    def test_scalar(self):
-        var = code_tree.Variable("x", "real")
-        self.assertEqual(var.name, "x")
-        self.assertEqual(var.typename, "real")
-        self.assertFalse(var.is_array())
-
-    def test_array(self):
-        var = code_tree.Variable("a", "real", dims=("n",))
-        self.assertTrue(var.is_array())
-        self.assertEqual(var.dims, ("n",))
-        self.assertEqual(str(var), "a(n)")
-
-    def test_invalid_name(self):
-        with self.assertRaises(ValueError):
-            code_tree.Variable("a(i)", "real")
-
-
 class TestLoopAnalysis(unittest.TestCase):
     def test_simple_loop(self):
         i = operators.OpVar("i")
@@ -323,6 +322,8 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual(loop.required_vars(), ["b", "n"])
         self.assertEqual(loop.is_independent(), True)
+        self.assertEqual(loop.check_initial("a"), 1)
+        self.assertEqual(loop.check_initial("b"), 0)
 
     def test_self_reference_loop(self):
         i = operators.OpVar("i")
@@ -338,6 +339,8 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual(loop.required_vars(), ["a", "c", "n"])
         self.assertEqual(loop.is_independent(), True)
+        self.assertEqual(loop.check_initial("a"), -1)
+        self.assertEqual(loop.check_initial("c"), 0)
 
     def test_no_recurrent_loop(self):
         i = operators.OpVar("i")
@@ -355,6 +358,9 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual(loop.required_vars(), ["a", "n"])
         self.assertEqual(loop.is_independent(), True)
+        self.assertEqual(loop.check_initial("a"), -1)
+        self.assertEqual(loop.check_initial("c"), -1)
+        self.assertEqual(loop.check_initial("c", independent=True), 1)
 
     def test_recurrent_loop(self):
         i = operators.OpVar("i")
@@ -372,6 +378,9 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual(loop.required_vars(), ["c", "n"])
         self.assertEqual(loop.is_independent(), False)
+        self.assertEqual(loop.check_initial("a"), 1)
+        self.assertEqual(loop.check_initial("c"), -1)
+        self.assertEqual(loop.check_initial("c", independent=True), -1)
 
     def test_nested_loop(self):
         i = operators.OpVar("i")
@@ -394,21 +403,26 @@ class TestLoopAnalysis(unittest.TestCase):
             end=operators.OpVar("m"),
         )
         self.assertEqual(outer.required_vars(), ["b", "c", "n", "m"])
-        self.assertEqual(loop.is_independent(), True)
+        self.assertEqual(outer.is_independent(), True)
+        self.assertEqual(outer.check_initial("a"), 1)
+        self.assertEqual(outer.check_initial("b"), 0)
+        self.assertEqual(outer.check_initial("c"), 0)
 
     def test_nested_loop_with_different_index(self):
-        # do j = 1, m
-        #   do i = 1, n
-        #     a[i,j] = b[i,k] + c
-        #   end do
-        # end do
+        code = textwrap.dedent("""\
+        do j = 1, m
+          do i = 1, n
+            a(i,j) = b(i,k) + c
+          end do
+        end do
+        """)
         i = operators.OpVar("i")
         j = operators.OpVar("j")
         k = operators.OpVar("k")
         inner = code_tree.DoLoop(
             code_tree.Block([
                 code_tree.Assignment(
-                    operators.OpVar("a", index=[j,k]),
+                    operators.OpVar("a", index=[i,j]),
                     operators.OpVar("b", index=[i,k]) + operators.OpVar("c")
                 )
             ]),
@@ -422,15 +436,21 @@ class TestLoopAnalysis(unittest.TestCase):
             start=operators.OpInt(1),
             end=operators.OpVar("m"),
         )
-        self.assertEqual(outer.required_vars(), ["a", "k", "b", "c", "n", "m"])
+        self.assertEqual("".join(outer.render()), code)
+        self.assertEqual(outer.required_vars(), ["b", "k", "c", "n", "m"])
         self.assertEqual(outer.is_independent(), True)
+        self.assertEqual(outer.check_initial("a"), 1)
+        self.assertEqual(outer.check_initial("b"), 0)
+        self.assertEqual(outer.check_initial("c"), 0)
 
     def test_nested_recurrent_loop_with_different_index(self):
-        # do j = 1, m
-        #   do i = 1, n
-        #     a[j,k] = b[i,k] + c
-        #   end do
-        # end do
+        code = textwrap.dedent("""\
+        do j = 1, m
+          do i = 1, n
+            a(j,k) = b(i,k) + c
+          end do
+        end do
+        """)
         i = operators.OpVar("i")
         j = operators.OpVar("j")
         k = operators.OpVar("k")
@@ -451,8 +471,12 @@ class TestLoopAnalysis(unittest.TestCase):
             start=operators.OpInt(1),
             end=operators.OpVar("m"),
         )
-        self.assertEqual(outer.required_vars(), ["a", "k", "b", "c", "n", "m"])
+        self.assertEqual("".join(outer.render()), code)
+        self.assertEqual(outer.required_vars(), ["k", "b", "c", "n", "m"])
         self.assertEqual(outer.is_independent(), False)
+        self.assertEqual(outer.check_initial("a"), -1)
+        self.assertEqual(outer.check_initial("b"), 0)
+        self.assertEqual(outer.check_initial("c"), 0)
 
 
 if __name__ == "__main__":

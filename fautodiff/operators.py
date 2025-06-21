@@ -289,16 +289,16 @@ class OpInt(OpNum):
         self.val = val
         self.target = target
 
-    def __new__(cls, val):
+    def __new__(cls, val: int, kind: str = None, target: OpVar = None):
         if val < 0:
             instance = super().__new__(cls)
-            instance.__init__(-val)
+            instance.__init__(- val, kind, target)
             return -instance
         else:
             return super().__new__(cls)
 
     def __reduce__(self):
-        return(self.__class__, (self.val,))
+        return(self.__class__, (self.val, self.kind, self.target,))
 
     def __str__(self) -> str:
         kind = None

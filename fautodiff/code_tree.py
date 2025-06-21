@@ -99,10 +99,10 @@ class Node:
     def has_partial_access_to(self, var: str) -> bool:
         """Return ``True`` if ``var`` is accessed with index within this node."""
         for v in self.iter_ref_vars():
-            if v.name==var and v.index is not None:
+            if v.name==var and v.index is not None and any(i is not None for i in v.index):
                 return True
         for v in self.iter_assign_vars():
-            if v.name==var and v.index is not None:
+            if v.name==var and v.index is not None and any(i is not None for i in v.index):
                 return True
         for child in self.iter_children():
             if child.has_partial_access_to(var):
@@ -245,27 +245,14 @@ class Node:
         """Return a copy of this node with only code needed for ``targets``."""
         return self.deep_clone()
 
-    def check_array_index(self, var: str, index: str) -> bool:
-        """Check all the reference to array ``var`` are with the same index ``index``"""
-        for v in self.iter_ref_vars():
-            if v.name == var and v.index_str() != index:
-                return False
-        for v in self.iter_assign_vars():
-            if v.name == var and v.index_str() != index:
-                return False
-        for child in self.iter_children():
-            if not child.check_array_index(var, index):
-                return False
-        return True
-
-    def check_initial(self, var: str) -> int:
+    def check_initial(self, var: str, independent: bool = None) -> int:
         """Remove self-add from the first assignment to ``var`` if safe.
 
         Returns ``0`` for not-found, ``1`` or ``2`` for assignment w/o self-reference and ``-1`` for assignment w/ self-reference.
         ``2`` indicates that a self-reference was removed.
         """
         for child in self.iter_children():
-            ret = child.check_initial(var)
+            ret = child.check_initial(var, independent)
             if ret != 0:
                 return ret
         return 0
@@ -586,11 +573,18 @@ class Assignment(Node):
             _append_unique(needed, lhs_base)
         return needed
 
-    def check_initial(self, var: str) -> int:
+    def check_initial(self, var: str, independent: bool = None) -> int:
         if self.lhs.name != var:
             return 0
-        if var in self.rhs_names:
+        do_index = ",".join(self.do_index_list)
+        if do_index != "" and self.lhs.index is None: # scalar in loop
+            if independent is None or not independent:
+                return -1
+        if self.lhs.index is not None and not do_index in self.lhs.index_str():
             return -1
+        for v in self.rhs.collect_vars():
+            if v.name == var and (v.index is None or do_index in self.lhs.index_str()):
+                return -1
         if not self.accumulate:
             return 1
         self.accumulate = False
@@ -647,7 +641,7 @@ class SaveAssignment(Node):
         _append_unique(needed, self.rhs.name)
         return needed
 
-    def check_initial(self, var: str) -> int:
+    def check_initial(self, var: str, independent: bool = None) -> int:
         if self.lhs.name != var:
             return 0
         raise ValueError("This must not appeared at first time.")
@@ -796,8 +790,8 @@ class BranchBlock(Node):
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
 
-    def check_initial(self, var: str) -> int:
-        results = [b.check_initial(var) for b in self.iter_children()]
+    def check_initial(self, var: str, independent: bool = None) -> int:
+        results = [b.check_initial(var, independent) for b in self.iter_children()]
         if all(r ==0 for r in results):
             return 0
         if any(r < 0 for r in results):
@@ -905,15 +899,10 @@ class DoLoop(DoAbst):
         do_index = ",".join(self.do_index_list)
 
         def _check(node: Node) -> bool:
-            for var in node.iter_ref_vars():
-                if var.index is not None and (not do_index in var.index_str()):
-                    return False
             for var in node.iter_assign_vars():
                 if var.index is not None and (not do_index in var.index_str()):
                     return False
-            reqs = node.required_vars()
-            if isinstance(node, DoLoop):
-                reqs.remove(node.index.name)
+            reqs = [v for v in node.required_vars() if ((not v in do_index) and node.has_assignment_to(v))]
             for child in node.iter_children():
                 if isinstance(child, DoLoop):
                     if not child.is_independent():
@@ -921,7 +910,7 @@ class DoLoop(DoAbst):
                 else:
                     if not _check(child):
                         return False
-                for var in node.required_vars():
+                for var in reqs:
                     if not child.has_partial_access_to(var):
                         return False
             return True
@@ -1000,29 +989,11 @@ class DoLoop(DoAbst):
             return Block([])
         return DoLoop(new_body, self.index, self.start, self.end, self.step)
 
-    def check_array_index(self, var: str, index: str) -> bool:
-        for v in self.iter_ref_vars():
-            if v.name == var and v.index_str() != index:
-                return False
-        for v in self.iter_assign_vars():
-            if v.name == var and v.index_str() != index:
-                return False
-        do_index = ",".join(self.do_index_list)
-        if self._body.check_array_index(var, do_index):
-            return True
-        if var in self._body.required_vars():
-            return False
-        return True
-
-    def check_initial(self, var: str) -> int:
+    def check_initial(self, var: str, independent: bool = None) -> int:
         if self._body.has_assignment_to(var):
             if var in self.required_vars():
                 return -1
-            do_index = ",".join(self.do_index_list)
-            if self._body.check_array_index(var, do_index):
-                return self._body.check_initial(var)
-            return -1
-        return 0
+        return self._body.check_initial(var, independent)
 
 @dataclass
 class DoWhile(DoAbst):
@@ -1030,8 +1001,15 @@ class DoWhile(DoAbst):
 
     cond: OpVar
 
+    def __post_init__(self):
+        self.do_index_list = ["__nerver_match__"]
+
     def iter_ref_vars(self) -> Iterator[OpVar]:
         iter(self.cond.collect_vars())
+
+    def build_do_index_list(self, list: List[str]) -> None:
+        for child in self.iter_children():
+            child.build_do_index_list(list)
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
@@ -1067,7 +1045,7 @@ class DoWhile(DoAbst):
             return Block([])
         return DoWhild(new_body, self.cond)
 
-    def check_initial(self, var: str) -> int:
+    def check_initial(self, var: str, independent: bool = None) -> int:
         if self._body.has_assignment_to(var):
             return -1
         return 0
