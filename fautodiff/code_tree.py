@@ -565,10 +565,8 @@ class Assignment(Node):
     def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: Optional[bool] = None) -> List[OpVar]:
         needed = (names or [])
         lhs = self.lhs
-        if lhs.name=="x_ad":
-            print(self.render()[0])
         needed_new = []
-        entire = not lhs.is_partial_access()
+        entire = (not lhs.is_partial_access()) or set(self.do_index_list) <= set(lhs.index_list())
         for var in needed:
             if var == lhs:
                 continue
@@ -1019,6 +1017,14 @@ class DoLoop(DoAbst):
         needed = self._body.required_vars(names, no_accumulate)
         if self.index in needed:
             needed.remove(self.index)
+        do_index_list = set(self.do_index_list)
+        needed_new = []
+        for var in needed:
+            if var.index is not None and do_index_list <= set(var.index_list()):
+                needed_new.append(OpVar(var.name)) # remove index
+            else:
+                needed_new.append(var)
+        needed = needed_new
         for op in [self.start, self.end, self.step]:
             if op is not None:
                 for var in op.collect_vars():

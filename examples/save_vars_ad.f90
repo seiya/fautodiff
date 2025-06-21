@@ -99,8 +99,8 @@ contains
   end subroutine if_example_ad
 
   subroutine do_with_array_ad(n, m, x, x_ad, y, y_ad, z_ad)
-    integer, intent(in) :: n
-    integer, intent(in) :: m
+    integer, intent(in)  :: n
+    integer, intent(in)  :: m
     real, intent(in)  :: x(n,m)
     real, intent(out) :: x_ad(n,m)
     real, intent(in)  :: y(n,m)
