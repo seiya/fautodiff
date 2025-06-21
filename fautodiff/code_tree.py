@@ -245,17 +245,21 @@ class Node:
         """Return a copy of this node with only code needed for ``targets``."""
         return self.deep_clone()
 
-    def check_initial(self, var: str, independent: Optional[bool] = None) -> int:
+    def check_initial(self, var: str, independent: Optional[bool] = None, not_change: Optional[bool] = None) -> int:
         """Remove self-add from the first assignment to ``var`` if safe.
 
         Returns ``0`` for not-found, ``1`` or ``2`` for assignment w/o self-reference and ``-1`` for assignment w/ self-reference.
         ``2`` indicates that a self-reference was removed.
         """
+        ret_total = 0
         for child in self.iter_children():
-            ret = child.check_initial(var, independent)
-            if ret != 0:
+            ret = child.check_initial(var, independent, not_change)
+            if ret == -1:
+                return -1
+            if len(self.do_index_list) == 0 and (not not_change) and ret != 0:
                 return ret
-        return 0
+            ret_total = max(ret, ret_total)
+        return ret_total
 
 
 @dataclass
@@ -562,17 +566,21 @@ class Assignment(Node):
     def required_vars(self, names: Optional[List[str]] = None, no_accumulate: Optional[bool] = None) -> List[str]:
         lhs_base = self.lhs.name
         needed = (names or [])
+        print(self.render()[0])
         if self.lhs.index is None or set(self.do_index_list) <= set(self.lhs.index_list()):
             needed = [n for n in needed if n != lhs_base]
+        else:
+            _append_unique(needed, lhs_base)
         for var in self.lhs.collect_vars(): # variables in indexes
             if var.name != lhs_base:
                 _append_unique(needed, var.name)
+        print(needed)
         _extend_unique(needed, self.rhs_names)
         if not no_accumulate and self.accumulate:
             _append_unique(needed, lhs_base)
         return needed
 
-    def check_initial(self, var: str, independent: Optional[bool] = None) -> int:
+    def check_initial(self, var: str, independent: Optional[bool] = None, not_change: Optional[bool] = None) -> int:
         if self.lhs.name != var:
             return 0
         lhs_index = set(self.lhs.index_list())
@@ -587,7 +595,8 @@ class Assignment(Node):
                 return -1
         if not self.accumulate:
             return 1
-        self.accumulate = False
+        if not not_change:
+            self.accumulate = False
         return 2
 
 
@@ -641,7 +650,7 @@ class SaveAssignment(Node):
         _append_unique(needed, self.rhs.name)
         return needed
 
-    def check_initial(self, var: str, independent: Optional[bool] = None) -> int:
+    def check_initial(self, var: str, independent: Optional[bool] = None, not_change: Optional[bool] = None) -> int:
         if self.lhs.name != var:
             return 0
         raise ValueError("This must not appeared at first time.")
@@ -769,7 +778,9 @@ class BranchBlock(Node):
         for block in self.iter_children():
             common_assigned &= set(block.assigned_vars())
         needed = [n for n in needed if n not in common_assigned]
-        res = [var.name for var in self.iter_ref_vars()]
+        res = []
+        for var in self.iter_ref_vars():
+            _append_unique(res, var.name)
         for block in self.iter_children():
             req = block.required_vars(needed, no_accumulate)
             _extend_unique(res, req)
@@ -790,8 +801,8 @@ class BranchBlock(Node):
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
 
-    def check_initial(self, var: str, independent: Optional[bool] = None) -> int:
-        results = [b.check_initial(var, independent) for b in self.iter_children()]
+    def check_initial(self, var: str, independent: Optional[bool] = None, not_change: Optional[bool] = None) -> int:
+        results = [b.check_initial(var, independent, not_change) for b in self.iter_children()]
         if all(r ==0 for r in results):
             return 0
         if any(r < 0 for r in results):
@@ -989,11 +1000,14 @@ class DoLoop(DoAbst):
             return Block([])
         return DoLoop(new_body, self.index, self.start, self.end, self.step)
 
-    def check_initial(self, var: str, independent: Optional[bool] = None) -> int:
+    def check_initial(self, var: str, independent: Optional[bool] = None, not_change: Optional[bool] = None) -> int:
         if self._body.has_assignment_to(var):
             if var in self.required_vars(no_accumulate=True):
                 return -1
-        return self._body.check_initial(var, independent)
+        ret = self._body.check_initial(var, independent, not_change=True)
+        if ret == 2:
+            self._body.check_initial(var, independent, not_change=False)
+        return ret
 
 @dataclass
 class DoWhile(DoAbst):
@@ -1045,7 +1059,7 @@ class DoWhile(DoAbst):
             return Block([])
         return DoWhild(new_body, self.cond)
 
-    def check_initial(self, var: str, independent: Optional[bool] = None) -> int:
+    def check_initial(self, var: str, independent: Optional[bool] = None, not_change: Optional[bool] = None) -> int:
         if self._body.has_assignment_to(var):
             return -1
         return 0

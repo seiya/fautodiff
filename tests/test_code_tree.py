@@ -364,7 +364,7 @@ class TestLoopAnalysis(unittest.TestCase):
         self.assertEqual(loop.check_initial("a"), -1)
         self.assertEqual(loop.check_initial("c"), 0)
 
-    def test_no_recurrent_loop(self):
+    def test_no_recurrent_loop_with_scalar(self):
         i = operators.OpVar("i")
         a = operators.OpVar("a", index=[i])
         c = operators.OpVar("c")
@@ -384,7 +384,7 @@ class TestLoopAnalysis(unittest.TestCase):
         self.assertEqual(loop.check_initial("c"), -1)
         self.assertEqual(loop.check_initial("c", independent=True), 1)
 
-    def test_recurrent_loop(self):
+    def test_recurrent_loop_with_scalar(self):
         i = operators.OpVar("i")
         a = operators.OpVar("a", index=[i])
         c = operators.OpVar("c")
@@ -403,6 +403,42 @@ class TestLoopAnalysis(unittest.TestCase):
         self.assertEqual(loop.check_initial("a"), 1)
         self.assertEqual(loop.check_initial("c"), -1)
         self.assertEqual(loop.check_initial("c", independent=True), -1)
+
+    def test_recurrent_loop_with_different_index(self):
+        code = textwrap.dedent("""\
+        do i = 1, n
+          ip = i + 1
+          a(i) = b(i) + c
+          a(ip) = b(i) + c
+        end do
+        """)
+        i = operators.OpVar("i")
+        ip = operators.OpVar("ip")
+        loop = code_tree.DoLoop(
+            code_tree.Block([
+                code_tree.Assignment(
+                    operators.OpVar("ip"),
+                    i + operators.OpInt(1)
+                ),
+                code_tree.Assignment(
+                    operators.OpVar("a", index=[i]),
+                    operators.OpVar("b", index=[i]) + operators.OpVar("c")
+                ),
+                code_tree.Assignment(
+                    operators.OpVar("a", index=[ip]),
+                    operators.OpVar("b", index=[i]) + operators.OpVar("c")
+                )
+            ]),
+            index=i,
+            start=operators.OpInt(1),
+            end=operators.OpVar("n"),
+        )
+        self.assertEqual("".join(loop.render()), code)
+        self.assertEqual(loop.required_vars(), ["a", "b", "c", "n"])
+        self.assertEqual(loop.is_independent(), False)
+        self.assertEqual(loop.check_initial("a"), -1)
+        self.assertEqual(loop.check_initial("b"), 0)
+        self.assertEqual(loop.check_initial("c"), 0)
 
     def test_nested_loop(self):
         i = operators.OpVar("i")
