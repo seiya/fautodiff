@@ -221,6 +221,7 @@ class Node:
         """Return variables assigned within this node and children."""
         res = list(names or [])
         for var in self.iter_assign_vars(without_savevar=without_savevar):
+            var.do_index_list = self.do_index_list
             _append_unique(res, var)
         for child in self.iter_children():
             res = child.assigned_vars(res, without_savevar=without_savevar)
@@ -670,19 +671,19 @@ class SaveAssignment(Node):
 
     var: OpVar
     id: int
-    load: bool = False
     tmpvar: OpVar = field(repr=False, default=None)
+    load: bool = False
     lhs: OpVar = field(init=False, repr=False, default=None)
     rhs: OpVar = field(init=False, repr=False, default=None)
     scalar: bool = field(init=False, default=None)
 
     def __post_init__(self):
         super().__post_init__()
-        self.var = self.var.deep_clone()
         name = self.var.name
         if re.search(r"save_\d+_ad", name):
             raise RuntimeError(f"Variable has aleady saved: {name}")
         if self.tmpvar is None:
+            self.var = self.var.deep_clone()
             self.tmpvar = OpVar(f"{name}_save_{self.id}_ad", index=self.var.index, is_real=self.var.is_real)
         if self.load:
             self.lhs = self.var
@@ -726,7 +727,7 @@ class SaveAssignment(Node):
         raise ValueError("This must not appeared at first time.")
 
     def to_load(self) -> "SaveAssignment":
-        return SaveAssignment(self.var, tmpvar=self.tmpvar, id=self.id, load=True)
+        return SaveAssignment(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
 
     def scalarize(self) -> None:
         self.tmpvar.index = None
@@ -824,7 +825,8 @@ class BranchBlock(Node):
         cond_blocks = []
         for cond, block in self.cond_blocks:
             res = block.convert_assignments(saved_vars, func, reverse)[0]
-            new_res = block.prune_for(res.required_vars())
+            #new_res = block.prune_for(res.required_vars())
+            new_res = block.deep_clone()
             if not new_res.is_effectively_empty():
                 for node in res.iter_children():
                     new_res.append(node)
@@ -1014,7 +1016,8 @@ class DoLoop(DoAbst):
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
-        new_body = self._body.prune_for(body.required_vars())
+        #new_body = self._body.prune_for(body.required_vars())
+        new_body = self._body.deep_clone()
         if not new_body.is_effectively_empty():
             for node in body.iter_children():
                 new_body.append(node)
@@ -1039,10 +1042,10 @@ class DoLoop(DoAbst):
                 _append_unique(common_vars, var)
         loads = []
         blocks = []
-        for var in common_vars:
-            if var == self.index or var.name.endswith("_ad"):
+        for cvar in common_vars:
+            if cvar == self.index or cvar.name.endswith("_ad"):
                 continue
-            load = self._save_vars(var, saved_vars)
+            load = self._save_vars(cvar, saved_vars)
             for var in [load.var, load.tmpvar]:
                 idxs = var.index
                 if idxs is None:
@@ -1050,14 +1053,14 @@ class DoLoop(DoAbst):
                 new_idx = []
                 for idx in idxs:
                     found = False
-                    for do_idx in self.do_index_list:
-                        if isinstance(idx, OpVar):
-                            for v in idx.collect_vars():
+                    if isinstance(idx, Operator):
+                        for v in idx.collect_vars():
+                            for do_idx in cvar.do_index_list:
                                 if v.name == do_idx:
                                     found = True
                                     break
-                        if found:
-                            break
+                            if found or do_idx == self.index.name:
+                                break
                     if found:
                         new_idx.append(OpRange([]))
                     else:
@@ -1146,7 +1149,8 @@ class DoWhile(DoAbst):
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
-        new_body = self._body.prune_for(body.required_vars())
+        #new_body = self._body.prune_for(body.required_vars())
+        new_body = self._body.deep_clone()
         if not new_body.is_effectively_empty():
             for node in body.children:
                 new_body.append(node)

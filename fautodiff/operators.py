@@ -355,6 +355,7 @@ class OpVar(OpLeaf):
     index: List[Operator] = None
     is_real: bool = None
     index_vars: List[OpLear] = field(init=False, repr=False, default=None)
+    do_index_list: List[str] = field(init=False, repr=False, default=None)
 
     def __init__(self, name: str, index: List[Operator] = None, is_real: bool = None, kind: str = None):
         super().__init__(args=[])
