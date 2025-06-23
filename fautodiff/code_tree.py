@@ -835,12 +835,12 @@ class BranchBlock(Node):
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
         loads = []
+        blocks = []
         for var in block.assigned_vars():
             if not var.name.endswith("_ad"):
-                loads.append(self._save_vars(var, saved_vars))
-        blocks = []
-        for load in loads:
-            blocks.append(load)
+                load = self._save_vars(var, saved_vars)
+                loads.append(load)
+                blocks.insert(0, load)
         blocks.append(block)
         for load in loads:
             blocks.append(load)
@@ -1015,11 +1015,6 @@ class DoLoop(DoAbst):
         new_body = self._body.prune_for(body.required_vars())
         if not new_body.is_effectively_empty():
             for node in body.iter_children():
-                last = new_body.last()
-                if isinstance(last, SaveAssignment) and isinstance(node, SaveAssignment) and last.var == node.var:
-                    new_body.remove_child(last)
-                    if last.load != node.load:
-                        continue
                 new_body.append(node)
             body = new_body
         index = self.index
@@ -1040,12 +1035,17 @@ class DoLoop(DoAbst):
         for var in block.assigned_vars():
             if var in required_vars:
                 _append_unique(common_vars, var)
+        loads = []
         blocks = []
         for var in common_vars:
             if var == self.index or var.name.endswith("_ad"):
                 continue
-            blocks.insert(0, self._save_vars(var, saved_vars))
+            load = self._save_vars(var, saved_vars)
+            loads.append(load)
+            blocks.insert(0, load)
         blocks.append(block)
+        for load in loads:
+            blocks.append(load)
         return blocks
 
     def render(self, indent: int = 0) -> List[str]:
@@ -1130,10 +1130,15 @@ class DoWhile(DoAbst):
                 new_body.append(node)
             body = new_body
         block = DoWhile(body, self.cond)
-        blocks = [block]
+        loads = []
+        blocks = []
         for var in block.assigned_vars():
-            var = OpVar(var)
-            blocks.append(self._save_vars(var, saved_vars))
+            load = self._save_vars(OpVar(var), saved_vars)
+            loads.append(load)
+            blocks.insert(0, load)
+        blocks.append(block)
+        for load in loads:
+            blocks.append(load)
         return blocks
 
     def render(self, indent: int = 0) -> List[str]:

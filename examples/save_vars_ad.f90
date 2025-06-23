@@ -205,7 +205,6 @@ contains
        end do
     end do
     ary(:,:) = ary_save_89_ad(:,:)
-    z(:,:) = z_save_96_ad(:,:)
     do j = m, 1, -1
        do i = n, 1, -1
           z(i,j) = ary(i,j) * x(i,j)
