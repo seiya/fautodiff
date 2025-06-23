@@ -390,7 +390,7 @@ class Block(Node):
         for child in iter(new_children.copy()):
             if isinstance(child, SaveAssignment):
                 name = child.tmpvar.name
-                if not any(name == var.name for var in targets):
+                if not any(name == var.name for var in targets) and child.tmpvar == child.lhs:
                     child.scalarize()
                 if isinstance(last, SaveAssignment) and last.var == child.var and last.load != child.load:
                     new_children.remove(last)
