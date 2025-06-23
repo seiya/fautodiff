@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar
 from fractions import Fraction
 import re
+import copy
 
 
 @dataclass
@@ -23,6 +24,10 @@ class Operator:
             return f"({arg})"
         else:
             return f"{arg}"
+
+    def deep_clone(self) -> "Node":
+        clone = copy.deepcopy(self)
+        return clone
 
     def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         vars = []

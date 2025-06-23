@@ -12,6 +12,7 @@ from .operators import (
     OpVar,
     OpInt,
     OpReal,
+    OpRange,
 )
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -677,6 +678,7 @@ class SaveAssignment(Node):
 
     def __post_init__(self):
         super().__post_init__()
+        self.var = self.var.deep_clone()
         name = self.var.name
         if re.search(r"save_\d+_ad", name):
             raise RuntimeError(f"Variable has aleady saved: {name}")
@@ -1041,6 +1043,26 @@ class DoLoop(DoAbst):
             if var == self.index or var.name.endswith("_ad"):
                 continue
             load = self._save_vars(var, saved_vars)
+            for var in [load.var, load.tmpvar]:
+                idxs = var.index
+                if idxs is None:
+                    continue
+                new_idx = []
+                for idx in idxs:
+                    found = False
+                    for do_idx in self.do_index_list:
+                        if isinstance(idx, OpVar):
+                            for v in idx.collect_vars():
+                                if v.name == do_idx:
+                                    found = True
+                                    break
+                        if found:
+                            break
+                    if found:
+                        new_idx.append(OpRange([]))
+                    else:
+                        new_idx.append(idx)
+                var.index = new_idx
             loads.append(load)
             blocks.insert(0, load)
         blocks.append(block)

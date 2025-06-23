@@ -279,11 +279,17 @@ def _generate_ad_subroutine(routine_org, warnings):
         ad_block.extend(ad_code)
 
     fw_block = routine_org.content.prune_for(ad_block.required_vars())
-    last = fw_block.last()
-    first = ad_block.first()
-    if isinstance(last, SaveAssignment) and isinstance(first, SaveAssignment) and last.var==first.var and last.load != first.load:
-        fw_block.remove_child(last)
-        ad_block.remove_child(first)
+
+    flag = True
+    while flag:
+        last = fw_block.last()
+        first = ad_block.first()
+        if isinstance(last, SaveAssignment) and isinstance(first, SaveAssignment) and last.var==first.var and last.load != first.load:
+            fw_block.remove_child(last)
+            ad_block.remove_child(first)
+        else:
+            flag = False
+
     if not fw_block.is_effectively_empty():
         subroutine.content.extend(fw_block)
 
