@@ -159,8 +159,8 @@ contains
   end subroutine do_with_array_private_ad
 
   subroutine do_with_array_ad(n, m, x, x_ad, y, y_ad, z_ad)
-    integer, intent(in) :: n
-    integer, intent(in) :: m
+    integer, intent(in)  :: n
+    integer, intent(in)  :: m
     real, intent(in)  :: x(n,m)
     real, intent(out) :: x_ad(n,m)
     real, intent(in)  :: y(n,m)
@@ -172,56 +172,54 @@ contains
     real :: ary(n,m)
     real :: z(n,m)
     real :: ary_save_89_ad(n,m)
-    real :: z_save_96_ad(n,m)
     real :: z_save_92_ad
     real :: ary_save_93_ad
 
     do j = 1, m
-       do i = 1, n
-          ary(i,j) = x(i,j) + 1.0
-       end do
+      do i = 1, n
+        ary(i,j) = x(i,j) + 1.0
+      end do
     end do
-    z_save_96_ad(:,:) = z(:,:)
     ary_save_89_ad(:,:) = ary(:,:)
     do j = 1, m
-       do i = 1, n
-          z(i,j) = ary(i,j) * x(i,j)
-          ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
-       end do
+      do i = 1, n
+        z(i,j) = ary(i,j) * x(i,j)
+        ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
+      end do
     end do
 
-    do j = m, 1, -1
-       do i = n, 1, -1
-          z_save_92_ad = z(i,j)
-          ary_save_93_ad = ary(i,j)
-          ary_ad(i,j) = z_ad(i,j) ! z(i,j) = z(i,j) + ary(i,j)
-          ary(i,j) = ary_save_93_ad
-          y_ad(i,j) = ary_ad(i,j) * ary(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
-          ary_ad(i,j) = ary_ad(i,j) * y(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
-          z(i,j) = z_save_92_ad
-          z_ad(i,j) = z_ad(i,j) * x(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
-          x_ad(i,j) = z_ad(i,j) * z(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
-          ary_ad(i,j) = z_ad(i,j) + ary_ad(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
-       end do
+    do j = m, 1, - 1
+      do i = n, 1, - 1
+        z_save_92_ad = z(i,j)
+        ary_save_93_ad = ary(i,j)
+        ary_ad(i,j) = z_ad(i,j) ! z(i,j) = z(i,j) + ary(i,j)
+        ary(i,j) = ary_save_93_ad
+        y_ad(i,j) = ary_ad(i,j) * ary(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
+        ary_ad(i,j) = ary_ad(i,j) * y(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
+        z(i,j) = z_save_92_ad
+        z_ad(i,j) = z_ad(i,j) * x(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
+        x_ad(i,j) = z_ad(i,j) * z(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
+        ary_ad(i,j) = z_ad(i,j) + ary_ad(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
+      end do
     end do
     ary(:,:) = ary_save_89_ad(:,:)
-    do j = m, 1, -1
-       do i = n, 1, -1
-          z(i,j) = ary(i,j) * x(i,j)
-          z_ad(i,j) = ary_ad(i,j) * y(i,j) + z_ad(i,j) ! ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
-          y_ad(i,j) = ary_ad(i,j) * z(i,j) + y_ad(i,j) ! ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
-          ary_ad(i,j) = z_ad(i,j) * x(i,j) + ary_ad(i,j) ! z(i,j) = ary(i,j) * x(i,j)
-          x_ad(i,j) = z_ad(i,j) * ary(i,j) + x_ad(i,j) ! z(i,j) = ary(i,j) * x(i,j)
-       end do
+    do j = m, 1, - 1
+      do i = n, 1, - 1
+        z(i,j) = ary(i,j) * x(i,j)
+        z_ad(i,j) = ary_ad(i,j) * y(i,j) + z_ad(i,j) ! ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
+        y_ad(i,j) = ary_ad(i,j) * z(i,j) + y_ad(i,j) ! ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
+        ary_ad(i,j) = z_ad(i,j) * x(i,j) + ary_ad(i,j) ! z(i,j) = ary(i,j) * x(i,j)
+        x_ad(i,j) = z_ad(i,j) * ary(i,j) + x_ad(i,j) ! z(i,j) = ary(i,j) * x(i,j)
+        z_ad(i,j) = 0.0 ! z(i,j) = ary(i,j) * x(i,j)
+      end do
     end do
-
-    do j = m, 1, -1
-       do i = n, 1, -1
-          x_ad(i,j) = ary_ad(i,j) + x_ad(i,j) ! ary(i,j) = x(i,j) + 1.0
-       end do
+    do j = m, 1, - 1
+      do i = n, 1, - 1
+        x_ad(i,j) = ary_ad(i,j) + x_ad(i,j) ! ary(i,j) = x(i,j) + 1.0
+      end do
     end do
 
     return
-  end subroutine do_with_array
+  end subroutine do_with_array_ad
 
 end module save_vars_ad

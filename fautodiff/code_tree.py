@@ -12,6 +12,7 @@ from .operators import (
     OpVar,
     OpInt,
     OpReal,
+    OpRange,
 )
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -216,14 +217,14 @@ class Node:
     # variable analysis helpers
     # ------------------------------------------------------------------
 
-    def assigned_vars(self, names: Optional[List[OpVar]] = None, without_savevar: bool = False) -> List[OpVar]:
+    def assigned_vars(self, vars: Optional[List[OpVar]] = None, without_savevar: bool = False) -> List[OpVar]:
         """Return variables assigned within this node and children."""
-        res = list(names or [])
-        for var in self.iter_assign_vars(without_savevar=without_savevar):
-            _append_unique(res, var)
+        vars = list(vars or [])
         for child in self.iter_children():
-            res = child.assigned_vars(res, without_savevar=without_savevar)
-        return res
+            vars = child.assigned_vars(vars, without_savevar=without_savevar)
+        for var in self.iter_assign_vars(without_savevar=without_savevar):
+            _append_unique(vars, var)
+        return vars
 
     def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: bool = False) -> List[OpVar]:
         """Return variables needed before executing this node.
@@ -388,7 +389,7 @@ class Block(Node):
         for child in iter(new_children.copy()):
             if isinstance(child, SaveAssignment):
                 name = child.tmpvar.name
-                if not any(name == var.name for var in targets):
+                if (not any(name == var.name for var in targets)) and child.tmpvar == child.lhs:
                     child.scalarize()
                 if isinstance(last, SaveAssignment) and last.var == child.var and last.load != child.load:
                     new_children.remove(last)
@@ -502,17 +503,17 @@ class Routine(Node):
             vars.append(self.get_var(self.result))
         return vars
 
-    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: bool = False) -> List[OpVar]:
-        res = names
+    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False) -> List[OpVar]:
+        vars = list(vars or [])
         for block in reversed(self._all_blocks()):
-            res = block.required_vars(res, no_accumulate)
-        return res
+            vars = block.required_vars(vars, no_accumulate)
+        return vars
 
-    def nonrefered_advars(self, names: Optional[List[OpVar]] = None) -> List[OpVar]:
-        res = names
+    def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
+        vars = list(vars or [])
         for block in self.iter_children():
-            res = block.nonrefered_advars(res)
-        return res
+            vars = block.nonrefered_advars(vars)
+        return vars
 
     def expand_decls(self, decls: Block) -> "Routine":
         self.decls.expand(decls)
@@ -603,12 +604,12 @@ class Assignment(Node):
             ad_comment = f" ! {self.ad_info}"
         return [f"{space}{self.lhs} = {rhs}{ad_comment}\n"]
 
-    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: bool = False) -> List[OpVar]:
-        needed = (names or [])
+    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False) -> List[OpVar]:
+        vars = (vars or [])
         lhs = self.lhs
-        needed_new = []
+        vars_new = []
         entire = (not lhs.is_partial_access()) or set(self.do_index_list) <= set(lhs.index_list())
-        for var in needed:
+        for var in vars:
             if var == lhs:
                 continue
             if var.name == lhs.name:
@@ -616,15 +617,15 @@ class Assignment(Node):
                     continue
                 if lhs.index is None or not lhs.is_partial_access():
                     continue
-            needed_new.append(var)
-        needed = needed_new
+            vars_new.append(var)
+        vars = vars_new
         for var in lhs.collect_vars(): # variables in indexes
             if var != lhs:
-                _append_unique(needed, var)
-        _extend_unique(needed, self._rhs_vars)
+                _append_unique(vars, var)
+        _extend_unique(vars, self._rhs_vars)
         if not no_accumulate and self.accumulate:
-            _append_unique(needed, lhs)
-        return needed
+            _append_unique(vars, lhs)
+        return vars
 
     def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
         vars = (vars or [])
@@ -635,10 +636,9 @@ class Assignment(Node):
                 if var == rhs:
                     found = True
                     break
-                if var.name == rhs.name:
-                    if (not var.is_partial_access()) and (not rhs.is_partial_access()) or set(self.do_index_list) <= set(rhs.index_list()):
-                        found = True
-                        break
+                if var.name == rhs.name and (not rhs.is_partial_access()):
+                    fount = True
+                    break
             if not found:
                 vars_new.append(var)
         vars = vars_new
@@ -669,8 +669,8 @@ class SaveAssignment(Node):
 
     var: OpVar
     id: int
-    load: bool = False
     tmpvar: OpVar = field(repr=False, default=None)
+    load: bool = False
     lhs: OpVar = field(init=False, repr=False, default=None)
     rhs: OpVar = field(init=False, repr=False, default=None)
     scalar: bool = field(init=False, default=None)
@@ -681,6 +681,7 @@ class SaveAssignment(Node):
         if re.search(r"save_\d+_ad", name):
             raise RuntimeError(f"Variable has aleady saved: {name}")
         if self.tmpvar is None:
+            self.var = self.var.deep_clone()
             self.tmpvar = OpVar(f"{name}_save_{self.id}_ad", index=self.var.index, is_real=self.var.is_real)
         if self.load:
             self.lhs = self.var
@@ -724,7 +725,7 @@ class SaveAssignment(Node):
         raise ValueError("This must not appeared at first time.")
 
     def to_load(self) -> "SaveAssignment":
-        return SaveAssignment(self.var, tmpvar=self.tmpvar, id=self.id, load=True)
+        return SaveAssignment(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
 
     def scalarize(self) -> None:
         self.tmpvar.index = None
@@ -782,8 +783,8 @@ class Declaration(Node):
 
     def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
         vars = list(vars or [])
-        if self.intent in ("inout"):
-            vars.append(OpVar(self.name))
+        if self.intent in ("in", "inout"):
+            vars.append(OpVar(self.name, is_real=self.is_real, kind=self.kind))
         return vars
 
 
@@ -822,7 +823,7 @@ class BranchBlock(Node):
         cond_blocks = []
         for cond, block in self.cond_blocks:
             res = block.convert_assignments(saved_vars, func, reverse)[0]
-            new_res = block.prune_for(res.required_vars())
+            new_res = block.deep_clone()
             if not new_res.is_effectively_empty():
                 for node in res.iter_children():
                     new_res.append(node)
@@ -846,12 +847,12 @@ class BranchBlock(Node):
             blocks.append(load)
         return blocks
 
-    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: bool = False) -> List[OpVar]:
+    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False) -> List[OpVar]:
         res = []
         for var in self.iter_ref_vars():
             _append_unique(res, var)
         for block in self.iter_children():
-            req = block.required_vars(names, no_accumulate)
+            req = block.required_vars(vars, no_accumulate)
             _extend_unique(res, req)
         return res
 
@@ -859,7 +860,7 @@ class BranchBlock(Node):
         vars = list(vars or [])
         vars_new = []
         for block in self.iter_children():
-            for v in block.nonrefered_advars(vars.copy()):
+            for v in block.nonrefered_advars(vars):
                 _append_unique(vars_new, v)
         return vars_new
 
@@ -964,10 +965,12 @@ class DoLoop(DoAbst):
     start: Operaion
     end: Operaion
     step: Optional[Operator] = None
+    _index_map: dist = field(init=False, repr=False, default=None)
 
     def __post_init__(self):
         super().__post_init__()
         self.build_do_index_list([])
+        self._build_index_map()
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.start.collect_vars():
@@ -986,33 +989,28 @@ class DoLoop(DoAbst):
         self.do_index_list.extend(list)
         self._body.build_do_index_list(self.do_index_list)
 
-    def is_independent(self) -> bool:
-        do_index = set(self.do_index_list)
-
-        def _check(node: Node) -> bool:
-            for var in node.iter_assign_vars():
-                if var.index is not None and (not do_index <= set(var.index_list())):
-                    return False
-            #vars = [v.name for v in node.required_vars(no_accumulate=True)]
-            vars = [v.name for v in node.required_vars()]
-            reqs = [v for v in vars if ((not v in do_index) and node.has_assignment_to(v))]
-            for child in node.iter_children():
-                if isinstance(child, DoLoop):
-                    if not child.is_independent():
-                        return False
-                else:
-                    if not _check(child):
-                        return False
-                for var in reqs:
-                    if child.has_access_to(var) and not child.has_partial_access_to(var): # scalar
-                        return False
-            return True
-
-        return _check(self._body)
+    def _build_index_map(self):
+        if self._index_map is None:
+            self._index_map = {}
+        for node in self.iter_children():
+            for var in node.collect_vars():
+                name = var.name
+                found = False
+                if var.index is not None:
+                    for i, idx in enumerate(var.index):
+                        for v in idx.collect_vars():
+                            if isinstance(v, OpVar) and v == self.index:
+                                if name in self._index_map and self._index_map[name] != i:
+                                    raise RuntimeError(f"Inconsistency found: {var} {self.index}")
+                                self._index_map[name] = i
+                                found = True
+                                break
+                        if found:
+                            break
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
-        new_body = self._body.prune_for(body.required_vars())
+        new_body = self._body.deep_clone()
         if not new_body.is_effectively_empty():
             for node in body.iter_children():
                 new_body.append(node)
@@ -1037,10 +1035,10 @@ class DoLoop(DoAbst):
                 _append_unique(common_vars, var)
         loads = []
         blocks = []
-        for var in common_vars:
-            if var == self.index or var.name.endswith("_ad"):
+        for cvar in common_vars:
+            if cvar == self.index or cvar.name.endswith("_ad"):
                 continue
-            load = self._save_vars(var, saved_vars)
+            load = self._save_vars(cvar, saved_vars)
             loads.append(load)
             blocks.insert(0, load)
         blocks.append(block)
@@ -1058,33 +1056,42 @@ class DoLoop(DoAbst):
         lines.append(f"{space}end do\n")
         return lines
 
-    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: bool = False) -> List[OpVar]:
-        needed = self._body.required_vars(names, no_accumulate)
-        if self.index in needed:
-            needed.remove(self.index)
-        do_index_list = set(self.do_index_list)
-        needed_new = []
-        for var in needed:
-            if var.index is not None and do_index_list <= set(var.index_list()):
-                needed_new.append(OpVar(var.name)) # remove index
-            else:
-                needed_new.append(var)
-        needed = needed_new
+    def _update_index(self, vars: List[OpVar]) -> List[OpVar]:
+        vars_new = []
+        for var in vars:
+            if var.name in self._index_map and var.index is not None:
+                if var.index[self._index_map[var.name]] != OpRange([]):
+                    index_new = []
+                    for i, idx in enumerate(var.index):
+                        if i == self._index_map[var.name]:
+                            index_new.append( OpRange([]))
+                        else:
+                            index_new.append(idx)
+                    vars_new.append(var.change_index(index_new))
+                    continue
+            vars_new.append(var)
+        return vars_new
+
+    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False) -> List[OpVar]:
+        vars = self._body.required_vars(vars, no_accumulate)
+        if self.index in vars:
+            vars.remove(self.index)
+        vars = self._update_index(vars)
         for op in [self.start, self.end, self.step]:
             if op is not None:
                 for var in op.collect_vars():
-                    _append_unique(needed, var)
-        return needed
+                    _append_unique(vars, var)
+        return vars
+
+    def assigned_vars(self, vars: Optional[List[OpVar]] = None, without_savevar: bool = False) -> List[OpVar]:
+        vars = self._body.assigned_vars(vars, without_savevar=without_savevar)
+        vars = self._update_index(vars)
+        _append_unique(vars, self.index)
+        return vars
 
     def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
         vars = self._body.nonrefered_advars(vars)
-        do_index_list = set(self.do_index_list)
-        vars_new = []
-        for var in vars:
-            if var.index is not None and do_index_list <= set(var.index_list()):
-                vars_new.append(OpVar(var.name)) # remove index
-            else:
-                vars_new.append(var)
+        vars = self._update_index(vars)
         return vars
 
     def prune_for(self, targets: Iterable[OpVar]) -> Node:
@@ -1094,14 +1101,15 @@ class DoLoop(DoAbst):
         return DoLoop(new_body, self.index, self.start, self.end, self.step)
 
     def check_initial(self, var: str, not_change: bool = False) -> int:
-        if self._body.has_assignment_to(var):
-            for v in self.required_vars(no_accumulate=True):
-                if v.name == var:
+        if not self._body.has_assignment_to(var):
+            return 0
+        for v in self.required_vars(no_accumulate=True):
+            if v.name == var:
+                return -1
+        for v in self._body.nonrefered_advars():
+            if v.name == var:
+                if v.index is None or not set(self.do_index_list) <= set(v.index_list()):
                     return -1
-            for v in self.nonrefered_advars():
-                if v.name == var:
-                    if v.index is None or not set(self.do_index_list) <= set(v.index_list()):
-                        return -1
         ret = self._body.check_initial(var, not_change=True)
         self._body.check_initial(var, not_change=False)
         return ret
@@ -1124,7 +1132,7 @@ class DoWhile(DoAbst):
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
-        new_body = self._body.prune_for(body.required_vars())
+        new_body = self._body.deep_clone()
         if not new_body.is_effectively_empty():
             for node in body.children:
                 new_body.append(node)
@@ -1162,7 +1170,7 @@ class DoWhile(DoAbst):
         new_body = self._body.prune_for(targets)
         if new_body.is_effectively_empty():
             return Block([])
-        return DoWhild(new_body, self.cond)
+        return DoWhile(new_body, self.cond)
 
     def check_initial(self, var: str, not_change: bool = False) -> int:
         if self._body.has_assignment_to(var):

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar
 from fractions import Fraction
 import re
+import copy
 
 
 @dataclass
@@ -23,6 +24,10 @@ class Operator:
             return f"({arg})"
         else:
             return f"{arg}"
+
+    def deep_clone(self) -> "Node":
+        clone = copy.deepcopy(self)
+        return clone
 
     def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         vars = []
@@ -366,6 +371,11 @@ class OpVar(OpLeaf):
                     for v in idx.collect_vars():
                         if not v in self.index_vars:
                             self.index_vars.append(v)
+
+    def change_index(self, index) -> OpVar:
+        if index == self.index:
+            return self
+        return OpVar(name=self.name, index=index, is_real=self.is_real, kind=self.kind)
 
     def add_suffix(self, suffix: str = None) -> str:
         if suffix is None:
@@ -721,3 +731,8 @@ class OpRange(Operator):
             else:
                 args = self.args
         return ":".join(["" if arg is None else str(arg) for arg in args])
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, type(self)):
+            return False
+        return str(self) == str(other)
