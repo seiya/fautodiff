@@ -823,7 +823,6 @@ class BranchBlock(Node):
         cond_blocks = []
         for cond, block in self.cond_blocks:
             res = block.convert_assignments(saved_vars, func, reverse)[0]
-            #new_res = block.prune_for(res.required_vars())
             new_res = block.deep_clone()
             if not new_res.is_effectively_empty():
                 for node in res.iter_children():
@@ -1009,33 +1008,8 @@ class DoLoop(DoAbst):
                         if found:
                             break
 
-    def is_independent(self) -> bool:
-        do_index = set(self.do_index_list)
-
-        def _check(node: Node) -> bool:
-            for var in node.iter_assign_vars():
-                if var.index is not None and (not do_index <= set(var.index_list())):
-                    return False
-            #vars = [v.name for v in node.required_vars(no_accumulate=True)]
-            vars = [v.name for v in node.required_vars()]
-            reqs = [v for v in vars if ((not v in do_index) and node.has_assignment_to(v))]
-            for child in node.iter_children():
-                if isinstance(child, DoLoop):
-                    if not child.is_independent():
-                        return False
-                else:
-                    if not _check(child):
-                        return False
-                for var in reqs:
-                    if child.has_access_to(var) and not child.has_partial_access_to(var): # scalar
-                        return False
-            return True
-
-        return _check(self._body)
-
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
-        #new_body = self._body.prune_for(body.required_vars())
         new_body = self._body.deep_clone()
         if not new_body.is_effectively_empty():
             for node in body.iter_children():
@@ -1158,7 +1132,6 @@ class DoWhile(DoAbst):
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
-        #new_body = self._body.prune_for(body.required_vars())
         new_body = self._body.deep_clone()
         if not new_body.is_effectively_empty():
             for node in body.children:
@@ -1197,7 +1170,7 @@ class DoWhile(DoAbst):
         new_body = self._body.prune_for(targets)
         if new_body.is_effectively_empty():
             return Block([])
-        return DoWhild(new_body, self.cond)
+        return DoWhile(new_body, self.cond)
 
     def check_initial(self, var: str, not_change: bool = False) -> int:
         if self._body.has_assignment_to(var):
