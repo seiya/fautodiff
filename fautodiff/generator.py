@@ -312,8 +312,15 @@ def _generate_ad_subroutine(routine_org, warnings):
             ad_block.extend(ad_code)
             print("".join(subroutine.render()))
             raise
-        if sa.scalar:
-            dims = None
+        if sa.reduced_dims:
+            dims = []
+            for i, idx in enumerate(v_org.dims):
+                if not i in sa.reduced_dims:
+                    dims.append(idx)
+            if len(dims) == 0:
+                dims = None
+            else:
+                dims = tuple(dims)
         else:
             dims = v_org.dims
         v = Variable(name=sa.tmpvar.name, typename=v_org.typename, kind=v_org.kind, dims=dims)
