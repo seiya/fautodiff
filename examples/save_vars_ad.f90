@@ -188,8 +188,8 @@ contains
       end do
     end do
 
-    do j = m, 1, -1
-      do i = n, 1, -1
+    do j = m, 1, - 1
+      do i = n, 1, - 1
         z_save_92_ad = z(i,j)
         ary_save_93_ad = ary(i,j)
         ary_ad(i,j) = z_ad(i,j) ! z(i,j) = z(i,j) + ary(i,j)
@@ -203,23 +203,23 @@ contains
       end do
     end do
     ary(:,:) = ary_save_89_ad(:,:)
-    do j = m, 1, -1
-      do i = n, 1, -1
+    do j = m, 1, - 1
+      do i = n, 1, - 1
         z(i,j) = ary(i,j) * x(i,j)
         z_ad(i,j) = ary_ad(i,j) * y(i,j) + z_ad(i,j) ! ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
         y_ad(i,j) = ary_ad(i,j) * z(i,j) + y_ad(i,j) ! ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
         ary_ad(i,j) = z_ad(i,j) * x(i,j) + ary_ad(i,j) ! z(i,j) = ary(i,j) * x(i,j)
         x_ad(i,j) = z_ad(i,j) * ary(i,j) + x_ad(i,j) ! z(i,j) = ary(i,j) * x(i,j)
+        z_ad(i,j) = 0.0 ! z(i,j) = ary(i,j) * x(i,j)
       end do
     end do
-
-    do j = m, 1, -1
-      do i = n, 1, -1
+    do j = m, 1, - 1
+      do i = n, 1, - 1
         x_ad(i,j) = ary_ad(i,j) + x_ad(i,j) ! ary(i,j) = x(i,j) + 1.0
       end do
     end do
 
     return
-  end subroutine do_with_array
+  end subroutine do_with_array_ad
 
 end module save_vars_ad

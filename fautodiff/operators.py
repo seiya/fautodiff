@@ -355,7 +355,6 @@ class OpVar(OpLeaf):
     index: List[Operator] = None
     is_real: bool = None
     index_vars: List[OpLear] = field(init=False, repr=False, default=None)
-    do_index_list: List[str] = field(init=False, repr=False, default=None)
 
     def __init__(self, name: str, index: List[Operator] = None, is_real: bool = None, kind: str = None):
         super().__init__(args=[])
@@ -372,6 +371,11 @@ class OpVar(OpLeaf):
                     for v in idx.collect_vars():
                         if not v in self.index_vars:
                             self.index_vars.append(v)
+
+    def change_index(self, index) -> OpVar:
+        if index == self.index:
+            return self
+        return OpVar(name=self.name, index=index, is_real=self.is_real, kind=self.kind)
 
     def add_suffix(self, suffix: str = None) -> str:
         if suffix is None:
@@ -727,3 +731,8 @@ class OpRange(Operator):
             else:
                 args = self.args
         return ":".join(["" if arg is None else str(arg) for arg in args])
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, type(self)):
+            return False
+        return str(self) == str(other)
