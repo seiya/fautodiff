@@ -96,4 +96,51 @@ contains
     return
   end subroutine do_with_array
 
+  subroutine do_with_local_array(n, m, x, y, z)
+    integer, intent(in) :: n, m
+    real, intent(in) :: x(n,m), y(n,m)
+    real, intent(out) :: z(n,m)
+    real :: work1(2,n,m)
+    real :: work2(2,m)
+    real :: work3(2)
+    integer :: i, j, k
+
+    do j = 1, m
+       do i = 1, n
+          work3(1) = x(i,j) + y(i,j)
+          work3(2) = x(i,j) - y(i,j)
+          work2(1,i) = work3(1) + work3(2) * x(i,j)
+          work2(2,i) = work3(1) * work3(2) + y(i,j)
+       end do
+
+       do i = 1, n
+          work1(1,i,j) = work2(1,i) * x(i,j)
+          work1(2,i,j) = work2(2,i) * y(i,j)
+       end do
+    end do
+
+    do j = 1, m
+       do i = 1, n
+          z(i,j) = work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+          do k = 1, 2
+             work3(k) = work1(k,i,j)
+             work1(k,i,j) = x(i,j) * work3(k)
+          end do
+          z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+       end do
+    end do
+
+    return
+  end subroutine do_with_local_array
+
+  subroutine do_with_recurrent_scalar()
+
+    return
+  end subroutine do_with_recurrent_scalar
+
+  subroutine do_with_stencil_array()
+
+    return
+  end subroutine do_with_stencil_array
+
 end module save_vars
