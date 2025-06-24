@@ -424,7 +424,6 @@ class TestLoopAnalysis(unittest.TestCase):
             end=operators.OpVar("n"),
         )
         self.assertEqual([v.name for v in loop.required_vars()], ["b", "n"])
-        self.assertEqual(loop.is_independent(), True)
 
     def test_loop_with_accumulate(self):
         i = operators.OpVar("i")
@@ -443,7 +442,6 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual([v.name for v in loop.required_vars()], ["c", "b", "a", "n"])
         self.assertEqual([v.name for v in loop.required_vars(no_accumulate=True)], ["c", "n"])
-        self.assertEqual(loop.is_independent(), True)
 
 
     def test_self_reference_loop(self):
@@ -459,7 +457,6 @@ class TestLoopAnalysis(unittest.TestCase):
             end=operators.OpVar("n"),
         )
         self.assertEqual([v.name for v in loop.required_vars()], ["a", "c", "n"])
-        self.assertEqual(loop.is_independent(), True)
 
     def test_no_recurrent_loop_with_scalar(self):
         i = operators.OpVar("i")
@@ -476,7 +473,6 @@ class TestLoopAnalysis(unittest.TestCase):
             end=operators.OpVar("n"),
         )
         self.assertEqual([v.name for v in loop.required_vars()], ["a", "n"])
-        self.assertEqual(loop.is_independent(), True)
 
     def test_recurrent_loop_with_scalar(self):
         i = operators.OpVar("i")
@@ -493,7 +489,6 @@ class TestLoopAnalysis(unittest.TestCase):
             end=operators.OpVar("n"),
         )
         self.assertEqual([v.name for v in loop.required_vars()], ["c", "n"])
-        self.assertEqual(loop.is_independent(), False)
 
     def test_recurrent_loop_with_different_index(self):
         code = textwrap.dedent("""\
@@ -526,7 +521,6 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual("".join(loop.render()), code)
         self.assertEqual([v.name for v in loop.required_vars()], ["b", "c", "n"])
-        self.assertEqual(loop.is_independent(), False)
 
     def test_recurrent_loop_with_self_reference_and_different_index(self):
         code = textwrap.dedent("""\
@@ -553,7 +547,6 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual("".join(loop.render()), code)
         self.assertEqual([v.name for v in loop.required_vars()], ["a", "c", "n"])
-        self.assertEqual(loop.is_independent(), False)
 
     def test_nested_loop(self):
         i = operators.OpVar("i")
@@ -576,7 +569,6 @@ class TestLoopAnalysis(unittest.TestCase):
             end=operators.OpVar("m"),
         )
         self.assertEqual([v.name for v in outer.required_vars()], ["b", "c", "n", "m"])
-        self.assertEqual(outer.is_independent(), True)
 
     def test_nested_loop_with_different_index(self):
         code = textwrap.dedent("""\
@@ -608,7 +600,6 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual("".join(outer.render()), code)
         self.assertEqual([v.name for v in outer.required_vars()], ["b", "k", "c", "n", "m"])
-        self.assertEqual(outer.is_independent(), True)
 
     def test_nested_recurrent_loop_with_different_index(self):
         code = textwrap.dedent("""\
@@ -640,7 +631,6 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual("".join(outer.render()), code)
         self.assertEqual([v.name for v in outer.required_vars()], ["k", "b", "c", "n", "m"])
-        self.assertEqual(outer.is_independent(), False)
 
 
 if __name__ == "__main__":

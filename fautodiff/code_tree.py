@@ -381,21 +381,22 @@ class Block(Node):
                 if (child.intent is not None) or any(child.name==var.name for var in needed):
                     new_children.insert(0, child)
                     continue
-            if set(var.name for var in child.assigned_vars([])) & set(var.name for var in needed):
+            if set(var.name for var in child.assigned_vars([], without_savevar=True)) & set(var.name for var in needed):
                 pruned = child.prune_for(needed)
                 new_children.insert(0, pruned)
                 needed = pruned.required_vars(needed)
-        last = None
-        for child in iter(new_children.copy()):
-            if isinstance(child, SaveAssignment):
-                name = child.tmpvar.name
-                if (not any(name == var.name for var in targets)) and child.tmpvar == child.lhs:
-                    child.scalarize()
-                if isinstance(last, SaveAssignment) and last.var == child.var and last.load != child.load:
-                    new_children.remove(last)
-                    new_children.remove(child)
-            last = child
-        return Block(new_children)
+        children = new_children
+        if len(children) >= 2:
+            new_children = []
+            for child in children:
+                if len(new_children) > 0 and isinstance(child, SaveAssignment):
+                    last = new_children[-1]
+                    if isinstance(last, SaveAssignment) and last.var == child.var and last.load != child.load:
+                        new_children.remove(last)
+                        continue
+                new_children.append(child)
+            children = new_children
+        return Block(children)
 
 
 @dataclass
@@ -673,7 +674,7 @@ class SaveAssignment(Node):
     load: bool = False
     lhs: OpVar = field(init=False, repr=False, default=None)
     rhs: OpVar = field(init=False, repr=False, default=None)
-    scalar: bool = field(init=False, default=None)
+    reduced_dims: List[int] = field(init=False, repr=False, default=None)
 
     def __post_init__(self):
         super().__post_init__()
@@ -697,7 +698,7 @@ class SaveAssignment(Node):
         yield self.rhs
             
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
-        if without_savevar:
+        if without_savevar and self.lhs == self.tmpvar:
             return iter(())
         else:
             yield self.lhs
@@ -727,9 +728,18 @@ class SaveAssignment(Node):
     def to_load(self) -> "SaveAssignment":
         return SaveAssignment(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
 
-    def scalarize(self) -> None:
-        self.tmpvar.index = None
-        self.scalar = True
+    def reduce_dim(self, dim: int) -> None:
+        if self.reduced_dims is None:
+            self.reduced_dims = []
+        if self.tmpvar.index is None:
+            raise RuntimeError(f"No index {self.tmpvar.name}")
+        var = self.var.index[dim]
+        index_new = []
+        for idx in self.tmpvar.index:
+            if idx != var:
+                index_new.append(idx)
+        self.tmpvar.index = index_new
+        self.reduced_dims.append(dim)
 
 @dataclass
 class Declaration(Node):
@@ -1096,6 +1106,27 @@ class DoLoop(DoAbst):
 
     def prune_for(self, targets: Iterable[OpVar]) -> Node:
         new_body = self._body.prune_for(targets)
+        targets = list(targets)
+        for var in new_body.required_vars(targets):
+            if var.index is None or not set(self.do_index_list) <= set(var.index_list()):
+                _append_unique(targets, var)
+        new_body = self._body.prune_for(targets)
+
+        def _reducedim_from_tmpvar(node: Node) -> None:
+            for child in node.iter_children():
+                if isinstance(child, SaveAssignment):
+                    if child.tmpvar.index is None:
+                        continue
+                    name = child.tmpvar.name
+                    if (not any(name == var.name for var in targets)) and child.tmpvar == child.lhs:
+                        if child.var.name in self._index_map:
+                            child.reduce_dim(self._index_map[child.var.name])
+                    continue
+                if isinstance(child, DoLoop):
+                    continue
+                _reducedim_from_tmpvar(child)
+        _reducedim_from_tmpvar(self._body)
+
         if new_body.is_effectively_empty():
             return Block([])
         return DoLoop(new_body, self.index, self.start, self.end, self.step)
@@ -1167,6 +1198,10 @@ class DoWhile(DoAbst):
         return vars
 
     def prune_for(self, targets: Iterable[OpVar]) -> Node:
+        new_body = self._body.prune_for(targets)
+        targets = list(targets)
+        for var in new_body.required_vars(targets):
+            _append_unique(targets, var)
         new_body = self._body.prune_for(targets)
         if new_body.is_effectively_empty():
             return Block([])
