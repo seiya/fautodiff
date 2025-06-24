@@ -608,22 +608,11 @@ class Assignment(Node):
         vars = (vars or [])
         lhs = self.lhs
         vars_new = []
+        # entire: access entier element of the variable in the loop
+        # e.g., in the loop of index "i"
+        # True: a, a[:], a[i], a[k,i]
+        # False: a[k]
         entire = (not lhs.is_partial_access()) or set(self.do_index_list) <= set(lhs.index_list())
-        index = []
-        if lhs.index is not None:
-            for idx in lhs.index:
-                if idx is None:
-                    index.append(":")
-                    break
-                found = False
-                for v in idx.collect_vars():
-                    if v.name in self.do_index_list:
-                        found = True
-                        break
-                if found:
-                    index.append(":")
-                else:
-                    index.append(str(idx))
         for var in vars:
             if var == lhs:
                 continue
@@ -631,8 +620,6 @@ class Assignment(Node):
                 if (not var.is_partial_access()) and entire: # var does not has different index
                     continue
                 if lhs.index is None or not lhs.is_partial_access():
-                    continue
-                if index == var.index_list():
                     continue
             vars_new.append(var)
         vars = vars_new
@@ -1090,7 +1077,25 @@ class DoLoop(DoAbst):
         return vars_new
 
     def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
-        vars = self._body.required_vars(vars, no_accumulate, without_savevar)
+        # build index map: variable name -> position of the loop index in the array index
+        index_map = {}
+        for var in self.collect_vars():
+            if var.index is not None:
+                for i, idx in enumerate(var.index):
+                    if isinstance(idx, OpVar) and idx == self.index:
+                        index_map[var.name] = i
+        vars_new = []
+        for var in list(vars or []):
+            if var.index is not None and var.name in index_map:
+                index_new = []
+                for i, idx in enumerate(var.index):
+                    if isinstance(var, OpVar) and var.name in index_map and i == index_map[var.name]:
+                        index_new.append(self.index)
+                    else:
+                        index_new.append(idx)
+                var = OpVar(name=var.name, index=index_new, is_real=var.is_real, kind=var.kind)
+            vars_new.append(var)
+        vars = self._body.required_vars(vars_new, no_accumulate, without_savevar)
         if self.index in vars:
             vars.remove(self.index)
         vars = self._update_index(vars)

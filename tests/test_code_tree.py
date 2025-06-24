@@ -148,8 +148,8 @@ class TestNodeMethods(unittest.TestCase):
             code_tree.Assignment(b, a),
             code_tree.IfBlock([(cond1, body1), (cond2, body2)])
         ])
-        self.assertEqual([v.name for v in blk.assigned_vars()], ["a", "b", "c"])
-        self.assertEqual([v.name for v in blk.required_vars()], ["c"])
+        self.assertEqual([str(v) for v in blk.assigned_vars()], ["a", "b", "c"])
+        self.assertEqual([str(v) for v in blk.required_vars()], ["c"])
 
         sub = code_tree.Subroutine(
             "foo",
@@ -160,8 +160,8 @@ class TestNodeMethods(unittest.TestCase):
             ]),
             content=code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpVar("a"))]),
         )
-        self.assertEqual([v.name for v in sub.assigned_vars()], ["a", "b"])
-        self.assertEqual([v.name for v in sub.required_vars()], [])
+        self.assertEqual([str(v) for v in sub.assigned_vars()], ["a", "b"])
+        self.assertEqual([str(v) for v in sub.required_vars()], [])
 
     def test_do_loop_list(self):
         a = code_tree.Assignment(operators.OpVar("a"), operators.OpInt(0))
@@ -204,14 +204,14 @@ class TestNodeMethods(unittest.TestCase):
         x_da = operators.OpVar("x_da")
         y = operators.OpVar("y")
         a = code_tree.Assignment(x_da, x_da + y)
-        self.assertEqual([v.name for v in a.required_vars()], ["x_da", "y"])
+        self.assertEqual([str(v) for v in a.required_vars()], ["x_da", "y"])
 
         b = code_tree.Assignment(x, x_da + y)
         z = operators.OpVar("z")
-        self.assertEqual([v.name for v in b.required_vars([z])], ["z", "x_da", "y"])
+        self.assertEqual([str(v) for v in b.required_vars([z])], ["z", "x_da", "y"])
 
         c = code_tree.Assignment(x, x_da + y)
-        self.assertEqual([v.name for v in c.required_vars([x])], ["x_da", "y"])
+        self.assertEqual([str(v) for v in c.required_vars([x])], ["x_da", "y"])
 
         # explicit accumulate
         d = code_tree.Assignment(x_da, y, accumulate=True)
@@ -219,20 +219,20 @@ class TestNodeMethods(unittest.TestCase):
             code_tree.render_program(code_tree.Block([d])),
             "x_da = y + x_da\n",
         )
-        self.assertEqual([v.name for v in b.required_vars()], ["x_da", "y"])
+        self.assertEqual([str(v) for v in b.required_vars()], ["x_da", "y"])
 
     def test_required_vars(self):
         a = operators.OpVar("a")
         b = operators.OpVar("b")
         c = operators.OpVar("c")
         assign = code_tree.Assignment(a, b + c)
-        self.assertEqual([v.name for v in assign.required_vars()], ["b", "c"])
+        self.assertEqual([str(v) for v in assign.required_vars()], ["b", "c"])
 
         blk = code_tree.Block([
             code_tree.Assignment(a, c),
             code_tree.Assignment(b, a)
         ])
-        self.assertEqual([v.name for v in blk.required_vars()], ["c"])
+        self.assertEqual([str(v) for v in blk.required_vars()], ["c"])
         
         i = operators.OpVar("i")
         xa = operators.OpVar("x", index=[operators.OpRange([None])])
@@ -242,7 +242,7 @@ class TestNodeMethods(unittest.TestCase):
             code_tree.Assignment(xa, operators.OpInt(0)),
             code_tree.Assignment(yi, xi)
         ])
-        self.assertEqual([v.name for v in blk.required_vars()], ["i"])
+        self.assertEqual([str(v) for v in blk.required_vars()], ["i"])
 
         ya = operators.OpVar("y", index=[operators.OpRange([None])])
         blk = code_tree.Block([
@@ -252,7 +252,7 @@ class TestNodeMethods(unittest.TestCase):
                 index=i, start=operators.OpInt(1), end=operators.OpVar("n")
             )
         ])
-        self.assertEqual([v.name for v in blk.required_vars([ya])], ["n"])
+        self.assertEqual([str(v) for v in blk.required_vars([ya])], ["n"])
 
         cond1 = i < 0
         block1 = code_tree.Block([code_tree.Assignment(a, c)])
@@ -263,7 +263,7 @@ class TestNodeMethods(unittest.TestCase):
         ifblk = code_tree.IfBlock([
             (cond1, block1), (cond2, block2), (cond3, block3)
         ])
-        self.assertEqual([v.name for v in ifblk.required_vars([a])], ["i", "c", "b", "a"])
+        self.assertEqual([str(v) for v in ifblk.required_vars([a])], ["i", "c", "b", "a"])
 
     def test_check_initial(self):
         a_ad = operators.OpVar("a_ad")
@@ -423,7 +423,7 @@ class TestLoopAnalysis(unittest.TestCase):
             start=operators.OpInt(1),
             end=operators.OpVar("n"),
         )
-        self.assertEqual([v.name for v in loop.required_vars()], ["b", "n"])
+        self.assertEqual([str(v) for v in loop.required_vars()], ["b(:)", "n"])
 
     def test_loop_with_accumulate(self):
         i = operators.OpVar("i")
@@ -440,8 +440,8 @@ class TestLoopAnalysis(unittest.TestCase):
             start=operators.OpInt(1),
             end=operators.OpVar("n"),
         )
-        self.assertEqual([v.name for v in loop.required_vars()], ["c", "b", "a", "n"])
-        self.assertEqual([v.name for v in loop.required_vars(no_accumulate=True)], ["c", "n"])
+        self.assertEqual([str(v) for v in loop.required_vars()], ["c", "b(:)", "a(:)", "n"])
+        self.assertEqual([str(v) for v in loop.required_vars(no_accumulate=True)], ["c", "n"])
 
 
     def test_self_reference_loop(self):
@@ -456,7 +456,7 @@ class TestLoopAnalysis(unittest.TestCase):
             start=operators.OpInt(1),
             end=operators.OpVar("n"),
         )
-        self.assertEqual([v.name for v in loop.required_vars()], ["a", "c", "n"])
+        self.assertEqual([str(v) for v in loop.required_vars()], ["a(:)", "c", "n"])
 
     def test_no_recurrent_loop_with_scalar(self):
         i = operators.OpVar("i")
@@ -472,7 +472,7 @@ class TestLoopAnalysis(unittest.TestCase):
             start=operators.OpInt(1),
             end=operators.OpVar("n"),
         )
-        self.assertEqual([v.name for v in loop.required_vars()], ["a", "n"])
+        self.assertEqual([str(v) for v in loop.required_vars()], ["a(:)", "n"])
 
     def test_recurrent_loop_with_scalar(self):
         i = operators.OpVar("i")
@@ -488,7 +488,7 @@ class TestLoopAnalysis(unittest.TestCase):
             start=operators.OpInt(1),
             end=operators.OpVar("n"),
         )
-        self.assertEqual([v.name for v in loop.required_vars()], ["c", "n"])
+        self.assertEqual([str(v) for v in loop.required_vars()], ["c", "n"])
 
     def test_recurrent_loop_with_different_index(self):
         code = textwrap.dedent("""\
@@ -520,7 +520,7 @@ class TestLoopAnalysis(unittest.TestCase):
             end=operators.OpVar("n"),
         )
         self.assertEqual("".join(loop.render()), code)
-        self.assertEqual([v.name for v in loop.required_vars()], ["b", "c", "n"])
+        self.assertEqual([str(v) for v in loop.required_vars()], ["b(:)", "c", "n"])
 
     def test_recurrent_loop_with_self_reference_and_different_index(self):
         code = textwrap.dedent("""\
@@ -546,7 +546,7 @@ class TestLoopAnalysis(unittest.TestCase):
             end=operators.OpVar("n"),
         )
         self.assertEqual("".join(loop.render()), code)
-        self.assertEqual([v.name for v in loop.required_vars()], ["a", "c", "n"])
+        self.assertEqual([str(v) for v in loop.required_vars()], ["a(ip)", "c", "n"])
 
     def test_nested_loop(self):
         i = operators.OpVar("i")
@@ -568,7 +568,58 @@ class TestLoopAnalysis(unittest.TestCase):
             start=operators.OpInt(1),
             end=operators.OpVar("m"),
         )
-        self.assertEqual([v.name for v in outer.required_vars()], ["b", "c", "n", "m"])
+        self.assertEqual([str(v) for v in outer.required_vars()], ["b(:,:)", "c", "n", "m"])
+
+    def test_nested_loop_with_private_array(self):
+        code = textwrap.dedent("""\
+        do i = 1, n
+          do k = 1, 2
+            c(k,i) = k
+            d(k,i) = k
+          end do
+          a(i) = c(1,i) + c(2,i)
+          do k = 1, 2
+            b(i) = b(i) + d(k,i)
+          end do
+        end do
+        """)
+        i = operators.OpVar("i")
+        k = operators.OpVar("k")
+        a = operators.OpVar("a", index=[i])
+        b = operators.OpVar("b", index=[i])
+        c = operators.OpVar("c", index=[k,i])
+        d = operators.OpVar("d", index=[k,i])
+        inner1 = code_tree.DoLoop(
+            code_tree.Block([
+                code_tree.Assignment(c, k),
+                code_tree.Assignment(d, k)
+            ]),
+            index=k,
+            start=operators.OpInt(1),
+            end=operators.OpInt(2)
+        )
+        inner2 = code_tree.DoLoop(
+            code_tree.Block([
+                code_tree.Assignment(b, b + d),
+            ]),
+            index=k,
+            start=operators.OpInt(1),
+            end=operators.OpInt(2)
+        )
+        outer = code_tree.DoLoop(
+            code_tree.Block([
+                inner1,
+                code_tree.Assignment(a,
+                                     operators.OpVar("c", index=[operators.OpInt(1), i])
+                                     + operators.OpVar("c", index=[operators.OpInt(2), i])),
+                inner2,
+            ]),
+            index=i,
+            start=operators.OpInt(1),
+            end=operators.OpVar("n"),
+        )
+        self.assertEqual("".join(outer.render()), code)
+        self.assertEqual([str(v) for v in outer.required_vars()], ["b(:)", "n"])
 
     def test_nested_loop_with_different_index(self):
         code = textwrap.dedent("""\
@@ -599,7 +650,7 @@ class TestLoopAnalysis(unittest.TestCase):
             end=operators.OpVar("m"),
         )
         self.assertEqual("".join(outer.render()), code)
-        self.assertEqual([v.name for v in outer.required_vars()], ["b", "k", "c", "n", "m"])
+        self.assertEqual([str(v) for v in outer.required_vars()], ["b(:,k)", "k", "c", "n", "m"])
 
     def test_nested_recurrent_loop_with_different_index(self):
         code = textwrap.dedent("""\
@@ -630,7 +681,7 @@ class TestLoopAnalysis(unittest.TestCase):
             end=operators.OpVar("m"),
         )
         self.assertEqual("".join(outer.render()), code)
-        self.assertEqual([v.name for v in outer.required_vars()], ["k", "b", "c", "n", "m"])
+        self.assertEqual([str(v) for v in outer.required_vars()], ["k", "b(:,k)", "c", "n", "m"])
 
 
 if __name__ == "__main__":
