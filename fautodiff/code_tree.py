@@ -381,7 +381,7 @@ class Block(Node):
                 if (child.intent is not None) or any(child.name==var.name for var in needed):
                     new_children.insert(0, child)
                     continue
-            if set(var.name for var in child.assigned_vars([], without_savevar=True)) & set(var.name for var in needed):
+            if set(var.name for var in child.assigned_vars([])) & set(var.name for var in needed):
                 pruned = child.prune_for(needed)
                 new_children.insert(0, pruned)
                 needed = pruned.required_vars(needed)
@@ -728,18 +728,18 @@ class SaveAssignment(Node):
     def to_load(self) -> "SaveAssignment":
         return SaveAssignment(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
 
-    def reduce_dim(self, dim: int) -> None:
+    def reduce_dim(self, dims: List[str]) -> None:
         if self.reduced_dims is None:
             self.reduced_dims = []
         if self.tmpvar.index is None:
             raise RuntimeError(f"No index {self.tmpvar.name}")
-        var = self.var.index[dim]
         index_new = []
-        for idx in self.tmpvar.index:
-            if idx != var:
+        for i, idx in enumerate(self.tmpvar.index):
+            if isinstance(idx, OpVar) and idx.name in dims:
+                self.reduced_dims.append(i)
+            else:
                 index_new.append(idx)
         self.tmpvar.index = index_new
-        self.reduced_dims.append(dim)
 
 @dataclass
 class Declaration(Node):
@@ -975,12 +975,10 @@ class DoLoop(DoAbst):
     start: Operaion
     end: Operaion
     step: Optional[Operator] = None
-    _index_map: dist = field(init=False, repr=False, default=None)
 
     def __post_init__(self):
         super().__post_init__()
         self.build_do_index_list([])
-        self._build_index_map()
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.start.collect_vars():
@@ -999,24 +997,14 @@ class DoLoop(DoAbst):
         self.do_index_list.extend(list)
         self._body.build_do_index_list(self.do_index_list)
 
-    def _build_index_map(self):
-        if self._index_map is None:
-            self._index_map = {}
-        for node in self.iter_children():
-            for var in node.collect_vars():
-                name = var.name
-                found = False
-                if var.index is not None:
-                    for i, idx in enumerate(var.index):
-                        for v in idx.collect_vars():
-                            if isinstance(v, OpVar) and v == self.index:
-                                if name in self._index_map and self._index_map[name] != i:
-                                    raise RuntimeError(f"Inconsistency found: {var} {self.index}")
-                                self._index_map[name] = i
-                                found = True
-                                break
-                        if found:
-                            break
+    def find_index(self, var: OpVar, name: str) -> Union[int, None]:
+        if var.index is None:
+            return None
+        for i, idx in enumerate(var.index):
+            for v in idx.collect_vars():
+                if v.name == name:
+                    return i
+        return None
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
@@ -1069,11 +1057,12 @@ class DoLoop(DoAbst):
     def _update_index(self, vars: List[OpVar]) -> List[OpVar]:
         vars_new = []
         for var in vars:
-            if var.name in self._index_map and var.index is not None:
-                if var.index[self._index_map[var.name]] != OpRange([]):
+            if var.index is not None:
+                index = self.find_index(var, self.index.name)
+                if index is not None:
                     index_new = []
                     for i, idx in enumerate(var.index):
-                        if i == self._index_map[var.name]:
+                        if i == index:
                             index_new.append( OpRange([]))
                         else:
                             index_new.append(idx)
@@ -1107,9 +1096,11 @@ class DoLoop(DoAbst):
     def prune_for(self, targets: Iterable[OpVar]) -> Node:
         new_body = self._body.prune_for(targets)
         targets = list(targets)
-        for var in new_body.required_vars(targets):
+
+        for var in new_body.required_vars(targets, no_accumulate=True):
             if var.index is None or not set(self.do_index_list) <= set(var.index_list()):
                 _append_unique(targets, var)
+
         new_body = self._body.prune_for(targets)
 
         def _reducedim_from_tmpvar(node: Node) -> None:
@@ -1119,13 +1110,13 @@ class DoLoop(DoAbst):
                         continue
                     name = child.tmpvar.name
                     if (not any(name == var.name for var in targets)) and child.tmpvar == child.lhs:
-                        if child.var.name in self._index_map:
-                            child.reduce_dim(self._index_map[child.var.name])
+                        if set(self.do_index_list) <= set(child.tmpvar.index_list()):
+                            child.reduce_dim(self.do_index_list)
                     continue
                 if isinstance(child, DoLoop):
                     continue
                 _reducedim_from_tmpvar(child)
-        _reducedim_from_tmpvar(self._body)
+        _reducedim_from_tmpvar(new_body)
 
         if new_body.is_effectively_empty():
             return Block([])
