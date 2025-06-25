@@ -335,26 +335,22 @@ class TestNodeMethods(unittest.TestCase):
         self.assertEqual(blk.check_initial("a_ad"), 2)
         self.assertEqual(code_tree.render_program(blk), "a_ad = b_ad\na_ad = c_ad + a_ad\n")
 
-        loop = code_tree.Block([
-            code_tree.DoLoop(code_tree.Block([
-                code_tree.Assignment(a_ad, b_ad, accumulate=True),
-                code_tree.Assignment(a_ad, c_ad, accumulate=True)
-            ]),
-            index=i, start=operators.OpInt(1), end=n)
-        ])
+        loop = code_tree.DoLoop(code_tree.Block([
+            code_tree.Assignment(a_ad, b_ad, accumulate=True),
+            code_tree.Assignment(a_ad, c_ad, accumulate=True)
+        ]),
+        index=i, start=operators.OpInt(1), end=n)
         self.assertEqual(loop.check_initial("a_ad"), -1)
         self.assertEqual(
             code_tree.render_program(loop),
             "do i = 1, n\n  a_ad = b_ad + a_ad\n  a_ad = c_ad + a_ad\nend do\n",
         )
 
-        loop = code_tree.Block([
-            code_tree.DoLoop(code_tree.Block([
-                code_tree.Assignment(a_ad, b_ad, accumulate=True),
-                code_tree.Assignment(b_ad, a_ad, accumulate=True)
-            ]),
-            index=i, start=operators.OpInt(1), end=n)
-        ])
+        loop = code_tree.DoLoop(code_tree.Block([
+            code_tree.Assignment(a_ad, b_ad, accumulate=True),
+            code_tree.Assignment(b_ad, a_ad, accumulate=True)
+        ]),
+        index=i, start=operators.OpInt(1), end=n)
         self.assertEqual(loop.check_initial("a_ad"), 2)
         self.assertEqual(loop.check_initial("b_ad"), -1)
         self.assertEqual(
@@ -362,14 +358,12 @@ class TestNodeMethods(unittest.TestCase):
             "do i = 1, n\n  a_ad = b_ad\n  b_ad = a_ad + b_ad\nend do\n",
         )
 
-        loop = code_tree.Block([
-            code_tree.DoLoop(code_tree.Block([
-                code_tree.Assignment(a_ad, b_ad, accumulate=True),
-                code_tree.Assignment(b_ad, a_ad, accumulate=True),
-                code_tree.Assignment(a_ad, b_ad, accumulate=True)
-            ]),
-            index=i, start=operators.OpInt(1), end=n)
-        ])
+        loop = code_tree.DoLoop(code_tree.Block([
+            code_tree.Assignment(a_ad, b_ad, accumulate=True),
+            code_tree.Assignment(b_ad, a_ad, accumulate=True),
+            code_tree.Assignment(a_ad, b_ad, accumulate=True)
+        ]),
+        index=i, start=operators.OpInt(1), end=n)
         self.assertEqual(loop.check_initial("a_ad"), -1)
         self.assertEqual(loop.check_initial("b_ad"), -1)
         self.assertEqual(
@@ -377,13 +371,11 @@ class TestNodeMethods(unittest.TestCase):
             "do i = 1, n\n  a_ad = b_ad + a_ad\n  b_ad = a_ad + b_ad\n  a_ad = b_ad + a_ad\nend do\n",
         )
 
-        loop = code_tree.Block([
-            code_tree.DoLoop(code_tree.Block([
-                code_tree.Assignment(a_ad, a_ad),
-                code_tree.Assignment(a_ad, b_ad, accumulate=True)
-            ]),
-            index=operators.OpVar("i"), start=operators.OpInt(1), end=operators.OpVar("n"))
-        ])
+        loop = code_tree.DoLoop(code_tree.Block([
+            code_tree.Assignment(a_ad, a_ad),
+            code_tree.Assignment(a_ad, b_ad, accumulate=True)
+        ]),
+        index=operators.OpVar("i"), start=operators.OpInt(1), end=operators.OpVar("n"))
         self.assertEqual(loop.check_initial("a_ad"), -1)
         self.assertEqual(
             code_tree.render_program(loop),
@@ -393,14 +385,12 @@ class TestNodeMethods(unittest.TestCase):
         index = [i]
         x_ad = operators.OpVar("x_ad", index=index)
         y_ad = operators.OpVar("y_ad", index=index)
-        loop = code_tree.Block([
-            code_tree.DoLoop(code_tree.Block([
-                code_tree.Assignment(x_ad, y_ad, accumulate=True),
-                code_tree.Assignment(y_ad, c_ad, accumulate=True),
-                code_tree.Assignment(x_ad, c_ad, accumulate=True)
-            ]),
-            index=operators.OpVar("i"), start=operators.OpInt(1), end=operators.OpVar("n"))
-        ])
+        loop = code_tree.DoLoop(code_tree.Block([
+            code_tree.Assignment(x_ad, y_ad, accumulate=True),
+            code_tree.Assignment(y_ad, c_ad, accumulate=True),
+            code_tree.Assignment(x_ad, c_ad, accumulate=True)
+        ]),
+        index=operators.OpVar("i"), start=operators.OpInt(1), end=operators.OpVar("n"))
         self.assertEqual(loop.check_initial("x_ad"), 2)
         self.assertEqual(loop.check_initial("y_ad"), -1)
         self.assertEqual(
@@ -411,13 +401,11 @@ class TestNodeMethods(unittest.TestCase):
         ip = operators.OpVar("ip")
         xi_ad = operators.OpVar("x_ad", index=[i])
         xip_ad = operators.OpVar("x_ad", index=[ip])
-        loop = code_tree.Block([
-            code_tree.DoLoop(code_tree.Block([
-                code_tree.Assignment(xi_ad, y_ad, accumulate=True),
-                code_tree.Assignment(xip_ad, y_ad, accumulate=True),
-            ]),
-            index=i, start=operators.OpInt(1), end=n)
-        ])
+        loop = code_tree.DoLoop(code_tree.Block([
+            code_tree.Assignment(xi_ad, y_ad, accumulate=True),
+            code_tree.Assignment(xip_ad, y_ad, accumulate=True),
+        ]),
+        index=i, start=operators.OpInt(1), end=n)
         self.assertEqual(loop.check_initial("x_ad"), -1)
 
         index = [operators.OpVar("i"), operators.OpVar("j")]
@@ -792,7 +780,8 @@ class TestLoopAnalysis(unittest.TestCase):
         private_vars = outer.private_vars()
         self.assertEqual([str(v) for v in private_vars], ["work_ad(1)", "work_ad(2)"])
         for var in private_vars:
-            outer.check_initial(str(var))
+            outer.check_initial(str(var), force=True)
+            #outer.check_initial(str(var).split("(")[0], force=True)
         self.assertEqual("".join(outer.render()), code)
 
 
@@ -810,7 +799,7 @@ class TestLoopAnalysis(unittest.TestCase):
             code_tree.Block([
                 code_tree.DoLoop(
                     code_tree.Assignment(work_ad, x_ad * k, accumulate=True),
-                    index=k, start=operators.OpVar("n"), end=operators.OpInt(1), step=operators.OpInt(-1)),
+                    index=k, start=operators.OpInt(2), end=operators.OpInt(1), step=operators.OpInt(-1)),
                 code_tree.Assignment(x_ad, work1_ad * x, accumulate=True),
                 code_tree.Assignment(y_ad, work2_ad * y, accumulate=True),
             ]),
