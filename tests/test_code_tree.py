@@ -781,10 +781,20 @@ class TestLoopAnalysis(unittest.TestCase):
         self.assertEqual([str(v) for v in private_vars], ["work_ad(1)", "work_ad(2)"])
         for var in private_vars:
             outer.check_initial(str(var), force=True)
-            #outer.check_initial(str(var).split("(")[0], force=True)
         self.assertEqual("".join(outer.render()), code)
 
 
+        code = textwrap.dedent("""\
+        do j = m, 1, - 1
+          do i = n, 1, - 1
+            do k = 2, 1, - 1
+              work_ad(k) = x_ad(i,j) * k
+            end do
+            x_ad(i,j) = work_ad(1) * x(i,j) + x_ad(i,j)
+            y_ad(i,j) = work_ad(2) * y(i,j) + y_ad(i,j)
+          end do
+        end do
+        """)
         i = operators.OpVar("i")
         j = operators.OpVar("j")
         k = operators.OpVar("k")
@@ -819,7 +829,7 @@ class TestLoopAnalysis(unittest.TestCase):
         private_vars = outer.private_vars()
         self.assertEqual([str(v) for v in private_vars], ["work_ad(1)", "work_ad(2)"])
         for var in private_vars:
-            outer.check_initial(str(var))
+            outer.check_initial(str(var), force=True)
         self.assertEqual("".join(outer.render()), code)
 
 

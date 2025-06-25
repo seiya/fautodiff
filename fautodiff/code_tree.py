@@ -723,11 +723,12 @@ class Assignment(Node):
         return info
 
     def check_initial(self, var: str, not_change: bool = False, force: bool = False) -> int:
-        if self.lhs.name != var:
+        fullname = str(self.lhs)
+        if self.lhs.name != var and fullname != var:
             return 0
         lhs_index = set(self.lhs.index_list())
         do_index = set(self.do_index_list)
-        if self.lhs.index is not None and not do_index <= lhs_index and not force:
+        if self.lhs.index is not None and not do_index <= lhs_index and not force and fullname != var:
             return -1
         for v in self._rhs_vars:
             if v.name == var:
@@ -1230,6 +1231,16 @@ class DoLoop(DoAbst):
                     if var.index is None or v.index <= var.index:
                         vars.remove(v)
                         continue
+                    # tentative (integer index is assumed to cover all)
+                    check = True
+                    for i, dim in enumerate(var.index):
+                        if dim is None or isinstance(dim, OpInt):
+                            continue
+                        check = False
+                        break
+                    if check:
+                        vars.remove(v)
+                        continue
 
         if self.index in vars:
             vars.remove(self.index)
@@ -1322,16 +1333,18 @@ class DoLoop(DoAbst):
         return new_loop
 
     def check_initial(self, var: str, not_change: bool = False, force: bool = False) -> int:
+        varname = var
         if "(" in var:
-            self.check_initial(var.split("(")[0], not_change, force)
-        if not self._body.has_assignment_to(var):
+            varname = var.split("(")[0]
+            self.check_initial(varname, not_change, force)
+        if not self._body.has_assignment_to(varname):
             return 0
         for v in self.required_vars(no_accumulate=True):
-            if v.name == var:
+            if v.name == varname:
                 return -1
         if not force:
             for v in self._body.nonrefered_advars():
-                if v.name == var:
+                if v.name == varname:
                     if v.index is None or not set(self.do_index_list) <= set(v.index_list()):
                         return -1
         ret = self._body.check_initial(var, not_change=True, force=force)
