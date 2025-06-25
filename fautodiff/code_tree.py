@@ -14,6 +14,10 @@ from .operators import (
     OpReal,
 )
 
+from .var_dict import (
+    Vardict
+)
+
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
@@ -225,7 +229,7 @@ class Node:
             _append_unique(vars, var)
         return vars
 
-    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
+    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
         """Return variables needed before executing this node.
 
         ``names`` is the list of variables that must be defined *after* this
@@ -244,6 +248,30 @@ class Node:
         refered and to add any variables assigined by this node.
         """
         return list(names or [])
+
+    def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
+        """Return variable access information in this node.
+        This ignores access to the save variables and self-reference associated with accumulate attribute in Assignment object.
+
+        ``None``: the variable is referred before assignment
+        ``True``: the variable has assigned
+        ``False``: the variable has referred
+        """
+        if info is None:
+            info = Vardict()
+        else:
+            info = info.copy()
+        for var in self.iter_ref_vars():
+            if not var in info:
+                info[var] = None
+            if info[var] is not None:
+                info[var] = False
+        for var in self.iter_assign_vars():
+            if not (var in info and info[var] is None):
+                info[var] = True
+        for child in self.iter_children():
+            info = child.collect_access_info(info)
+        return info
 
     def collect_vars(self) -> List[OpVar]:
         """Return variables used in this node."""
@@ -371,6 +399,16 @@ class Block(Node):
         for child in self.iter_children():
             vars = child.nonrefered_advars(vars)
         return vars
+
+    def private_vars(self) -> List[OpVar]:
+        vars_info = {}
+        for child in self.iter_children():
+            if isinstance(child, SaveAssignment): # ignore Save variables
+                continue
+            if isinstance(child, Assignment):
+                for var in child.iter_ref_vars():
+                    if not var in vars_info:
+                        vars_info[var] = None # not private
 
     def prune_for(self, targets: Iterable[OpVar]) -> "Block":
         needed = targets
@@ -724,6 +762,9 @@ class SaveAssignment(Node):
         _append_unique(vars, self.lhs)
         return vars
 
+    def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
+        return info
+
     def check_initial(self, var: str, not_change: bool = False) -> int:
         if self.lhs.name != var:
             return 0
@@ -877,6 +918,42 @@ class BranchBlock(Node):
             for v in block.nonrefered_advars(vars):
                 _append_unique(vars_new, v)
         return vars_new
+
+    def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
+        if info is None:
+            info = Vardict()
+        else:
+            info = info.copy()
+        for var in self.iter_ref_vars():
+            if not var in info:
+                info[var] = None
+            if info[var] is not None:
+                info[var] = False
+        infos = []
+        for child in self.iter_children():
+            infos.append(child.collect_access_info(info))
+        if len(infos) == 0:
+            return info
+        if len(infos) == 1:
+            return infos[0]
+        vars = set()
+        for info in infos:
+            vars |= info.keys()
+        info_new = Vardict()
+        for var in vars:
+            values = [info[var] for info in infos if var in info]
+            if any(v is None for v in values):
+                info_new[var] = None
+            else:
+                merged = values[0]
+                for v in values[1:]:
+                    merged = merged or v
+                info_new[var] = merged
+        info = info_new
+        for var in self.iter_assign_vars():
+            if not (var in info[var] and info[var] is None):
+                info[var] = True
+        return info
 
     def prune_for(self, targets: Iterable[OpVar]) -> Node:
         new_condblocks = []
@@ -1059,7 +1136,7 @@ class DoLoop(DoAbst):
         lines.append(f"{space}end do\n")
         return lines
 
-    def _update_index(self, vars: List[OpVar]) -> List[OpVar]:
+    def _update_index_upward(self, vars: List[OpVar]) -> List[OpVar]:
         vars_new = []
         for var in vars:
             if var.index is not None:
@@ -1076,7 +1153,7 @@ class DoLoop(DoAbst):
             _append_unique(vars_new, var)
         return vars_new
 
-    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
+    def _update_index_downward(self, vars: List[OpVar]) -> List[OpVar]:
         # build index map: variable name -> position of the loop index in the array index
         index_map = {}
         for var in self.collect_vars():
@@ -1095,10 +1172,38 @@ class DoLoop(DoAbst):
                         index_new.append(idx)
                 var = OpVar(name=var.name, index=index_new, is_real=var.is_real, kind=var.kind)
             vars_new.append(var)
-        vars = self._body.required_vars(vars_new, no_accumulate, without_savevar)
+        return vars_new
+
+    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
+        vars = self._update_index_downward(vars)
+        vars = self._body.required_vars(vars, no_accumulate, without_savevar)
+
+        # remove private variables
+        access_info = self.collect_access_info()
+        private_vars = [var for var, v in access_info.items() if v==False]
+        for var in private_vars:
+            for v in list(vars):
+                if var == v:
+                    vars.remove(v)
+                    continue
+                if var.name == v.name:
+                    if var.index is None:
+                        vars.remove(v)
+                        continue
+                    if v.index is not None:
+                        flag = True
+                        for i, idx in enumerate(var.index):
+                            print(i, idx)
+                            if v.index[i] is None or str(v) == ":":
+                                if idx is not None and str(idx) != ":":
+                                    flag = False
+                        if flag:
+                            print(var)
+                            vars.remove(v)
+
         if self.index in vars:
             vars.remove(self.index)
-        vars = self._update_index(vars)
+        vars = self._update_index_upward(vars)
         for op in [self.start, self.end, self.step]:
             if op is not None:
                 for var in op.collect_vars():
@@ -1107,14 +1212,42 @@ class DoLoop(DoAbst):
 
     def assigned_vars(self, vars: Optional[List[OpVar]] = None, without_savevar: bool = False) -> List[OpVar]:
         vars = self._body.assigned_vars(vars, without_savevar=without_savevar)
-        vars = self._update_index(vars)
+        vars = self._update_index_upward(vars)
         _append_unique(vars, self.index)
         return vars
 
     def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
         vars = self._body.nonrefered_advars(vars)
-        vars = self._update_index(vars)
+        vars = self._update_index_upward(vars)
         return vars
+
+    def collect_access_info(self, info: Optional[vardict] = None) -> dict:
+        if info is None:
+            info = Vardict()
+        else:
+            info = info.copy()
+        for var in self.iter_ref_vars():
+            if not var in info:
+                info[var] = None
+            if info[var] is not None:
+                info[var] = False
+
+        vars = info.keys()
+        vars_child = self._update_index_downward(vars)
+        info_child = Vardict()
+        for i, var in enumerate(vars):
+            info_child[vars_child[i]] = info[var]
+
+        info_child = self._body.collect_access_info(info_child)
+        if self.index in info_child:
+            info_child.remove(self.index)
+
+        vars_child = info_child.keys()
+        vars = self._update_index_upward(vars_child)
+        info = Vardict()
+        for i, var in enumerate(vars_child):
+            info[vars[i]] = info_child[var]
+        return info
 
     def prune_for(self, targets: Iterable[OpVar]) -> Node:
         new_body = self._body.prune_for(targets)
