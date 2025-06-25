@@ -411,18 +411,35 @@ class Block(Node):
                     if not var in vars_info:
                         vars_info[var] = None # not private
 
-    def prune_for(self, targets: Iterable[OpVar]) -> "Block":
-        needed = targets
+    def prune_for(self, targets: List[OpVar]) -> "Block":
+        needed = list(targets)
         new_children: List[Node] = []
         for child in reversed(self.__children):
+            # Declaration
             if isinstance(child, Declaration):
                 if (child.intent is not None) or any(child.name==var.name for var in needed):
                     new_children.insert(0, child)
                     continue
-            if set(var.name for var in child.assigned_vars([])) & set(var.name for var in needed):
-                pruned = child.prune_for(needed)
-                new_children.insert(0, pruned)
-                needed = pruned.required_vars(needed)
+            # Other nodes
+            assigned = child.assigned_vars([])
+            common_vnames = set(var.name for var in assigned) & set(var.name for var in needed)
+            if common_vnames:
+                found = False
+                for vname in common_vnames:
+                    v1s = [v for v in assigned if v.name == vname]
+                    v2s = [v for v in needed if v.name == vname]
+                    for v1 in v1s:
+                        for v2 in v2s:
+                            if (v1.index is None or v1.index >= v2.index) or (v2.index is None or v2.index >= v1.index):
+                                pruned = child.prune_for(needed)
+                                new_children.insert(0, pruned)
+                                needed = pruned.required_vars(needed)
+                                found = True
+                                break
+                        if found:
+                            break
+                    if found:
+                        break
         children = new_children
         if len(children) >= 2:
             new_children = []
@@ -649,22 +666,26 @@ class Assignment(Node):
     def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
         vars = (vars or [])
         lhs = self.lhs
-        vars_new = []
         # entire: access entier element of the variable in the loop
         # e.g., in the loop of index "i"
         # True: a, a[:], a[i], a[k,i]
         # False: a[k]
-        entire = (not lhs.is_partial_access()) or set(self.do_index_list) <= set(lhs.index_list())
+        #entire = (not lhs.is_partial_access()) or set(self.do_index_list) <= set(lhs.index_list())
+        vars_new = []
         for var in vars:
-            if var == lhs:
-                continue
-            if var.name == lhs.name:
-                if (not var.is_partial_access()) and entire: # var does not has different index
+            if var.name == self.lhs.name:
+                if lhs.index is None or lhs.index >= var.index:
                     continue
-                if lhs.index is None or not lhs.is_partial_access():
-                    continue
+            #if var == lhs:
+            #    continue
+            #if var.name == lhs.name:
+            #    if (not var.is_partial_access()) and entire: # var does not has different index
+            #        continue
+            #    if lhs.index is None or not lhs.is_partial_access():
+            #        continue
             vars_new.append(var)
         vars = vars_new
+
         for var in lhs.collect_vars(): # variables in indexes
             if var != lhs:
                 _append_unique(vars, var)
@@ -698,8 +719,8 @@ class Assignment(Node):
             info = Vardict()
         else:
             info = info.copy()
-        if self.lhs.name.endswith("_ad") and isinstance(self.rhs, OpReal) and self.rhs.val=="0.0":
-            return info
+        #if self.lhs.name.endswith("_ad") and isinstance(self.rhs, OpReal) and self.rhs.val=="0.0":
+        #    return info
         for var in self.iter_ref_vars():
             found = False
             for v in info.keys():
@@ -787,10 +808,18 @@ class SaveAssignment(Node):
         return False
 
     def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
-        needed = [n for n in (vars or []) if n != self.lhs]
-        if not without_savevar or self.rhs != self.var:
-            _append_unique(needed, self.rhs)
-        return needed
+        vars = list(vars or [])
+        vars_new = []
+        for var in vars:
+            if var.name == self.lhs.name:
+                if self.lhs.index is None or self.lhs.index >= var.index:
+                    continue
+            _append_unique(vars_new, var)
+        vars = vars_new
+        rhs = self.rhs
+        if (not without_savevar) or rhs != self.var: # rhs is not saved var
+            _append_unique(vars, rhs)
+        return vars
 
     def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
         vars = [v for v in (vars or []) if v != self.rhs]
@@ -1222,25 +1251,25 @@ class DoLoop(DoAbst):
         vars = self._body.required_vars(vars, no_accumulate, without_savevar)
 
         # remove private variables
-        for var in self.private_vars():
-            for v in list(vars):
-                if var == v:
-                    vars.remove(v)
-                    continue
-                if var.name == v.name:
-                    if var.index is None or v.index <= var.index:
-                        vars.remove(v)
-                        continue
-                    # tentative (integer index is assumed to cover all)
-                    check = True
-                    for i, dim in enumerate(var.index):
-                        if dim is None or isinstance(dim, OpInt):
-                            continue
-                        check = False
-                        break
-                    if check:
-                        vars.remove(v)
-                        continue
+        #for var in self.private_vars():
+        #    for v in list(vars):
+        #        if var == v:
+        #            vars.remove(v)
+        #            continue
+        #        if var.name == v.name:
+        #            if var.index is None or v.index <= var.index:
+        #                vars.remove(v)
+        #                continue
+        #            # tentative (integer index is assumed to cover all)
+        #            check = True
+        #            for i, dim in enumerate(var.index):
+        #                if dim is None or isinstance(dim, OpInt):
+        #                    continue
+        #                check = False
+        #                break
+        #            if check:
+        #                vars.remove(v)
+        #                continue
 
         if self.index in vars:
             vars.remove(self.index)
@@ -1291,20 +1320,23 @@ class DoLoop(DoAbst):
             info[vars[i]] = info_child[var]
         return info
 
-    def prune_for(self, targets: Iterable[OpVar]) -> Node:
-        new_body = self._body.prune_for(targets)
-        targets = list(targets)
+    def prune_for(self, targets: List[OpVar]) -> Node:
 
-        for var in new_body.required_vars(targets, no_accumulate=True, without_savevar=True):
+        targets = list(targets)
+        targets = self._update_index_downward(targets)
+
+        new_body = self._body.prune_for(targets)
+
+        #for var in new_body.required_vars(targets, no_accumulate=True, without_savevar=True):
+        for var in new_body.required_vars(targets):
             if var.name == self.index.name:
                 continue
-            if var.name.endswith("_ad"):
-                continue
+            #if var.name.endswith("_ad"):
+            #    continue
             # check if the variable has no reccurent in this loop
             if var.index is not None and set(self.do_index_list) <= set(var.index_list()):
                 continue
             _append_unique(targets, var)
-
         new_body = self._body.prune_for(targets)
 
         def _reducedim_from_tmpvar(node: Node) -> None:
@@ -1324,13 +1356,7 @@ class DoLoop(DoAbst):
 
         if new_body.is_effectively_empty():
             return Block([])
-        new_loop = DoLoop(new_body, self.index, self.start, self.end, self.step)
-        for var in new_loop.private_vars():
-            var = str(var)
-            varname = var.split("(")[0]
-            if varname.endswith("_ad"):
-                new_loop.check_initial(varname, force=True)
-        return new_loop
+        return DoLoop(new_body, self.index, self.start, self.end, self.step)
 
     def check_initial(self, var: str, not_change: bool = False, force: bool = False) -> int:
         varname = var
