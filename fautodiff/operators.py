@@ -10,6 +10,122 @@ import copy
 
 
 @dataclass
+class AryIndex:
+    """Class to represent index of fortran array"""
+
+    dims: List["Operator"] = field(default_factory=list)
+
+    def __post_init__(self):
+        if not (isinstance(self.dims, list) or isinstance(self.dims, tuple)):
+            raise ValueError(f"dims must be either list or tuple: {type(self.dims)}")
+        if isinstance(self.dims, tuple):
+            self.dims = list(self.dims)
+        for i, dim in enumerate(self.dims):
+            if isinstance(dim, int):
+                self.dims[i] = OpInt(dim)
+                continue
+            if dim is None:
+                self.dims[i] = OpRange()
+                continue
+            if not isinstance(dim, Operator):
+                raise ValueError("dim must be either None, int, or Operator")
+
+    def list(self) -> List[str]:
+        return [(":" if dim is None else str(dim)) for dim in self.dims]
+
+    def __len__(self) -> int:
+        return len(self.dims)
+
+    def __iter__(self) -> iter:
+        return iter(self.dims)
+
+    def __str__(self) -> str:
+        return",".join(self.list())
+
+    def __eq__(self, other) -> bool:
+        if other is not None and not isinstance(other, AryIndex):
+            return NotImplemented
+        if other is None:
+            return not self.is_partial_access()
+        if len(self.dims) != len(other.dims):
+            raise ValueError("Different number of dimensions")
+        flags = []
+        for i, dim1 in enumerate(self.dims):
+            dim2 = other.dims[i]
+            if dim1 == dim2:
+                flags.append(True)
+                continue
+            if (dim1 is None or isinstance(dim1, OpRange)) and (dim2 is None or isinstance(dim2, OpRange)):
+                flags.append(True)
+                continue
+            flags.append(False)
+        return all(flags)
+
+    def __le__(self, other) -> bool:
+        if other is not None and not isinstance(other, AryIndex):
+            raise NotImplemented
+        if other is None:
+            return True
+        if len(self.dims) != len(other.dims):
+            raise ValueError("Different number of dimensions")
+        flags = []
+        for i, dim1 in enumerate(self.dims):
+            dim2 = other.dims[i]
+            if dim1 == dim2 or isinstance(dim2, OpRange):
+                flags.append(True)
+                continue
+            if isinstance(dim1, OpRange):
+                flags.append(False)
+                continue
+            if isinstance(dim1, Operator) and isinstance(dim2, Operator):
+                flags.append(False)
+                continue
+            raise RuntimeError(f"Unexpected value: {type(dim1)} {type(dim2)}")
+        return all(flags)
+
+    def __ge__(self, other) -> bool:
+        if other is not None and not isinstance(other, AryIndex):
+            raise NotImplemented
+        if other is None:
+            return all([dim is None or isinstance(dim, OpRange) for dim in self.dims])
+        if len(self.dims) != len(other.dims):
+            raise ValueError("Different number of dimensions")
+        flags = []
+        for i, dim1 in enumerate(self.dims):
+            dim2 = other.dims[i]
+            if dim1 == dim2 or isinstance(dim1, OpRange):
+                flags.append(True)
+                continue
+            if isinstance(dim2, OpRange):
+                flags.append(False)
+                continue
+            if isinstance(dim1, Operator) and isinstance(dim2, Operator):
+                flags.append(False)
+                continue
+            raise RuntimeError(f"Unexpected value: {type(dim1)} {type(dim2)}")
+        return all(set(flags))
+
+    def collect_vars(self) -> List[OpVar]:
+        if self.dims is None:
+            return []
+        vars = []
+        for dim in self.dims:
+            for var in dim.collect_vars():
+                if not var in vars:
+                    vars.append(var)
+        return vars
+
+    def is_partial_access(self) -> bool:
+        return any([(dim is not None and not isinstance(dim, OpRange)) for dim in self.dims])
+
+    def update_index(self, pos: int, index) -> None:
+        if not isinstance(pos, int):
+            raise ValueError("pos must be int")
+        if length(self.dims) < pos:
+            raise ValueError(f"Invalid position: len(dims) {len(self.dims)} < {pos}")
+        self.dims[pos] = index
+
+@dataclass
 class Operator:
     """Abstract fortran oprations."""
 
@@ -275,7 +391,7 @@ class OpLeaf(Operator):
 @dataclass
 class OpNum(OpLeaf):
 
-    def collect_vars(self, without_index: bool = False) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         return []
 
     def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
@@ -328,7 +444,7 @@ class OpChr(OpLeaf):
 
     name: str = field(default="")
 
-    def collect_vars(self, without_index: bool = False) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         return []
 
 @dataclass
@@ -352,25 +468,19 @@ class OpReal(OpNum):
 class OpVar(OpLeaf):
 
     name: str = field(default="")
-    index: List[Operator] = None
-    is_real: bool = None
-    index_vars: List[OpLear] = field(init=False, repr=False, default=None)
+    index: Optional[AryIndex] = None
+    is_real: Optional[bool] = None
 
-    def __init__(self, name: str, index: List[Operator] = None, is_real: bool = None, kind: str = None):
+    def __init__(self, name: str, index: Optional[AryIndex] = None, is_real: bool = None, kind: str = None):
         super().__init__(args=[])
         if not isinstance(name, str):
             raise ValueError(f"name must be str: {type(name)}")
         self.name = name
+        if index is not None and not isinstance(index, AryIndex):
+            index = AryIndex(index)
         self.index = index
         self.is_real = is_real
         self.kind = kind
-        if self.index is not None and len(self.index) > 0:
-            self.index_vars = []
-            for idx in self.index:
-                if idx is not None:
-                    for v in idx.collect_vars():
-                        if not v in self.index_vars:
-                            self.index_vars.append(v)
 
     def change_index(self, index) -> OpVar:
         if index == self.index:
@@ -381,12 +491,15 @@ class OpVar(OpLeaf):
         if suffix is None:
             return self
         name = f"{self.name}{suffix}"
-        return OpVar(name, index=self.index, is_real=self.is_real, kind=self.kind)
+        index = self.index
+        if index is not None:
+            index = AryIndex(list(index.dims))
+        return OpVar(name, index=index, is_real=self.is_real, kind=self.kind)
 
-    def collect_vars(self, without_index: bool = False) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         vars = [self]
-        if (not without_index) and self.index_vars is not None:
-            for v in self.index_vars:
+        if (not without_index) and self.index is not None:
+            for v in self.index.collect_vars():
                 if not v in vars:
                     vars.append(v)
         return vars
@@ -399,17 +512,12 @@ class OpVar(OpLeaf):
     def is_partial_access(self) -> bool:
         if self.index is None:
             return False
-        for idx in self.index:
-            if isinstance(idx, OpVar) or isinstance(idx, OpInt):
-                return True
-            if isinstance(idx, OpRange):
-                return False
+        return self.index.is_partial_access()
 
     def index_list(self) -> List[str]:
-        if self.index is not None and len(self.index) > 0:
-            index = [':' if v is None else str(v) for v in self.index]
-            return index
-        return []
+        if self.index is None:
+            return []
+        return self.index.list()
 
     def index_str(self) -> str:
         return ",".join(self.index_list())
@@ -421,15 +529,11 @@ class OpVar(OpLeaf):
             return f"{self.name}({self.index_str()})"
 
     def __eq__(self, other) -> bool:
-        if isinstance(other, type(self)) and self.name == other.name:
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        if self.name == other.name:
             if self.index == other.index:
                 return True
-            if self.index is None or other.index is None:
-                return True
-            #if self.index is None and all(isinstance(idx, OpRange) for idx in other.index):
-            #    return True
-            #if other.index is None and all(isinstance(idx, OpRange) for idx in self.index):
-            #    return True
         return False
 
 @dataclass
@@ -705,6 +809,8 @@ class OpFunc(Operator):
 class OpRange(Operator):
 
     def __post_init__(self):
+        if self.args is None:
+            self.args = []
         if len(self.args) > 3:
             raise ValueError(f"Length of args must be at most 3: {self.args}")
 
@@ -733,6 +839,6 @@ class OpRange(Operator):
         return ":".join(["" if arg is None else str(arg) for arg in args])
 
     def __eq__(self, other) -> bool:
-        if not isinstance(other, type(self)):
-            return False
+        if not isinstance(other, Operator):
+            return NotImplemented
         return str(self) == str(other)

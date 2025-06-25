@@ -8,6 +8,7 @@ import re
 import copy
 
 from .operators import (
+    AryIndex,
     Operator,
     OpVar,
     OpInt,
@@ -784,7 +785,7 @@ class SaveAssignment(Node):
                 self.reduced_dims.append(i)
             else:
                 index_new.append(idx)
-        self.tmpvar.index = index_new
+        self.tmpvar.index = AryIndex(index_new)
 
 @dataclass
 class Declaration(Node):
@@ -936,9 +937,9 @@ class BranchBlock(Node):
             return info
         if len(infos) == 1:
             return infos[0]
-        vars = set()
+        vars = []
         for info in infos:
-            vars |= info.keys()
+            _extend_unique(vars, info.keys())
         info_new = Vardict()
         for var in vars:
             values = [info[var] for info in infos if var in info]
@@ -1187,19 +1188,9 @@ class DoLoop(DoAbst):
                     vars.remove(v)
                     continue
                 if var.name == v.name:
-                    if var.index is None:
+                    if var.index is None or v.index <= var.index:
                         vars.remove(v)
                         continue
-                    if v.index is not None:
-                        flag = True
-                        for i, idx in enumerate(var.index):
-                            print(i, idx)
-                            if v.index[i] is None or str(v) == ":":
-                                if idx is not None and str(idx) != ":":
-                                    flag = False
-                        if flag:
-                            print(var)
-                            vars.remove(v)
 
         if self.index in vars:
             vars.remove(self.index)
