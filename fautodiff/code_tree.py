@@ -617,6 +617,9 @@ class Assignment(Node):
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self._rhs_vars:
             yield var
+        if self.lhs.index is not None:
+            for var in self.lhs.index.collect_vars():
+                yield var
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         yield self.lhs
@@ -689,12 +692,37 @@ class Assignment(Node):
             _append_unique(vars, self.lhs)
         return vars
 
+    def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
+        if info is None:
+            info = Vardict()
+        else:
+            info = info.copy()
+        if self.lhs.name.endswith("_ad") and isinstance(self.rhs, OpReal) and self.rhs.val=="0.0":
+            return info
+        for var in self.iter_ref_vars():
+            found = False
+            for v in info.keys():
+                if v.name == var.name:
+                    found = True
+                    if v.index is None or v.index >= var.index:
+                        info[v] = False
+                    else:
+                        info.remove(v)
+                        info[var] = False
+                    break
+            if not found:
+                info[var] = None
+        if not (self.lhs in info and info[self.lhs] is None):
+            info[self.lhs] = True
+        return info
+
     def check_initial(self, var: str, not_change: bool = False) -> int:
-        if self.lhs.name != var:
+        fullname = str(self.lhs)
+        if self.lhs.name != var and fullname != var:
             return 0
         lhs_index = set(self.lhs.index_list())
         do_index = set(self.do_index_list)
-        if self.lhs.index is not None and not do_index <= lhs_index:
+        if self.lhs.index is not None and not do_index <= lhs_index and fullname != var:
             return -1
         for v in self._rhs_vars:
             if v.name == var:
@@ -1175,14 +1203,20 @@ class DoLoop(DoAbst):
             vars_new.append(var)
         return vars_new
 
+    def private_vars(self) -> List[OpVar]:
+        """Return variables which have no effect to the outer region of this loop"""
+        access_info = self.collect_access_info()
+        vars = [var for var, v in access_info.items() if v==False]
+        vars = self._update_index_downward(vars)
+        vars = [var for var in vars if (var.index is None or not var.index.is_depended_on(self.index))]
+        return vars
+
     def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
         vars = self._update_index_downward(vars)
         vars = self._body.required_vars(vars, no_accumulate, without_savevar)
 
         # remove private variables
-        access_info = self.collect_access_info()
-        private_vars = [var for var, v in access_info.items() if v==False]
-        for var in private_vars:
+        for var in self.private_vars():
             for v in list(vars):
                 if var == v:
                     vars.remove(v)
@@ -1273,16 +1307,23 @@ class DoLoop(DoAbst):
 
         if new_body.is_effectively_empty():
             return Block([])
-        return DoLoop(new_body, self.index, self.start, self.end, self.step)
+        new_loop = DoLoop(new_body, self.index, self.start, self.end, self.step)
+        for var in new_loop.private_vars():
+            var = str(var)
+            varname = var.split("(")[0]
+            if varname.endswith("_ad"):
+                new_loop.check_initial(var)
+        return new_loop
 
     def check_initial(self, var: str, not_change: bool = False) -> int:
-        if not self._body.has_assignment_to(var):
+        varname = var.split("(")[0]
+        if not self._body.has_assignment_to(varname):
             return 0
         for v in self.required_vars(no_accumulate=True):
-            if v.name == var:
+            if v.name == varname:
                 return -1
         for v in self._body.nonrefered_advars():
-            if v.name == var:
+            if v.name == varname:
                 if v.index is None or not set(self.do_index_list) <= set(v.index_list()):
                     return -1
         ret = self._body.check_initial(var, not_change=True)

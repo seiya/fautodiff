@@ -230,17 +230,17 @@ contains
     real, intent(in)  :: y(n,m)
     real, intent(out) :: y_ad(n,m)
     real, intent(inout) :: z_ad(n,m)
-    real :: work1(2,n,m)
-    real :: work1_ad(2,n,m)
-    real :: work2(2,m)
-    real :: work2_ad(2,m)
-    real :: work3(2)
     real :: work3_ad(2)
-    real :: z(n,m)
-    real :: work1_save_1_ad(2,n,m)
+    real :: work1_ad(2,n,m)
+    real :: work2_ad(2,m)
     integer :: i
     integer :: j
+    real :: work3(2)
+    real :: work2(2,m)
+    real :: work1(2,n,m)
     integer :: k
+    real :: z(n,m)
+    real :: work1_save_1_ad(2,n,m)
 
     do j = m, 1, - 1
       do i = n, 1, - 1

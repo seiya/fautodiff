@@ -118,12 +118,13 @@ class AryIndex:
     def is_partial_access(self) -> bool:
         return any([(dim is not None and not isinstance(dim, OpRange)) for dim in self.dims])
 
-    def update_index(self, pos: int, index) -> None:
-        if not isinstance(pos, int):
-            raise ValueError("pos must be int")
-        if length(self.dims) < pos:
-            raise ValueError(f"Invalid position: len(dims) {len(self.dims)} < {pos}")
-        self.dims[pos] = index
+    def is_depended_on(self, var:OpVar) -> bool:
+        for dim in self.dims:
+            if dim is None:
+                continue
+            if var in dim.collect_vars():
+                return True
+        return False
 
 @dataclass
 class Operator:
