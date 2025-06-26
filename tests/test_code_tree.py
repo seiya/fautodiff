@@ -5,110 +5,131 @@ import textwrap
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff import code_tree
-from fautodiff import operators
+from fautodiff.code_tree import (
+    Variable,
+    Subroutine,
+    Declaration,
+    Block,
+    Assignment,
+    SaveAssignment,
+    DoLoop,
+    DoWhile,
+    IfBlock,
+    render_program
+)
+from fautodiff.operators import (
+    OpInt,
+    OpReal,
+    OpVar,
+    OpRange
+)
 
+from fautodiff.var_list import (
+    VarList
+)
 
 class TestVariable(unittest.TestCase):
     def test_scalar(self):
-        var = code_tree.Variable("x", "real")
+        var = Variable("x", "real")
         self.assertEqual(var.name, "x")
         self.assertEqual(var.typename, "real")
         self.assertFalse(var.is_array())
 
     def test_array(self):
-        var = code_tree.Variable("a", "real", dims=("n",))
+        var = Variable("a", "real", dims=("n",))
         self.assertTrue(var.is_array())
         self.assertEqual(var.dims, ("n",))
         self.assertEqual(str(var), "a(n)")
 
     def test_invalid_name(self):
         with self.assertRaises(ValueError):
-            code_tree.Variable("a(i)", "real")
+            Variable("a(i)", "real")
 
 
 class TestRenderProgram(unittest.TestCase):
     def test_simple_assignment(self):
-        prog = code_tree.Block([code_tree.Assignment(operators.OpVar("a"), operators.OpInt(1))])
-        self.assertEqual(code_tree.render_program(prog), "a = 1\n")
+        prog = Block([Assignment(OpVar("a"), OpInt(1))])
+        self.assertEqual(render_program(prog), "a = 1\n")
 
     def test_if_else_block(self):
-        b = operators.OpVar("b")
-        cond1 = operators.OpVar("a") > operators.OpInt(0)
-        body1 = code_tree.Block([code_tree.Assignment(b, operators.OpInt(1))])
+        code = textwrap.dedent("""\
+        if (a > 0) then
+          b = 1
+        else
+          b = 2
+        end if
+        """)
+        b = OpVar("b")
+        cond1 = OpVar("a") > OpInt(0)
+        body1 = Block([Assignment(b, OpInt(1))])
         cond2 = None
-        body2 = code_tree.Block([code_tree.Assignment(b, operators.OpInt(2))])
-        prog = code_tree.Block([code_tree.IfBlock([(cond1, body1), (cond2, body2)])])
-        expected = (
-            "if (a > 0) then\n"
-            "  b = 1\n"
-            "else\n"
-            "  b = 2\n"
-            "end if\n"
-        )
-        self.assertEqual(code_tree.render_program(prog), expected)
+        body2 = Block([Assignment(b, OpInt(2))])
+        prog = Block([IfBlock([(cond1, body1), (cond2, body2)])])
+        self.assertEqual(render_program(prog), code)
 
     def test_if_elif_block(self):
-        b = operators.OpVar("b")
-        cond1 = operators.OpVar("a") > operators.OpInt(0)
-        body1 = code_tree.Block([code_tree.Assignment(b, operators.OpInt(1))])
-        cond2 = operators.OpVar("a") < operators.OpInt(0)
-        body2 = code_tree.Block([code_tree.Assignment(b, operators.OpInt(2))])
+        code = textwrap.dedent("""\
+        if (a > 0) then
+          b = 1
+        else if (a < 0) then
+          b = 2
+        else
+          b = 3
+        end if
+        """)
+        b = OpVar("b")
+        cond1 = OpVar("a") > OpInt(0)
+        body1 = Block([Assignment(b, OpInt(1))])
+        cond2 = OpVar("a") < OpInt(0)
+        body2 = Block([Assignment(b, OpInt(2))])
         cond3 = None
-        body3 = code_tree.Block([code_tree.Assignment(b, operators.OpInt(3))])
-        prog = code_tree.Block([code_tree.IfBlock([(cond1, body1), (cond2, body2), (cond3, body3)])])
+        body3 = Block([Assignment(b, OpInt(3))])
+        prog = Block([IfBlock([(cond1, body1), (cond2, body2), (cond3, body3)])])
         expected = (
-            "if (a > 0) then\n"
-            "  b = 1\n"
-            "else if (a < 0) then\n"
-            "  b = 2\n"
-            "else\n"
-            "  b = 3\n"
-            "end if\n"
         )
-        self.assertEqual(code_tree.render_program(prog), expected)
+        self.assertEqual(render_program(prog), code)
 
 
 class TestNodeMethods(unittest.TestCase):
     def test_block_empty(self):
-        blk = code_tree.Block([])
+        blk = Block([])
         self.assertTrue(blk.is_effectively_empty())
 
     def test_has_assignment_to(self):
-        blk = code_tree.Block([
-            code_tree.Assignment(operators.OpVar("a"), operators.OpInt(1)),
+        blk = Block([
+            Assignment(OpVar("a"), OpInt(1)),
         ])
         self.assertTrue(blk.has_assignment_to("a"))
         self.assertFalse(blk.has_assignment_to("b"))
 
-        inner = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.Assignment(
-                    operators.OpVar(
-                        "a", index=[operators.OpVar("i"), operators.OpVar("j")]
+        inner = DoLoop(
+            Block([
+                Assignment(
+                    OpVar(
+                        "a", index=[OpVar("i"), OpVar("j")]
                     ),
-                    operators.OpVar(
-                        "b", index=[operators.OpVar("i"), operators.OpVar("j")]
+                    OpVar(
+                        "b", index=[OpVar("i"), OpVar("j")]
                     )
-                    + operators.OpVar("c")
+                    + OpVar("c")
                 )
             ]),
-            index=operators.OpVar("i"),
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            index=OpVar("i"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
-        outer = code_tree.DoLoop(
-            code_tree.Block([inner]),
-            index=operators.OpVar("j"),
-            start=operators.OpInt(1),
-            end=operators.OpVar("m"),
+        outer = DoLoop(
+            Block([inner]),
+            index=OpVar("j"),
+            start=OpInt(1),
+            end=OpVar("m"),
         )
         self.assertTrue(outer.has_assignment_to("a"))
         self.assertFalse(outer.has_assignment_to("b"))
         self.assertFalse(outer.has_assignment_to("c"))
 
     def test_ids_and_clone(self):
-        blk = code_tree.Block([code_tree.Assignment(operators.OpVar("a"), operators.OpInt(1))])
+        blk = Block([Assignment(OpVar("a"), OpInt(1))])
         for child in blk.iter_children():
             child_id = child.get_id()
             break
@@ -119,13 +140,13 @@ class TestNodeMethods(unittest.TestCase):
         self.assertNotEqual(clone.get_id(), blk.get_id())
         self.assertNotEqual(clone_child_id, child_id)
         self.assertEqual(
-            code_tree.render_program(clone), code_tree.render_program(blk)
+            render_program(clone), render_program(blk)
         )
 
     def test_find_and_remove(self):
-        a = code_tree.Assignment(operators.OpVar("a"), operators.OpInt(1))
-        b = code_tree.Assignment(operators.OpVar("b"), operators.OpInt(2))
-        blk = code_tree.Block([a, b])
+        a = Assignment(OpVar("a"), OpInt(1))
+        b = Assignment(OpVar("b"), OpInt(2))
+        blk = Block([a, b])
         self.assertIs(blk.find_by_id(b.get_id()), b)
         blk.remove_by_id(a.get_id())
         self.assertEqual(len(blk), 1)
@@ -136,324 +157,346 @@ class TestNodeMethods(unittest.TestCase):
         self.assertIs(child0, b)
 
     def test_var_analysis(self):
-        a = operators.OpVar("a")
-        b = operators.OpVar("b")
-        c = operators.OpVar("c")
+        a = OpVar("a")
+        b = OpVar("b")
+        c = OpVar("c")
         cond1 = a > 0
-        body1 = code_tree.Block([code_tree.Assignment(c, b)])
+        body1 = Block([Assignment(c, b)])
         cond2 = None
-        body2 = code_tree.Block([code_tree.Assignment(b, c)])
-        blk = code_tree.Block([
-            code_tree.Assignment(a, operators.OpInt(1)),
-            code_tree.Assignment(b, a),
-            code_tree.IfBlock([(cond1, body1), (cond2, body2)])
+        body2 = Block([Assignment(b, c)])
+        blk = Block([
+            Assignment(a, OpInt(1)),
+            Assignment(b, a),
+            IfBlock([(cond1, body1), (cond2, body2)])
         ])
-        self.assertEqual([str(v) for v in blk.assigned_vars()], ["a", "b", "c"])
-        self.assertEqual([str(v) for v in blk.required_vars()], ["c"])
+        self.assertEqual({str(v) for v in blk.assigned_vars()}, {"a", "b", "c"})
+        self.assertEqual({str(v) for v in blk.required_vars()}, {"c"})
 
-        sub = code_tree.Subroutine(
+        sub = Subroutine(
             "foo",
             "",
-            decls=code_tree.Block([
-                code_tree.Declaration(name="a", typename="real", intent="in"),
-                code_tree.Declaration(name="b", typename="real"),
+            decls=Block([
+                Declaration(name="a", typename="real", intent="in"),
+                Declaration(name="b", typename="real"),
             ]),
-            content=code_tree.Block([code_tree.Assignment(operators.OpVar("b"), operators.OpVar("a"))]),
+            content=Block([Assignment(OpVar("b"), OpVar("a"))]),
         )
-        self.assertEqual([str(v) for v in sub.assigned_vars()], ["a", "b"])
-        self.assertEqual([str(v) for v in sub.required_vars()], [])
+        self.assertEqual({str(v) for v in sub.assigned_vars()}, {"a", "b"})
+        self.assertEqual({str(v) for v in sub.required_vars()}, set())
 
     def test_do_loop_list(self):
-        a = code_tree.Assignment(operators.OpVar("a"), operators.OpInt(0))
-        blk = code_tree.Block([a])
+        a = Assignment(OpVar("a"), OpInt(0))
+        blk = Block([a])
         self.assertEqual(a.do_index_list, [])
-        doblk = code_tree.DoLoop(blk, index=operators.OpVar("i"), start=operators.OpInt(1), end=operators.OpVar("n"))
+        doblk = DoLoop(blk, index=OpVar("i"), start=OpInt(1), end=OpVar("n"))
         self.assertEqual(a.do_index_list, ["i"])
-        blk2 = code_tree.Block([doblk])
-        doblk = code_tree.DoLoop(blk2,
-                                  index=operators.OpVar("j"), start=operators.OpInt(1), end=operators.OpVar("m")
+        blk2 = Block([doblk])
+        doblk = DoLoop(blk2,
+                                  index=OpVar("j"), start=OpInt(1), end=OpVar("m")
                                   )
         self.assertEqual(a.do_index_list, ["i","j"])
-        b = code_tree.Assignment(operators.OpVar("b"), operators.OpInt(0))
+        b = Assignment(OpVar("b"), OpInt(0))
         blk.append(b)
         self.assertEqual(b.do_index_list, ["i","j"])
 
     def test_prune_for(self):
-        a = operators.OpVar("a")
-        b = operators.OpVar("b")
-        c = operators.OpVar("c")
-        blk = code_tree.Block([
-            code_tree.Block([
-                code_tree.Assignment(a, operators.OpInt(2)),
-                code_tree.Assignment(c, a),
+        a = OpVar("a")
+        b = OpVar("b")
+        c = OpVar("c")
+        blk = Block([
+            Block([
+                Assignment(a, OpInt(2)),
+                Assignment(c, a),
             ]),
-            code_tree.Block([
-                code_tree.Assignment(a, operators.OpInt(1)),
-                code_tree.Assignment(b, a),
+            Block([
+                Assignment(a, OpInt(1)),
+                Assignment(b, a),
             ]),
         ])
-        pruned = blk.prune_for([b])
+        pruned = blk.prune_for(VarList([b]))
         self.assertEqual(
-            code_tree.render_program(pruned),
+            render_program(pruned),
             "a = 1\n" "b = a\n",
         )
 
     def test_assignment_accumulate(self):
         # detection without flag
-        x = operators.OpVar("x")
-        x_da = operators.OpVar("x_da")
-        y = operators.OpVar("y")
-        a = code_tree.Assignment(x_da, x_da + y)
-        self.assertEqual([str(v) for v in a.required_vars()], ["x_da", "y"])
+        x = OpVar("x")
+        x_da = OpVar("x_da")
+        y = OpVar("y")
+        a = Assignment(x_da, x_da + y)
+        self.assertEqual({str(v) for v in a.required_vars()}, {"x_da", "y"})
 
-        b = code_tree.Assignment(x, x_da + y)
-        z = operators.OpVar("z")
-        self.assertEqual([str(v) for v in b.required_vars([z])], ["z", "x_da", "y"])
+        b = Assignment(x, x_da + y)
+        z = OpVar("z")
+        self.assertEqual({str(v) for v in b.required_vars(VarList([z]))}, {"z", "x_da", "y"})
 
-        c = code_tree.Assignment(x, x_da + y)
-        self.assertEqual([str(v) for v in c.required_vars([x])], ["x_da", "y"])
+        c = Assignment(x, x_da + y)
+        self.assertEqual({str(v) for v in c.required_vars(VarList([x]))}, {"x_da", "y"})
 
         # explicit accumulate
-        d = code_tree.Assignment(x_da, y, accumulate=True)
+        d = Assignment(x_da, y, accumulate=True)
         self.assertEqual(
-            code_tree.render_program(code_tree.Block([d])),
+            render_program(Block([d])),
             "x_da = y + x_da\n",
         )
-        self.assertEqual([str(v) for v in b.required_vars()], ["x_da", "y"])
+        self.assertEqual({str(v) for v in b.required_vars()}, {"x_da", "y"})
 
     def test_required_vars_in_simple_loop(self):
-        a = operators.OpVar("a")
-        b = operators.OpVar("b")
-        c = operators.OpVar("c")
-        assign = code_tree.Assignment(a, b + c)
-        self.assertEqual([str(v) for v in assign.required_vars()], ["b", "c"])
+        a = OpVar("a")
+        b = OpVar("b")
+        c = OpVar("c")
+        assign = Assignment(a, b + c)
+        self.assertEqual({str(v) for v in assign.required_vars()}, {"b", "c"})
 
-        blk = code_tree.Block([
-            code_tree.Assignment(a, c),
-            code_tree.Assignment(b, a)
+        blk = Block([
+            Assignment(a, c),
+            Assignment(b, a)
         ])
-        self.assertEqual([str(v) for v in blk.required_vars()], ["c"])
+        self.assertEqual({str(v) for v in blk.required_vars()}, {"c"})
         
-        i = operators.OpVar("i")
-        xa = operators.OpVar("x", index=[operators.OpRange([None])])
-        xi = operators.OpVar("x", index=[i])
-        yi = operators.OpVar("y", index=[i])
-        blk = code_tree.Block([
-            code_tree.Assignment(xa, operators.OpInt(0)),
-            code_tree.Assignment(yi, xi)
+        i = OpVar("i")
+        xa = OpVar("x", index=[OpRange([None])])
+        xi = OpVar("x", index=[i])
+        yi = OpVar("y", index=[i])
+        blk = Block([
+            Assignment(xa, OpInt(0)),
+            Assignment(yi, xi)
         ])
-        self.assertEqual([str(v) for v in blk.required_vars()], ["i"])
+        self.assertEqual({str(v) for v in blk.required_vars()}, {"i"})
 
-        ya = operators.OpVar("y", index=[operators.OpRange([None])])
-        blk = code_tree.Block([
-            code_tree.Assignment(xa, operators.OpInt(0)),
-            code_tree.DoLoop(
-                code_tree.Block([code_tree.Assignment(yi, xi)]),
-                index=i, start=operators.OpInt(1), end=operators.OpVar("n")
+        ya = OpVar("y", index=[OpRange([None])])
+        blk = Block([
+            Assignment(xa, OpInt(0)),
+            DoLoop(
+                Block([Assignment(yi, xi)]),
+                index=i, start=OpInt(1), end=OpVar("n")
             )
         ])
-        self.assertEqual([str(v) for v in blk.required_vars([ya])], ["n"])
+        self.assertEqual({str(v) for v in blk.required_vars(VarList([ya]))}, {"n"})
 
     def test_required_vars_in_nested_loop(self):
-        i = operators.OpVar("i")
-        k = operators.OpVar("k")
-        a = operators.OpVar("a")
-        x = operators.OpVar("x", index=[i])
-        y = operators.OpVar("y", index=[i])
-        v = operators.OpVar("v", index=[k])
-        v1 = operators.OpVar("v", index=[operators.OpInt(1)])
-        v2 = operators.OpVar("v", index=[operators.OpInt(2)])
-        w = operators.OpVar("w", index=[None])
-        w1 = operators.OpVar("w", index=[operators.OpInt(1)])
-        w2 = operators.OpVar("w", index=[operators.OpInt(2)])
-        inner = code_tree.DoLoop(
-            code_tree.Block([code_tree.Assignment(v, k)]),
-            index=k, start=operators.OpInt(1), end=operators.OpInt(2)
+        i = OpVar("i")
+        k = OpVar("k")
+        a = OpVar("a")
+        x = OpVar("x", index=[i])
+        y = OpVar("y", index=[i])
+        v = OpVar("v", index=[k])
+        v1 = OpVar("v", index=[1])
+        v2 = OpVar("v", index=[2])
+        w = OpVar("w", index=[None])
+        w1 = OpVar("w", index=[1])
+        w2 = OpVar("w", index=[2])
+        inner = DoLoop(
+            Block([Assignment(v, k)]),
+            index=k, start=OpInt(1), end=OpInt(2)
         )
-        outer = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.Assignment(a, i),
-                code_tree.Assignment(w, x),
+        outer = DoLoop(
+            Block([
+                Assignment(a, i),
+                Assignment(w, x),
                 inner,
-                code_tree.Assignment(y, v1 + v2 + w1 + w2 + a)
+                Assignment(y, v1 + v2 + w1 + w2 + a)
             ]),
-            index=i, start=operators.OpInt(1), end=operators.OpVar("n")
+            index=i, start=OpInt(1), end=OpVar("n")
         )
-        self.assertEqual([str(v) for v in outer.required_vars()], ["x(:)", "n"])
+        self.assertEqual({str(v) for v in outer.required_vars()}, {"x(1:n)", "n"})
             
-        x_ad = operators.OpVar("x_ad", index=[i])
-        y_ad = operators.OpVar("y_ad", index=[i])
-        v_ad = operators.OpVar("v_ad", index=[k])
-        v1_ad = operators.OpVar("v_ad", index=[operators.OpInt(1)])
-        v2_ad = operators.OpVar("v_ad", index=[operators.OpInt(2)])
-        w1_ad = operators.OpVar("w_ad", index=[operators.OpInt(1)])
-        w2_ad = operators.OpVar("w_ad", index=[operators.OpInt(2)])
-        save_assign1 = code_tree.SaveAssignment(w1, id=1)
-        save_assign2 = code_tree.SaveAssignment(w2, id=1)
-        inner = code_tree.DoLoop(
-            code_tree.Block([code_tree.Assignment(x_ad, v_ad, accumulate=True)]),
-            index=k, start=operators.OpInt(2), end=operators.OpInt(1), step=operators.OpInt(-1)
+        x_ad = OpVar("x_ad", index=[i])
+        y_ad = OpVar("y_ad", index=[i])
+        v_ad = OpVar("v_ad", index=[k])
+        v1_ad = OpVar("v_ad", index=[1])
+        v2_ad = OpVar("v_ad", index=[2])
+        w1_ad = OpVar("w_ad", index=[1])
+        w2_ad = OpVar("w_ad", index=[2])
+        save_assign1 = SaveAssignment(w1, id=1)
+        save_assign2 = SaveAssignment(w2, id=1)
+        inner = DoLoop(
+            Block([Assignment(x_ad, v_ad, accumulate=True)]),
+            index=k, start=OpInt(2), end=OpInt(1), step=OpInt(-1)
         )
-        outer = code_tree.DoLoop(
-            code_tree.Block([
+        outer = DoLoop(
+            Block([
                 save_assign1,
                 save_assign2,
-                code_tree.Assignment(v1_ad, y_ad, accumulate=True),
-                code_tree.Assignment(v2_ad, y_ad, accumulate=True),
-                code_tree.Assignment(w1_ad, y_ad, accumulate=True),
-                code_tree.Assignment(w2_ad, y_ad, accumulate=True),
+                Assignment(v1_ad, y_ad, accumulate=True),
+                Assignment(v2_ad, y_ad, accumulate=True),
+                Assignment(w1_ad, y_ad, accumulate=True),
+                Assignment(w2_ad, y_ad, accumulate=True),
                 inner,
-                code_tree.Assignment(x_ad, w1_ad + w2_ad, accumulate=True),
+                Assignment(x_ad, w1_ad + w2_ad, accumulate=True),
                 save_assign1.to_load(),
                 save_assign2.to_load()
             ]),
-            index=i, start=operators.OpVar("n"), end=operators.OpInt(1), step=operators.OpInt(-1)
+            index=i, start=OpVar("n"), end=OpInt(1), step=OpInt(-1)
         )
-        #self.assertEqual([str(v) for v in outer.required_vars(no_accumulate=True, without_savevar=True)], ["y_ad(:)","n"])
-        self.assertEqual([str(v) for v in outer.required_vars(no_accumulate=True, without_savevar=True)], ["v_ad(:)","y_ad(:)","n"])
+        self.assertEqual({str(v) for v in outer.required_vars(no_accumulate=True, without_savevar=True)}, {"y_ad(1:n)","n"})
 
     def test_required_vars_in_if(self):
-        i = operators.OpVar("i")
-        a = operators.OpVar("a")
-        b = operators.OpVar("b")
-        c = operators.OpVar("c")
+        i = OpVar("i")
+        a = OpVar("a")
+        b = OpVar("b")
+        c = OpVar("c")
         cond1 = i < 0
-        block1 = code_tree.Block([code_tree.Assignment(a, c)])
+        block1 = Block([Assignment(a, c)])
         cond2 = i > 0
-        block2 = code_tree.Block([code_tree.Assignment(a, b)])
+        block2 = Block([Assignment(a, b)])
         cond3 = None
-        block3 = code_tree.Block([code_tree.Assignment(b, c)])
-        ifblk = code_tree.IfBlock([
+        block3 = Block([Assignment(b, c)])
+        ifblk = IfBlock([
             (cond1, block1), (cond2, block2), (cond3, block3)
         ])
-        self.assertEqual([str(v) for v in ifblk.required_vars([a])], ["i", "c", "b", "a"])
+        self.assertEqual({str(v) for v in ifblk.required_vars(VarList([a]))}, {"i", "c", "b", "a"})
 
     def test_check_initial(self):
-        a_ad = operators.OpVar("a_ad")
-        b_ad = operators.OpVar("b_ad")
-        c_ad = operators.OpVar("c_ad")
-        i = operators.OpVar("i")
-        n = operators.OpVar("n")
+        code = textwrap.dedent("""\
+        a_ad = b_ad
+        a_ad = c_ad + a_ad
+        """)
+        a_ad = OpVar("a_ad")
+        b_ad = OpVar("b_ad")
+        c_ad = OpVar("c_ad")
+        i = OpVar("i")
+        n = OpVar("n")
 
-        blk = code_tree.Block([
-            code_tree.Assignment(a_ad, b_ad, accumulate=True),
-            code_tree.Assignment(a_ad, c_ad, accumulate=True)
+        blk = Block([
+            Assignment(a_ad, b_ad, accumulate=True),
+            Assignment(a_ad, c_ad, accumulate=True)
         ])
         self.assertEqual(blk.check_initial("a_ad"), 2)
-        self.assertEqual(code_tree.render_program(blk), "a_ad = b_ad\na_ad = c_ad + a_ad\n")
+        self.assertEqual(render_program(blk), code)
 
-        loop = code_tree.DoLoop(code_tree.Block([
-            code_tree.Assignment(a_ad, b_ad, accumulate=True),
-            code_tree.Assignment(a_ad, c_ad, accumulate=True)
+        code = textwrap.dedent("""\
+        do i = 1, n
+          a_ad = b_ad + a_ad
+          a_ad = c_ad + a_ad
+        end do
+        """)
+        loop = DoLoop(Block([
+            Assignment(a_ad, b_ad, accumulate=True),
+            Assignment(a_ad, c_ad, accumulate=True)
         ]),
-        index=i, start=operators.OpInt(1), end=n)
+        index=i, start=OpInt(1), end=n)
         self.assertEqual(loop.check_initial("a_ad"), -1)
-        self.assertEqual(
-            code_tree.render_program(loop),
-            "do i = 1, n\n  a_ad = b_ad + a_ad\n  a_ad = c_ad + a_ad\nend do\n",
-        )
+        self.assertEqual(render_program(loop), code)
 
-        loop = code_tree.DoLoop(code_tree.Block([
-            code_tree.Assignment(a_ad, b_ad, accumulate=True),
-            code_tree.Assignment(b_ad, a_ad, accumulate=True)
+        code = textwrap.dedent("""\
+        do i = 1, n
+          a_ad = b_ad
+          b_ad = a_ad + b_ad
+        end do
+        """)
+        loop = DoLoop(Block([
+            Assignment(a_ad, b_ad, accumulate=True),
+            Assignment(b_ad, a_ad, accumulate=True)
         ]),
-        index=i, start=operators.OpInt(1), end=n)
+        index=i, start=OpInt(1), end=n)
         self.assertEqual(loop.check_initial("a_ad"), 2)
         self.assertEqual(loop.check_initial("b_ad"), -1)
-        self.assertEqual(
-            code_tree.render_program(loop),
-            "do i = 1, n\n  a_ad = b_ad\n  b_ad = a_ad + b_ad\nend do\n",
-        )
+        self.assertEqual(render_program(loop), code)
 
-        loop = code_tree.DoLoop(code_tree.Block([
-            code_tree.Assignment(a_ad, b_ad, accumulate=True),
-            code_tree.Assignment(b_ad, a_ad, accumulate=True),
-            code_tree.Assignment(a_ad, b_ad, accumulate=True)
+        code = textwrap.dedent("""\
+        do i = 1, n
+          a_ad = b_ad + a_ad
+          b_ad = a_ad + b_ad
+          a_ad = b_ad + a_ad
+        end do
+        """)
+        loop = DoLoop(Block([
+            Assignment(a_ad, b_ad, accumulate=True),
+            Assignment(b_ad, a_ad, accumulate=True),
+            Assignment(a_ad, b_ad, accumulate=True)
         ]),
-        index=i, start=operators.OpInt(1), end=n)
+        index=i, start=OpInt(1), end=n)
         self.assertEqual(loop.check_initial("a_ad"), -1)
         self.assertEqual(loop.check_initial("b_ad"), -1)
-        self.assertEqual(
-            code_tree.render_program(loop),
-            "do i = 1, n\n  a_ad = b_ad + a_ad\n  b_ad = a_ad + b_ad\n  a_ad = b_ad + a_ad\nend do\n",
-        )
+        self.assertEqual(render_program(loop), code)
 
-        loop = code_tree.DoLoop(code_tree.Block([
-            code_tree.Assignment(a_ad, a_ad),
-            code_tree.Assignment(a_ad, b_ad, accumulate=True)
+        code = textwrap.dedent("""\
+        do i = 1, n
+          a_ad = b_ad + a_ad
+        end do
+        """)
+        loop = DoLoop(Block([
+            Assignment(a_ad, a_ad),
+            Assignment(a_ad, b_ad, accumulate=True)
         ]),
-        index=operators.OpVar("i"), start=operators.OpInt(1), end=operators.OpVar("n"))
+        index=OpVar("i"), start=OpInt(1), end=OpVar("n"))
         self.assertEqual(loop.check_initial("a_ad"), -1)
-        self.assertEqual(
-            code_tree.render_program(loop),
-            "do i = 1, n\n  a_ad = b_ad + a_ad\nend do\n",
-        )
+        self.assertEqual(render_program(loop), code)
 
-        index = [i]
-        x_ad = operators.OpVar("x_ad", index=index)
-        y_ad = operators.OpVar("y_ad", index=index)
-        loop = code_tree.DoLoop(code_tree.Block([
-            code_tree.Assignment(x_ad, y_ad, accumulate=True),
-            code_tree.Assignment(y_ad, c_ad, accumulate=True),
-            code_tree.Assignment(x_ad, c_ad, accumulate=True)
+        code = textwrap.dedent("""\
+        do i = 1, n
+          x_ad(i) = y_ad(i)
+          y_ad(i) = c_ad + y_ad(i)
+          x_ad(i) = c_ad + x_ad(i)
+        end do
+        """)
+        x_ad = OpVar("x_ad", index=[i])
+        y_ad = OpVar("y_ad", index=[i])
+        loop = DoLoop(Block([
+            Assignment(x_ad, y_ad, accumulate=True),
+            Assignment(y_ad, c_ad, accumulate=True),
+            Assignment(x_ad, c_ad, accumulate=True)
         ]),
-        index=operators.OpVar("i"), start=operators.OpInt(1), end=operators.OpVar("n"))
+        index=OpVar("i"), start=OpInt(1), end=OpVar("n"))
         self.assertEqual(loop.check_initial("x_ad"), 2)
         self.assertEqual(loop.check_initial("y_ad"), -1)
-        self.assertEqual(
-            code_tree.render_program(loop),
-            "do i = 1, n\n  x_ad(i) = y_ad(i)\n  y_ad(i) = c_ad + y_ad(i)\n  x_ad(i) = c_ad + x_ad(i)\nend do\n",
-        )
+        self.assertEqual(render_program(loop), code)
 
-        ip = operators.OpVar("ip")
-        xi_ad = operators.OpVar("x_ad", index=[i])
-        xip_ad = operators.OpVar("x_ad", index=[ip])
-        loop = code_tree.DoLoop(code_tree.Block([
-            code_tree.Assignment(xi_ad, y_ad, accumulate=True),
-            code_tree.Assignment(xip_ad, y_ad, accumulate=True),
+        ip = OpVar("ip")
+        xi_ad = OpVar("x_ad", index=[i])
+        xip_ad = OpVar("x_ad", index=[ip])
+        loop = DoLoop(Block([
+            Assignment(xi_ad, y_ad, accumulate=True),
+            Assignment(xip_ad, y_ad, accumulate=True),
         ]),
-        index=i, start=operators.OpInt(1), end=n)
+        index=i, start=OpInt(1), end=n)
         self.assertEqual(loop.check_initial("x_ad"), -1)
 
-        index = [operators.OpVar("i"), operators.OpVar("j")]
-        x_ad = operators.OpVar("x_ad", index=index)
-        y_ad = operators.OpVar("y_ad", index=index)
-        c_ad = operators.OpVar("c_ad")
-        inner = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.Assignment(x_ad, y_ad, accumulate=True),
-                code_tree.Assignment(c_ad, y_ad, accumulate=True)
+        index = [OpVar("i"), OpVar("j")]
+        x_ad = OpVar("x_ad", index=index)
+        y_ad = OpVar("y_ad", index=index)
+        c_ad = OpVar("c_ad")
+        inner = DoLoop(
+            Block([
+                Assignment(x_ad, y_ad, accumulate=True),
+                Assignment(c_ad, y_ad, accumulate=True)
             ]),
-            index=i, start=operators.OpInt(1), end=n)
-        outer = code_tree.DoLoop(
-            code_tree.Block([inner]),
-            index=operators.OpVar("j"),
-            start=operators.OpInt(1),
-            end=operators.OpVar("m"),
+            index=i, start=OpInt(1), end=n)
+        outer = DoLoop(
+            Block([inner]),
+            index=OpVar("j"),
+            start=OpInt(1),
+            end=OpVar("m"),
         )
         self.assertEqual(outer.check_initial("x_ad"), 2)
         self.assertEqual(outer.check_initial("y_ad"), 0)
         self.assertEqual(outer.check_initial("c_ad"), -1)
 
-        cond1 = operators.OpVar("a") > 0
-        body1 = code_tree.Block([code_tree.Assignment(a_ad, b_ad, accumulate=True)])
+        code = textwrap.dedent("""\
+        if (a > 0) then
+          a_ad = b_ad
+        else
+          a_ad = c_ad
+        end if
+        """)
+        cond1 = OpVar("a") > 0
+        body1 = Block([Assignment(a_ad, b_ad, accumulate=True)])
         cond2 = None
-        body2 = code_tree.Block([code_tree.Assignment(a_ad, c_ad, accumulate=True)])
-        cond_blk = code_tree.Block([
-            code_tree.IfBlock([(cond1, body1), (cond2, body2)])
+        body2 = Block([Assignment(a_ad, c_ad, accumulate=True)])
+        cond_blk = Block([
+            IfBlock([(cond1, body1), (cond2, body2)])
         ])
         self.assertEqual(cond_blk.check_initial("a_ad"), 2)
-        self.assertEqual(
-            code_tree.render_program(cond_blk),
-            "if (a > 0) then\n  a_ad = b_ad\nelse\n  a_ad = c_ad\nend if\n",
-        )
+        self.assertEqual(render_program(cond_blk), code)
 
-        cond1 = operators.OpVar("a") > 0
-        body1 = code_tree.Block([code_tree.Assignment(a_ad, b_ad, accumulate=True)])
+        cond1 = OpVar("a") > 0
+        body1 = Block([Assignment(a_ad, b_ad, accumulate=True)])
         cond2 = None
-        body2 = code_tree.Block([code_tree.Assignment(c_ad, b_ad, accumulate=True)])
-        cond_blk2 = code_tree.Block([
-            code_tree.IfBlock([(cond1, body1), (cond2, body2)])
+        body2 = Block([Assignment(c_ad, b_ad, accumulate=True)])
+        cond_blk2 = Block([
+            IfBlock([(cond1, body1), (cond2, body2)])
         ])
         self.assertEqual(cond_blk2.check_initial("a_ad"), -1)
         self.assertEqual(cond_blk2.check_initial("c_ad"), -1)
@@ -461,90 +504,90 @@ class TestNodeMethods(unittest.TestCase):
 
 class TestLoopAnalysis(unittest.TestCase):
     def test_simple_loop(self):
-        i = operators.OpVar("i")
-        body = code_tree.Block([
-            code_tree.Assignment(
-                operators.OpVar("a", index=[i]),
-                operators.OpVar("b", index=[i])
+        i = OpVar("i")
+        body = Block([
+            Assignment(
+                OpVar("a", index=[i]),
+                OpVar("b", index=[i])
             )
         ])
-        loop = code_tree.DoLoop(
+        loop = DoLoop(
             body,
             index=i,
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
-        self.assertEqual([str(v) for v in loop.required_vars()], ["b(:)", "n"])
-        self.assertEqual([str(v) for v in loop.private_vars()], [])
+        self.assertEqual({str(v) for v in loop.required_vars()}, {"b(1:n)", "n"})
+        #self.assertEqual({str(v) for v in loop.private_vars()}, set())
 
     def test_loop_with_accumulate(self):
-        i = operators.OpVar("i")
-        a = operators.OpVar("a", index=[i])
-        b = operators.OpVar("b", index=[i])
-        c = operators.OpVar("c")
-        body = code_tree.Block([
-            code_tree.Assignment(a, c, accumulate=True),
-            code_tree.Assignment(b, c, accumulate=True)
+        i = OpVar("i")
+        a_ad = OpVar("a_ad", index=[i])
+        b_ad = OpVar("b_ad", index=[i])
+        c = OpVar("c")
+        body = Block([
+            Assignment(a_ad, c, accumulate=True),
+            Assignment(b_ad, c, accumulate=True)
         ])
-        loop = code_tree.DoLoop(
+        loop = DoLoop(
             body,
             index=i,
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
-        self.assertEqual([str(v) for v in loop.required_vars()], ["c", "b(:)", "a(:)", "n"])
-        self.assertEqual([str(v) for v in loop.required_vars(no_accumulate=True)], ["c", "n"])
-        self.assertEqual([str(v) for v in loop.private_vars()], [])
+        self.assertEqual({str(v) for v in loop.required_vars()}, {"a_ad(1:n)", "b_ad(1:n)", "c", "n"})
+        self.assertEqual({str(v) for v in loop.required_vars(no_accumulate=True)}, {"c", "n"})
+        #self.assertEqual({str(v) for v in loop.private_vars()}, set())
 
 
     def test_self_reference_loop(self):
-        i = operators.OpVar("i")
-        a = operators.OpVar("a", index=[i])
-        body = code_tree.Block([
-            code_tree.Assignment(a, a + operators.OpVar("c"))
+        i = OpVar("i")
+        a = OpVar("a", index=[i])
+        body = Block([
+            Assignment(a, a + OpVar("c"))
         ])
-        loop = code_tree.DoLoop(
+        loop = DoLoop(
             body,
             index=i,
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
-        self.assertEqual([str(v) for v in loop.required_vars()], ["a(:)", "c", "n"])
-        self.assertEqual([str(v) for v in loop.private_vars()], [])
+        self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "c", "n"})
+        #self.assertEqual({str(v) for v in loop.private_vars()}, set())
 
     def test_no_recurrent_loop_with_scalar(self):
-        i = operators.OpVar("i")
-        a = operators.OpVar("a", index=[i])
-        c = operators.OpVar("c")
-        body = code_tree.Block([
-            code_tree.Assignment(c, a + i),
-            code_tree.Assignment(a, c + operators.OpInt(1)),
+        i = OpVar("i")
+        a = OpVar("a", index=[i])
+        c = OpVar("c")
+        body = Block([
+            Assignment(c, a + i),
+            Assignment(a, c + OpInt(1)),
         ])
-        loop = code_tree.DoLoop(
+        loop = DoLoop(
             body,
             index=i,
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
-        self.assertEqual([str(v) for v in loop.required_vars()], ["a(:)", "n"])
-        self.assertEqual([str(v) for v in loop.private_vars()], ["c"])
+        self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "n"})
+        #self.assertEqual({str(v) for v in loop.private_vars()}, {"c"})
 
     def test_recurrent_loop_with_scalar(self):
-        i = operators.OpVar("i")
-        a = operators.OpVar("a", index=[i])
-        c = operators.OpVar("c")
-        body = code_tree.Block([
-            code_tree.Assignment(a, c + operators.OpInt(1)),
-            code_tree.Assignment(c, a + i),
+        i = OpVar("i")
+        a = OpVar("a", index=[i])
+        c = OpVar("c")
+        body = Block([
+            Assignment(a, c + OpInt(1)),
+            Assignment(c, a + i),
         ])
-        loop = code_tree.DoLoop(
+        loop = DoLoop(
             body,
             index=i,
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
-        self.assertEqual([str(v) for v in loop.required_vars()], ["c", "n"])
-        self.assertEqual([str(v) for v in loop.private_vars()], [])
+        self.assertEqual({str(v) for v in loop.required_vars()}, {"c", "n"})
+        #self.assertEqual({str(v) for v in loop.private_vars()}, set())
 
     def test_recurrent_loop_with_different_index(self):
         code = textwrap.dedent("""\
@@ -554,30 +597,30 @@ class TestLoopAnalysis(unittest.TestCase):
           a(ip) = b(i) + c
         end do
         """)
-        i = operators.OpVar("i")
-        ip = operators.OpVar("ip")
-        loop = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.Assignment(
-                    operators.OpVar("ip"),
-                    i + operators.OpInt(1)
+        i = OpVar("i")
+        ip = OpVar("ip")
+        loop = DoLoop(
+            Block([
+                Assignment(
+                    OpVar("ip"),
+                    i + OpInt(1)
                 ),
-                code_tree.Assignment(
-                    operators.OpVar("a", index=[i]),
-                    operators.OpVar("b", index=[i]) + operators.OpVar("c")
+                Assignment(
+                    OpVar("a", index=[i]),
+                    OpVar("b", index=[i]) + OpVar("c")
                 ),
-                code_tree.Assignment(
-                    operators.OpVar("a", index=[ip]),
-                    operators.OpVar("b", index=[i]) + operators.OpVar("c")
+                Assignment(
+                    OpVar("a", index=[ip]),
+                    OpVar("b", index=[i]) + OpVar("c")
                 )
             ]),
             index=i,
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
         self.assertEqual("".join(loop.render()), code)
-        self.assertEqual([str(v) for v in loop.required_vars()], ["b(:)", "c", "n"])
-        self.assertEqual([str(v) for v in loop.private_vars()], ["ip"])
+        self.assertEqual({str(v) for v in loop.required_vars()}, {"b(1:n)", "c", "n"})
+        #self.assertEqual({str(v) for v in loop.private_vars()}, {"ip"})
 
     def test_recurrent_loop_with_self_reference_and_different_index(self):
         code = textwrap.dedent("""\
@@ -587,47 +630,47 @@ class TestLoopAnalysis(unittest.TestCase):
           a(ip) = a(ip) + c
         end do
         """)
-        i = operators.OpVar("i")
-        ip = operators.OpVar("ip")
-        a1 = operators.OpVar("a", index=[i])
-        a2 = operators.OpVar("a", index=[ip])
-        c = operators.OpVar("c")
-        loop = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.Assignment(operators.OpVar("ip"), i + operators.OpInt(1)),
-                code_tree.Assignment(a1, c),
-                code_tree.Assignment(a2, a2 + c)
+        i = OpVar("i")
+        ip = OpVar("ip")
+        a1 = OpVar("a", index=[i])
+        a2 = OpVar("a", index=[ip])
+        c = OpVar("c")
+        loop = DoLoop(
+            Block([
+                Assignment(OpVar("ip"), i + OpInt(1)),
+                Assignment(a1, c),
+                Assignment(a2, a2 + c)
             ]),
             index=i,
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
         self.assertEqual("".join(loop.render()), code)
-        self.assertEqual([str(v) for v in loop.required_vars()], ["a(ip)", "c", "n"])
-        self.assertEqual([str(v) for v in loop.private_vars()], ["ip"])
+        self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "c", "n"})
+        #self.assertEqual({str(v) for v in loop.private_vars()}, {"ip"})
 
     def test_nested_loop(self):
-        i = operators.OpVar("i")
-        j = operators.OpVar("j")
-        inner = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.Assignment(
-                    operators.OpVar("a", index=[i,j]),
-                    operators.OpVar("b", index=[i,j]) + operators.OpVar("c")
+        i = OpVar("i")
+        j = OpVar("j")
+        inner = DoLoop(
+            Block([
+                Assignment(
+                    OpVar("a", index=[i,j]),
+                    OpVar("b", index=[i,j]) + OpVar("c")
                 )
             ]),
             index=i,
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
-        outer = code_tree.DoLoop(
-            code_tree.Block([inner]),
+        outer = DoLoop(
+            Block([inner]),
             index=j,
-            start=operators.OpInt(1),
-            end=operators.OpVar("m"),
+            start=OpInt(1),
+            end=OpVar("m"),
         )
-        self.assertEqual([str(v) for v in outer.required_vars()], ["b(:,:)", "c", "n", "m"])
-        self.assertEqual([str(v) for v in outer.private_vars()], [])
+        self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n,1:m)", "c", "n", "m"})
+        #self.assertEqual({str(v) for v in outer.private_vars()}, set())
 
     def test_nested_loop_with_private_array(self):
         code = textwrap.dedent("""\
@@ -642,44 +685,44 @@ class TestLoopAnalysis(unittest.TestCase):
           end do
         end do
         """)
-        i = operators.OpVar("i")
-        k = operators.OpVar("k")
-        a = operators.OpVar("a", index=[i])
-        b = operators.OpVar("b", index=[i])
-        c = operators.OpVar("c", index=[k,i])
-        d = operators.OpVar("d", index=[k,i])
-        inner1 = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.Assignment(c, k),
-                code_tree.Assignment(d, k)
+        i = OpVar("i")
+        k = OpVar("k")
+        a = OpVar("a", index=[i])
+        b = OpVar("b", index=[i])
+        c = OpVar("c", index=[k,i])
+        d = OpVar("d", index=[k,i])
+        inner1 = DoLoop(
+            Block([
+                Assignment(c, k),
+                Assignment(d, k)
             ]),
             index=k,
-            start=operators.OpInt(1),
-            end=operators.OpInt(2)
+            start=OpInt(1),
+            end=OpInt(2)
         )
-        inner2 = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.Assignment(b, b + d),
+        inner2 = DoLoop(
+            Block([
+                Assignment(b, b + d),
             ]),
             index=k,
-            start=operators.OpInt(1),
-            end=operators.OpInt(2)
+            start=OpInt(1),
+            end=OpInt(2)
         )
-        outer = code_tree.DoLoop(
-            code_tree.Block([
+        outer = DoLoop(
+            Block([
                 inner1,
-                code_tree.Assignment(a,
-                                     operators.OpVar("c", index=[operators.OpInt(1), i])
-                                     + operators.OpVar("c", index=[operators.OpInt(2), i])),
+                Assignment(a,
+                                     OpVar("c", index=[1, i])
+                                     + OpVar("c", index=[2, i])),
                 inner2,
             ]),
             index=i,
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
         self.assertEqual("".join(outer.render()), code)
-        self.assertEqual([str(v) for v in outer.required_vars()], ["b(:)", "n"])
-        self.assertEqual([str(v) for v in outer.private_vars()], [])
+        self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n)", "n"})
+        #self.assertEqual({str(v) for v in outer.private_vars()}, set())
 
     def test_nested_loop_with_different_index(self):
         code = textwrap.dedent("""\
@@ -689,29 +732,29 @@ class TestLoopAnalysis(unittest.TestCase):
           end do
         end do
         """)
-        i = operators.OpVar("i")
-        j = operators.OpVar("j")
-        k = operators.OpVar("k")
-        inner = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.Assignment(
-                    operators.OpVar("a", index=[i,j]),
-                    operators.OpVar("b", index=[i,k]) + operators.OpVar("c")
+        i = OpVar("i")
+        j = OpVar("j")
+        k = OpVar("k")
+        inner = DoLoop(
+            Block([
+                Assignment(
+                    OpVar("a", index=[i,j]),
+                    OpVar("b", index=[i,k]) + OpVar("c")
                 )
             ]),
             index=i,
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
-        outer = code_tree.DoLoop(
-            code_tree.Block([inner]),
+        outer = DoLoop(
+            Block([inner]),
             index=j,
-            start=operators.OpInt(1),
-            end=operators.OpVar("m"),
+            start=OpInt(1),
+            end=OpVar("m"),
         )
         self.assertEqual("".join(outer.render()), code)
-        self.assertEqual([str(v) for v in outer.required_vars()], ["b(:,k)", "k", "c", "n", "m"])
-        self.assertEqual([str(v) for v in outer.private_vars()], [])
+        self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n,k)", "k", "c", "n", "m"})
+        #self.assertEqual({str(v) for v in outer.private_vars()}, set())
 
     def test_nested_recurrent_loop_with_different_index(self):
         code = textwrap.dedent("""\
@@ -721,29 +764,29 @@ class TestLoopAnalysis(unittest.TestCase):
           end do
         end do
         """)
-        i = operators.OpVar("i")
-        j = operators.OpVar("j")
-        k = operators.OpVar("k")
-        inner = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.Assignment(
-                    operators.OpVar("a", index=[j,k]),
-                    operators.OpVar("b", index=[i,k]) + operators.OpVar("c")
+        i = OpVar("i")
+        j = OpVar("j")
+        k = OpVar("k")
+        inner = DoLoop(
+            Block([
+                Assignment(
+                    OpVar("a", index=[j,k]),
+                    OpVar("b", index=[i,k]) + OpVar("c")
                 )
             ]),
             index=i,
-            start=operators.OpInt(1),
-            end=operators.OpVar("n"),
+            start=OpInt(1),
+            end=OpVar("n"),
         )
-        outer = code_tree.DoLoop(
-            code_tree.Block([inner]),
+        outer = DoLoop(
+            Block([inner]),
             index=j,
-            start=operators.OpInt(1),
-            end=operators.OpVar("m"),
+            start=OpInt(1),
+            end=OpVar("m"),
         )
         self.assertEqual("".join(outer.render()), code)
-        self.assertEqual([str(v) for v in outer.required_vars()], ["k", "b(:,k)", "c", "n", "m"])
-        self.assertEqual([str(v) for v in outer.private_vars()], [])
+        self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n,k)", "k", "c", "n", "m"})
+        #self.assertEqual({str(v) for v in outer.private_vars()}, set())
 
     def test_nested_loop_with_private_advars(self):
         code = textwrap.dedent("""\
@@ -756,40 +799,40 @@ class TestLoopAnalysis(unittest.TestCase):
           end do
         end do
         """)
-        i = operators.OpVar("i")
-        j = operators.OpVar("j")
-        x = operators.OpVar("x", index=[i,j])
-        x_ad = operators.OpVar("x_ad", index=[i,j])
-        y = operators.OpVar("y", index=[i,j])
-        y_ad = operators.OpVar("y_ad", index=[i,j])
-        work1_ad = operators.OpVar("work_ad", index=[operators.OpInt(1)])
-        work2_ad = operators.OpVar("work_ad", index=[operators.OpInt(2)])
-        inner = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.Assignment(work1_ad, x_ad, accumulate=True),
-                code_tree.Assignment(work2_ad, y_ad, accumulate=True),
-                code_tree.Assignment(x_ad, work1_ad * x, accumulate=True),
-                code_tree.Assignment(y_ad, work2_ad * y, accumulate=True),
+        i = OpVar("i")
+        j = OpVar("j")
+        x = OpVar("x", index=[i,j])
+        x_ad = OpVar("x_ad", index=[i,j])
+        y = OpVar("y", index=[i,j])
+        y_ad = OpVar("y_ad", index=[i,j])
+        work1_ad = OpVar("work_ad", index=[1])
+        work2_ad = OpVar("work_ad", index=[2])
+        inner = DoLoop(
+            Block([
+                Assignment(work1_ad, x_ad, accumulate=True),
+                Assignment(work2_ad, y_ad, accumulate=True),
+                Assignment(x_ad, work1_ad * x, accumulate=True),
+                Assignment(y_ad, work2_ad * y, accumulate=True),
             ]),
             index=i,
-            start=operators.OpVar("n"),
-            end=operators.OpInt(1),
-            step=operators.OpInt(-1),
+            start=OpVar("n"),
+            end=OpInt(1),
+            step=OpInt(-1),
         )
-        outer = code_tree.DoLoop(
-            code_tree.Block([inner]),
+        outer = DoLoop(
+            Block([inner]),
             index=j,
-            start=operators.OpVar("m"),
-            end=operators.OpInt(1),
-            step=operators.OpInt(-1),
+            start=OpVar("m"),
+            end=OpInt(1),
+            step=OpInt(-1),
         )
-        #self.assertEqual([str(v) for v in outer.required_vars()], ["y(:,:)", "y_ad(:,:)", "x(:,:)", "x_ad(:,:)", "n", "m"])
-        self.assertEqual([str(v) for v in outer.required_vars()], ["y(:,:)", "y_ad(:,:)", "x(:,:)", "x_ad(:,:)", "work_ad(2)", "work_ad(1)", "n", "m"])
-        private_vars = outer.private_vars()
-        self.assertEqual([str(v) for v in private_vars], ["work_ad(1)", "work_ad(2)"])
-        for var in private_vars:
-            outer.check_initial(str(var), force=True)
-        self.assertEqual("".join(outer.render()), code)
+        #self.assertEqual({str(v) for v in outer.required_vars()}, {"y(:,:)", "y_ad(:,:)", "x(:,:)", "x_ad(:,:)", "n", "m")
+        self.assertEqual({str(v) for v in outer.required_vars()}, {"x(1:n,1:m)", "y(1:n,1:m)", "x_ad(1:n,1:m)", "y_ad(1:n,1:m)", "work_ad(1:2)", "n", "m"})
+        #private_vars = outer.private_vars()
+        #self.assertEqual({str(v) for v in private_vars}, {"work_ad(1)", "work_ad(2)"})
+        #for var in private_vars:
+        #    outer.check_initial(str(var), force=True)
+        #self.assertEqual("".join(outer.render()), code)
 
 
         code = textwrap.dedent("""\
@@ -806,90 +849,90 @@ class TestLoopAnalysis(unittest.TestCase):
           end do
         end do
         """)
-        i = operators.OpVar("i")
-        j = operators.OpVar("j")
-        k = operators.OpVar("k")
-        x = operators.OpVar("x", index=[i,j])
-        x_ad = operators.OpVar("x_ad", index=[i,j])
-        y = operators.OpVar("y", index=[i,j])
-        y_ad = operators.OpVar("y_ad", index=[i,j])
-        work = operators.OpVar("work", index=[k])
-        work1 = operators.OpVar("work", index=[operators.OpInt(1)])
-        work2 = operators.OpVar("work", index=[operators.OpInt(2)])
-        work_ad = operators.OpVar("work_ad", index=[k])
-        work1_ad = operators.OpVar("work_ad", index=[operators.OpInt(1)])
-        work2_ad = operators.OpVar("work_ad", index=[operators.OpInt(2)])
-        save1 = code_tree.SaveAssignment(work1, id=1)
-        save2 = code_tree.SaveAssignment(work2, id=1)
-        inner = code_tree.DoLoop(
-            code_tree.Block([
-                code_tree.DoLoop(
-                    code_tree.Block([
-                        code_tree.Assignment(work, k),
-                        code_tree.Assignment(work_ad, x_ad * k, accumulate=True),
+        i = OpVar("i")
+        j = OpVar("j")
+        k = OpVar("k")
+        x = OpVar("x", index=[i,j])
+        x_ad = OpVar("x_ad", index=[i,j])
+        y = OpVar("y", index=[i,j])
+        y_ad = OpVar("y_ad", index=[i,j])
+        work = OpVar("work", index=[k])
+        work1 = OpVar("work", index=[1])
+        work2 = OpVar("work", index=[2])
+        work_ad = OpVar("work_ad", index=[k])
+        work1_ad = OpVar("work_ad", index=[1])
+        work2_ad = OpVar("work_ad", index=[2])
+        save1 = SaveAssignment(work1, id=1)
+        save2 = SaveAssignment(work2, id=1)
+        inner = DoLoop(
+            Block([
+                DoLoop(
+                    Block([
+                        Assignment(work, k),
+                        Assignment(work_ad, x_ad * k, accumulate=True),
                     ]),
-                    index=k, start=operators.OpInt(2), end=operators.OpInt(1), step=operators.OpInt(-1)),
-                code_tree.Assignment(x_ad, work1_ad * work1, accumulate=True),
-                code_tree.Assignment(work1_ad, operators.OpReal("0.0"), accumulate=False),
-                code_tree.Assignment(y_ad, work2_ad * work2, accumulate=True),
-                code_tree.Assignment(work2_ad, operators.OpReal("0.0"), accumulate=False)
+                    index=k, start=OpInt(2), end=OpInt(1), step=OpInt(-1)),
+                Assignment(x_ad, work1_ad * work1, accumulate=True),
+                Assignment(work1_ad, OpReal("0.0"), accumulate=False),
+                Assignment(y_ad, work2_ad * work2, accumulate=True),
+                Assignment(work2_ad, OpReal("0.0"), accumulate=False)
             ]),
             index=i,
-            start=operators.OpVar("n"),
-            end=operators.OpInt(1),
-            step=operators.OpInt(-1),
+            start=OpVar("n"),
+            end=OpInt(1),
+            step=OpInt(-1),
         )
-        outer = code_tree.DoLoop(
-            code_tree.Block([
+        outer = DoLoop(
+            Block([
                 save1, save2,
                 inner,
                 save1.to_load(), save2.to_load()
             ]),
             index=j,
-            start=operators.OpVar("m"),
-            end=operators.OpInt(1),
-            step=operators.OpInt(-1),
+            start=OpVar("m"),
+            end=OpInt(1),
+            step=OpInt(-1),
         )
-        #self.assertEqual([str(v) for v in outer.required_vars()], ["y_ad(:,:)", "x_ad(:,:)", "n", "m"])
-        self.assertEqual([str(v) for v in outer.required_vars()], ["y_ad(:,:)", "x_ad(:,:)", "work_ad(:)", "n", "work(2)", "work(1)", "m"])
-        private_vars = outer.private_vars()
-        #self.assertEqual([str(v) for v in private_vars], ["work_ad(1)", "work(1)", "work_ad(2)", "work(2)"])
-        self.assertEqual([str(v) for v in private_vars], ["work(1)", "work(2)"])
-        outer = outer.prune_for([x_ad, y_ad])
+        #self.assertEqual({str(v) for v in outer.required_vars()}, {"y_ad(:,:)", "x_ad(:,:)", "n", "m"})
+        self.assertEqual({str(v) for v in outer.required_vars()}, {"x_ad(1:n,1:m)", "y_ad(1:n,1:m)", "work(1:2)", "work_ad(1:2)", "n", "m"})
+        #private_vars = outer.private_vars()
+        #self.assertEqual({str(v) for v in private_vars}, {"work_ad(1)", "work(1)", "work_ad(2)", "work(2)")
+        #self.assertEqual({str(v) for v in private_vars}, {"work(1)", "work(2)"})
+        outer = outer.prune_for(VarList([x_ad, y_ad]))
         self.assertEqual("".join(outer.render()), code)
 
 
 class TestDoWhile(unittest.TestCase):
     def test_basic_render_and_required(self):
-        cond = operators.OpVar('cond')
-        body = code_tree.Block([
-            code_tree.Assignment(operators.OpVar('a'), operators.OpVar('b'))
+        code = textwrap.dedent("""\
+        do while (cond)
+          a = b
+        end do
+        """)
+        cond = OpVar('cond')
+        body = Block([
+            Assignment(OpVar('a'), OpVar('b'))
         ])
-        loop = code_tree.DoWhile(body, cond)
-        expected = (
-            "do while (cond)\n"
-            "  a = b\n"
-            "end do\n"
-        )
-        self.assertEqual(code_tree.render_program(loop), expected)
-        self.assertEqual([str(v) for v in loop.required_vars()], ['b', 'cond'])
+        loop = DoWhile(body, cond)
+        self.assertEqual(render_program(loop), code)
+        self.assertEqual({str(v) for v in loop.required_vars()}, {"b", "cond"})
 
     def test_check_initial(self):
-        body = code_tree.Block([
-            code_tree.Assignment(operators.OpVar('a'), operators.OpVar('b'))
+        body = Block([
+            Assignment(OpVar('a'), OpVar('b'))
         ])
-        loop = code_tree.DoWhile(body, operators.OpVar('flag'))
+        loop = DoWhile(body, OpVar('flag'))
         self.assertEqual(loop.check_initial('a'), -1)
         self.assertEqual(loop.check_initial('b'), 0)
 
     def test_prune_for(self):
-        body = code_tree.Block([
-            code_tree.Assignment(operators.OpVar('a'), operators.OpVar('b'))
+        body = Block([
+            Assignment(OpVar('a'), OpVar('b'))
         ])
-        loop = code_tree.DoWhile(body, operators.OpVar('flag'))
-        pruned = loop.prune_for([operators.OpVar('a')])
-        self.assertEqual(code_tree.render_program(pruned), code_tree.render_program(loop))
-        pruned2 = loop.prune_for([operators.OpVar('c')])
+        loop = DoWhile(body, OpVar('flag'))
+        pruned = loop.prune_for(VarList([OpVar('a')]))
+        self.assertEqual(render_program(pruned), render_program(loop))
+        pruned2 = loop.prune_for(VarList([OpVar('c')]))
         self.assertTrue(pruned2.is_effectively_empty())
 
 

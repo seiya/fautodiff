@@ -13,10 +13,15 @@ from .operators import (
     OpVar,
     OpInt,
     OpReal,
+    OpRange,
 )
 
 from .var_dict import (
     Vardict
+)
+
+from .var_list import (
+    VarList
 )
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -221,34 +226,38 @@ class Node:
     # variable analysis helpers
     # ------------------------------------------------------------------
 
-    def assigned_vars(self, vars: Optional[List[OpVar]] = None, without_savevar: bool = False) -> List[OpVar]:
+    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False) -> VarList:
         """Return variables assigned within this node and children."""
-        vars = list(vars or [])
+        flag = False
         for child in self.iter_children():
             vars = child.assigned_vars(vars, without_savevar=without_savevar)
+            flag = True
+        if not flag:
+            if vars is None:
+                vars = VarList()
+            else:
+                vars = vars.deep_clone()
         for var in self.iter_assign_vars(without_savevar=without_savevar):
-            _append_unique(vars, var)
+            vars.push(var)
         return vars
 
-    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         """Return variables needed before executing this node.
 
-        ``names`` is the list of variables that must be defined *after* this
-        node has executed.  The default implementation simply returns ``names``
+        ``vars`` is the ```VarList`` which consists of variables that must be defined *after* this
+        node has executed.  The default implementation simply returns ``vars``
         unchanged.  Subclasses override this to remove variables that are
         assigned and to add any variables referenced by this node.
         """
-        return list(names or [])
+        if vars is None:
+            vars = VarList()
+        return vars
 
-    def nonrefered_advars(self, names: Optional[List[OpVar]] = None) -> List[OpVar]:
-        """Return AD variables without reference after executing this node.
-
-        ``names`` is the list of variables that are defined *before* this
-        node has executed.  The default implementation simply returns ``names``
-        unchanged.  Subclasses override this to remove variables that are
-        refered and to add any variables assigined by this node.
-        """
-        return list(names or [])
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        """Return AD variables without reference after executing this node."""
+        if vars is None:
+            vars = VarList()
+        return vars
 
     def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
         """Return variable access information in this node.
@@ -295,7 +304,7 @@ class Node:
     # optimization helpers
     # ------------------------------------------------------------------
 
-    def prune_for(self, targets: Iterable[OpVar]) -> "Node":
+    def prune_for(self, targets: VarList) -> "Node":
         """Return a copy of this node with only code needed for ``targets``."""
         return self.deep_clone()
 
@@ -389,16 +398,14 @@ class Block(Node):
             lines.extend(child.render(indent))
         return lines
 
-    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
-        needed = list(names or [])
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         for child in reversed(self.__children):
-            needed = child.required_vars(needed, no_accumulate, without_savevar)
-        return needed
+            vars = child.required_vars(vars, no_accumulate, without_savevar)
+        return vars
 
-    def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
-        vars = list(vars or [])
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
         for child in self.iter_children():
-            vars = child.nonrefered_advars(vars)
+            vars = child.unrefered_advars(vars)
         return vars
 
     def private_vars(self) -> List[OpVar]:
@@ -411,35 +418,22 @@ class Block(Node):
                     if not var in vars_info:
                         vars_info[var] = None # not private
 
-    def prune_for(self, targets: List[OpVar]) -> "Block":
-        needed = list(targets)
+    def prune_for(self, targets: VarList) -> "Block":
         new_children: List[Node] = []
         for child in reversed(self.__children):
             # Declaration
+            target_names = targets.names()
             if isinstance(child, Declaration):
-                if (child.intent is not None) or any(child.name==var.name for var in needed):
+                if child.intent is not None or child.name in target_names:
                     new_children.insert(0, child)
                     continue
             # Other nodes
-            assigned = child.assigned_vars([])
-            common_vnames = set(var.name for var in assigned) & set(var.name for var in needed)
-            if common_vnames:
-                found = False
-                for vname in common_vnames:
-                    v1s = [v for v in assigned if v.name == vname]
-                    v2s = [v for v in needed if v.name == vname]
-                    for v1 in v1s:
-                        for v2 in v2s:
-                            if (v1.index is None or v1.index >= v2.index) or (v2.index is None or v2.index >= v1.index):
-                                pruned = child.prune_for(needed)
-                                new_children.insert(0, pruned)
-                                needed = pruned.required_vars(needed)
-                                found = True
-                                break
-                        if found:
-                            break
-                    if found:
-                        break
+            for var in child.assigned_vars():
+                if var in targets:
+                    pruned = child.prune_for(targets)
+                    new_children.insert(0, pruned)
+                    targets = pruned.required_vars(targets)
+                    break
         children = new_children
         if len(children) >= 2:
             new_children = []
@@ -559,33 +553,30 @@ class Routine(Node):
             vars.append(self.get_var(self.result))
         return vars
 
-    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
-        vars = list(vars or [])
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         for block in reversed(self._all_blocks()):
             vars = block.required_vars(vars, no_accumulate, without_savevar)
         return vars
 
-    def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
-        vars = list(vars or [])
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
         for block in self.iter_children():
-            vars = block.nonrefered_advars(vars)
+            vars = block.unrefered_advars(vars)
         return vars
 
     def expand_decls(self, decls: Block) -> "Routine":
         self.decls.expand(decls)
         return self
 
-    def prune_for(self, targets: Iterable[str]) -> "Routine":
-        needed = list(targets)
-        ad_content = self.ad_content.prune_for(needed)
-        needed = ad_content.required_vars(needed)
-        ad_init = self.ad_init.prune_for(needed)
-        needed = ad_init.required_vars(needed)
-        content = self.content.prune_for(needed)
+    def prune_for(self, targets: VarList) -> "Routine":
+        ad_content = self.ad_content.prune_for(targets)
+        targets = ad_content.required_vars(targets)
+        ad_init = self.ad_init.prune_for(targets)
+        targets = ad_init.required_vars(targets)
+        content = self.content.prune_for(targets)
         all_vars = content.collect_vars()
         _extend_unique(all_vars, ad_init.collect_vars())
         _extend_unique(all_vars, ad_content.collect_vars())
-        decls = self.decls.prune_for(all_vars)
+        decls = self.decls.prune_for(VarList(all_vars))
         return type(self)(name = self.name,
                           args = self.args,
                           result = self.result,
@@ -663,55 +654,33 @@ class Assignment(Node):
             ad_comment = f" ! {self.ad_info}"
         return [f"{space}{self.lhs} = {rhs}{ad_comment}\n"]
 
-    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
-        vars = (vars or [])
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         lhs = self.lhs
-        # entire: access entier element of the variable in the loop
-        # e.g., in the loop of index "i"
-        # True: a, a[:], a[i], a[k,i]
-        # False: a[k]
-        #entire = (not lhs.is_partial_access()) or set(self.do_index_list) <= set(lhs.index_list())
-        vars_new = []
-        for var in vars:
-            if var.name == self.lhs.name:
-                if lhs.index is None or lhs.index >= var.index:
-                    continue
-            #if var == lhs:
-            #    continue
-            #if var.name == lhs.name:
-            #    if (not var.is_partial_access()) and entire: # var does not has different index
-            #        continue
-            #    if lhs.index is None or not lhs.is_partial_access():
-            #        continue
-            vars_new.append(var)
-        vars = vars_new
-
+        if vars is None:
+            vars = VarList()
+        else:
+            if not isinstance(vars, VarList):
+                raise ValueError(f"Must be VarList: {type(vars)}")
+            vars = vars.deep_clone()
+            vars.remove(lhs)
         for var in lhs.collect_vars(): # variables in indexes
             if var != lhs:
-                _append_unique(vars, var)
-        _extend_unique(vars, self._rhs_vars)
-        if not no_accumulate and self.accumulate:
-            _append_unique(vars, lhs)
+                vars.push(var)
+        for var in self._rhs_vars:
+            vars.push(var)
+        if (not no_accumulate) and self.accumulate:
+            vars.push(lhs)
         return vars
 
-    def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
-        vars = (vars or [])
-        vars_new = []
-        for var in vars:
-            found = False
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.deep_clone()
             for rhs in self.rhs.collect_vars(without_index=True):
-                if var == rhs:
-                    found = True
-                    break
-                if var.name == rhs.name:
-                    if (var.index is None or var.index >= rhs.index) or (rhs.index is None or rhs.index >= var.index):
-                        found = True
-                        break
-            if not found:
-                vars_new.append(var)
-        vars = vars_new
+                vars.remove(rhs)
         if not (isinstance(self.rhs, OpReal) and self.rhs.val=="0.0"):
-            _append_unique(vars, self.lhs)
+            vars.push(self.lhs)
         return vars
 
     def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
@@ -793,7 +762,7 @@ class SaveAssignment(Node):
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         yield self.rhs
-            
+
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         if without_savevar and self.lhs == self.tmpvar:
             return iter(())
@@ -807,23 +776,24 @@ class SaveAssignment(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
-    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
-        vars = list(vars or [])
-        vars_new = []
-        for var in vars:
-            if var.name == self.lhs.name:
-                if self.lhs.index is None or self.lhs.index >= var.index:
-                    continue
-            _append_unique(vars_new, var)
-        vars = vars_new
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.deep_clone()
+            vars.remove(self.lhs)
         rhs = self.rhs
         if (not without_savevar) or rhs != self.var: # rhs is not saved var
-            _append_unique(vars, rhs)
+            vars.push(rhs)
         return vars
 
-    def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
-        vars = [v for v in (vars or []) if v != self.rhs]
-        _append_unique(vars, self.lhs)
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.deep_clone()
+            vars.remove(self.rhs)
+        vars.push(self.lhs)
         return vars
 
     def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
@@ -894,16 +864,20 @@ class Declaration(Node):
         typename = self.typename.lower()
         return typename.startswith("real") or typename.startswith("double")
 
-    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
-        needed = list(names or [])
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        if vars is None:
+            return VarList()
         if self.intent in ("in", "inout"):
-            needed = [var for var in needed if self.name != var.name]
-        return needed
+            vars = vars.deep_clone()
+            vars.remove(OpVar(self.name))
+        return vars
 
-    def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
-        vars = list(vars or [])
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        if vars is None:
+            vars = VarList()
         if self.intent in ("in", "inout"):
-            vars.append(OpVar(self.name, is_real=self.is_real, kind=self.kind))
+            vars = vars.deep_clone()
+            vars.push(OpVar(self.name, is_real=self.is_real, kind=self.kind))
         return vars
 
 
@@ -966,22 +940,27 @@ class BranchBlock(Node):
             blocks.append(load)
         return blocks
 
-    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
-        res = []
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.deep_clone()
         for var in self.iter_ref_vars():
-            _append_unique(res, var)
+            vars.push(var)
+        vars_new = VarList()
         for block in self.iter_children():
-            req = block.required_vars(vars, no_accumulate, without_savevar)
-            _extend_unique(res, req)
-        return res
-
-    def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
-        vars = list(vars or [])
-        vars_new = []
-        for block in self.iter_children():
-            for v in block.nonrefered_advars(vars):
-                _append_unique(vars_new, v)
+            vars_new.merge(block.required_vars(vars, no_accumulate, without_savevar))
         return vars_new
+
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.deep_clone()
+        for block in self.iter_children():
+            for v in block.unrefered_advars(vars.deep_clone()):
+                vars.push(v)
+        return vars
 
     def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
         if info is None:
@@ -1019,7 +998,7 @@ class BranchBlock(Node):
                 info[var] = True
         return info
 
-    def prune_for(self, targets: Iterable[OpVar]) -> Node:
+    def prune_for(self, targets: VarList) -> Node:
         new_condblocks = []
         for cond, block in self.cond_blocks:
             new_block = block.prune_for(targets)
@@ -1142,6 +1121,16 @@ class DoLoop(DoAbst):
         self.do_index_list.extend(list)
         self._body.build_do_index_list(self.do_index_list)
 
+    def _build_index_map(self) -> dict:
+        # build index map: variable name -> position of the loop index in the array index
+        index_map = {}
+        for var in self.collect_vars():
+            if var.index is not None:
+                for i, idx in enumerate(var.index):
+                    if isinstance(idx, OpVar) and idx == self.index:
+                        index_map[var.name] = i
+        return index_map
+
     def find_index(self, var: OpVar, name: str) -> Union[int, None]:
         if var.index is None:
             return None
@@ -1172,11 +1161,8 @@ class DoLoop(DoAbst):
             end = self.end
             step = self.step
         block = DoLoop(body, index, start, end, step)
-        common_vars = []
-        required_vars = block.required_vars()
-        for var in block.assigned_vars():
-            if var in required_vars:
-                _append_unique(common_vars, var)
+
+        common_vars = block.required_vars() & block.assigned_vars()
         loads = []
         blocks = []
         for cvar in common_vars:
@@ -1200,54 +1186,23 @@ class DoLoop(DoAbst):
         lines.append(f"{space}end do\n")
         return lines
 
-    def _update_index_upward(self, vars: List[OpVar]) -> List[OpVar]:
-        vars_new = []
-        for var in vars:
-            if var.index is not None:
-                index = self.find_index(var, self.index.name)
-                if index is not None:
-                    index_new = []
-                    for i, idx in enumerate(var.index):
-                        if i == index:
-                            index_new.append(None) # None is equivalent OpRange([]) (= ":")
-                        else:
-                            index_new.append(idx)
-                    _append_unique(vars_new, var.change_index(index_new))
-                    continue
-            _append_unique(vars_new, var)
-        return vars_new
-
-    def _update_index_downward(self, vars: List[OpVar]) -> List[OpVar]:
-        # build index map: variable name -> position of the loop index in the array index
-        index_map = {}
-        for var in self.collect_vars():
-            if var.index is not None:
-                for i, idx in enumerate(var.index):
-                    if isinstance(idx, OpVar) and idx == self.index:
-                        index_map[var.name] = i
-        vars_new = []
-        for var in list(vars or []):
-            if var.index is not None and var.name in index_map:
-                index_new = []
-                for i, idx in enumerate(var.index):
-                    if isinstance(var, OpVar) and var.name in index_map and i == index_map[var.name]:
-                        index_new.append(self.index)
-                    else:
-                        index_new.append(idx)
-                var = OpVar(name=var.name, index=index_new, is_real=var.is_real, kind=var.kind)
-            vars_new.append(var)
-        return vars_new
-
     def private_vars(self) -> List[OpVar]:
         """Return variables which have no effect to the outer region of this loop"""
         access_info = self.collect_access_info()
-        vars = [var for var, v in access_info.items() if v==False]
-        vars = self._update_index_downward(vars)
-        vars = [var for var in vars if (var.index is None or not var.index.is_depended_on(self.index))]
-        return vars
+        vars = VarList([var.deep_clone() for var, v in access_info.items() if v==False])
+        vars.update_index_downward(self._build_index_map(), self.index)
+        vars_list = []
+        for var in vars:
+            if (var.index is None or not var.index.is_depended_on(self.index)):
+                _append_unique(vars_list, var)
+        return vars_list
 
-    def required_vars(self, vars: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
-        vars = self._update_index_downward(vars)
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.deep_clone()
+            vars.update_index_downward(self._build_index_map(), self.index)
         vars = self._body.required_vars(vars, no_accumulate, without_savevar)
 
         # remove private variables
@@ -1273,26 +1228,26 @@ class DoLoop(DoAbst):
 
         if self.index in vars:
             vars.remove(self.index)
-        vars = self._update_index_upward(vars)
+        vars.update_index_upward(self._build_index_map(), range=OpRange([self.start,self.end,self.step]))
         for op in [self.start, self.end, self.step]:
             if op is not None:
                 for var in op.collect_vars():
-                    _append_unique(vars, var)
+                    vars.push(var)
         return vars
 
-    def assigned_vars(self, vars: Optional[List[OpVar]] = None, without_savevar: bool = False) -> List[OpVar]:
+    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False) -> VarList:
         vars = self._body.assigned_vars(vars, without_savevar=without_savevar)
-        vars = self._update_index_upward(vars)
-        _append_unique(vars, self.index)
+        vars.update_index_upward(self._build_index_map(), range=OpRange([self.start,self.end,self.step]))
+        vars.push(self.index)
         return vars
 
-    def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
-        vars = self._body.nonrefered_advars(vars)
-        vars = self._update_index_upward(vars)
-
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        vars = self._body.unrefered_advars(vars)
+        vars.update_index_upward(self._build_index_map(), range=OpRange([self.start,self.end,self.step]))
         return vars
 
     def collect_access_info(self, info: Optional[vardict] = None) -> dict:
+        raise NotImplementedError
         if info is None:
             info = Vardict()
         else:
@@ -1320,15 +1275,13 @@ class DoLoop(DoAbst):
             info[vars[i]] = info_child[var]
         return info
 
-    def prune_for(self, targets: List[OpVar]) -> Node:
-
-        targets = list(targets)
-        targets = self._update_index_downward(targets)
-
+    def prune_for(self, targets: VarList) -> Node:
+        targets = targets.deep_clone()
+        targets.update_index_downward(self._build_index_map(), self.index)
         new_body = self._body.prune_for(targets)
 
         #for var in new_body.required_vars(targets, no_accumulate=True, without_savevar=True):
-        for var in new_body.required_vars(targets):
+        for var in new_body.required_vars(targets.deep_clone()):
             if var.name == self.index.name:
                 continue
             #if var.name.endswith("_ad"):
@@ -1336,7 +1289,7 @@ class DoLoop(DoAbst):
             # check if the variable has no reccurent in this loop
             if var.index is not None and set(self.do_index_list) <= set(var.index_list()):
                 continue
-            _append_unique(targets, var)
+            targets.push(var)
         new_body = self._body.prune_for(targets)
 
         def _reducedim_from_tmpvar(node: Node) -> None:
@@ -1365,11 +1318,11 @@ class DoLoop(DoAbst):
             self.check_initial(varname, not_change, force)
         if not self._body.has_assignment_to(varname):
             return 0
-        for v in self.required_vars(no_accumulate=True):
-            if v.name == varname:
+        for vname in self.required_vars(no_accumulate=True).names():
+            if vname == varname:
                 return -1
         if not force:
-            for v in self._body.nonrefered_advars():
+            for v in self._body.unrefered_advars():
                 if v.name == varname:
                     if v.index is None or not set(self.do_index_list) <= set(v.index_list()):
                         return -1
@@ -1419,21 +1372,22 @@ class DoWhile(DoAbst):
         lines.append(f"{space}end do\n")
         return lines
 
-    def required_vars(self, names: Optional[List[OpVar]] = None, no_accumulate: bool = False, without_savevar: bool = False) -> List[OpVar]:
-        needed = self._body.required_vars(names, no_accumulate, without_savevar)
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        vars = self._body.required_vars(vars, no_accumulate, without_savevar)
+        vars = vars.deep_clone()
         for var in self.cond.collect_vars():
-            _append_unique(needed, var)
-        return needed
-
-    def nonrefered_advars(self, vars: Optional[List[OpVar]] = None) -> List[OpVar]:
-        vars = self._body.nonrefered_advars(vars)
+            vars.push(var)
         return vars
 
-    def prune_for(self, targets: Iterable[OpVar]) -> Node:
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        vars = self._body.unrefered_advars(vars)
+        return vars
+
+    def prune_for(self, targets: VarList) -> Node:
         new_body = self._body.prune_for(targets)
-        targets = list(targets)
-        for var in new_body.required_vars(targets):
-            _append_unique(targets, var)
+        targets = targets.deep_clone()
+        for var in new_body.required_vars(targets.deep_clone()):
+            targets.push(var)
         new_body = self._body.prune_for(targets)
         if new_body.is_effectively_empty():
             return Block([])

@@ -26,6 +26,10 @@ from .code_tree import (
     render_program,
 )
 
+from .var_list import (
+    VarList
+)
+
 from . import parser
 
 
@@ -259,13 +263,13 @@ def _generate_ad_subroutine(routine_org, warnings):
                 else:
                     index = None
                 subroutine.ad_init.append(Assignment(OpVar(var.name, index=index), OpReal(0.0, kind=var.kind)))
-        ad_code = ad_code.prune_for([OpVar(var.name) for var in grad_args])
+        ad_code = ad_code.prune_for(VarList([OpVar(var.name) for var in grad_args]))
         # check undefined output variables
-        vars = ad_code.required_vars([OpVar(var.name) for var in out_grad_args])
+        vars = ad_code.required_vars(VarList([OpVar(var.name) for var in out_grad_args]))
         vars = subroutine.ad_init.required_vars(vars)
         var_names = []
         for var in vars:
-            if var.name not in vars:
+            if var not in vars:
                 var_names.append(var.name)
         for name in var_names:
             var = next((var for var in out_grad_args if var.name == name), None)
@@ -326,7 +330,7 @@ def _generate_ad_subroutine(routine_org, warnings):
         v = Variable(name=sa.tmpvar.name, typename=v_org.typename, kind=v_org.kind, dims=dims)
         subroutine.decls.append(v.to_decl())
 
-    subroutine = subroutine.prune_for([OpVar(var.name) for var in grad_args])
+    subroutine = subroutine.prune_for(VarList([OpVar(var.name) for var in grad_args]))
 
     required_vnames = [str(var) for var in subroutine.required_vars()]
     if len(required_vnames) > 0:

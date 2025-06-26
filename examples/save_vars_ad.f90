@@ -106,8 +106,8 @@ contains
     real, intent(in)  :: y(n,m)
     real, intent(out) :: y_ad(n,m)
     real, intent(inout) :: z_ad(n,m)
-    real :: scalar_ad
     real :: ary_ad(n,m)
+    real :: scalar_ad
     real :: ary(n,m)
     integer :: i
     integer :: j
@@ -118,6 +118,8 @@ contains
     real :: scalar_save_62_ad
 
     ary(:,:) = x(:,:)
+
+    ary_ad(:,:) = 0.0
 
     do j = m, 1, - 1
       do i = n, 1, - 1
@@ -142,7 +144,7 @@ contains
         x_ad(i,j) = z_ad(i,j) ! z(i,j) = x(i,j) + scalar
         scalar_ad = z_ad(i,j) + scalar_ad ! z(i,j) = x(i,j) + scalar
         z_ad(i,j) = 0.0 ! z(i,j) = x(i,j) + scalar
-        ary_ad(i,j) = scalar_ad * z(i,j) ! scalar = ary(i,j) * z(i,j)
+        ary_ad(i,j) = scalar_ad * z(i,j) + ary_ad(i,j) ! scalar = ary(i,j) * z(i,j)
         z_ad(i,j) = scalar_ad * ary(i,j) + z_ad(i,j) ! scalar = ary(i,j) * z(i,j)
         ary(i,j) = ary_save_58_ad
         x_ad(i,j) = ary_ad(i,j) * ary(i,j) + x_ad(i,j) ! ary(i,j) = x(i,j) * ary(i,j) + z(i,j)
