@@ -36,6 +36,12 @@ class AryIndex:
     def __len__(self) -> int:
         return len(self.dims)
 
+    def __getitem__(self, index: int) -> "Operator":
+        return self.dims[index]
+
+    def __setitem__(self, index: int, var: Operator) -> None:
+        self.dims[index] = var
+
     def __iter__(self) -> iter:
         return iter(self.dims)
 
@@ -49,17 +55,16 @@ class AryIndex:
             return not self.is_partial_access()
         if len(self.dims) != len(other.dims):
             raise ValueError("Different number of dimensions")
-        flags = []
         for i, dim1 in enumerate(self.dims):
             dim2 = other.dims[i]
             if dim1 == dim2:
-                flags.append(True)
                 continue
             if (dim1 is None or isinstance(dim1, OpRange)) and (dim2 is None or isinstance(dim2, OpRange)):
-                flags.append(True)
+                if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
+                    return False
                 continue
-            flags.append(False)
-        return all(flags)
+            return False
+        return True
 
     def __le__(self, other) -> bool:
         if other is not None and not isinstance(other, AryIndex):
@@ -68,20 +73,26 @@ class AryIndex:
             return True
         if len(self.dims) != len(other.dims):
             raise ValueError("Different number of dimensions")
-        flags = []
         for i, dim1 in enumerate(self.dims):
             dim2 = other.dims[i]
-            if dim1 == dim2 or isinstance(dim2, OpRange):
-                flags.append(True)
+            if dim1 == dim2:
                 continue
-            if isinstance(dim1, OpRange):
-                flags.append(False)
+            if dim2 is None:
                 continue
-            if isinstance(dim1, Operator) and isinstance(dim2, Operator):
-                flags.append(False)
-                continue
-            raise RuntimeError(f"Unexpected value: {type(dim1)} {type(dim2)}")
-        return all(flags)
+            if isinstance(dim2, OpRange):
+                if isinstance(dim1, OpInt):
+                    j = dim1.val
+                    i0 = dim2[0].val
+                    i1 = dim2[1].val
+                    if isinstance(dim2[2], OpInt) and dim2.val < 0:
+                        i0, i1 = i1, i0
+                    if (isinstance(i0, int) and j < i0) or (isinstance(i1, int) and j > i0):
+                        return False
+                    continue
+                if isinstance(dim1, OpVar):
+                    continue
+            return False
+        return True
 
     def __ge__(self, other) -> bool:
         if other is not None and not isinstance(other, AryIndex):
@@ -90,20 +101,26 @@ class AryIndex:
             return all([dim is None or isinstance(dim, OpRange) for dim in self.dims])
         if len(self.dims) != len(other.dims):
             raise ValueError("Different number of dimensions")
-        flags = []
         for i, dim1 in enumerate(self.dims):
             dim2 = other.dims[i]
-            if dim1 == dim2 or isinstance(dim1, OpRange):
-                flags.append(True)
+            if dim1 == dim2:
                 continue
-            if isinstance(dim2, OpRange):
-                flags.append(False)
+            if dim1 is None:
                 continue
-            if isinstance(dim1, Operator) and isinstance(dim2, Operator):
-                flags.append(False)
-                continue
-            raise RuntimeError(f"Unexpected value: {type(dim1)} {type(dim2)}")
-        return all(set(flags))
+            if isinstance(dim1, OpRange):
+                if isinstance(dim2, OpInt):
+                    j = dim2.val
+                    i0 = dim1[0].val
+                    i1 = dim1[1].val
+                    if isinstance(dim1[2], OpInt) and dim1.val < 0:
+                        i0, i1 = i1, i0
+                    if (isinstance(i0, int) and j < i0) or (isinstance(i1, int) and j > i0):
+                        return False
+                    continue
+                if isinstance(dim2, OpVar):
+                    continue
+            return False
+        return True
 
     def collect_vars(self) -> List[OpVar]:
         if self.dims is None:
@@ -125,6 +142,11 @@ class AryIndex:
             if var in dim.collect_vars():
                 return True
         return False
+
+
+class AryIndexEmpty:
+    pass
+
 
 @dataclass
 class Operator:
@@ -814,6 +836,9 @@ class OpRange(Operator):
             self.args = []
         if len(self.args) > 3:
             raise ValueError(f"Length of args must be at most 3: {self.args}")
+        for i, val in enumerate(self.args):
+            if isinstance(val, int):
+                self.args[i] = OpInt(val)
 
     def collect_vars(self, without_index: bool = False) -> List[OpLeaf]:
         vars = []
@@ -838,6 +863,11 @@ class OpRange(Operator):
             else:
                 args = self.args
         return ":".join(["" if arg is None else str(arg) for arg in args])
+
+    def __getitem__(self, index: int) -> Operator:
+        if len(self.args) <= index:
+          return None
+        return self.args[index]
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Operator):

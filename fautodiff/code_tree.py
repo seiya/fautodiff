@@ -13,6 +13,7 @@ from .operators import (
     OpVar,
     OpInt,
     OpReal,
+    OpRange,
 )
 
 from .var_dict import (
@@ -672,10 +673,40 @@ class Assignment(Node):
         # False: a[k]
         #entire = (not lhs.is_partial_access()) or set(self.do_index_list) <= set(lhs.index_list())
         vars_new = []
+        #print(self.render()) # for debug
+        #print([str(v) for v in vars]) # for debug
         for var in vars:
             if var.name == self.lhs.name:
                 if lhs.index is None or lhs.index >= var.index:
                     continue
+                # tentative
+                # integer index is assumed to cover entier range of the dimension
+                flag = True
+                for i, idx in enumerate(lhs.index):
+                    if idx is None or isinstance(idx, OpRange):
+                        continue
+                    if isinstance(idx, OpInt):
+                        if var.index is None or var.index[i] is None or isinstance(var.index[i], OpRange):
+                            continue
+                        if isinstance(var.index[i], OpInt):
+                            if idx == var.index[i]:
+                                continue
+                            else:
+                                flag = False
+                                break
+                    if isinstance(idx, OpVar) and (var.index is None or var.index[i] is None or isinstance(var.index[i], OpRange)):
+                        flag = False
+                        break
+                    if isinstance(idx, OpVar) and (var.index is not None and isinstance(var.index[i], OpVar)):
+                        if idx == var.index[i]:
+                            continue
+                        else:
+                            flag = False
+                            break
+                    raise RuntimeError(f"Unexpected type: {type(idx)} {type(lhs.index)} {type(var.index)}")
+                if flag:
+                   continue
+
             #if var == lhs:
             #    continue
             #if var.name == lhs.name:
@@ -793,7 +824,7 @@ class SaveAssignment(Node):
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         yield self.rhs
-            
+
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         if without_savevar and self.lhs == self.tmpvar:
             return iter(())

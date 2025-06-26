@@ -309,8 +309,7 @@ class TestNodeMethods(unittest.TestCase):
             ]),
             index=i, start=operators.OpVar("n"), end=operators.OpInt(1), step=operators.OpInt(-1)
         )
-        #self.assertEqual([str(v) for v in outer.required_vars(no_accumulate=True, without_savevar=True)], ["y_ad(:)","n"])
-        self.assertEqual([str(v) for v in outer.required_vars(no_accumulate=True, without_savevar=True)], ["v_ad(:)","y_ad(:)","n"])
+        self.assertEqual([str(v) for v in outer.required_vars(no_accumulate=True, without_savevar=True)], ["y_ad(:)","n"])
 
     def test_required_vars_in_if(self):
         i = operators.OpVar("i")

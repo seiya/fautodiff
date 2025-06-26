@@ -36,6 +36,13 @@ class TestAryIndex(unittest.TestCase):
         self.assertTrue(idx.is_depended_on(i))
         self.assertFalse(idx.is_depended_on(operators.OpVar('k')))
 
+    def test_add(self):
+        i = operators.OpVar('i')
+        idx1 = operators.AryIndex([Operators.OpInt(1), i])
+        idx2 = operators.AryIndex([Operators.OpInt(2), i])
+        idx = operators.AryIndex([Operators.OpRange[OpInt(1), OpInt(2)], i])
+        self.assertEqual(idx1 + idx2, idx)
+        self.assertEqual(idx2 + idx1, idx)
 
 if __name__ == '__main__':
     unittest.main()
