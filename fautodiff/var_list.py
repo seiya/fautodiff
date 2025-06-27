@@ -59,12 +59,12 @@ class VarList:
         return self.vars[key]
 
     def __iter__(self) -> iter:
-        for name in sorted(self.names()):
+        for name in self.names():
             for index in self.vars[name]:
                 yield OpVar(name, index=index)
 
-    def names(self) -> Set[str]:
-        return set(self.vars.keys())
+    def names(self) -> List[str]:
+        return sorted(self.vars.keys())
 
     @staticmethod
     def _get_int(op) -> bool:
@@ -469,3 +469,28 @@ class VarList:
         self.vars[name] = []
         for index in index_list:
             self.push(OpVar(name, index=index), not_reorganize=True)
+
+    def update_index_upward(self, index_map: dict) -> None:
+        for name in self.names():
+            if name in index_map:
+                do_index = index_map[name]
+            else:
+                continue
+            for index in self.vars[name]:
+                if index is None:
+                    continue
+                index[do_index] = None
+            self._reorganize(name)
+
+    def update_index_downward(self, index_map: dict, do_index_var: OpVar) -> None:
+        for name in self.names():
+            if name in index_map:
+                do_index = index_map[name]
+            else:
+                continue
+            for index in self.vars[name]:
+                if index is None:
+                    continue
+                index[do_index] = do_index_var
+            self._reorganize(name)
+

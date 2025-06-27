@@ -145,6 +145,8 @@ class AryIndex:
             return []
         vars = []
         for dim in self.dims:
+            if dim is None:
+                continue
             for var in dim.collect_vars():
                 if not var in vars:
                     vars.append(var)

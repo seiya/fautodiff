@@ -13,6 +13,7 @@ from fautodiff.code_tree import (
     Assignment,
     SaveAssignment,
     DoLoop,
+    DoWhile,
     IfBlock,
     render_program
 )
