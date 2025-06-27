@@ -144,10 +144,6 @@ class AryIndex:
         return False
 
 
-class AryIndexEmpty:
-    pass
-
-
 @dataclass
 class Operator:
     """Abstract fortran oprations."""
