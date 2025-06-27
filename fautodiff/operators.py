@@ -25,7 +25,7 @@ class AryIndex:
                 self.dims[i] = OpInt(dim)
                 continue
             if dim is None:
-                self.dims[i] = OpRange()
+                self.dims[i] = None
                 continue
             if not isinstance(dim, Operator):
                 raise ValueError("dim must be either None, int, or Operator")
