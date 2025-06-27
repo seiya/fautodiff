@@ -33,6 +33,9 @@ class AryIndex:
     def list(self) -> List[str]:
         return [(":" if dim is None else str(dim)) for dim in self.dims]
 
+    def copy(self) -> AryIndex:
+        return AryIndex(list(self.dims))
+
     def __len__(self) -> int:
         return len(self.dims)
 
@@ -81,6 +84,8 @@ class AryIndex:
                 continue
             if not isinstance(dim1, OpRange):
                 return False
+            if dim2 is not None and not (isinstance(dim2, OpInt) or isinstance(dim2, OpRange)):
+                continue
             i0 = dim1[0]
             i1 = dim1[1]
             if i0 is None and i1 is None:

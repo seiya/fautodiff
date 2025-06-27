@@ -15,7 +15,7 @@ from fautodiff.operators import (
 class TestAryIndex(unittest.TestCase):
     def test_equality_and_str(self):
         i = OpVar('i')
-        idx1 = AryIndex([OpInt(1), None, i])
+        idx1 = AryIndex([1, None, i])
         idx2 = AryIndex([1, OpRange(), i])
         self.assertEqual(idx1.list(), ['1', ':', 'i'])
         self.assertEqual(str(idx1), '1,:,i')
@@ -33,21 +33,17 @@ class TestAryIndex(unittest.TestCase):
 
     def test_comparisons_with_int_range(self):
         i = OpVar('i')
-        one = OpInt(1)
-        two = OpInt(2)
-        three = OpInt(3)
-        four = OpInt(4)
-        five = OpInt(5)
-        idx1 = AryIndex([three, i])
-        idx2 = AryIndex([OpRange([one,two]), None])
-        idx3 = AryIndex([four, None])
-        idx4 = AryIndex([OpRange([three,four]), None])
-        ref = AryIndex([OpRange([two,four]), None])
-        self.assertTrue(AryIndex([three, i]) <= ref)
-        self.assertFalse(AryIndex([five, i]) <= ref)
-        self.assertTrue(AryIndex([OpRange([two,three]), None]) <= ref)
-        self.assertFalse(AryIndex([OpRange([one,three]), None]) <= ref)
-        self.assertFalse(AryIndex([OpRange([three,five]), None]) <= ref)
+        idx1 = AryIndex([3, i])
+        idx2 = AryIndex([OpRange([1, 2]), None])
+        idx3 = AryIndex([4, None])
+        idx4 = AryIndex([OpRange([3, 4]), None])
+        ref = AryIndex([OpRange([2, 4]), None])
+        self.assertTrue(AryIndex([3, i]) <= ref)
+        self.assertFalse(AryIndex([5, i]) <= ref)
+        self.assertTrue(AryIndex([OpRange([2, 3]), None]) <= ref)
+        self.assertFalse(AryIndex([OpRange([1, 3]), None]) <= ref)
+        self.assertFalse(AryIndex([OpRange([3, 5]), None]) <= ref)
+        self.assertTrue(AryIndex([OpVar("j"), i]) <= ref)
 
     def test_collect_vars_and_flags(self):
         i = OpVar('i')
