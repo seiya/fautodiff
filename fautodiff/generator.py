@@ -216,6 +216,9 @@ def _generate_ad_subroutine(routine_org, warnings):
                 return [Assignment(v, handler, accumulate=(not v==grad_lhs), ad_info=ad_info)]
 
         vars = rhs.collect_vars()
+        if lhs in vars:
+            vars.remove(lhs)
+            vars.append(lhs)
         assigns = []
         for var in vars:
             if not var.is_real:

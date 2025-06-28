@@ -64,8 +64,8 @@ contains
     work_ad = z_ad * x ! z = work * x + z
     x_ad = z_ad * work ! z = work * x + z
     work = work_save_38_ad
-    work_ad = work_ad * x ! work = work * x
     x_ad = work_ad * work + x_ad ! work = work * x
+    work_ad = work_ad * x ! work = work * x
     work = work_save_37_ad
     if (work > 0.0) then
       work_save_29_ad = work
@@ -76,8 +76,8 @@ contains
       work_ad = work_ad * 2.0 * work ! work = work**2
     else if (work < 0.0) then
       work = x
-      work_ad = work_ad * x ! work = work * x
       x_ad = work_ad * work + x_ad ! work = work * x
+      work_ad = work_ad * x ! work = work * x
       work_ad = z_ad * y + work_ad ! z = work * y
       y_ad = z_ad * work ! z = work * y
       z_ad = 0.0 ! z = work * y
@@ -129,8 +129,8 @@ contains
         z(i,j) = y(i,j) * scalar + z(i,j)
         scalar_save_62_ad = scalar
         scalar = z(i,j) * y(i,j)
-        z_ad(i,j) = z_ad(i,j) * scalar ! z(i,j) = z(i,j) * scalar
         scalar_ad = z_ad(i,j) * z(i,j) ! z(i,j) = z(i,j) * scalar
+        z_ad(i,j) = z_ad(i,j) * scalar ! z(i,j) = z(i,j) * scalar
         scalar = scalar_save_62_ad
         z_ad(i,j) = scalar_ad * y(i,j) + z_ad(i,j) ! scalar = z(i,j) * y(i,j)
         y_ad(i,j) = scalar_ad * z(i,j) ! scalar = z(i,j) * y(i,j)
@@ -143,8 +143,8 @@ contains
         z_ad(i,j) = scalar_ad * ary(i,j) ! scalar = ary(i,j) * z(i,j)
         ary(i,j) = ary_save_58_ad
         x_ad(i,j) = ary_ad(i,j) * ary(i,j) + x_ad(i,j) ! ary(i,j) = x(i,j) * ary(i,j) + z(i,j)
-        ary_ad(i,j) = ary_ad(i,j) * x(i,j) ! ary(i,j) = x(i,j) * ary(i,j) + z(i,j)
         z_ad(i,j) = ary_ad(i,j) + z_ad(i,j) ! ary(i,j) = x(i,j) * ary(i,j) + z(i,j)
+        ary_ad(i,j) = ary_ad(i,j) * x(i,j) ! ary(i,j) = x(i,j) * ary(i,j) + z(i,j)
         ary_ad(i,j) = z_ad(i,j) * y(i,j) + ary_ad(i,j) ! z(i,j) = ary(i,j) * y(i,j)
         y_ad(i,j) = z_ad(i,j) * ary(i,j) + y_ad(i,j) ! z(i,j) = ary(i,j) * y(i,j)
         z_ad(i,j) = 0.0 ! z(i,j) = ary(i,j) * y(i,j)
@@ -194,9 +194,9 @@ contains
         y_ad(i,j) = ary_ad(i,j) * ary(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
         ary_ad(i,j) = ary_ad(i,j) * y(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
         z(i,j) = z_save_92_ad
-        z_ad(i,j) = z_ad(i,j) * x(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
         x_ad(i,j) = z_ad(i,j) * z(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
         ary_ad(i,j) = z_ad(i,j) + ary_ad(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
+        z_ad(i,j) = z_ad(i,j) * x(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
       end do
     end do
     ary(1:n,1:m) = ary_save_89_ad(1:n,1:m)
@@ -263,13 +263,13 @@ contains
           work3(k) = work1(k,i,j)
           work1(k,i,j) = x(i,j) * work3(k)
         end do
-        z_ad(i,j) = z_ad(i,j) * (work3(1) + work3(2)) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         work3_ad(1) = z_ad(i,j) * z(i,j) + work3_ad(1) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         work3_ad(2) = z_ad(i,j) * z(i,j) + work3_ad(2) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         work1_ad(1,i,j) = z_ad(i,j) * y(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         y_ad(i,j) = z_ad(i,j) * work1(1,i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         work1_ad(2,i,j) = z_ad(i,j) * x(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         x_ad(i,j) = z_ad(i,j) * work1(2,i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+        z_ad(i,j) = z_ad(i,j) * (work3(1) + work3(2)) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         work1(1:2,i,j) = work1_save_131_ad(1:2)
         do k = 2, 1, - 1
           work3(k) = work1(k,i,j)
