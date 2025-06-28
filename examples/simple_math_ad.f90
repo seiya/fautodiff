@@ -27,8 +27,8 @@ contains
     real, intent(out) :: b_ad
     real, intent(inout) :: c_ad
 
-    c_ad = - c_ad ! c = - c + b
     b_ad = c_ad ! c = - c + b
+    c_ad = - c_ad ! c = - c + b
     a_ad = c_ad ! c = a - b
     b_ad = - c_ad + b_ad ! c = a - b
     c_ad = 0.0 ! c = a - b
@@ -43,8 +43,8 @@ contains
     real, intent(out) :: b_ad
     real, intent(inout) :: c_ad
 
-    c_ad = c_ad * 3.0 ! c = c * 3.0 + a
     a_ad = c_ad ! c = c * 3.0 + a
+    c_ad = c_ad * 3.0 ! c = c * 3.0 + a
     a_ad = c_ad * (b + 1.0) + a_ad ! c = a * b + a
     b_ad = c_ad * a ! c = a * b + a
     c_ad = 0.0 ! c = a * b + a
@@ -59,8 +59,8 @@ contains
     real, intent(out) :: b_ad
     real, intent(inout) :: c_ad
 
-    c_ad = c_ad / 2.0 ! c = c / 2.0 + a
     a_ad = c_ad ! c = c / 2.0 + a
+    c_ad = c_ad / 2.0 ! c = c / 2.0 + a
     a_ad = c_ad / (b + 1.5) + a_ad ! c = a / (b + 1.5)
     b_ad = - c_ad * a / (b + 1.5)**2 ! c = a / (b + 1.5)
     c_ad = 0.0 ! c = a / (b + 1.5)
