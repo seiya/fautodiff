@@ -2,6 +2,7 @@ program run_intrinsic_func
   use intrinsic_func
   use intrinsic_func_ad
   implicit none
+  real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_casting = 1
@@ -41,6 +42,8 @@ contains
     real :: r, r_ad
     double precision :: d, d_ad
     character(len=1) :: c
+    double precision :: exp_d
+    real :: exp_r
 
     i = 3
     r = 4.5
@@ -51,7 +54,13 @@ contains
     d_ad = 1.0d0
     call casting_intrinsics_ad(i, r, r_ad, d_ad, c)
 
-    print *, d, r_ad
+    exp_d = dble(r) + dble(int(r))
+    exp_r = 1.0
+
+    if (abs(d - exp_d) > tol .or. abs(r_ad - exp_r) > tol) then
+       print *, 'test_casting failed', d, r_ad
+       error stop 1
+    end if
     return
   end subroutine test_casting
 

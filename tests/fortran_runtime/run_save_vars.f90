@@ -2,6 +2,7 @@ program run_save_vars
   use save_vars
   use save_vars_ad
   implicit none
+  real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_simple = 1
@@ -39,6 +40,7 @@ contains
   subroutine test_simple
     real :: x, y, z
     real :: x_ad, y_ad, z_ad
+    real :: exp_z, exp_x, exp_y
 
     x = 2.0
     y = 3.0
@@ -49,7 +51,15 @@ contains
     z_ad = 1.0
     call simple_ad(x, x_ad, y, y_ad, z_ad)
 
-    print *, z, x_ad, y_ad
+    exp_z = 2.0*x**3 + 2.0*x**2 + 2.0*x + (1.0 + y)
+    exp_x = 6.0*x**2 + 4.0*x + 2.0
+    exp_y = 1.0
+
+    if (abs(z - exp_z) > tol .or. abs(x_ad - exp_x) > tol .or. &
+        abs(y_ad - exp_y) > tol) then
+       print *, 'test_simple failed', z, x_ad, y_ad
+       error stop 1
+    end if
     return
   end subroutine test_simple
 
