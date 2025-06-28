@@ -6,6 +6,200 @@ from dataclasses import dataclass, field
 from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar
 from fractions import Fraction
 import re
+import copy
+
+
+@dataclass
+class AryIndex:
+    """Class to represent index of fortran array"""
+
+    dims: List["Operator"] = field(default_factory=list)
+
+    def __post_init__(self):
+        if not (isinstance(self.dims, list) or isinstance(self.dims, tuple)):
+            raise ValueError(f"dims must be either list or tuple: {type(self.dims)}")
+        if isinstance(self.dims, tuple):
+            self.dims = list(self.dims)
+        for i, dim in enumerate(self.dims):
+            if isinstance(dim, int):
+                self.dims[i] = OpInt(dim)
+                continue
+            if dim is None:
+                self.dims[i] = None
+                continue
+            if not isinstance(dim, Operator):
+                raise ValueError("dim must be either None, int, or Operator")
+
+    def list(self) -> List[str]:
+        return [(":" if dim is None else str(dim)) for dim in self.dims]
+
+    def copy(self) -> AryIndex:
+        return AryIndex(list(self.dims))
+
+    def __len__(self) -> int:
+        return len(self.dims)
+
+    def __getitem__(self, index: int) -> "Operator":
+        return self.dims[index]
+
+    def __setitem__(self, index: int, var: Operator) -> None:
+        self.dims[index] = var
+
+    def __iter__(self) -> iter:
+        return iter(self.dims)
+
+    def __str__(self) -> str:
+        return",".join(self.list())
+
+    def __eq__(self, other) -> bool:
+        if other is not None and not isinstance(other, AryIndex):
+            return NotImplemented
+        if other is None:
+            return not self.is_partial_access()
+        if len(self.dims) != len(other.dims):
+            raise ValueError("Different number of dimensions")
+        for i, dim1 in enumerate(self.dims):
+            dim2 = other.dims[i]
+            if dim1 == dim2:
+                continue
+            if (dim1 is None or isinstance(dim1, OpRange)) and (dim2 is None or isinstance(dim2, OpRange)):
+                if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
+                    return False
+                continue
+            return False
+        return True
+
+    @classmethod
+    def dim_is_entire(cls, dim) -> bool:
+        if dim is None:
+            return True
+        if isinstance(dim, OpRange):
+            if dim[0] is None and dim[1] is None:
+                return True
+        return False
+
+    @classmethod
+    def get_diff_dim(cls, index1, index2) -> int:
+        if len(index1.dims) != len(index2.dims):
+            raise ValueError("Different number of dimensions")
+
+        def _check_found():
+            if diff_dim > 0:
+                return -1 # not allow difference in multiple dimensions
+
+        diff_dim = -1 # dimension at which difference was found
+        for i, dim1 in enumerate(index1):
+            dim2 = index2[i]
+            if dim1 == dim2:
+                continue
+            if AryIndex.dim_is_entire(dim1) and AryIndex.dim_is_entire(dim2):
+                continue
+            _check_found()
+            diff_dim = i
+
+        return diff_dim
+
+    @staticmethod
+    def _check_cover(index1, index2) -> bool:
+        """Return true if index1 >= index2"""
+        if len(index1.dims) != len(index2.dims):
+            raise ValueError("Different number of dimensions")
+        if index1 == index2:
+            return True
+        for i, dim1 in enumerate(index1):
+            dim2 = index2.dims[i]
+            if dim1 == dim2:
+                continue
+            if AryIndex.dim_is_entire(dim1):
+                continue
+            if isinstance(dim1, OpRange) and (isinstance(dim1[0], OpVar) or isinstance(dim1[1], OpVar)):
+                # This is not sure but assumue that dim1 covers entire region.
+                continue
+            if dim2 is None:
+                return False
+            if isinstance(dim1, OpVar) and isinstance(dim2, OpVar):
+                # This is not sure but different variables can be identical.
+                continue
+            if not isinstance(dim1, OpRange):
+                return False
+            if not (isinstance(dim2, OpInt) or isinstance(dim2, OpRange)):
+                continue
+            i0 = dim1[0]
+            i1 = dim1[1]
+            if i0 is None and i1 is None:
+                continue
+            if not ((i0 is None or isinstance(i0, OpInt)) and (i1 is None or isinstance(i1, OpInt))):
+                continue
+            if not (dim1[2] is None or (isinstance(dim1[2], OpInt) and abs(dim1[2].val)==1)):
+                continue
+            if dim1[2] is not None and dim1[2].val < 0:
+                i0, i1 = i1, i0
+            if isinstance(dim2, OpInt):
+                j = dim2.val
+                if i0 is None and i1.val >= j:
+                    continue
+                if i1 is None and i0.val <= j:
+                    continue
+                i0 = i0.val
+                i1 = i1.val
+                if j < i0 or j > i1:
+                    return False
+                continue # i0 <= j and j <= i1
+            if isinstance(dim2, OpRange):
+                j0 = dim2[0]
+                j1 = dim2[1]
+                if j0 is None and j1 is None:
+                    return False
+                if not ((j0 is None or isinstance(j0, OpInt)) and (j1 is None or isinstance(j1, OpInt))):
+                    return False
+                if not (dim2[2] is None or (isinstance(dim2[2], OpInt) and abs(dim2[2].val)==1)):
+                    return False
+                if dim2[2] is not None and dim2[2].val < 0:
+                    j0, j1 = j1, j0
+                if (j0 is None and i0 is not None) or (isinstance(i0, OpInt) and j0.val < i0.val):
+                    return False
+                if (j1 is None and i1 is not None) or (isinstance(i1, OpInt) and i1.val < j1.val):
+                    return False
+                continue
+            return False
+        return True
+
+    def __le__(self, other) -> bool:
+        if other is not None and not isinstance(other, AryIndex):
+            raise NotImplemented
+        if other is None:
+            return True
+        return AryIndex._check_cover(other, self)
+
+    def __ge__(self, other) -> bool:
+        if other is not None and not isinstance(other, AryIndex):
+            raise NotImplemented
+        if other is None:
+            return all([dim is None or isinstance(dim, OpRange) for dim in self.dims])
+        return AryIndex._check_cover(self, other)
+
+    def collect_vars(self) -> List[OpVar]:
+        if self.dims is None:
+            return []
+        vars = []
+        for dim in self.dims:
+            if dim is None:
+                continue
+            for var in dim.collect_vars():
+                if not var in vars:
+                    vars.append(var)
+        return vars
+
+    def is_partial_access(self) -> bool:
+        return any([(dim is not None and not isinstance(dim, OpRange)) for dim in self.dims])
+
+    def is_depended_on(self, var:OpVar) -> bool:
+        for dim in self.dims:
+            if dim is None:
+                continue
+            if var in dim.collect_vars():
+                return True
+        return False
 
 
 @dataclass
@@ -24,10 +218,14 @@ class Operator:
         else:
             return f"{arg}"
 
-    def collect_vars(self) -> List[OpVar]:
+    def deep_clone(self) -> "Node":
+        clone = copy.deepcopy(self)
+        return clone
+
+    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         vars = []
         for arg in self.args:
-            for var in arg.collect_vars():
+            for var in arg.collect_vars(without_index):
                 if var not in vars:
                     vars.append(var)
         return vars
@@ -44,6 +242,8 @@ class Operator:
         return OpNeg(args=[self])
 
     def __add__(self, other):
+        if isinstance(other, int):
+            return self + OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 0:
                 return other
@@ -79,6 +279,8 @@ class Operator:
         return NotImplemented
 
     def __sub__(self, other):
+        if isinstance(other, int):
+            return self - OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 0:
                 return - other
@@ -118,6 +320,8 @@ class Operator:
         return NotImplemented
 
     def __mul__(self, other):
+        if isinstance(other, int):
+            return other * OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 1:
                 return other
@@ -175,6 +379,8 @@ class Operator:
         return NotImplemented
 
     def __truediv__(self, other):
+        if isinstance(other, int):
+            return other / OpInt(other)
         if isinstance(other, Operator):
             if isinstance(other, OpInt) and other.val == 1:
                 return self
@@ -218,11 +424,7 @@ class Operator:
 
     def __pow__(self, other):
         if isinstance(other, int):
-            if other < 0:
-                other = - OpInt(abs(other))
-            else:
-                other = OpInt(other)
-            return OpPow(args=[self, other])
+            return OpPow(args=[self, OpInt(other)])
         if isinstance(other, Operator):
             if isinstance(other, OpInt) and other.val == 0:
                 return OpInt(1, target=other.target, kind=other.kind)
@@ -238,15 +440,23 @@ class Operator:
         return NotImplemented
 
     def __lt__(self, other):
+        if isinstance(other, int):
+            return self < OpInt(other)
         return OpLog("<", args=[self, other])
 
     def __le__(self, other):
+        if isinstance(other, int):
+            return self <= OpInt(other)
         return OpLog("<=", args=[self, other])
 
     def __gt__(self, other):
+        if isinstance(other, int):
+            return self > OpInt(other)
         return OpLog(">", args=[self, other])
 
     def __ge__(self, other):
+        if isinstance(other, int):
+            return self >= OpInt(other)
         return OpLog(">=", args=[self, other])
 
 @dataclass
@@ -258,7 +468,7 @@ class OpLeaf(Operator):
 @dataclass
 class OpNum(OpLeaf):
 
-    def collect_vars(self) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         return []
 
     def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
@@ -276,6 +486,17 @@ class OpInt(OpNum):
             raise ValueError(f"val must be >= 0: {val}")
         self.val = val
         self.target = target
+
+    def __new__(cls, val: int, kind: str = None, target: OpVar = None):
+        if val < 0:
+            instance = super().__new__(cls)
+            instance.__init__(- val, kind, target)
+            return -instance
+        else:
+            return super().__new__(cls)
+
+    def __reduce__(self):
+        return(self.__class__, (self.val, self.kind, self.target,))
 
     def __str__(self) -> str:
         kind = None
@@ -300,7 +521,7 @@ class OpChr(OpLeaf):
 
     name: str = field(default="")
 
-    def collect_vars(self) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         return []
 
 @dataclass
@@ -324,36 +545,38 @@ class OpReal(OpNum):
 class OpVar(OpLeaf):
 
     name: str = field(default="")
-    index: List[Operator] = None
-    is_real: bool = None
-    index_vars: List[OpLear] = field(init=False, default=None)
+    index: Optional[AryIndex] = None
+    is_real: Optional[bool] = None
 
-    def __init__(self, name: str, index: List[Operator] = None, is_real: bool = None, kind: str = None):
+    def __init__(self, name: str, index: Optional[AryIndex] = None, is_real: bool = None, kind: str = None):
         super().__init__(args=[])
         if not isinstance(name, str):
             raise ValueError(f"name must be str: {type(name)}")
         self.name = name
+        if index is not None and not isinstance(index, AryIndex):
+            index = AryIndex(index)
         self.index = index
         self.is_real = is_real
         self.kind = kind
-        if self.index is not None and len(self.index) > 0:
-            self.index_vars = []
-            for idx in self.index:
-                if idx is not None:
-                    for v in idx.collect_vars():
-                        if not v in self.index_vars:
-                            self.index_vars.append(v)
+
+    def change_index(self, index) -> OpVar:
+        if index == self.index:
+            return self
+        return OpVar(name=self.name, index=index, is_real=self.is_real, kind=self.kind)
 
     def add_suffix(self, suffix: str = None) -> str:
         if suffix is None:
             return self
         name = f"{self.name}{suffix}"
-        return OpVar(name, index=self.index, is_real=self.is_real, kind=self.kind)
+        index = self.index
+        if index is not None:
+            index = AryIndex(list(index.dims))
+        return OpVar(name, index=index, is_real=self.is_real, kind=self.kind)
 
-    def collect_vars(self) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         vars = [self]
-        if self.index_vars is not None:
-            for v in self.index_vars:
+        if (not without_index) and self.index is not None:
+            for v in self.index.collect_vars():
                 if not v in vars:
                     vars.append(v)
         return vars
@@ -363,10 +586,18 @@ class OpVar(OpLeaf):
             return OpInt(1, target=target)
         return OpInt(0, target=target)
 
+    def is_partial_access(self) -> bool:
+        if self.index is None:
+            return False
+        return self.index.is_partial_access()
+
+    def index_list(self) -> List[str]:
+        if self.index is None:
+            return []
+        return self.index.list()
+
     def index_str(self) -> str:
-        if self.index is not None and len(self.index) > 0:
-            index = ','.join([':' if v is None else str(v) for v in self.index])
-            return index
+        return ",".join(self.index_list())
 
     def __str__(self) -> str:
         if self.index is None or len(self.index) == 0:
@@ -375,12 +606,10 @@ class OpVar(OpLeaf):
             return f"{self.name}({self.index_str()})"
 
     def __eq__(self, other) -> bool:
-        if isinstance(other, type(self)) and self.name == other.name:
+        if not isinstance(other, type(self)):
+            return NotImplemented
+        if self.name == other.name:
             if self.index == other.index:
-                return True
-            if self.index is None and all(isinstance(idx, OpRange) for idx in other.index):
-                return True
-            if other.index is None and all(isinstance(idx, OpRange) for idx in self.index):
                 return True
         return False
 
@@ -657,16 +886,22 @@ class OpFunc(Operator):
 class OpRange(Operator):
 
     def __post_init__(self):
+        if self.args is None:
+            self.args = []
         if len(self.args) > 3:
             raise ValueError(f"Length of args must be at most 3: {self.args}")
+        for i, val in enumerate(self.args):
+            if isinstance(val, int):
+                self.args[i] = OpInt(val)
 
-    def collect_vars(self) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpLeaf]:
         vars = []
-        for arg in self.args:
-            if arg is not None:
-                for v in arg.collect_vars():
-                    if not v in vars:
-                        vars.append(v)
+        if not without_index:
+            for arg in self.args:
+                if arg is not None:
+                    for v in arg.collect_vars():
+                        if not v in vars:
+                            vars.append(v)
         return vars
 
     def __str__(self) -> str:
@@ -682,3 +917,13 @@ class OpRange(Operator):
             else:
                 args = self.args
         return ":".join(["" if arg is None else str(arg) for arg in args])
+
+    def __getitem__(self, index: int) -> Operator:
+        if len(self.args) <= index:
+          return None
+        return self.args[index]
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Operator):
+            return NotImplemented
+        return str(self) == str(other)
