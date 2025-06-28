@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar
-import copy
 
 from .operators import (
     AryIndex,
@@ -29,8 +28,14 @@ class VarList:
             for var in vars:
                 self.push(var, not_reorganize=True)
 
-    def deep_clone(self) -> VarList:
-        return copy.deepcopy(self)
+    def copy(self) -> VarList:
+        var_list = VarList()
+        for name in self.names():
+            list = []
+            for index in self.vars[name]:
+                list.append(index)
+            var_list.vars[name] = list
+        return var_list
 
     def __contains__(self, item: OpVar):
         if not isinstance(item, OpVar):
@@ -214,11 +219,12 @@ class VarList:
         var = self._force_stride_one(var)
 
         for pos, index in enumerate(self.vars[name]):
-            if index is None:
-                continue
 
             if index == var.index:
                 self.vars[name].remove(index)
+                continue
+
+            if index is None:
                 continue
 
             i = AryIndex.get_diff_dim(index, var.index) # index and var.index is either OpInt or OpRange
@@ -460,7 +466,7 @@ class VarList:
             range = OpRange([range[1], range[0], slice])
         for name in self.names():
             if name in index_map:
-                do_index = index_map[name]
+                do_index, _ = index_map[name]
             else:
                 continue
             index_new = []
@@ -475,14 +481,16 @@ class VarList:
     def update_index_downward(self, index_map: dict, do_index_var: OpVar) -> None:
         for name in self.names():
             if name in index_map:
-                do_index = index_map[name]
+                do_index, ndim = index_map[name]
             else:
                 continue
             index_new = []
             for index in self.vars[name]:
-                if index is not None:
+                if index is None:
+                    index = AryIndex([None] * ndim)
+                else:
                     index = index.copy()
-                    index[do_index] = do_index_var
+                index[do_index] = do_index_var
                 index_new.append(index)
             self.vars[name] = index_new
             self._reorganize(name)

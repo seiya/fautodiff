@@ -68,6 +68,8 @@ contains
     real, intent(out) :: x_ad
     real, intent(inout) :: y_ad
 
+    arr_ad(:) = 0.0
+
     y_ad = 0.0 ! y = a + b + c
     x_ad = 0.0 ! c = tiny(x)
 

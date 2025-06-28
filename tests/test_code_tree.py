@@ -11,6 +11,7 @@ from fautodiff.code_tree import (
     Declaration,
     Block,
     Assignment,
+    ClearAssignment,
     SaveAssignment,
     DoLoop,
     DoWhile,
@@ -277,6 +278,9 @@ class TestNodeMethods(unittest.TestCase):
 
     def test_required_vars_in_nested_loop(self):
         i = OpVar("i")
+        j = OpVar("j")
+        n = OpVar("n")
+        m = OpVar("m")
         k = OpVar("k")
         a = OpVar("a")
         x = OpVar("x", index=[i])
@@ -298,7 +302,7 @@ class TestNodeMethods(unittest.TestCase):
                 inner,
                 Assignment(y, v1 + v2 + w1 + w2 + a)
             ]),
-            index=i, start=OpInt(1), end=OpVar("n")
+            index=i, start=OpInt(1), end=n
         )
         self.assertEqual({str(v) for v in outer.required_vars()}, {"x(1:n)", "n"})
             
@@ -332,6 +336,19 @@ class TestNodeMethods(unittest.TestCase):
         )
         self.assertEqual({str(v) for v in outer.required_vars(no_accumulate=True, without_savevar=True)}, {"y_ad(1:n)","n"})
 
+        a_ad = OpVar("a_ad", index=[i,j])
+        b_ad = OpVar("b_ad", index=[i,j])
+        one = OpInt(1)
+        inner = DoLoop(
+            Block([
+                Assignment(a_ad, b_ad, accumulate=True),
+            ]),
+            index=i, start=n, end=one, step=-one)
+        outer = DoLoop(
+            Block([inner]),
+            index=j, start=m, end=one, step=-one)
+        self.assertEqual({str(v) for v in outer.required_vars()}, {"a_ad(1:n,1:m)","b_ad(1:n,1:m)", "m", "n"})
+
     def test_required_vars_in_if(self):
         i = OpVar("i")
         a = OpVar("a")
@@ -363,7 +380,7 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(a_ad, b_ad, accumulate=True),
             Assignment(a_ad, c_ad, accumulate=True)
         ])
-        self.assertEqual(blk.check_initial("a_ad"), 2)
+        blk.check_initial()
         self.assertEqual(render_program(blk), code)
 
         code = textwrap.dedent("""\
@@ -377,22 +394,23 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(a_ad, c_ad, accumulate=True)
         ]),
         index=i, start=OpInt(1), end=n)
-        self.assertEqual(loop.check_initial("a_ad"), -1)
+        loop.check_initial()
         self.assertEqual(render_program(loop), code)
 
         code = textwrap.dedent("""\
         do i = 1, n
           a_ad = b_ad
           b_ad = a_ad + b_ad
+          a_ad = 0.0
         end do
         """)
         loop = DoLoop(Block([
             Assignment(a_ad, b_ad, accumulate=True),
-            Assignment(b_ad, a_ad, accumulate=True)
+            Assignment(b_ad, a_ad, accumulate=True),
+            ClearAssignment(a_ad)
         ]),
         index=i, start=OpInt(1), end=n)
-        self.assertEqual(loop.check_initial("a_ad"), 2)
-        self.assertEqual(loop.check_initial("b_ad"), -1)
+        loop.check_initial()
         self.assertEqual(render_program(loop), code)
 
         code = textwrap.dedent("""\
@@ -408,8 +426,7 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(a_ad, b_ad, accumulate=True)
         ]),
         index=i, start=OpInt(1), end=n)
-        self.assertEqual(loop.check_initial("a_ad"), -1)
-        self.assertEqual(loop.check_initial("b_ad"), -1)
+        loop.check_initial()
         self.assertEqual(render_program(loop), code)
 
         code = textwrap.dedent("""\
@@ -422,28 +439,39 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(a_ad, b_ad, accumulate=True)
         ]),
         index=OpVar("i"), start=OpInt(1), end=OpVar("n"))
-        self.assertEqual(loop.check_initial("a_ad"), -1)
+        loop.check_initial()
         self.assertEqual(render_program(loop), code)
 
         code = textwrap.dedent("""\
+        y_ad(:) = 0.0
         do i = 1, n
           x_ad(i) = y_ad(i)
           y_ad(i) = c_ad + y_ad(i)
           x_ad(i) = c_ad + x_ad(i)
+          x_ad(i) = 0.0
         end do
         """)
         x_ad = OpVar("x_ad", index=[i])
         y_ad = OpVar("y_ad", index=[i])
-        loop = DoLoop(Block([
-            Assignment(x_ad, y_ad, accumulate=True),
-            Assignment(y_ad, c_ad, accumulate=True),
-            Assignment(x_ad, c_ad, accumulate=True)
-        ]),
-        index=OpVar("i"), start=OpInt(1), end=OpVar("n"))
-        self.assertEqual(loop.check_initial("x_ad"), 2)
-        self.assertEqual(loop.check_initial("y_ad"), -1)
-        self.assertEqual(render_program(loop), code)
+        body = Block([
+            Assignment(OpVar("y_ad", index=[None]), OpReal("0.0")),
+            DoLoop(Block([
+                Assignment(x_ad, y_ad, accumulate=True),
+                Assignment(y_ad, c_ad, accumulate=True),
+                Assignment(x_ad, c_ad, accumulate=True),
+                ClearAssignment(x_ad)
+            ]),
+                   index=OpVar("i"), start=OpInt(1), end=OpVar("n"))
+        ])
+        body.check_initial()
+        self.assertEqual(render_program(body), code)
 
+        code = textwrap.dedent("""\
+        do i = 1, n
+          x_ad(i) = y_ad(i) + x_ad(i)
+          x_ad(ip) = y_ad(i) + x_ad(ip)
+        end do
+        """)
         ip = OpVar("ip")
         xi_ad = OpVar("x_ad", index=[i])
         xip_ad = OpVar("x_ad", index=[ip])
@@ -452,8 +480,19 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(xip_ad, y_ad, accumulate=True),
         ]),
         index=i, start=OpInt(1), end=n)
-        self.assertEqual(loop.check_initial("x_ad"), -1)
+        loop.check_initial()
+        self.assertEqual(render_program(loop), code)
 
+        code = textwrap.dedent("""\
+        do j = 1, m
+          do i = 1, n
+            x_ad(i,j) = y_ad(i,j)
+            x_ad(i,j) = 0.0
+            c_ad = y_ad(i,j)
+            c_ad = 0.0
+          end do
+        end do
+        """)
         index = [OpVar("i"), OpVar("j")]
         x_ad = OpVar("x_ad", index=index)
         y_ad = OpVar("y_ad", index=index)
@@ -461,7 +500,9 @@ class TestNodeMethods(unittest.TestCase):
         inner = DoLoop(
             Block([
                 Assignment(x_ad, y_ad, accumulate=True),
-                Assignment(c_ad, y_ad, accumulate=True)
+                ClearAssignment(x_ad),
+                Assignment(c_ad, y_ad, accumulate=True),
+                ClearAssignment(c_ad)
             ]),
             index=i, start=OpInt(1), end=n)
         outer = DoLoop(
@@ -470,9 +511,8 @@ class TestNodeMethods(unittest.TestCase):
             start=OpInt(1),
             end=OpVar("m"),
         )
-        self.assertEqual(outer.check_initial("x_ad"), 2)
-        self.assertEqual(outer.check_initial("y_ad"), 0)
-        self.assertEqual(outer.check_initial("c_ad"), -1)
+        outer.check_initial()
+        self.assertEqual(render_program(outer), code)
 
         code = textwrap.dedent("""\
         if (a > 0) then
@@ -488,9 +528,16 @@ class TestNodeMethods(unittest.TestCase):
         cond_blk = Block([
             IfBlock([(cond1, body1), (cond2, body2)])
         ])
-        self.assertEqual(cond_blk.check_initial("a_ad"), 2)
+        cond_blk.check_initial()
         self.assertEqual(render_program(cond_blk), code)
 
+        code = textwrap.dedent("""\
+        if (a > 0) then
+          a_ad = b_ad
+        else
+          c_ad = b_ad
+        end if
+        """)
         cond1 = OpVar("a") > 0
         body1 = Block([Assignment(a_ad, b_ad, accumulate=True)])
         cond2 = None
@@ -498,8 +545,8 @@ class TestNodeMethods(unittest.TestCase):
         cond_blk2 = Block([
             IfBlock([(cond1, body1), (cond2, body2)])
         ])
-        self.assertEqual(cond_blk2.check_initial("a_ad"), -1)
-        self.assertEqual(cond_blk2.check_initial("c_ad"), -1)
+        cond_blk2.check_initial()
+        self.assertEqual(render_program(cond_blk2), code)
 
 
 class TestLoopAnalysis(unittest.TestCase):
@@ -918,12 +965,17 @@ class TestDoWhile(unittest.TestCase):
         self.assertEqual({str(v) for v in loop.required_vars()}, {"b", "cond"})
 
     def test_check_initial(self):
+        code = textwrap.dedent("""\
+        do while (flag)
+          a_ad = b_ad
+        end do
+        """)
         body = Block([
-            Assignment(OpVar('a'), OpVar('b'))
+            Assignment(OpVar("a_ad"), OpVar("b_ad"))
         ])
         loop = DoWhile(body, OpVar('flag'))
-        self.assertEqual(loop.check_initial('a'), -1)
-        self.assertEqual(loop.check_initial('b'), 0)
+        loop.check_initial()
+        self.assertEqual(render_program(loop), code)
 
     def test_prune_for(self):
         body = Block([

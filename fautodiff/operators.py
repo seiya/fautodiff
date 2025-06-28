@@ -112,9 +112,17 @@ class AryIndex:
                 continue
             if AryIndex.dim_is_entire(dim1):
                 continue
+            if isinstance(dim1, OpRange) and (isinstance(dim1[0], OpVar) or isinstance(dim1[1], OpVar)):
+                # This is not sure but assumue that dim1 covers entire region.
+                continue
+            if dim2 is None:
+                return False
+            if isinstance(dim1, OpVar) and isinstance(dim2, OpVar):
+                # This is not sure but different variables can be identical.
+                continue
             if not isinstance(dim1, OpRange):
                 return False
-            if dim2 is not None and not (isinstance(dim2, OpInt) or isinstance(dim2, OpRange)):
+            if not (isinstance(dim2, OpInt) or isinstance(dim2, OpRange)):
                 continue
             i0 = dim1[0]
             i1 = dim1[1]

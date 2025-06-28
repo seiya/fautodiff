@@ -21,6 +21,7 @@ from .code_tree import (
     DoLoop,
     Declaration,
     Assignment,
+    ClearAssignment,
     SaveAssignment,
     Statement,
     render_program,
@@ -224,7 +225,7 @@ def _generate_ad_subroutine(routine_org, warnings):
             res = grad_lhs * dev
             assigns.append(Assignment(v, res, accumulate=(not v==grad_lhs), ad_info=ad_info))
         if not lhs in vars:
-            assigns.append(Assignment(grad_lhs, OpReal("0.0", kind=grad_lhs.kind), accumulate=False, ad_info=ad_info))
+            assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
         return assigns
 
         raise ValueError(f"Unsupported operation: {type(rhs)}")
@@ -234,7 +235,6 @@ def _generate_ad_subroutine(routine_org, warnings):
     #print("subroutine: ", subroutine.name) # for debug
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
         # check undefined reference
-        vars = []
         for var in ad_code.assigned_vars(without_savevar=True):
             name = var.name
             if name.endswith("_ad"):
@@ -250,35 +250,31 @@ def _generate_ad_subroutine(routine_org, warnings):
                 continue
             v_org = routine_org.get_var(name_org)
             v = Variable(name=name, typename=v_org.typename, kind=v_org.kind, dims=v_org.dims)
-            if not v in vars:
-                vars.append(v)
+            if not subroutine.is_declared(name):
                 subroutine.decls.append(v.to_decl())
-        for var in out_grad_args:
-            vars.append(var)
-        for var in vars:
-            ret = ad_code.check_initial(var.name)
-            if ret == -1:
-                if var.dims is not None and len(var.dims) > 0:
-                    index = (None,) * len(var.dims)
-                else:
-                    index = None
-                subroutine.ad_init.append(Assignment(OpVar(var.name, index=index), OpReal(0.0, kind=var.kind)))
+        vars = []
+        for var in grad_args:
+            if not var in out_grad_args:
+                vars.append(OpVar(var.name))
+        ad_code.check_initial(VarList(vars))
+        #subroutine.ad_init.append(Assignment(OpVar(var.name, index=index), OpReal(0.0, kind=var.kind)))
         ad_code = ad_code.prune_for(VarList([OpVar(var.name) for var in grad_args]))
         # check undefined output variables
         vars = ad_code.required_vars(VarList([OpVar(var.name) for var in out_grad_args]))
-        vars = subroutine.ad_init.required_vars(vars)
-        var_names = []
-        for var in vars:
-            if var not in vars:
-                var_names.append(var.name)
-        for name in var_names:
+        #vars = subroutine.ad_init.required_vars(vars)
+        for name in vars.names():
             var = next((var for var in out_grad_args if var.name == name), None)
+            if var is None and name.endswith("_ad") and not any(v for v in grad_args if v.name == name):
+                if subroutine.is_declared(name):
+                    var = subroutine.get_var(name)
             if var is not None:
                 if var.dims is not None and len(var.dims) > 0:
                     index = (None,) * len(var.dims)
                 else:
                     index = None
-                    subroutine.ad_init.append(Assignment(OpVar(var.name, index=index), OpReal(0.0, kind=var.kind)))
+                subroutine.ad_init.append(Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind)))
+                
+
         # now ad_code is completed
         ad_block.extend(ad_code)
 

@@ -226,18 +226,20 @@ class Node:
     # variable analysis helpers
     # ------------------------------------------------------------------
 
-    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False) -> VarList:
+    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False, check_init_advars: bool = False) -> VarList:
         """Return variables assigned within this node and children."""
         flag = False
         for child in self.iter_children():
-            vars = child.assigned_vars(vars, without_savevar=without_savevar)
+            vars = child.assigned_vars(vars, without_savevar=without_savevar, check_init_advars=check_init_advars)
             flag = True
         if not flag:
             if vars is None:
                 vars = VarList()
             else:
-                vars = vars.deep_clone()
+                vars = vars.copy()
         for var in self.iter_assign_vars(without_savevar=without_savevar):
+            if check_init_advars and not var.name.endswith("_ad"):
+                continue
             vars.push(var)
         return vars
 
@@ -257,6 +259,16 @@ class Node:
         """Return AD variables without reference after executing this node."""
         if vars is None:
             vars = VarList()
+        else:
+            vars = vars.copy()
+            for var in self.iter_ref_vars():
+                if var.name.endswith("_ad"):
+                    vars.remove(var)
+        for var in self.iter_assign_vars():
+            if var.name.endswith("_ad"):
+                vars.push(var)
+        for child in self.iter_children():
+            vars = child.unrefered_advars(vars)
         return vars
 
     def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
@@ -308,21 +320,11 @@ class Node:
         """Return a copy of this node with only code needed for ``targets``."""
         return self.deep_clone()
 
-    def check_initial(self, var: str, not_change: bool = False, force: bool = False) -> int:
-        """Remove self-add from the first assignment to ``var`` if safe.
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        """Remove self-add from the first assignment if safe.
         This method is for only AD variables.
-        Returns ``0`` for not-found, ``1`` or ``2`` for assignment w/o self-reference and ``-1`` for assignment w/ self-reference.
-        ``2`` indicates that a self-reference was removed.
         """
-        ret_total = 0
-        for child in self.iter_children():
-            ret = child.check_initial(var, not_change=not_change, force=force)
-            if ret == -1:
-                return -1
-            if (len(self.do_index_list) == 0 or (not not_change)) and ret != 0:
-                return ret
-            ret_total = max(ret, ret_total)
-        return ret_total
+        return assigned_vars
 
 
 @dataclass
@@ -403,11 +405,6 @@ class Block(Node):
             vars = child.required_vars(vars, no_accumulate, without_savevar)
         return vars
 
-    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
-        for child in self.iter_children():
-            vars = child.unrefered_advars(vars)
-        return vars
-
     def private_vars(self) -> List[OpVar]:
         vars_info = {}
         for child in self.iter_children():
@@ -447,6 +444,12 @@ class Block(Node):
             children = new_children
         return Block(children)
 
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        if assigned_vars is None:
+            assigned_vars = VarList()
+        for child in self.iter_children():
+            assigned_vars = child.check_initial(assigned_vars)
+        return assigned_vars
 
 @dataclass
 class Statement(Node):
@@ -553,14 +556,12 @@ class Routine(Node):
             vars.append(self.get_var(self.result))
         return vars
 
+    def is_declared(self, name: str) -> bool:
+        return self.decls.find_by_name(name) is not None
+
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         for block in reversed(self._all_blocks()):
             vars = block.required_vars(vars, no_accumulate, without_savevar)
-        return vars
-
-    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
-        for block in self.iter_children():
-            vars = block.unrefered_advars(vars)
         return vars
 
     def expand_decls(self, decls: Block) -> "Routine":
@@ -636,8 +637,6 @@ class Assignment(Node):
         return self.lhs == self.rhs
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Assignment]:
-        if isinstance(self, SaveAssignment):
-            raise RuntimeError("AD code is beeing converted")
         assigns = [self._save_vars(self.lhs, saved_vars)]
         assigns.extend(func(self.lhs, self.rhs, self.info))
         return assigns
@@ -661,7 +660,7 @@ class Assignment(Node):
         else:
             if not isinstance(vars, VarList):
                 raise ValueError(f"Must be VarList: {type(vars)}")
-            vars = vars.deep_clone()
+            vars = vars.copy()
             vars.remove(lhs)
         for var in lhs.collect_vars(): # variables in indexes
             if var != lhs:
@@ -672,24 +671,11 @@ class Assignment(Node):
             vars.push(lhs)
         return vars
 
-    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
-        if vars is None:
-            vars = VarList()
-        else:
-            vars = vars.deep_clone()
-            for rhs in self.rhs.collect_vars(without_index=True):
-                vars.remove(rhs)
-        if not (isinstance(self.rhs, OpReal) and self.rhs.val=="0.0"):
-            vars.push(self.lhs)
-        return vars
-
     def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
         if info is None:
             info = Vardict()
         else:
             info = info.copy()
-        #if self.lhs.name.endswith("_ad") and isinstance(self.rhs, OpReal) and self.rhs.val=="0.0":
-        #    return info
         for var in self.iter_ref_vars():
             found = False
             for v in info.keys():
@@ -712,22 +698,93 @@ class Assignment(Node):
             info[self.lhs] = True
         return info
 
-    def check_initial(self, var: str, not_change: bool = False, force: bool = False) -> int:
-        fullname = str(self.lhs)
-        if self.lhs.name != var and fullname != var:
-            return 0
-        lhs_index = set(self.lhs.index_list())
-        do_index = set(self.do_index_list)
-        if self.lhs.index is not None and not do_index <= lhs_index and not force and fullname != var:
-            return -1
-        for v in self._rhs_vars:
-            if v.name == var:
-                return -1
-        if self.accumulate is None:
-            raise ValueError("Unexpected. This method is for only AD variables.")
-        if not not_change:
-            self.accumulate = False
-        return 2
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        if assigned_vars is None:
+            assigned_vars = VarList()
+        if self.accumulate:
+            if not self.lhs in assigned_vars:
+                self.accumulate = False
+        if self.lhs.name.endswith("_ad"):
+            assigned_vars = assigned_vars.copy()
+            assigned_vars.push(self.lhs)
+        return assigned_vars
+
+
+@dataclass
+class ClearAssignment(Node):
+
+    lhs: OpVar
+    info: Optional[dict] = field(repr=False, default=None)
+    ad_info: Optional[str] = field(repr=False, default=None)
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not isinstance(self.lhs, OpVar):
+            raise ValueError(f"lhs must be OpVar: {type(self.lhs)}")
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        if self.lhs.index is not None:
+            for var in self.lhs.index.collect_vars():
+                yield var
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        yield self.lhs
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Assignment]:
+        raise RuntimeError("This is AD code")
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        ad_comment = ""
+        if self.ad_info is not None:
+            ad_comment = f" ! {self.ad_info}"
+        zero = OpReal("0.0", kind=self.lhs.kind)
+        return [f"{space}{self.lhs} = {zero}{ad_comment}\n"]
+
+    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False, check_init_advars: bool = False) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.copy()
+            if check_init_advars:
+                vars.remove(self.lhs)
+        if not check_init_advars:
+            vars.push(self.lhs)
+        return vars
+
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        lhs = self.lhs
+        if vars is None:
+            vars = VarList()
+        else:
+            if not isinstance(vars, VarList):
+                raise ValueError(f"Must be VarList: {type(vars)}")
+            vars = vars.copy()
+            vars.remove(lhs)
+        for var in lhs.collect_vars(): # variables in indexes
+            if var != lhs:
+                vars.push(var)
+        return vars
+
+    def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
+        if info is None:
+            info = Vardict()
+        else:
+            info = info.copy()
+        if not (self.lhs in info and info[self.lhs] is None):
+            info[self.lhs] = True
+        return info
+
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        if assigned_vars is None:
+            assigned_vars = VarList()
+        else:
+            assigned_vars = assigned_vars.copy()
+            assigned_vars.remove(self.lhs)
+        return assigned_vars
 
 
 @dataclass
@@ -780,7 +837,7 @@ class SaveAssignment(Node):
         if vars is None:
             vars = VarList()
         else:
-            vars = vars.deep_clone()
+            vars = vars.copy()
             vars.remove(self.lhs)
         rhs = self.rhs
         if (not without_savevar) or rhs != self.var: # rhs is not saved var
@@ -791,18 +848,17 @@ class SaveAssignment(Node):
         if vars is None:
             vars = VarList()
         else:
-            vars = vars.deep_clone()
-            vars.remove(self.rhs)
-        vars.push(self.lhs)
+            vars = vars.copy()
+            if self.rhs == self.var:
+                if self.rhs.name.endswith("_ad"):
+                    vars.remove(self.rhs)
+        if self.lhs == self.var:
+            if self.lhs.name.endswith("_ad"):
+                vars.push(self.lhs)
         return vars
 
     def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
         return info
-
-    def check_initial(self, var: str, not_change: bool = False, force: bool = False) -> int:
-        if self.lhs.name != var:
-            return 0
-        raise ValueError("This must not appeared at first time.")
 
     def to_load(self) -> "SaveAssignment":
         return SaveAssignment(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
@@ -868,7 +924,7 @@ class Declaration(Node):
         if vars is None:
             return VarList()
         if self.intent in ("in", "inout"):
-            vars = vars.deep_clone()
+            vars = vars.copy()
             vars.remove(OpVar(self.name))
         return vars
 
@@ -876,8 +932,9 @@ class Declaration(Node):
         if vars is None:
             vars = VarList()
         if self.intent in ("in", "inout"):
-            vars = vars.deep_clone()
-            vars.push(OpVar(self.name, is_real=self.is_real, kind=self.kind))
+            if self.name.endswith("_ad"):
+                vars = vars.copy()
+                vars.push(OpVar(self.name, is_real=self.is_real, kind=self.kind))
         return vars
 
 
@@ -944,7 +1001,7 @@ class BranchBlock(Node):
         if vars is None:
             vars = VarList()
         else:
-            vars = vars.deep_clone()
+            vars = vars.copy()
         for var in self.iter_ref_vars():
             vars.push(var)
         vars_new = VarList()
@@ -953,14 +1010,12 @@ class BranchBlock(Node):
         return vars_new
 
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
-        if vars is None:
-            vars = VarList()
-        else:
-            vars = vars.deep_clone()
+        vars_list = VarList()
         for block in self.iter_children():
-            for v in block.unrefered_advars(vars.deep_clone()):
-                vars.push(v)
-        return vars
+            for v in block.unrefered_advars(vars):
+                if v.name.endswith("_ad"):
+                    vars_list.push(v)
+        return vars_list
 
     def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
         if info is None:
@@ -1013,18 +1068,11 @@ class BranchBlock(Node):
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
 
-    def check_initial(self, var: str, not_change: bool = False, force: bool = False) -> int:
-        results = [b.check_initial(var, not_change=True, force=force) for b in self.iter_children()]
-        if not not_change:
-            for b in self.iter_children():
-                b.check_initial(var, not_change=False, force=force)
-        if all(r == 0 for r in results):
-            return 0
-        if any(r <= 0 for r in results):
-            return -1
-        if any(r == 2 for r in results):
-            return 2
-        return 1
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        vars_list = VarList()
+        for block in self.iter_children():
+            vars_list.merge(block.check_initial(assigned_vars))
+        return vars_list
 
 
 @dataclass
@@ -1128,7 +1176,7 @@ class DoLoop(DoAbst):
             if var.index is not None:
                 for i, idx in enumerate(var.index):
                     if isinstance(idx, OpVar) and idx == self.index:
-                        index_map[var.name] = i
+                        index_map[var.name] = (i, len(var.index))
         return index_map
 
     def find_index(self, var: OpVar, name: str) -> Union[int, None]:
@@ -1189,7 +1237,7 @@ class DoLoop(DoAbst):
     def private_vars(self) -> List[OpVar]:
         """Return variables which have no effect to the outer region of this loop"""
         access_info = self.collect_access_info()
-        vars = VarList([var.deep_clone() for var, v in access_info.items() if v==False])
+        vars = VarList([var for var, v in access_info.items() if v==False])
         vars.update_index_downward(self._build_index_map(), self.index)
         vars_list = []
         for var in vars:
@@ -1201,7 +1249,7 @@ class DoLoop(DoAbst):
         if vars is None:
             vars = VarList()
         else:
-            vars = vars.deep_clone()
+            vars = vars.copy()
             vars.update_index_downward(self._build_index_map(), self.index)
         vars = self._body.required_vars(vars, no_accumulate, without_savevar)
 
@@ -1235,10 +1283,11 @@ class DoLoop(DoAbst):
                     vars.push(var)
         return vars
 
-    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False) -> VarList:
-        vars = self._body.assigned_vars(vars, without_savevar=without_savevar)
+    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False, check_init_advars: bool = False) -> VarList:
+        vars = self._body.assigned_vars(vars, without_savevar=without_savevar, check_init_advars=check_init_advars)
         vars.update_index_upward(self._build_index_map(), range=OpRange([self.start,self.end,self.step]))
-        vars.push(self.index)
+        if not check_init_advars:
+            vars.push(self.index)
         return vars
 
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
@@ -1276,12 +1325,12 @@ class DoLoop(DoAbst):
         return info
 
     def prune_for(self, targets: VarList) -> Node:
-        targets = targets.deep_clone()
+        targets = targets.copy()
         targets.update_index_downward(self._build_index_map(), self.index)
         new_body = self._body.prune_for(targets)
 
         #for var in new_body.required_vars(targets, no_accumulate=True, without_savevar=True):
-        for var in new_body.required_vars(targets.deep_clone()):
+        for var in new_body.required_vars(targets):
             if var.name == self.index.name:
                 continue
             #if var.name.endswith("_ad"):
@@ -1311,24 +1360,19 @@ class DoLoop(DoAbst):
             return Block([])
         return DoLoop(new_body, self.index, self.start, self.end, self.step)
 
-    def check_initial(self, var: str, not_change: bool = False, force: bool = False) -> int:
-        varname = var
-        if "(" in var:
-            varname = var.split("(")[0]
-            self.check_initial(varname, not_change, force)
-        if not self._body.has_assignment_to(varname):
-            return 0
-        for vname in self.required_vars(no_accumulate=True).names():
-            if vname == varname:
-                return -1
-        if not force:
-            for v in self._body.unrefered_advars():
-                if v.name == varname:
-                    if v.index is None or not set(self.do_index_list) <= set(v.index_list()):
-                        return -1
-        ret = self._body.check_initial(var, not_change=True, force=force)
-        self._body.check_initial(var, not_change=False, force=force)
-        return ret
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        if assigned_vars is None:
+            assigned_vars = VarList()
+        else:
+            assigned_vars = assigned_vars.copy()
+        assigned_vars.update_index_downward(self._build_index_map(), do_index_var=self.index)
+        #assigned_vars.merge(self._body.assigned_vars(check_init_advars = True))
+        for var in self._body.assigned_vars(check_init_advars = True):
+            if not set(self.do_index_list) <= set(var.index_list()):
+                assigned_vars.push(var)
+        assigned_vars = self._body.check_initial(assigned_vars)
+        assigned_vars.update_index_upward(self._build_index_map(), range=OpRange([self.start,self.end,self.step]))
+        return assigned_vars
 
 @dataclass
 class DoWhile(DoAbst):
@@ -1374,7 +1418,7 @@ class DoWhile(DoAbst):
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         vars = self._body.required_vars(vars, no_accumulate, without_savevar)
-        vars = vars.deep_clone()
+        vars = vars.copy()
         for var in self.cond.collect_vars():
             vars.push(var)
         return vars
@@ -1385,18 +1429,21 @@ class DoWhile(DoAbst):
 
     def prune_for(self, targets: VarList) -> Node:
         new_body = self._body.prune_for(targets)
-        targets = targets.deep_clone()
-        for var in new_body.required_vars(targets.deep_clone()):
-            targets.push(var)
+        targets = targets.copy()
+        targets.merge(new_body.required_vars(targets))
         new_body = self._body.prune_for(targets)
         if new_body.is_effectively_empty():
             return Block([])
         return DoWhile(new_body, self.cond)
 
-    def check_initial(self, var: str, not_change: bool = False, force: bool = False) -> int:
-        if self._body.has_assignment_to(var):
-            return -1
-        return 0
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        if assigned_vars is None:
+            assigned_vars = VarList()
+        else:
+            assigned_vars = assigned_vars.copy()
+        assigned_vars.merge(self._body.assigned_vars(check_init_advars = True))
+        assigned_vars = self._body.check_initial(assigned_vars)
+        return assigned_vars
 
 def render_program(node: Node, indent: int = 0) -> str:
     """Return formatted Fortran code for the entire ``node`` tree."""
