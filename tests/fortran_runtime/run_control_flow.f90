@@ -2,6 +2,7 @@ program run_control_flow
   use control_flow
   use control_flow_ad
   implicit none
+  real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_if_example = 1
@@ -45,6 +46,7 @@ contains
   subroutine test_if_example
     real :: x, y, z
     real :: x_ad, y_ad, z_ad
+    real :: exp_z, exp_x
 
     x = 1.0
     y = 2.0
@@ -55,7 +57,13 @@ contains
     z_ad = 1.0
     call if_example_ad(x, x_ad, y, y_ad, z_ad)
 
-    print *, z, x_ad
+    exp_z = x
+    exp_x = 1.0
+
+    if (abs(z - exp_z) > tol .or. abs(x_ad - exp_x) > tol) then
+       print *, 'test_if_example failed', z, x_ad
+       error stop 1
+    end if
     return
   end subroutine test_if_example
 
@@ -63,6 +71,7 @@ contains
     integer :: n
     real :: x, sum
     real :: x_ad, sum_ad
+    real :: exp_sum, exp_x
 
     n = 3
     x = 2.0
@@ -72,7 +81,13 @@ contains
     sum_ad = 1.0
     call do_example_ad(n, x, x_ad, sum_ad)
 
-    print *, sum, x_ad
+    exp_sum = x * real(n * (n + 1) / 2)
+    exp_x = real(n * (n + 1) / 2)
+
+    if (abs(sum - exp_sum) > tol .or. abs(x_ad - exp_x) > tol) then
+       print *, 'test_do_example failed', sum, x_ad
+       error stop 1
+    end if
     return
   end subroutine test_do_example
 
