@@ -47,8 +47,8 @@ contains
 
        if (.not. associated(ary_r4(page_r4%page_num)%ptr)) then
           allocate(ary_r4(page_r4%page_num)%ptr(PAGE_SIZE))
-          ptr => ary_r4(page_r4%page_num)%ptr
        end if
+       ptr => ary_r4(page_r4%page_num)%ptr
 
        i1 = i0 + min(len - 1, PAGE_SIZE - page_r4%pos)
        ptr(page_r4%pos:page_r4%pos + i1 - i0) = ary(i0:i1)
@@ -94,11 +94,11 @@ contains
 
        ptr => ary_r4(page_r4%page_num)%ptr
 
-       i0 = i1 - min(len, page_r4%pos) + 1
-       ary(i0:i1) = ptr(page_r4%pos - (i1 - i0):page_r4%pos)
+       i0 = i1 - min(len, page_r4%pos - 1) + 1
+       ary(i0:i1) = ptr(page_r4%pos - (i1 - i0 + 1):page_r4%pos - 1)
        len = len - (i1 - i0 + 1)
        page_r4%pos = page_r4%pos - (i1 - i0 + 1)
-       i0 = i1 + 1
+       i1 = i0 - 1
 
        if (page_r4%pos < 1) then
           page_r4%pos = PAGE_SIZE
