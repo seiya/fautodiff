@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+# Suffix used for all AD related names. Change here if a different suffix is
+# desired throughout the project.
+AD_SUFFIX = "_ad"
+
 from pathlib import Path
 import sys
 import re
@@ -27,6 +31,10 @@ from .code_tree import (
     Statement,
     render_program,
 )
+
+# Ensure other modules use the same AD suffix
+from . import code_tree as code_tree
+code_tree.AD_SUFFIX = AD_SUFFIX
 
 from .var_list import (
     VarList
@@ -164,7 +172,7 @@ def _generate_ad_subroutine(routine_org, warnings):
         intent = arg.intent
         if intent == "out":
             if arg.ad_target:
-                ad_name = f"{name}_ad"
+                ad_name = f"{name}{AD_SUFFIX}"
                 var = Variable(ad_name, typ, arg.kind, dims, "inout")
                 args.append(var)
                 grad_args.append(var)
@@ -172,7 +180,7 @@ def _generate_ad_subroutine(routine_org, warnings):
         else:
             args.append(arg)
             if arg.ad_target:
-                ad_name = f"{name}_ad"
+                ad_name = f"{name}{AD_SUFFIX}"
                 grad_int = {
                     "in": "out",
                     "inout": "inout",
@@ -187,7 +195,7 @@ def _generate_ad_subroutine(routine_org, warnings):
 
     # Create Subroutine node for AD
     name = routine_org.name
-    ad_name = f"{name}_ad"
+    ad_name = f"{name}{AD_SUFFIX}"
     arg_names = []
     for arg in args:
         arg_names.append(arg.name)
@@ -215,7 +223,7 @@ def _generate_ad_subroutine(routine_org, warnings):
     def _backward(lhs: OpVar, rhs: Operator, info: dict) -> List[Assignment]:
         if not lhs.is_real:
             return Block([])
-        grad_lhs = lhs.add_suffix("_ad")
+        grad_lhs = lhs.add_suffix(AD_SUFFIX)
 
         #ad_info = f"{lhs} = {rhs} @ line {info.get('line','?')}"
         ad_info = f"{lhs} = {rhs}"
@@ -223,7 +231,7 @@ def _generate_ad_subroutine(routine_org, warnings):
         if isinstance(rhs, OpFunc):
             handler = rhs.special_handler(grad_lhs, rhs.args)
             if handler is not None:
-                v = rhs.args[0].add_suffix("_ad")
+                v = rhs.args[0].add_suffix(AD_SUFFIX)
                 return [Assignment(v, handler, accumulate=(not v==grad_lhs), ad_info=ad_info)]
 
         vars = rhs.collect_vars()
@@ -235,7 +243,7 @@ def _generate_ad_subroutine(routine_org, warnings):
             if not var.is_real:
                 continue
             dev = rhs.derivative(var, target=grad_lhs, info=info, warnings=warnings)
-            v = var.add_suffix("_ad")
+            v = var.add_suffix(AD_SUFFIX)
             res = grad_lhs * dev
             assigns.append(Assignment(v, res, accumulate=(not v==grad_lhs), ad_info=ad_info))
         if not lhs in vars:
@@ -252,7 +260,7 @@ def _generate_ad_subroutine(routine_org, warnings):
         # check undeclared reference for AD variables
         for var in ad_code.assigned_vars(without_savevar=True):
             name = var.name
-            if name.endswith("_ad"): # only for AD variables
+            if name.endswith(AD_SUFFIX):  # only for AD variables
                 found = False
                 for arg in grad_args:
                     if arg.name == name:
@@ -260,7 +268,7 @@ def _generate_ad_subroutine(routine_org, warnings):
                         break
                 if found:
                     continue # already declared
-                v_org = routine_org.get_var(name.removesuffix("_ad"))
+                v_org = routine_org.get_var(name.removesuffix(AD_SUFFIX))
                 v = Variable(name=name, typename=v_org.typename, kind=v_org.kind, dims=v_org.dims)
                 if not subroutine.is_declared(name):
                     subroutine.decls.append(v.to_decl())
@@ -278,7 +286,7 @@ def _generate_ad_subroutine(routine_org, warnings):
         # check uninitialized AD variables
         vars = ad_code.required_vars(VarList([OpVar(var.name) for var in out_grad_args]), without_savevar=True)
         for name in vars.names():
-            if name.endswith("_ad") and not any(v for v in grad_args if v.name == name):
+            if name.endswith(AD_SUFFIX) and not any(v for v in grad_args if v.name == name):
                 # AD variables which is not in grads_args (= temporary variables in this subroutine)
                 if subroutine.is_declared(name):
                     var = subroutine.get_var(name)
@@ -373,7 +381,7 @@ def generate_ad(in_file, out_file=None, warn=True):
             if used:
                 pushpop_used = True
 
-        mod = Module(f"{name}_ad")
+        mod = Module(f"{name}{AD_SUFFIX}")
         if pushpop_used:
             mod.body.append(Statement("use fautodiff_data_storage"))
         #mod.body.append(Statement(f"use {name}"))
