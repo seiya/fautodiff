@@ -79,7 +79,7 @@ class Node:
     """Abstract syntax tree node for Fortran code fragments."""
 
     __id: int = field(init=False, repr=False)
-    __parent: "Node" = field(init=False, repr=False, default=None)
+    parent: "Node" = field(init=False, repr=False, default=None)
     do_index_list: List[str] = field(init=False, repr=False, default=None)
 
     _id_counter = 0
@@ -157,7 +157,7 @@ class Node:
     def _save_vars(self, var: OpVar, saved_vars: List[SaveAssignment]) -> SaveAssignment:
         id = self.get_id()
         save = SaveAssignment(var, id)
-        self.__parent.insert_before(id, save)
+        self.parent.insert_before(id, save)
         saved_vars.append(save)
         return save.to_load()
 
@@ -188,7 +188,7 @@ class Node:
         return self.__id
 
     def set_parent(self, node: "Node") -> "Node":
-        self.__parent = node
+        self.parent = node
 
     def find_by_id(self, node_id: int) -> Optional["Node"]:
         """Return the node with ``node_id`` from this subtree or ``None``."""
@@ -201,6 +201,10 @@ class Node:
         return None
 
     def insert_before(self, id: int, node: "Node"):
+        """Insert node to the before of node with id"""
+        raise NotImplementedError
+
+    def insert_begin(self, node: "Node"):
         """Insert node to the before of node with id"""
         raise NotImplementedError
 
@@ -270,30 +274,6 @@ class Node:
         for child in self.iter_children():
             vars = child.unrefered_advars(vars)
         return vars
-
-    def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
-        """Return variable access information in this node.
-        This ignores access to the save variables and self-reference associated with accumulate attribute in Assignment object.
-
-        ``None``: the variable is referred before assignment
-        ``True``: the variable has assigned
-        ``False``: the variable has referred
-        """
-        if info is None:
-            info = Vardict()
-        else:
-            info = info.copy()
-        for var in self.iter_ref_vars():
-            if not var in info:
-                info[var] = None
-            if info[var] is not None:
-                info[var] = False
-        for var in self.iter_assign_vars():
-            if not (var in info and info[var] is None):
-                info[var] = True
-        for child in self.iter_children():
-            info = child.collect_access_info(info)
-        return info
 
     def collect_vars(self) -> List[OpVar]:
         """Return variables used in this node."""
@@ -388,6 +368,10 @@ class Block(Node):
                 return self.__children.insert(i, node)
         raise ValueError("id is not found")
 
+    def insert_begin(self, node:Node) -> Node:
+        node.build_do_index_list(self.do_index_list)
+        return self.__children.insert(0, node)
+
     def __iter__(self):
         return self.iter_children()
 
@@ -405,15 +389,12 @@ class Block(Node):
             vars = child.required_vars(vars, no_accumulate, without_savevar)
         return vars
 
-    def private_vars(self) -> List[OpVar]:
-        vars_info = {}
+    def remove_push(self) -> "Block":
+        children_new = []
         for child in self.iter_children():
-            if isinstance(child, SaveAssignment): # ignore Save variables
-                continue
-            if isinstance(child, Assignment):
-                for var in child.iter_ref_vars():
-                    if not var in vars_info:
-                        vars_info[var] = None # not private
+            if not isinstance(child, PushPop):
+                children_new.append(child)
+        return Block(children_new)
 
     def prune_for(self, targets: VarList) -> "Block":
         new_children: List[Node] = []
@@ -437,7 +418,7 @@ class Block(Node):
             for child in children:
                 if len(new_children) > 0 and isinstance(child, SaveAssignment):
                     last = new_children[-1]
-                    if isinstance(last, SaveAssignment) and last.var == child.var and last.load != child.load:
+                    if isinstance(last, SaveAssignment) and last.id == child.id and last.load != child.load:
                         new_children.remove(last)
                         continue
                 new_children.append(child)
@@ -671,33 +652,6 @@ class Assignment(Node):
             vars.push(lhs)
         return vars
 
-    def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
-        if info is None:
-            info = Vardict()
-        else:
-            info = info.copy()
-        for var in self.iter_ref_vars():
-            found = False
-            for v in info.keys():
-                if v.name == var.name:
-                    if v.index == var.index:
-                        found = True
-                        if info[v] is not None:
-                            info[v] = False
-                    elif var.index is None or var.index >= v.index:
-                        found = True
-                        if info[v] is not None:
-                            info[v] = False
-                    elif v.index is None or v.index >= var.index:
-                        found = True
-                        if info[v] is not None:
-                            info[var] = False
-            if not found:
-                info[var] = None
-        if not (self.lhs in info and info[self.lhs] is None):
-            info[self.lhs] = True
-        return info
-
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         if assigned_vars is None:
             assigned_vars = VarList()
@@ -769,15 +723,6 @@ class ClearAssignment(Node):
                 vars.push(var)
         return vars
 
-    def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
-        if info is None:
-            info = Vardict()
-        else:
-            info = info.copy()
-        if not (self.lhs in info and info[self.lhs] is None):
-            info[self.lhs] = True
-        return info
-
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         if assigned_vars is None:
             assigned_vars = VarList()
@@ -840,7 +785,7 @@ class SaveAssignment(Node):
             vars = vars.copy()
             vars.remove(self.lhs)
         rhs = self.rhs
-        if (not without_savevar) or rhs != self.var: # rhs is not saved var
+        if (not without_savevar) or rhs == self.var: # rhs is not saved var
             vars.push(rhs)
         return vars
 
@@ -857,9 +802,6 @@ class SaveAssignment(Node):
                 vars.push(self.lhs)
         return vars
 
-    def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
-        return info
-
     def to_load(self) -> "SaveAssignment":
         return SaveAssignment(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
 
@@ -875,6 +817,22 @@ class SaveAssignment(Node):
             else:
                 index_new.append(idx)
         self.tmpvar.index = AryIndex(index_new)
+
+
+@dataclass
+class PushPop(SaveAssignment):
+    """Push or pop a variable to/from a stack."""
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        op = "pop" if self.load else "push"
+        return [f"{space}call {op}({self.var})\n"]
+
+    def to_load(self) -> "PushPop":
+        return PushPop(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
+
+    def reduce_dim(self, dims: List[str]) -> None:
+        pass
 
 @dataclass
 class Declaration(Node):
@@ -1017,42 +975,6 @@ class BranchBlock(Node):
                     vars_list.push(v)
         return vars_list
 
-    def collect_access_info(self, info: Optional[Vardict] = None) -> dict:
-        if info is None:
-            info = Vardict()
-        else:
-            info = info.copy()
-        for var in self.iter_ref_vars():
-            if not var in info:
-                info[var] = None
-            if info[var] is not None:
-                info[var] = False
-        infos = []
-        for child in self.iter_children():
-            infos.append(child.collect_access_info(info))
-        if len(infos) == 0:
-            return info
-        if len(infos) == 1:
-            return infos[0]
-        vars = []
-        for info in infos:
-            _extend_unique(vars, info.keys())
-        info_new = Vardict()
-        for var in vars:
-            values = [info[var] for info in infos if var in info]
-            if any(v is None for v in values):
-                info_new[var] = None
-            else:
-                merged = values[0]
-                for v in values[1:]:
-                    merged = merged or v
-                info_new[var] = merged
-        info = info_new
-        for var in self.iter_assign_vars():
-            if not (var in info[var] and info[var] is None):
-                info[var] = True
-        return info
-
     def prune_for(self, targets: VarList) -> Node:
         new_condblocks = []
         for cond, block in self.cond_blocks:
@@ -1189,13 +1111,43 @@ class DoLoop(DoAbst):
                         return i
         return None
 
+    def recurrent_vars(self) -> List[str]:
+        required_vars = self._body.required_vars()
+        assigned_vars = self._body.assigned_vars()
+        common_var_names = sorted(set(required_vars.names()) & set(assigned_vars.names()))
+        do_index_list = set(self.do_index_list)
+        var_names = []
+        for name in common_var_names:
+            flag = False
+            for index in required_vars[name]:
+                if not(index is not None and do_index_list <= set(index.list())):
+                    flag = True
+                    break
+            if not flag:
+                for index in assigned_vars[name]:
+                    if not(index is not None and do_index_list <= set(index.list())):
+                        flag = True
+                        break
+            if flag:
+                var_names.append(name)
+        return var_names
+
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
         new_body = self._body.deep_clone()
-        if not new_body.is_effectively_empty():
-            for node in body.iter_children():
-                new_body.append(node)
-            body = new_body
+        recurrent_vars = self.recurrent_vars()
+        pushed = []
+        for node in self._body.iter_children():
+            for var in node.required_vars():
+                if var.name in recurrent_vars:
+                    if not var in pushed:
+                        pushpop = PushPop(var, node.get_id())
+                        self._body.insert_begin(pushpop)
+                        new_body.insert_begin(pushpop.to_load())
+                        pushed.append(var)
+        for node in body.iter_children():
+            new_body.append(node)
+        body = new_body
         index = self.index
         if reverse:
             start = self.end
@@ -1233,17 +1185,6 @@ class DoLoop(DoAbst):
         lines.extend(self._body.render(indent+1))
         lines.append(f"{space}end do\n")
         return lines
-
-    def private_vars(self) -> List[OpVar]:
-        """Return variables which have no effect to the outer region of this loop"""
-        access_info = self.collect_access_info()
-        vars = VarList([var for var, v in access_info.items() if v==False])
-        vars.update_index_downward(self._build_index_map(), self.index)
-        vars_list = []
-        for var in vars:
-            if (var.index is None or not var.index.is_depended_on(self.index)):
-                _append_unique(vars_list, var)
-        return vars_list
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         if vars is None:
@@ -1294,35 +1235,6 @@ class DoLoop(DoAbst):
         vars = self._body.unrefered_advars(vars)
         vars.update_index_upward(self._build_index_map(), range=OpRange([self.start,self.end,self.step]))
         return vars
-
-    def collect_access_info(self, info: Optional[vardict] = None) -> dict:
-        raise NotImplementedError
-        if info is None:
-            info = Vardict()
-        else:
-            info = info.copy()
-        for var in self.iter_ref_vars():
-            if not var in info:
-                info[var] = None
-            if info[var] is not None:
-                info[var] = False
-
-        vars = info.keys()
-        vars_child = self._update_index_downward(vars)
-        info_child = Vardict()
-        for i, var in enumerate(vars):
-            info_child[vars_child[i]] = info[var]
-
-        info_child = self._body.collect_access_info(info_child)
-        if self.index in info_child:
-            info_child.remove(self.index)
-
-        vars_child = info_child.keys()
-        vars = self._update_index_upward(vars_child)
-        info = Vardict()
-        for i, var in enumerate(vars_child):
-            info[vars[i]] = info_child[var]
-        return info
 
     def prune_for(self, targets: VarList) -> Node:
         targets = targets.copy()
@@ -1392,7 +1304,7 @@ class DoWhile(DoAbst):
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse)[0]
-        new_body = self._body.deep_clone()
+        new_body = self._body.deep_clone().remove_push()
         if not new_body.is_effectively_empty():
             for node in body.children:
                 new_body.append(node)

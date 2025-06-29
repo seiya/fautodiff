@@ -11,6 +11,15 @@ from fautodiff import code_tree
 class TestGenerator(unittest.TestCase):
     """Tests auto-diff generation for each example file."""
 
+    def test_store_vars_use_data_storage(self):
+        code_tree.Node.reset()
+        generated = generator.generate_ad("examples/store_vars.f90", warn=False)
+        lines = generated.splitlines()
+        self.assertIn("use data_storage", lines[1])
+        idx_use = next(i for i, l in enumerate(lines) if "use data_storage" in l)
+        idx_imp = next(i for i, l in enumerate(lines) if "implicit none" in l)
+        self.assertLess(idx_use, idx_imp)
+
 
 def _make_example_test(src: Path):
     def test(self):

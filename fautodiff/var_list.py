@@ -371,29 +371,15 @@ class VarList:
                         index_list.append(index1.copy())
                         continue
 
-                    i = AryIndex.get_diff_dim(index1, index2) # index1 and index2 is either OpInt or OpRange
-                    if i == -999:
+                    i = AryIndex.get_diff_dim(index1, index2)
+                    if i < 0:
                         continue
 
                     index = index1.copy()
 
-                    if i < 0:
-                        i = -i-1
-                        dim1 = index1[i]
-                        dim2 = index2[i]
-                        if isinstance(dim1, OpVar):
-                            index[i] = dim1
-                            index_list.append(index)
-                            continue
-                        if isinstance(dim2, OpVar):
-                            index[i] = dim2
-                            index_list.append(index)
-                            continue
-                        raise RuntimeError(f"Unexpected: {type(dim1)} {type(dim2)}")
-                        continue
-
                     dim1 = index1[i]
                     dim2 = index2[i]
+
                     if dim1 is None:
                         index[i] = dim2
                         index_list.append(index)
@@ -403,17 +389,47 @@ class VarList:
                         index_list.append(index)
                         continue
 
-                    v1 = self._get_int(dim1)
-                    v2 = self._get_int(dim2)
-                    if v1 is not None and v2 is not None: # int
-                        # different
-                        continue
-
-                    if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
+                    if isinstance(dim1, OpRange):
                         i0 = self._get_int(dim1[0])
                         i1 = self._get_int(dim1[1])
+                        i2 = self._get_int(dim1[2])
+                        if not(isinstance(i2, int) and abs(i2) == 1):
+                            continue # assumes no overlap
+                        if not(isinstance(dim2, OpInt) or isinstance(dim2, OpRange)):
+                            index[i] = dim2
+                            index_list.append(index)
+                            continue
+                    if isinstance(dim2, OpRange):
                         j0 = self._get_int(dim2[0])
                         j1 = self._get_int(dim2[1])
+                        j2 = self._get_int(dim2[2])
+                        if not(isinstance(j2, int) and abs(j2) == 1):
+                            continue # assumes no overlap
+                        if not(isinstance(dim1, OpInt) or isinstance(dim1, OpRange)):
+                            index[i] = dim1
+                            index_list.append(index)
+                            continue
+
+                    v1 = self._get_int(dim1)
+                    v2 = self._get_int(dim2)
+                    if not(isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
+                        # both are not range
+                        if v1 is not None and v2 is not None: # both are int
+                            continue # different
+                        if v1 is None and v2 is None: # neither is int
+                            continue # different
+                        if v1 is None: # dim1 is int and dim2 is not int
+                            index[i] = dim1
+                            index_list.append(index)
+                            continue
+                        if v2 is None: # dim2 is int and dim1 is not int
+                            index[i] = dim2
+                            index_list.append(index)
+                            continue
+
+                    if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
+                        if not((dim1[0] is None or isinstance(i0, int)) and (dim1[1] is None or isinstance(i1, int)) and (dim2[0] is None or isinstance(j0, int)) and (dim2[1] is None or isinstance(j1, int))):
+                                continue # assumue different
                         if (isinstance(i1, int) and isinstance(j0, int) and i1 < j0) or (isinstance(j1, int) and isinstance(j1, int) and j1 < i0): # no overlap
                             continue
                         if i0 is None:
@@ -432,6 +448,8 @@ class VarList:
                         range = dim1
                         v = v2
                     else:
+                        if not isinstance(dim2, OpRange):
+                            raise RuntimeError(f"Unexpected: {type(dim2)}")
                         range = dim2
                         v = v1
                     i0 = self._get_int(range[0])

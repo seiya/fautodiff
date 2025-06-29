@@ -23,6 +23,7 @@ from .code_tree import (
     Assignment,
     ClearAssignment,
     SaveAssignment,
+    PushPop,
     Statement,
     render_program,
 )
@@ -140,6 +141,16 @@ def _find_index_expr(expr, var, all_indices=False):
         return uniq.pop()
     return None
 
+
+def _contains_pushpop(node) -> bool:
+    """Return True if ``node`` or any child is a ``PushPop``."""
+    if isinstance(node, PushPop):
+        return True
+    for child in getattr(node, "iter_children", lambda: [])():
+        if _contains_pushpop(child):
+            return True
+    return False
+
 def _generate_ad_subroutine(routine_org, warnings):
     # Collect information of aruguments
     args = []
@@ -194,12 +205,12 @@ def _generate_ad_subroutine(routine_org, warnings):
             lhs = OpVar(arg.name, kind=arg.kind)
             ad_block.append(Assignment(lhs, OpReal("0.0", kind=arg.kind)))
         subroutine.ad_content = ad_block
-        return subroutine
+        return subroutine, False
 
     # If there are no input gradients to propagate we can exit early
     if not out_grad_args:
         subroutine.ad_content = ad_block
-        return subroutine
+        return subroutine, False
 
     def _backward(lhs: OpVar, rhs: Operator, info: dict) -> List[Assignment]:
         if not lhs.is_real:
@@ -237,40 +248,43 @@ def _generate_ad_subroutine(routine_org, warnings):
     ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True)[0]
     #print("subroutine: ", subroutine.name) # for debug
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
-        # check undefined reference
+
+        # check undeclared reference for AD variables
         for var in ad_code.assigned_vars(without_savevar=True):
             name = var.name
-            if name.endswith("_ad"):
-                name_org = name.removesuffix("_ad")
+            if name.endswith("_ad"): # only for AD variables
                 found = False
                 for arg in grad_args:
                     if arg.name == name:
                         found = True
                         break
                 if found:
-                    continue
-            else:
-                continue
-            v_org = routine_org.get_var(name_org)
-            v = Variable(name=name, typename=v_org.typename, kind=v_org.kind, dims=v_org.dims)
-            if not subroutine.is_declared(name):
-                subroutine.decls.append(v.to_decl())
+                    continue # already declared
+                v_org = routine_org.get_var(name.removesuffix("_ad"))
+                v = Variable(name=name, typename=v_org.typename, kind=v_org.kind, dims=v_org.dims)
+                if not subroutine.is_declared(name):
+                    subroutine.decls.append(v.to_decl())
+
+        # check initialization for AD variables with intent(out)
         vars = []
         for var in grad_args:
             if not var in out_grad_args:
                 vars.append(OpVar(var.name))
         ad_code.check_initial(VarList(vars))
-        #subroutine.ad_init.append(Assignment(OpVar(var.name, index=index), OpReal(0.0, kind=var.kind)))
+
+        # optimize the AD code
         ad_code = ad_code.prune_for(VarList([OpVar(var.name) for var in grad_args]))
-        # check undefined output variables
-        vars = ad_code.required_vars(VarList([OpVar(var.name) for var in out_grad_args]))
-        #vars = subroutine.ad_init.required_vars(vars)
+
+        # check uninitialized AD variables
+        vars = ad_code.required_vars(VarList([OpVar(var.name) for var in out_grad_args]), without_savevar=True)
         for name in vars.names():
-            var = next((var for var in out_grad_args if var.name == name), None)
-            if var is None and name.endswith("_ad") and not any(v for v in grad_args if v.name == name):
+            if name.endswith("_ad") and not any(v for v in grad_args if v.name == name):
+                # AD variables which is not in grads_args (= temporary variables in this subroutine)
                 if subroutine.is_declared(name):
                     var = subroutine.get_var(name)
-            if var is not None:
+            else: # var which is in out_grad_args
+                var = next((var for var in out_grad_args if var.name == name), None)
+            if var is not None: # uninitialized AD variables
                 if var.dims is not None and len(var.dims) > 0:
                     index = (None,) * len(var.dims)
                 else:
@@ -335,7 +349,9 @@ def _generate_ad_subroutine(routine_org, warnings):
     if len(required_vnames) > 0:
         _warn(warnings, {}, f"{required_vnames} in {subroutine.name}", "Required variables are remained")
 
-    return subroutine
+    uses_pushpop = _contains_pushpop(subroutine)
+
+    return subroutine, uses_pushpop
 
 
 def generate_ad(in_file, out_file=None, warn=True):
@@ -349,11 +365,21 @@ def generate_ad(in_file, out_file=None, warn=True):
     warnings = []
     for mod_org in modules_org:
         name = mod_org.name
+        pushpop_used = False
+        routines = []
+        for routine in mod_org.routines:
+            sub, used = _generate_ad_subroutine(routine, warnings)
+            routines.append(sub)
+            if used:
+                pushpop_used = True
+
         mod = Module(f"{name}_ad")
+        if pushpop_used:
+            mod.body.append(Statement("use data_storage"))
         #mod.body.append(Statement(f"use {name}"))
         mod.body.append(Statement("implicit none"))
-        for routine in mod_org.routines:
-            mod.routines.append(_generate_ad_subroutine(routine, warnings))
+        for sub in routines:
+            mod.routines.append(sub)
         modules.append(render_program(mod))
 
     code = "\n".join(modules)
