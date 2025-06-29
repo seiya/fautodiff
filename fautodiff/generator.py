@@ -23,6 +23,7 @@ from .code_tree import (
     Assignment,
     ClearAssignment,
     SaveAssignment,
+    PushPop,
     Statement,
     render_program,
 )
@@ -140,6 +141,16 @@ def _find_index_expr(expr, var, all_indices=False):
         return uniq.pop()
     return None
 
+
+def _contains_pushpop(node) -> bool:
+    """Return True if ``node`` or any child is a ``PushPop``."""
+    if isinstance(node, PushPop):
+        return True
+    for child in getattr(node, "iter_children", lambda: [])():
+        if _contains_pushpop(child):
+            return True
+    return False
+
 def _generate_ad_subroutine(routine_org, warnings):
     # Collect information of aruguments
     args = []
@@ -194,12 +205,12 @@ def _generate_ad_subroutine(routine_org, warnings):
             lhs = OpVar(arg.name, kind=arg.kind)
             ad_block.append(Assignment(lhs, OpReal("0.0", kind=arg.kind)))
         subroutine.ad_content = ad_block
-        return subroutine
+        return subroutine, False
 
     # If there are no input gradients to propagate we can exit early
     if not out_grad_args:
         subroutine.ad_content = ad_block
-        return subroutine
+        return subroutine, False
 
     def _backward(lhs: OpVar, rhs: Operator, info: dict) -> List[Assignment]:
         if not lhs.is_real:
@@ -338,7 +349,9 @@ def _generate_ad_subroutine(routine_org, warnings):
     if len(required_vnames) > 0:
         _warn(warnings, {}, f"{required_vnames} in {subroutine.name}", "Required variables are remained")
 
-    return subroutine
+    uses_pushpop = _contains_pushpop(subroutine)
+
+    return subroutine, uses_pushpop
 
 
 def generate_ad(in_file, out_file=None, warn=True):
@@ -352,11 +365,21 @@ def generate_ad(in_file, out_file=None, warn=True):
     warnings = []
     for mod_org in modules_org:
         name = mod_org.name
+        pushpop_used = False
+        routines = []
+        for routine in mod_org.routines:
+            sub, used = _generate_ad_subroutine(routine, warnings)
+            routines.append(sub)
+            if used:
+                pushpop_used = True
+
         mod = Module(f"{name}_ad")
+        if pushpop_used:
+            mod.body.append(Statement("use data_storage"))
         #mod.body.append(Statement(f"use {name}"))
         mod.body.append(Statement("implicit none"))
-        for routine in mod_org.routines:
-            mod.routines.append(_generate_ad_subroutine(routine, warnings))
+        for sub in routines:
+            mod.routines.append(sub)
         modules.append(render_program(mod))
 
     code = "\n".join(modules)
