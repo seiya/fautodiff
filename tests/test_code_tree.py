@@ -549,20 +549,20 @@ class TestNodeMethods(unittest.TestCase):
         cond_blk2.check_initial()
         self.assertEqual(render_program(cond_blk2), code)
 
+
 class TestPushPop(unittest.TestCase):
     def test_push(self):
         var = OpVar("a")
-        node = PushPop(var)
+        node = PushPop(var, 100)
         self.assertEqual(render_program(Block([node])), "call push(a)\n")
         self.assertEqual([str(v) for v in node.iter_ref_vars()], ["a"])
-        self.assertEqual(list(node.iter_assign_vars()), [])
 
     def test_pop(self):
         var = OpVar("a")
-        node = PushPop(var).to_load()
+        node = PushPop(var, 100).to_load()
         self.assertEqual(render_program(Block([node])), "call pop(a)\n")
-        self.assertEqual(list(node.iter_ref_vars()), [])
         self.assertEqual([str(v) for v in node.iter_assign_vars()], ["a"])
+
 
 class TestLoopAnalysis(unittest.TestCase):
     def test_simple_loop(self):
@@ -580,7 +580,7 @@ class TestLoopAnalysis(unittest.TestCase):
             end=OpVar("n"),
         )
         self.assertEqual({str(v) for v in loop.required_vars()}, {"b(1:n)", "n"})
-        #self.assertEqual({str(v) for v in loop.private_vars()}, set())
+        self.assertEqual(set(loop.recurrent_vars()), set())
 
     def test_loop_with_accumulate(self):
         i = OpVar("i")
@@ -599,23 +599,22 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual({str(v) for v in loop.required_vars()}, {"a_ad(1:n)", "b_ad(1:n)", "c", "n"})
         self.assertEqual({str(v) for v in loop.required_vars(no_accumulate=True)}, {"c", "n"})
-        #self.assertEqual({str(v) for v in loop.private_vars()}, set())
+        self.assertEqual(set(loop.recurrent_vars()), set())
 
 
     def test_self_reference_loop(self):
         i = OpVar("i")
         a = OpVar("a", index=[i])
-        body = Block([
-            Assignment(a, a + OpVar("c"))
-        ])
         loop = DoLoop(
-            body,
+            Block([
+                Assignment(a, a + OpVar("c"))
+            ]),
             index=i,
             start=OpInt(1),
             end=OpVar("n"),
         )
         self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "c", "n"})
-        #self.assertEqual({str(v) for v in loop.private_vars()}, set())
+        self.assertEqual(set(loop.recurrent_vars()), set())
 
     def test_no_recurrent_loop_with_scalar(self):
         i = OpVar("i")
@@ -632,7 +631,7 @@ class TestLoopAnalysis(unittest.TestCase):
             end=OpVar("n"),
         )
         self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "n"})
-        #self.assertEqual({str(v) for v in loop.private_vars()}, {"c"})
+        self.assertEqual(set(loop.recurrent_vars()), set())
 
     def test_recurrent_loop_with_scalar(self):
         i = OpVar("i")
@@ -649,14 +648,13 @@ class TestLoopAnalysis(unittest.TestCase):
             end=OpVar("n"),
         )
         self.assertEqual({str(v) for v in loop.required_vars()}, {"c", "n"})
-        #self.assertEqual({str(v) for v in loop.private_vars()}, set())
+        self.assertEqual(set(loop.recurrent_vars()), {"c"})
 
     def test_recurrent_loop_with_different_index(self):
         code = textwrap.dedent("""\
         do i = 1, n
           ip = i + 1
-          a(i) = b(i) + c
-          a(ip) = b(i) + c
+          a(i) = a(i) + a(ip) + c
         end do
         """)
         i = OpVar("i")
@@ -669,11 +667,7 @@ class TestLoopAnalysis(unittest.TestCase):
                 ),
                 Assignment(
                     OpVar("a", index=[i]),
-                    OpVar("b", index=[i]) + OpVar("c")
-                ),
-                Assignment(
-                    OpVar("a", index=[ip]),
-                    OpVar("b", index=[i]) + OpVar("c")
+                    OpVar("a", index=[i]) + OpVar("a", index=[ip]) + OpVar("c")
                 )
             ]),
             index=i,
@@ -681,8 +675,8 @@ class TestLoopAnalysis(unittest.TestCase):
             end=OpVar("n"),
         )
         self.assertEqual("".join(loop.render()), code)
-        self.assertEqual({str(v) for v in loop.required_vars()}, {"b(1:n)", "c", "n"})
-        #self.assertEqual({str(v) for v in loop.private_vars()}, {"ip"})
+        self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "c", "n"})
+        self.assertEqual(set(loop.recurrent_vars()), {"a"})
 
     def test_recurrent_loop_with_self_reference_and_different_index(self):
         code = textwrap.dedent("""\
@@ -709,7 +703,7 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual("".join(loop.render()), code)
         self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "c", "n"})
-        #self.assertEqual({str(v) for v in loop.private_vars()}, {"ip"})
+        self.assertEqual(set(loop.recurrent_vars()), {"a"})
 
     def test_nested_loop(self):
         i = OpVar("i")
@@ -732,7 +726,7 @@ class TestLoopAnalysis(unittest.TestCase):
             end=OpVar("m"),
         )
         self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n,1:m)", "c", "n", "m"})
-        #self.assertEqual({str(v) for v in outer.private_vars()}, set())
+        self.assertEqual(set(outer.recurrent_vars()), set())
 
     def test_nested_loop_with_private_array(self):
         code = textwrap.dedent("""\
@@ -784,7 +778,7 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual("".join(outer.render()), code)
         self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n)", "n"})
-        #self.assertEqual({str(v) for v in outer.private_vars()}, set())
+        self.assertEqual(set(outer.recurrent_vars()), set())
 
     def test_nested_loop_with_different_index(self):
         code = textwrap.dedent("""\
@@ -816,7 +810,7 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual("".join(outer.render()), code)
         self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n,k)", "k", "c", "n", "m"})
-        #self.assertEqual({str(v) for v in outer.private_vars()}, set())
+        self.assertEqual(set(outer.recurrent_vars()), set())
 
     def test_nested_recurrent_loop_with_different_index(self):
         code = textwrap.dedent("""\
@@ -848,7 +842,7 @@ class TestLoopAnalysis(unittest.TestCase):
         )
         self.assertEqual("".join(outer.render()), code)
         self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n,k)", "k", "c", "n", "m"})
-        #self.assertEqual({str(v) for v in outer.private_vars()}, set())
+        self.assertEqual(set(outer.recurrent_vars()), set())
 
     def test_nested_loop_with_private_advars(self):
         code = textwrap.dedent("""\
@@ -888,13 +882,8 @@ class TestLoopAnalysis(unittest.TestCase):
             end=OpInt(1),
             step=OpInt(-1),
         )
-        #self.assertEqual({str(v) for v in outer.required_vars()}, {"y(:,:)", "y_ad(:,:)", "x(:,:)", "x_ad(:,:)", "n", "m")
         self.assertEqual({str(v) for v in outer.required_vars()}, {"x(1:n,1:m)", "y(1:n,1:m)", "x_ad(1:n,1:m)", "y_ad(1:n,1:m)", "work_ad(1:2)", "n", "m"})
-        #private_vars = outer.private_vars()
-        #self.assertEqual({str(v) for v in private_vars}, {"work_ad(1)", "work_ad(2)"})
-        #for var in private_vars:
-        #    outer.check_initial(str(var), force=True)
-        #self.assertEqual("".join(outer.render()), code)
+        self.assertEqual(set(outer.recurrent_vars()), {"work_ad"})
 
 
         code = textwrap.dedent("""\
@@ -955,11 +944,8 @@ class TestLoopAnalysis(unittest.TestCase):
             end=OpInt(1),
             step=OpInt(-1),
         )
-        #self.assertEqual({str(v) for v in outer.required_vars()}, {"y_ad(:,:)", "x_ad(:,:)", "n", "m"})
         self.assertEqual({str(v) for v in outer.required_vars()}, {"x_ad(1:n,1:m)", "y_ad(1:n,1:m)", "work(1:2)", "work_ad(1:2)", "n", "m"})
-        #private_vars = outer.private_vars()
-        #self.assertEqual({str(v) for v in private_vars}, {"work_ad(1)", "work(1)", "work_ad(2)", "work(2)")
-        #self.assertEqual({str(v) for v in private_vars}, {"work(1)", "work(2)"})
+        self.assertEqual(set(outer.recurrent_vars()), {"work_ad", "work"})
         outer = outer.prune_for(VarList([x_ad, y_ad]))
         self.assertEqual("".join(outer.render()), code)
 
