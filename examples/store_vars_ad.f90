@@ -1,5 +1,5 @@
 module store_vars_ad
-  use data_storage
+  use fautodiff_data_storage
   implicit none
 
 contains
@@ -16,14 +16,14 @@ contains
 
     work = 1.0
     do i = 1, n
-      call push(work)
+      call fautodiff_data_storage_push(work)
       work = x(i) * work
     end do
 
     work_ad = 0.0
 
     do i = n, 1, - 1
-      call pop(work)
+      call fautodiff_data_storage_pop(work)
       work_save_14_ad = work
       work_ad = z_ad(i) + work_ad ! z(i) = work
       z_ad(i) = 0.0 ! z(i) = work

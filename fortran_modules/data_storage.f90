@@ -1,19 +1,19 @@
-module data_storage
+module fautodiff_data_storage
   implicit none
   private
 
-  public push
-  public pop
+  public fautodiff_data_storage_push
+  public fautodiff_data_storage_pop
 
-  interface push
+  interface fautodiff_data_storage_push
      module procedure push_ary_r4
      module procedure push_scalar_r4
-  end interface push
+  end interface fautodiff_data_storage_push
 
-  interface pop
+  interface fautodiff_data_storage_pop
      module procedure pop_ary_r4
      module procedure pop_scalar_r4
-  end interface pop
+  end interface fautodiff_data_storage_pop
 
 
   type :: ptr_r4_t
@@ -124,4 +124,4 @@ contains
     return
   end subroutine pop_scalar_r4
 
-end module data_storage
+end module fautodiff_data_storage

@@ -375,7 +375,7 @@ def generate_ad(in_file, out_file=None, warn=True):
 
         mod = Module(f"{name}_ad")
         if pushpop_used:
-            mod.body.append(Statement("use data_storage"))
+            mod.body.append(Statement("use fautodiff_data_storage"))
         #mod.body.append(Statement(f"use {name}"))
         mod.body.append(Statement("implicit none"))
         for sub in routines:
