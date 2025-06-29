@@ -840,7 +840,7 @@ class SaveAssignment(Node):
             vars = vars.copy()
             vars.remove(self.lhs)
         rhs = self.rhs
-        if (not without_savevar) or rhs != self.var: # rhs is not saved var
+        if (not without_savevar) or rhs == self.var: # rhs is not saved var
             vars.push(rhs)
         return vars
 

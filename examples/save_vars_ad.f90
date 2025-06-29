@@ -320,11 +320,6 @@ contains
     return
   end subroutine do_with_local_array_ad
 
-  subroutine do_with_recurrent_scalar_ad()
-
-    return
-  end subroutine do_with_recurrent_scalar_ad
-
   subroutine do_with_stencil_array_ad()
 
     return
