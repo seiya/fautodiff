@@ -1,5 +1,5 @@
 program run_data_storage
-  use data_storage
+  use fautodiff_data_storage
   implicit none
 
   real :: arr(3)
@@ -9,15 +9,15 @@ program run_data_storage
 
   arr = (/10.0, 20.0, 30.0/)
 
-  call push(1.0)
-  call push(2.0)
-  call push(3.0)
-  call push(arr)
+  call fautodiff_data_storage_push(1.0)
+  call fautodiff_data_storage_push(2.0)
+  call fautodiff_data_storage_push(3.0)
+  call fautodiff_data_storage_push(arr)
 
-  call pop(out)
-  call pop(x3)
-  call pop(x2)
-  call pop(x1)
+  call fautodiff_data_storage_pop(out)
+  call fautodiff_data_storage_pop(x3)
+  call fautodiff_data_storage_pop(x2)
+  call fautodiff_data_storage_pop(x1)
 
   ok = .true.
   ok = ok .and. abs(x1 - 1.0) < 1.0e-6

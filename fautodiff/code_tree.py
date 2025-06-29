@@ -826,7 +826,8 @@ class PushPop(SaveAssignment):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         op = "pop" if self.load else "push"
-        return [f"{space}call {op}({self.var})\n"]
+        op_name = f"fautodiff_data_storage_{op}"
+        return [f"{space}call {op_name}({self.var})\n"]
 
     def to_load(self) -> "PushPop":
         return PushPop(self.var, id=self.id, tmpvar=self.tmpvar, load=True)

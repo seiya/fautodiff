@@ -60,3 +60,10 @@ This file provides guidelines for contributors about the repository and develop 
   the reversed execution of the routine.
 - Do not introduce additional control flow or modify the numerical logic other
   than inserting the derivative computations.
+
+## 9. Fortran Modules in `fortran_modules`
+- Module names must start with the prefix ``fautodiff_``.
+- Public subroutines provided by these modules must also start with the module
+  name followed by an underscore.  For example, ``data_storage`` becomes
+  ``fautodiff_data_storage`` and its public routine ``push`` is renamed to
+  ``fautodiff_data_storage_push``.
