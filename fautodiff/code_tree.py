@@ -7,6 +7,8 @@ from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar
 import re
 import copy
 
+AD_SUFFIX = "_ad"
+
 from .operators import (
     AryIndex,
     Operator,
@@ -242,7 +244,7 @@ class Node:
             else:
                 vars = vars.copy()
         for var in self.iter_assign_vars(without_savevar=without_savevar):
-            if check_init_advars and not var.name.endswith("_ad"):
+            if check_init_advars and not var.name.endswith(AD_SUFFIX):
                 continue
             vars.push(var)
         return vars
@@ -266,10 +268,10 @@ class Node:
         else:
             vars = vars.copy()
             for var in self.iter_ref_vars():
-                if var.name.endswith("_ad"):
+                if var.name.endswith(AD_SUFFIX):
                     vars.remove(var)
         for var in self.iter_assign_vars():
-            if var.name.endswith("_ad"):
+            if var.name.endswith(AD_SUFFIX):
                 vars.push(var)
         for child in self.iter_children():
             vars = child.unrefered_advars(vars)
@@ -658,7 +660,7 @@ class Assignment(Node):
         if self.accumulate:
             if not self.lhs in assigned_vars:
                 self.accumulate = False
-        if self.lhs.name.endswith("_ad"):
+        if self.lhs.name.endswith(AD_SUFFIX):
             assigned_vars = assigned_vars.copy()
             assigned_vars.push(self.lhs)
         return assigned_vars
@@ -747,11 +749,11 @@ class SaveAssignment(Node):
     def __post_init__(self):
         super().__post_init__()
         name = self.var.name
-        if re.search(r"save_\d+_ad", name):
+        if re.search(rf"save_\d+{AD_SUFFIX}", name):
             raise RuntimeError(f"Variable has aleady saved: {name}")
         if self.tmpvar is None:
             self.var = self.var.deep_clone()
-            self.tmpvar = OpVar(f"{name}_save_{self.id}_ad", index=self.var.index, is_real=self.var.is_real)
+            self.tmpvar = OpVar(f"{name}_save_{self.id}{AD_SUFFIX}", index=self.var.index, is_real=self.var.is_real)
         if self.load:
             self.lhs = self.var
             self.rhs = self.tmpvar
@@ -795,10 +797,10 @@ class SaveAssignment(Node):
         else:
             vars = vars.copy()
             if self.rhs == self.var:
-                if self.rhs.name.endswith("_ad"):
+                if self.rhs.name.endswith(AD_SUFFIX):
                     vars.remove(self.rhs)
         if self.lhs == self.var:
-            if self.lhs.name.endswith("_ad"):
+            if self.lhs.name.endswith(AD_SUFFIX):
                 vars.push(self.lhs)
         return vars
 
@@ -891,7 +893,7 @@ class Declaration(Node):
         if vars is None:
             vars = VarList()
         if self.intent in ("in", "inout"):
-            if self.name.endswith("_ad"):
+            if self.name.endswith(AD_SUFFIX):
                 vars = vars.copy()
                 vars.push(OpVar(self.name, is_real=self.is_real, kind=self.kind))
         return vars
@@ -947,7 +949,7 @@ class BranchBlock(Node):
         loads = []
         blocks = []
         for var in block.assigned_vars():
-            if not var.name.endswith("_ad"):
+            if not var.name.endswith(AD_SUFFIX):
                 load = self._save_vars(var, saved_vars)
                 loads.append(load)
                 blocks.insert(0, load)
@@ -972,7 +974,7 @@ class BranchBlock(Node):
         vars_list = VarList()
         for block in self.iter_children():
             for v in block.unrefered_advars(vars):
-                if v.name.endswith("_ad"):
+                if v.name.endswith(AD_SUFFIX):
                     vars_list.push(v)
         return vars_list
 
@@ -1167,7 +1169,7 @@ class DoLoop(DoAbst):
         loads = []
         blocks = []
         for cvar in common_vars:
-            if cvar == self.index or cvar.name.endswith("_ad"):
+            if cvar == self.index or cvar.name.endswith(AD_SUFFIX):
                 continue
             load = self._save_vars(cvar, saved_vars)
             loads.append(load)
@@ -1246,7 +1248,7 @@ class DoLoop(DoAbst):
         for var in new_body.required_vars(targets):
             if var.name == self.index.name:
                 continue
-            #if var.name.endswith("_ad"):
+            #if var.name.endswith(AD_SUFFIX):
             #    continue
             # check if the variable has no reccurent in this loop
             if var.index is not None and set(self.do_index_list) <= set(var.index_list()):
