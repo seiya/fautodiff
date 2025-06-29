@@ -334,7 +334,7 @@ class TestNodeMethods(unittest.TestCase):
             ]),
             index=i, start=OpVar("n"), end=OpInt(1), step=OpInt(-1)
         )
-        self.assertEqual({str(v) for v in outer.required_vars(no_accumulate=True, without_savevar=True)}, {"y_ad(1:n)","n"})
+        self.assertEqual({str(v) for v in outer.required_vars(no_accumulate=True, without_savevar=True)}, {"y_ad(1:n)", "w(1:2)", "n"})
 
         a_ad = OpVar("a_ad", index=[i,j])
         b_ad = OpVar("b_ad", index=[i,j])

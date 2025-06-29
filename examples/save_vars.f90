@@ -133,11 +133,6 @@ contains
     return
   end subroutine do_with_local_array
 
-  subroutine do_with_recurrent_scalar()
-
-    return
-  end subroutine do_with_recurrent_scalar
-
   subroutine do_with_stencil_array()
 
     return
