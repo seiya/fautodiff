@@ -13,6 +13,7 @@ from fautodiff.code_tree import (
     Assignment,
     ClearAssignment,
     SaveAssignment,
+    PushPop,
     DoLoop,
     DoWhile,
     IfBlock,
@@ -548,6 +549,20 @@ class TestNodeMethods(unittest.TestCase):
         cond_blk2.check_initial()
         self.assertEqual(render_program(cond_blk2), code)
 
+class TestPushPop(unittest.TestCase):
+    def test_push(self):
+        var = OpVar("a")
+        node = PushPop(var)
+        self.assertEqual(render_program(Block([node])), "call push(a)\n")
+        self.assertEqual([str(v) for v in node.iter_ref_vars()], ["a"])
+        self.assertEqual(list(node.iter_assign_vars()), [])
+
+    def test_pop(self):
+        var = OpVar("a")
+        node = PushPop(var).to_load()
+        self.assertEqual(render_program(Block([node])), "call pop(a)\n")
+        self.assertEqual(list(node.iter_ref_vars()), [])
+        self.assertEqual([str(v) for v in node.iter_assign_vars()], ["a"])
 
 class TestLoopAnalysis(unittest.TestCase):
     def test_simple_loop(self):

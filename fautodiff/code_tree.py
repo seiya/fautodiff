@@ -876,6 +876,38 @@ class SaveAssignment(Node):
                 index_new.append(idx)
         self.tmpvar.index = AryIndex(index_new)
 
+
+@dataclass
+class PushPop(Node):
+    """Push or pop a variable to/from a stack."""
+
+    var: OpVar
+    load: bool = False
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not isinstance(self.var, OpVar):
+            raise ValueError(f"var must be OpVar: {type(self.var)}")
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        if not self.load:
+            yield self.var
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        if self.load:
+            yield self.var
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        op = "pop" if self.load else "push"
+        return [f"{space}call {op}({self.var})\n"]
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def to_load(self) -> "PushPop":
+        return PushPop(self.var, load=not self.load)
+
 @dataclass
 class Declaration(Node):
     """A variable declaration."""
