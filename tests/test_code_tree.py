@@ -6,6 +6,7 @@ import textwrap
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff.code_tree import (
+    AD_SUFFIX,
     Variable,
     Subroutine,
     Declaration,
@@ -24,7 +25,8 @@ from fautodiff.operators import (
     OpInt,
     OpReal,
     OpVar,
-    OpRange
+    OpRange,
+    OpFuncUser
 )
 
 from fautodiff.var_list import (
@@ -257,7 +259,7 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(b, a)
         ])
         self.assertEqual({str(v) for v in blk.required_vars()}, {"c"})
-        
+
         i = OpVar("i")
         xa = OpVar("x", index=[OpRange([None])])
         xi = OpVar("x", index=[i])
@@ -307,7 +309,7 @@ class TestNodeMethods(unittest.TestCase):
             index=i, start=OpInt(1), end=n
         )
         self.assertEqual({str(v) for v in outer.required_vars()}, {"x(1:n)", "n"})
-            
+
         x_ad = OpVar("x_ad", index=[i])
         y_ad = OpVar("y_ad", index=[i])
         v_ad = OpVar("v_ad", index=[k])
@@ -1007,9 +1009,43 @@ class TestDoWhile(unittest.TestCase):
         pruned2 = loop.prune_for(VarList([OpVar('c')]))
         self.assertTrue(pruned2.is_effectively_empty())
 
+class TestConvertUserFunc(unittest.TestCase):
+    def test_simple(self):
+        assign = Assignment(OpVar("x"), OpFuncUser(name="foo", args=[OpVar("y")]))
+        block = Block([assign])
+        converted = block.convert_userfunc()[0]
+        tmp_vname = f"foo0_save_{assign.get_id()}{AD_SUFFIX}"
+        code = textwrap.dedent(f"""\
+        {tmp_vname} = foo(y)
+        x = {tmp_vname}
+        """)
+        self.assertEqual(render_program(converted), code)
 
-if __name__ == '__main__':
-    unittest.main()
+    def test_in_operation(self):
+        assign = Assignment(OpVar("x"), OpInt(2) * OpFuncUser(name="foo", args=[OpVar("y")]))
+        block = Block([assign])
+        converted = block.convert_userfunc()[0]
+        tmp_vname = f"foo0_save_{assign.get_id()}{AD_SUFFIX}"
+        code = textwrap.dedent(f"""\
+        {tmp_vname} = foo(y)
+        x = 2 * {tmp_vname}
+        """)
+        self.assertEqual(render_program(converted), code)
+
+    def test_nested_operation(self):
+        func1 = OpFuncUser(name="foo", args=[OpVar("y")])
+        func2 = OpFuncUser(name="bar", args=[func1])
+        assign = Assignment(OpVar("x"), func2)
+        block = Block([assign])
+        converted = block.convert_userfunc()[0]
+        tmp_vname1 = f"foo0_save_{assign.get_id()}{AD_SUFFIX}"
+        tmp_vname2 = f"bar1_save_{assign.get_id()}{AD_SUFFIX}"
+        code = textwrap.dedent(f"""\
+        {tmp_vname1} = foo(y)
+        {tmp_vname2} = bar({tmp_vname1})
+        x = {tmp_vname2}
+        """)
+        self.assertEqual(render_program(converted), code)
 
 
 
