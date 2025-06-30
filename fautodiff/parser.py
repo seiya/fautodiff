@@ -44,6 +44,7 @@ from .code_tree import (
     DoWhile,
     SelectBlock,
     Statement,
+    CallStatement,
 )
 
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
@@ -288,6 +289,15 @@ def _parse_routine(content, filename):
                 "code": stmt.tofortran().strip(),
             }
             return Assignment(lhs, rhs, False, info)
+        if isinstance(stmt, Fortran2003.Call_Stmt):
+            name = stmt.items[0].tofortran()
+            args = []
+            if stmt.items[1] is not None:
+                for arg in stmt.items[1].items:
+                    if isinstance(arg, str):
+                        continue
+                    args.append(_stmt2op(arg, decls))
+            return CallStatement(name, args)
         if isinstance(stmt, Fortran2003.If_Construct):
             cond_blocks = []
             cond = _stmt2op(stmt.content[0].items[0], decls)
@@ -372,7 +382,9 @@ def _parse_routine(content, filename):
     def _block(body_list, decls):
         blk = Block([])
         for st in body_list:
-            blk.append(_parse_stmt(st, decls))
+            node = _parse_stmt(st, decls)
+            if node is not None:
+                blk.append(node)
         return blk
 
     stmt = content.content[0]
