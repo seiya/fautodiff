@@ -447,6 +447,54 @@ class Statement(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
+
+@dataclass
+class CallStatement(Node):
+    """Representation of a ``call`` statement."""
+
+    name: str
+    args: List[Operator] = field(default_factory=list)
+    intents: Optional[List[str]] = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not _NAME_RE.fullmatch(self.name):
+            raise ValueError(f"invalid Fortran routine name: {self.name}")
+        if not isinstance(self.args, list):
+            raise ValueError(f"args must be a list: {type(self.args)}")
+        for i, arg in enumerate(self.args):
+            if isinstance(arg, int):
+                self.args[i] = OpInt(arg)
+            elif not isinstance(arg, Operator):
+                raise ValueError(f"arg must be Operator: {type(arg)}")
+        if self.intents is not None:
+            if not isinstance(self.intents, list):
+                raise ValueError(f"intents must be a list: {type(self.intents)}")
+            if len(self.intents) != len(self.args):
+                raise ValueError("intents length must match args length")
+            for intent in self.intents:
+                if intent not in ("in", "out", "inout"):
+                    raise ValueError(f"invalid intent: {intent}")
+
+    def _iter_vars(self, intents: List[str], kinds: Tuple[str, ...]) -> Iterator[OpVar]:
+        for arg, intent in zip(self.args, intents):
+            if intent in kinds:
+                for var in arg.collect_vars():
+                    yield var
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        intents = self.intents or ["in"] * len(self.args)
+        yield from self._iter_vars(intents, ("in", "inout"))
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        intents = self.intents or ["in"] * len(self.args)
+        yield from self._iter_vars(intents, ("out", "inout"))
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        args = ", ".join([str(a) for a in self.args])
+        return [f"{space}call {self.name}({args})\n"]
+
 @dataclass
 class Module(Node):
     """Representation of a Fortran module."""

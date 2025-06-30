@@ -14,6 +14,7 @@ from fautodiff.code_tree import (
     ClearAssignment,
     SaveAssignment,
     PushPop,
+    CallStatement,
     DoLoop,
     DoWhile,
     IfBlock,
@@ -562,6 +563,24 @@ class TestPushPop(unittest.TestCase):
         node = PushPop(var, 100).to_load()
         self.assertEqual(render_program(Block([node])), "call fautodiff_data_storage_pop(a)\n")
         self.assertEqual([str(v) for v in node.iter_assign_vars()], ["a"])
+
+
+class TestCallStatement(unittest.TestCase):
+    def test_render_and_vars(self):
+        a = OpVar("a")
+        b = OpVar("b")
+        node = CallStatement("foo", [a, b])
+        self.assertEqual(render_program(Block([node])), "call foo(a, b)\n")
+        self.assertEqual([str(v) for v in node.iter_ref_vars()], ["a", "b"])
+        self.assertEqual(list(node.iter_assign_vars()), [])
+
+    def test_intent(self):
+        a = OpVar("a")
+        b = OpVar("b")
+        node = CallStatement("foo", [a, b], intents=["in", "out"])
+        self.assertEqual(render_program(Block([node])), "call foo(a, b)\n")
+        self.assertEqual([str(v) for v in node.iter_ref_vars()], ["a"])
+        self.assertEqual([str(v) for v in node.iter_assign_vars()], ["b"])
 
 
 class TestLoopAnalysis(unittest.TestCase):
