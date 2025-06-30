@@ -29,6 +29,7 @@ from .code_tree import (
     SaveAssignment,
     PushPop,
     Statement,
+    CallStatement,
     render_program,
 )
 
@@ -159,7 +160,7 @@ def _contains_pushpop(node) -> bool:
             return True
     return False
 
-def _generate_ad_subroutine(routine_org, warnings):
+def _generate_ad_subroutine(routine_org, routine_map, warnings):
     # Collect information of aruguments
     args = []
     out_grad_args = []
@@ -254,6 +255,17 @@ def _generate_ad_subroutine(routine_org, warnings):
 
     # convert user functions from OpFuncUser to CallStatement
     routine_org.content.convert_userfunc()[0]
+
+    # populate CallStatement intents from routine declarations
+    def _set_call_intents(node):
+        if isinstance(node, CallStatement):
+            intents = routine_map.get(node.name)
+            if intents is not None:
+                node.intents = list(intents)
+        for child in getattr(node, "iter_children", lambda: [])():
+            _set_call_intents(child)
+
+    _set_call_intents(routine_org.content)
 
     saved_vars = []
     ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True)[0]
@@ -374,12 +386,21 @@ def generate_ad(in_file, out_file=None, warn=True):
     modules_org = parser.parse_file(in_file)
     modules = []
     warnings = []
+
+    routine_map = {}
+    for mod_org in modules_org:
+        for r in mod_org.routines:
+            intents = [v.intent or "in" for v in r.arg_vars()]
+            if r.result is not None:
+                intents = intents[:-1]
+            routine_map[r.name] = intents
+
     for mod_org in modules_org:
         name = mod_org.name
         pushpop_used = False
         routines = []
         for routine in mod_org.routines:
-            sub, used = _generate_ad_subroutine(routine, warnings)
+            sub, used = _generate_ad_subroutine(routine, routine_map, warnings)
             routines.append(sub)
             if used:
                 pushpop_used = True

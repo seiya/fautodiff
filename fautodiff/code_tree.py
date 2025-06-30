@@ -859,7 +859,11 @@ class SaveAssignment(Node):
             raise RuntimeError(f"Variable has aleady saved: {name}")
         if self.tmpvar is None:
             self.var = self.var.deep_clone()
-            self.tmpvar = OpVar(self._save_var_name(name, id), index=self.var.index, is_real=self.var.is_real)
+            self.tmpvar = OpVar(
+                self._save_var_name(name, self.id),
+                index=self.var.index,
+                is_real=self.var.is_real,
+            )
         if self.load:
             self.lhs = self.var
             self.rhs = self.tmpvar

@@ -778,6 +778,15 @@ class OpLog(OpBinary):
         a1 = self._paren(self.args[1], eq=eq)
         return f"{a0} {self.op} {a1}"
 
+INTRINSIC_FUNCTIONS = {
+    'abs', 'sqrt', 'exp', 'log', 'log10', 'sin', 'cos', 'tan', 'asin',
+    'acos', 'atan', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
+    'erf', 'erfc', 'real', 'dble', 'mod', 'min', 'max', 'sign', 'atan2',
+    'transpose', 'cshift', 'len', 'len_trim', 'adjustl', 'index', 'lbound',
+    'ubound', 'size', 'epsilon', 'huge', 'tiny', 'ichar', 'achar', 'int',
+    'nint'
+}
+
 NONDIFF_INTRINSICS = {
     'len',
     'len_trim',
