@@ -230,6 +230,26 @@ class Operator:
                     vars.append(var)
         return vars
 
+    def find_userfunc(self) -> List[OpFuncUser]:
+        funcs = []
+        for arg in self.args:
+            funcs.extend(arg.find_userfunc())
+        return funcs
+
+    def replace_with(self, src: Operator, dest: Operator) -> Operator:
+        if self is src:
+            return dest
+        args_new = []
+        for arg in self.args:
+            if arg is src:
+                args_new.append(dest)
+            elif isinstance(arg, Operator):
+                args_new.append(arg.replace_with(src, dest))
+            else:
+                args_new.append(arg)
+        self.args = args_new
+        return self
+
     def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
         """Return the derivative operation with respetive to ```var```."""
         raise NotImplementedError(f"derivative in {type(self)}")
@@ -464,6 +484,12 @@ class OpLeaf(Operator):
 
     kind: Optional[str] = None
     PRIORITY: ClassVar[int] = 0
+
+    def find_userfunc(self) -> List[OpFuncUser]:
+        return []
+
+    def replace_with(self, src: Operator, dest: Operator) -> Operator:
+        return self
 
 @dataclass
 class OpNum(OpLeaf):
@@ -886,6 +912,7 @@ class OpFunc(Operator):
 class OpFuncUser(Operator):
 
     name: str = field(default="")
+    intents: List[name] = field(default=None)
     PRIORITY: ClassVar[int] = 1
 
     def __init__(self, name: str, args:List[Operator]):
@@ -900,6 +927,13 @@ class OpFuncUser(Operator):
             args.append(f"{arg}")
         args = ", ".join(args)
         return f"{self.name}({args})"
+
+    def find_userfunc(self) -> List[OpFuncUser]:
+        funcs = []
+        for arg in self.args:
+            funcs.extend(arg.find_userfunc())
+        funcs.append(self)
+        return funcs
 
     def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
         raise NotImplementedError

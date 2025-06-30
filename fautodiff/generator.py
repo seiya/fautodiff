@@ -252,6 +252,9 @@ def _generate_ad_subroutine(routine_org, warnings):
 
         raise ValueError(f"Unsupported operation: {type(rhs)}")
 
+    # convert user functions from OpFuncUser to CallStatement
+    routine_org.content.convert_userfunc()[0]
+
     saved_vars = []
     ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True)[0]
     #print("subroutine: ", subroutine.name) # for debug

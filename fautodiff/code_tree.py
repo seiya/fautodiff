@@ -16,6 +16,7 @@ from .operators import (
     OpInt,
     OpReal,
     OpRange,
+    OpFuncUser
 )
 
 from .var_dict import (
@@ -151,6 +152,9 @@ class Node:
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         """Yield variables which is assigned in this node w/o children nodes."""
         return iter(())
+
+    def convert_userfunc(self) -> [Node]:
+        return [self]
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False) -> List["Node"]:
         """New with converted assignment nodes."""
@@ -308,6 +312,11 @@ class Node:
         """
         return assigned_vars
 
+    # ------------------------------------------------------------------
+    # other helpers
+    # ------------------------------------------------------------------
+    def _save_var_name(self, name: str, id: int) -> str:
+        return f"{name}_save_{id}{AD_SUFFIX}"
 
 @dataclass
 class Block(Node):
@@ -320,6 +329,12 @@ class Block(Node):
 
     def __getitem__(self, index: int) -> Node:
         return self.__children[index]
+
+    def convert_userfunc(self) -> List[Node]:
+        children = []
+        for child in self.iter_children():
+            children.extend(child.convert_userfunc())
+        return [Block(children)]
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False) -> List[Node]:
         children = []
@@ -453,11 +468,12 @@ class Statement(Node):
 
 @dataclass
 class CallStatement(Node):
-    """Representation of a ``call`` statement."""
+    """Representation of a ``call`` statement or function call."""
 
     name: str
     args: List[Operator] = field(default_factory=list)
     intents: Optional[List[str]] = None
+    result: Optinal[OpVar] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -492,11 +508,34 @@ class CallStatement(Node):
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         intents = self.intents or ["in"] * len(self.args)
         yield from self._iter_vars(intents, ("out", "inout"))
+        if self.result is not None:
+            yield self.result
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         args = ", ".join([str(a) for a in self.args])
-        return [f"{space}call {self.name}({args})\n"]
+        if self.result is None:
+            return [f"{space}call {self.name}({args})\n"]
+        else:
+            return [f"{space}{self.result} = {self.name}({args})\n"]
+
+    def convert_userfunc(self) -> List[Node]:
+        assigns = []
+        args = copy.deepcopy(self.args)
+        found = False
+        for n, var in enumerate(self.collect_vars()):
+            if isinstance(var, OpFuncUser):
+                result = OpVar(name=_save_var_name(f"{var.name}{n}", self.get_id()))
+                callstmt = CallStatement(name=var.name, args=var.args, intents=var.intents, result=result)
+                assignes.extend(callstmt.convert_userfunc())
+                for i, arg in enumerate(args):
+                    args[i] = arg.replace_with(var, result)
+                found = True
+        if found:
+            assigns.append(CallStatement(name=self.name, args=args, intents=self.intents, result=self.result))
+            return assigns
+        else:
+            return [self]
 
 @dataclass
 class Module(Node):
@@ -670,6 +709,22 @@ class Assignment(Node):
     def is_effectively_empty(self) -> bool:
         return self.lhs == self.rhs
 
+    def convert_userfunc(self) -> List[Node]:
+        assigns = []
+        rhs = self.rhs.deep_clone()
+        found = False
+        for n, func in enumerate(rhs.find_userfunc()):
+            result = OpVar(name=self._save_var_name(f"{func.name}{n}", self.get_id()))
+            callstmt = CallStatement(name=func.name, args=func.args, intents=func.intents, result=result)
+            assigns.extend(callstmt.convert_userfunc())
+            rhs = rhs.replace_with(func, result)
+            found = True
+        if found:
+            assigns.append(Assignment(lhs=self.lhs, rhs=rhs, info=self.info))
+            return assigns
+        else:
+            return [self]
+
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False) -> List[Assignment]:
         assigns = [self._save_vars(self.lhs, saved_vars)]
         assigns.extend(func(self.lhs, self.rhs, self.info))
@@ -804,7 +859,7 @@ class SaveAssignment(Node):
             raise RuntimeError(f"Variable has aleady saved: {name}")
         if self.tmpvar is None:
             self.var = self.var.deep_clone()
-            self.tmpvar = OpVar(f"{name}_save_{self.id}{AD_SUFFIX}", index=self.var.index, is_real=self.var.is_real)
+            self.tmpvar = OpVar(self._save_var_name(name, id), index=self.var.index, is_real=self.var.is_real)
         if self.load:
             self.lhs = self.var
             self.rhs = self.tmpvar
