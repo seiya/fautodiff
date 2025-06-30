@@ -30,6 +30,7 @@ from .operators import (
     OpFuncUser,
     OpLog,
     OpRange,
+    INTRINSIC_FUNCTIONS,
 )
 
 from .code_tree import (
@@ -47,6 +48,7 @@ from .code_tree import (
     Statement,
     CallStatement,
 )
+
 
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
 
@@ -113,10 +115,16 @@ def _stmt2op(stmt, decls):
         name = stmt.items[0].tofortran()
         index = tuple(_stmt2op(x, decls) for x in stmt.items[1].items)
         decl = decls.find_by_name(name)
-        if decl is None: # must be function
-            name = name.lower()
-            args = [_stmt2op(arg, decls) for arg in getattr(stmt.items[1], "items", []) if not isinstance(arg, str)]
-            return OpFuncUser(name, args)
+        if decl is None:  # must be function
+            name_l = name.lower()
+            args = [
+                _stmt2op(arg, decls)
+                for arg in getattr(stmt.items[1], "items", [])
+                if not isinstance(arg, str)
+            ]
+            if name_l in INTRINSIC_FUNCTIONS:
+                return OpFunc(name_l, args)
+            return OpFuncUser(name_l, args)
         else:
             return OpVar(name=name, index=index, is_real=decl.is_real())
 
