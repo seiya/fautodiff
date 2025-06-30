@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar
+from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar, Callable
 import re
 import copy
 
@@ -473,7 +473,7 @@ class CallStatement(Node):
     name: str
     args: List[Operator] = field(default_factory=list)
     intents: Optional[List[str]] = None
-    result: Optinal[OpVar] = None
+    result: Optional[OpVar] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -518,6 +518,33 @@ class CallStatement(Node):
             return [f"{space}call {self.name}({args})\n"]
         else:
             return [f"{space}{self.result} = {self.name}({args})\n"]
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        intents = self.intents or ["in"] * len(self.args)
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.copy()
+            for arg, intent in zip(self.args, intents):
+                if intent in ("out", "inout"):
+                    for var in arg.collect_vars():
+                        vars.remove(var)
+            if self.result is not None:
+                vars.remove(self.result)
+        for arg, intent in zip(self.args, intents):
+            if intent in ("in", "inout"):
+                for var in arg.collect_vars():
+                    vars.push(var)
+        return vars
+
+    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False) -> List[Node]:
+        ad_call = getattr(self, "ad_call", None)
+        if ad_call is not None:
+            return [ad_call]
+        return [self]
 
     def convert_userfunc(self) -> List[Node]:
         assigns = []

@@ -216,10 +216,7 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
         subroutine.ad_content = ad_block
         return subroutine, False
 
-    # If there are no input gradients to propagate we can exit early
-    if not out_grad_args:
-        subroutine.ad_content = ad_block
-        return subroutine, False
+
 
     def _backward(lhs: OpVar, rhs: Operator, info: dict) -> List[Assignment]:
         if not lhs.is_real:
@@ -266,6 +263,49 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
             _set_call_intents(child)
 
     _set_call_intents(routine_org.content)
+
+    call_ad_vars = []
+
+    def _prepare_calls(node):
+        if isinstance(node, CallStatement):
+            intents = node.intents or ["in"] * len(node.args)
+            grad_args = []
+            grad_intents = []
+            for arg, intent in zip(node.args, intents):
+                if isinstance(arg, OpVar):
+                    try:
+                        var = routine_org.get_var(arg.name)
+                    except ValueError:
+                        continue
+                    if var.ad_target:
+                        gname = f"{arg.name}{AD_SUFFIX}"
+                        grad_args.append(OpVar(gname, index=arg.index, kind=var.kind))
+                        grad_intents.append({"in": "out", "inout": "inout", "out": "inout"}.get(intent, "out"))
+                        call_ad_vars.append(gname)
+            if node.result is not None and isinstance(node.result, OpVar):
+                try:
+                    var = routine_org.get_var(node.result.name)
+                except ValueError:
+                    var = None
+                if var is not None and var.ad_target:
+                    gname = f"{node.result.name}{AD_SUFFIX}"
+                    grad_args.append(OpVar(gname, index=node.result.index, kind=var.kind))
+                    grad_intents.append("inout")
+                    call_ad_vars.append(gname)
+            node.ad_call = CallStatement(
+                name=f"{node.name}{AD_SUFFIX}",
+                args=list(node.args) + grad_args,
+                intents=intents + grad_intents,
+            )
+        for child in getattr(node, "iter_children", lambda: [])():
+            _prepare_calls(child)
+
+    _prepare_calls(routine_org.content)
+
+    # If there are no input gradients to propagate we can exit early
+    if not out_grad_args and not call_ad_vars:
+        subroutine.ad_content = ad_block
+        return subroutine, False
 
     saved_vars = []
     ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True)[0]
@@ -340,6 +380,17 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
     for var in vars:
         if subroutine.decls.find_by_name(var) is None:
             decl = routine_org.decls.find_by_name(var)
+            if decl is None and var.endswith(AD_SUFFIX):
+                base = var.removesuffix(AD_SUFFIX)
+                base_decl = routine_org.decls.find_by_name(base)
+                if base_decl is not None:
+                    decl = Declaration(
+                        var,
+                        base_decl.typename,
+                        base_decl.kind,
+                        base_decl.dims,
+                        None,
+                    )
             if decl is not None:
                 if decl.intent is not None and decl.intent == "out":
                     decl.intent = None
