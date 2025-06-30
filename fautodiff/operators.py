@@ -883,6 +883,28 @@ class OpFunc(Operator):
         return None
 
 @dataclass
+class OpFuncUser(Operator):
+
+    name: str = field(default="")
+    PRIORITY: ClassVar[int] = 1
+
+    def __init__(self, name: str, args:List[Operator]):
+        super().__init__(args=args)
+        if not name:
+            raise ValueError("name should not be empty")
+        self.name = name
+
+    def __str__(self) -> str:
+        args = []
+        for arg in self.args:
+            args.append(f"{arg}")
+        args = ", ".join(args)
+        return f"{self.name}({args})"
+
+    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+        raise NotImplementedError
+
+@dataclass
 class OpRange(Operator):
 
     def __post_init__(self):

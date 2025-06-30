@@ -1,14 +1,11 @@
 import sys
 from pathlib import Path
 import unittest
+import textwrap
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff import parser, code_tree, operators
-from fparser.common.readfortran import FortranStringReader
-from fparser.two.parser import ParserFactory
-from fparser.two import Fortran2003
-from fparser.two.utils import walk
 
 
 class TestParser(unittest.TestCase):
@@ -32,70 +29,70 @@ class TestParser(unittest.TestCase):
         self.assertIn("multiply_numbers", routine_names)
 
     def test_parse_call_stmt(self):
-        src = """
-subroutine wrapper(x)
-  integer :: x
-  call foo(x)
-end subroutine wrapper
-"""
-        reader = FortranStringReader(src)
-        factory = ParserFactory().create(std="f2008")
-        ast = factory(reader)
-        sub = walk(ast, Fortran2003.Subroutine_Subprogram)[0]
-        routine = parser._parse_routine(sub, "<string>")
+        src = textwrap.dedent("""\
+        module test
+        contains
+          subroutine wrapper(x)
+            integer :: x
+            call foo(x)
+          end subroutine wrapper
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
         stmt = routine.content.first()
         self.assertIsInstance(stmt, code_tree.CallStatement)
         self.assertEqual(stmt.name, "foo")
 
     def test_parse_call_stmt_in_function(self):
-        src = """
-function wrapper(x) result(y)
-  integer :: x, y
-  call foo(x)
-  y = x
-end function wrapper
-"""
-        reader = FortranStringReader(src)
-        factory = ParserFactory().create(std="f2008")
-        ast = factory(reader)
-        func = walk(ast, Fortran2003.Function_Subprogram)[0]
-        routine = parser._parse_routine(func, "<string>")
+        src = textwrap.dedent("""\
+        module test
+        contains
+          function wrapper(x) result(y)
+            integer :: x, y
+            call foo(x)
+            y = x
+          end function wrapper
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
         stmt = routine.content.first()
         self.assertIsInstance(stmt, code_tree.CallStatement)
         self.assertEqual(stmt.name, "foo")
 
     def test_parse_function_call_assignment(self):
-        src = """
-subroutine wrapper(x, y)
-  integer :: x, y
-  y = foo(x)
-end subroutine wrapper
-"""
-        reader = FortranStringReader(src)
-        factory = ParserFactory().create(std="f2008")
-        ast = factory(reader)
-        sub = walk(ast, Fortran2003.Subroutine_Subprogram)[0]
-        routine = parser._parse_routine(sub, "<string>")
+        src = textwrap.dedent("""\
+        module test
+        contains
+          subroutine wrapper(x, y)
+            integer :: x, y
+            y = foo(x)
+          end subroutine wrapper
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
         stmt = routine.content.first()
         self.assertIsInstance(stmt, code_tree.Assignment)
-        self.assertIsInstance(stmt.rhs, operators.OpFunc)
+        self.assertIsInstance(stmt.rhs, operators.OpFuncUser)
         self.assertEqual(stmt.rhs.name, "foo")
 
     def test_parse_function_call_assignment_in_function(self):
-        src = """
-function wrapper(x) result(y)
-  integer :: x, y
-  y = foo(x)
-end function wrapper
-"""
-        reader = FortranStringReader(src)
-        factory = ParserFactory().create(std="f2008")
-        ast = factory(reader)
-        func = walk(ast, Fortran2003.Function_Subprogram)[0]
-        routine = parser._parse_routine(func, "<string>")
+        src = textwrap.dedent("""\
+        module test
+        contains
+          function wrapper(x) result(y)
+            integer :: x, y
+            y = foo(x)
+          end function wrapper
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
         stmt = routine.content.first()
         self.assertIsInstance(stmt, code_tree.Assignment)
-        self.assertIsInstance(stmt.rhs, operators.OpFunc)
+        self.assertIsInstance(stmt.rhs, operators.OpFuncUser)
         self.assertEqual(stmt.rhs.name, "foo")
 
 

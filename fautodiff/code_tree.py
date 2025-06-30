@@ -318,6 +318,9 @@ class Block(Node):
     def iter_children(self) -> Iterator[Node]:
         return iter(self.__children)
 
+    def __getitem__(self, index: int) -> Node:
+        return self.__children[index]
+
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False) -> List[Node]:
         children = []
         iterator = self.__children
