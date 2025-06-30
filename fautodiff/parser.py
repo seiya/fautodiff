@@ -27,6 +27,7 @@ from .operators import (
     OpPow,
     OpNeg,
     OpFunc,
+    OpFuncUser,
     OpLog,
     OpRange,
 )
@@ -44,6 +45,7 @@ from .code_tree import (
     DoWhile,
     SelectBlock,
     Statement,
+    CallStatement,
 )
 
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
@@ -114,7 +116,7 @@ def _stmt2op(stmt, decls):
         if decl is None: # must be function
             name = name.lower()
             args = [_stmt2op(arg, decls) for arg in getattr(stmt.items[1], "items", []) if not isinstance(arg, str)]
-            return OpFunc(name, args)
+            return OpFuncUser(name, args)
         else:
             return OpVar(name=name, index=index, is_real=decl.is_real())
 
@@ -197,6 +199,14 @@ __all__ = [
 def parse_file(path):
     """Parse ``path`` and return a list of :class:`Module` nodes."""
     reader = FortranFileReader(path)
+    return _parse_from_reader(reader, path)
+
+def parse_src(src):
+    """Parse ``srch`` and return a list of :class:`Module` nodes."""
+    reader = FortranStringReader(src)
+    return _parse_from_reader(reader, "<string>")
+
+def _parse_from_reader(reader, src_name):
     factory = ParserFactory().create(std="f2008")
     ast = factory(reader)
     output = []
@@ -209,7 +219,7 @@ def parse_file(path):
             if isinstance(part, Fortran2003.Module_Subprogram_Part):
                 for c in part.content:
                     if isinstance(c, (Fortran2003.Function_Subprogram, Fortran2003.Subroutine_Subprogram)):
-                        mod_node.routines.append(_parse_routine(c, path))
+                        mod_node.routines.append(_parse_routine(c, src_name))
                 break
     return output
 
@@ -235,7 +245,7 @@ def find_subroutines(modules):
     return names
 
 
-def _parse_routine(content, filename):
+def _parse_routine(content, src_name):
     """Return node tree correspoinding to the input AST"""
     def _parse_decls(spec):
         """Return mapping of variable names to ``(type, intent)``."""
@@ -283,11 +293,20 @@ def _parse_routine(content, filename):
             if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
                 line_no = stmt.item.span[0]
             info = {
-                "file": filename,
+                "file": src_name,
                 "line": line_no,
                 "code": stmt.tofortran().strip(),
             }
             return Assignment(lhs, rhs, False, info)
+        if isinstance(stmt, Fortran2003.Call_Stmt):
+            name = stmt.items[0].tofortran()
+            args = []
+            if stmt.items[1] is not None:
+                for arg in stmt.items[1].items:
+                    if isinstance(arg, str):
+                        continue
+                    args.append(_stmt2op(arg, decls))
+            return CallStatement(name, args)
         if isinstance(stmt, Fortran2003.If_Construct):
             cond_blocks = []
             cond = _stmt2op(stmt.content[0].items[0], decls)
@@ -372,7 +391,9 @@ def _parse_routine(content, filename):
     def _block(body_list, decls):
         blk = Block([])
         for st in body_list:
-            blk.append(_parse_stmt(st, decls))
+            node = _parse_stmt(st, decls)
+            if node is not None:
+                blk.append(node)
         return blk
 
     stmt = content.content[0]

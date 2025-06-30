@@ -1,10 +1,11 @@
 import sys
 from pathlib import Path
 import unittest
+import textwrap
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff import parser
+from fautodiff import parser, code_tree, operators
 
 
 class TestParser(unittest.TestCase):
@@ -26,6 +27,74 @@ class TestParser(unittest.TestCase):
         routine_names = [r.name for r in mod.routines]
         self.assertIn("add_numbers", routine_names)
         self.assertIn("multiply_numbers", routine_names)
+
+    def test_parse_call_stmt(self):
+        src = textwrap.dedent("""\
+        module test
+        contains
+          subroutine wrapper(x)
+            integer :: x
+            call foo(x)
+          end subroutine wrapper
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        stmt = routine.content.first()
+        self.assertIsInstance(stmt, code_tree.CallStatement)
+        self.assertEqual(stmt.name, "foo")
+
+    def test_parse_call_stmt_in_function(self):
+        src = textwrap.dedent("""\
+        module test
+        contains
+          function wrapper(x) result(y)
+            integer :: x, y
+            call foo(x)
+            y = x
+          end function wrapper
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        stmt = routine.content.first()
+        self.assertIsInstance(stmt, code_tree.CallStatement)
+        self.assertEqual(stmt.name, "foo")
+
+    def test_parse_function_call_assignment(self):
+        src = textwrap.dedent("""\
+        module test
+        contains
+          subroutine wrapper(x, y)
+            integer :: x, y
+            y = foo(x)
+          end subroutine wrapper
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        stmt = routine.content.first()
+        self.assertIsInstance(stmt, code_tree.Assignment)
+        self.assertIsInstance(stmt.rhs, operators.OpFuncUser)
+        self.assertEqual(stmt.rhs.name, "foo")
+
+    def test_parse_function_call_assignment_in_function(self):
+        src = textwrap.dedent("""\
+        module test
+        contains
+          function wrapper(x) result(y)
+            integer :: x, y
+            y = foo(x)
+          end function wrapper
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        stmt = routine.content.first()
+        self.assertIsInstance(stmt, code_tree.Assignment)
+        self.assertIsInstance(stmt.rhs, operators.OpFuncUser)
+        self.assertEqual(stmt.rhs.name, "foo")
+
 
 
 if __name__ == "__main__":
