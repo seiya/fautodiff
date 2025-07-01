@@ -7,6 +7,8 @@ contains
     real, intent(inout) :: a
     real, intent(inout) :: a_ad
 
+    a_ad = a_ad * 2.0 ! a = a * 2.0
+
     return
   end subroutine foo_ad
 

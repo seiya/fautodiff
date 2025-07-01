@@ -162,18 +162,22 @@ def _contains_pushpop(node) -> bool:
 
 
 def _prepare_ad_header(routine_org):
-    """Prepare AD subroutine header and store argument info to routine."""
+    """Prepare AD subroutine header and returns argument info."""
 
     args = []
     grad_args = []
     out_grad_args = []
     has_grad_input = False
 
+    arg_info = {"args": [], "intents": [], "ad_name": None, "ad_args": [], "ad_intents": []}
+
     for arg in routine_org.arg_vars():
         name = arg.name
         typ = arg.typename
         dims = arg.dims
-        intent = arg.intent
+        intent = arg.intent or "inout"
+        arg_info["args"].append(name)
+        arg_info["intents"].append(intent)
         if intent == "out":
             if arg.ad_target:
                 ad_name = f"{name}{AD_SUFFIX}"
@@ -185,45 +189,40 @@ def _prepare_ad_header(routine_org):
             args.append(arg)
             if arg.ad_target:
                 ad_name = f"{name}{AD_SUFFIX}"
-                grad_int = {
+                grad_intent = {
                     "in": "out",
                     "inout": "inout",
-                }.get(intent, "out")
-                var = Variable(ad_name, typ, arg.kind, dims, grad_int)
+                }.get(intent)
+                var = Variable(ad_name, typ, arg.kind, dims, grad_intent)
                 args.append(var)
                 grad_args.append(var)
-                if grad_int == "out":
+                if grad_intent == "out":
                     out_grad_args.append(var)
                 else:
                     has_grad_input = True
+    if routine_org.result is not None:
+        arg_info["intents"] = arg_info["intents"][:-1]
 
     ad_name = f"{routine_org.name}{AD_SUFFIX}"
     subroutine = Subroutine(ad_name, [v.name for v in args])
+    arg_info["ad_name"] = ad_name
     for var in args:
         subroutine.decls.append(var.to_decl())
+        arg_info["ad_args"].append(var.name)
+        arg_info["ad_intents"].append(var.intent)
+
     subroutine.ad_init = Block([])
     subroutine.ad_content = Block([])
 
-    intents = [v.intent or "in" for v in routine_org.arg_vars()]
-    if routine_org.result is not None:
-        call_intents = intents[:-1]
-    else:
-        call_intents = intents
-
-    routine_org.ad_arg_info = (
-        list(routine_org.args),
-        call_intents,
-        list(subroutine.args),
-    )
-    routine_org._ad_header = subroutine
+    routine_org._ad_routine = subroutine
     routine_org._grad_args = grad_args
     routine_org._out_grad_args = out_grad_args
     routine_org._has_grad_input = has_grad_input
 
-    return subroutine
+    return arg_info
 
 def _generate_ad_subroutine(routine_org, routine_map, warnings):
-    subroutine = routine_org._ad_header
+    subroutine = routine_org._ad_routine
     grad_args = routine_org._grad_args
     out_grad_args = routine_org._out_grad_args
     has_grad_input = routine_org._has_grad_input
@@ -236,7 +235,6 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
             ad_block.append(Assignment(lhs, OpReal("0.0", kind=arg.kind)))
         subroutine.ad_content = ad_block
         return subroutine, False
-
 
 
     def _backward(lhs: OpVar, rhs: Operator, info: dict) -> List[Assignment]:
@@ -274,90 +272,19 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
     # convert user functions from OpFuncUser to CallStatement
     routine_org.content.convert_userfunc()[0]
 
-    # populate CallStatement intents from routine declarations
+    # populate CallStatement intents from routine map
     def _set_call_intents(node):
         if isinstance(node, CallStatement):
-            callee = routine_map.get(node.name)
-            if callee is not None and callee.ad_arg_info is not None:
-                node.intents = list(callee.ad_arg_info[1])
+            arg_info = routine_map.get(node.name)
+            if arg_info is not None and "intents" in arg_info:
+                node.intents = list(arg_info["intents"])
         for child in getattr(node, "iter_children", lambda: [])():
             _set_call_intents(child)
 
     _set_call_intents(routine_org.content)
 
-    call_ad_vars = []
-
-    def _prepare_calls(node):
-        if isinstance(node, CallStatement):
-            callee = routine_map.get(node.name)
-            if callee is not None and callee.ad_arg_info is not None:
-                call_intents = callee.ad_arg_info[1]
-            else:
-                call_intents = node.intents or ["in"] * len(node.args)
-            intents = node.intents or call_intents
-
-            grad_args = []
-            grad_intents = []
-
-            if callee is not None and callee.ad_arg_info is not None:
-                callee_vars = callee.arg_vars()
-                if callee.result is not None:
-                    callee_vars_nores = callee_vars[:-1]
-                else:
-                    callee_vars_nores = callee_vars
-                for arg_var, arg_op, intent in zip(callee_vars_nores, node.args, intents):
-                    if isinstance(arg_op, OpVar) and arg_var.ad_target:
-                        gname = f"{arg_op.name}{AD_SUFFIX}"
-                        grad_args.append(OpVar(gname, index=arg_op.index, kind=arg_var.kind))
-                        grad_intents.append({"in": "out", "inout": "inout", "out": "inout"}.get(intent, "out"))
-                        call_ad_vars.append(gname)
-                if node.result is not None and isinstance(node.result, OpVar) and callee.result is not None:
-                    rvar = callee.get_var(callee.result)
-                    if rvar.ad_target:
-                        gname = f"{node.result.name}{AD_SUFFIX}"
-                        grad_args.append(OpVar(gname, index=node.result.index, kind=rvar.kind))
-                        grad_intents.append("inout")
-                        call_ad_vars.append(gname)
-            else:
-                for arg, intent in zip(node.args, intents):
-                    if isinstance(arg, OpVar):
-                        try:
-                            var = routine_org.get_var(arg.name)
-                        except ValueError:
-                            continue
-                        if var.ad_target:
-                            gname = f"{arg.name}{AD_SUFFIX}"
-                            grad_args.append(OpVar(gname, index=arg.index, kind=var.kind))
-                            grad_intents.append({"in": "out", "inout": "inout", "out": "inout"}.get(intent, "out"))
-                            call_ad_vars.append(gname)
-                if node.result is not None and isinstance(node.result, OpVar):
-                    try:
-                        var = routine_org.get_var(node.result.name)
-                    except ValueError:
-                        var = None
-                    if var is not None and var.ad_target:
-                        gname = f"{node.result.name}{AD_SUFFIX}"
-                        grad_args.append(OpVar(gname, index=node.result.index, kind=var.kind))
-                        grad_intents.append("inout")
-                        call_ad_vars.append(gname)
-
-            node.ad_call = CallStatement(
-                name=f"{node.name}{AD_SUFFIX}",
-                args=list(node.args) + grad_args,
-                intents=intents + grad_intents,
-            )
-        for child in getattr(node, "iter_children", lambda: [])():
-            _prepare_calls(child)
-
-    _prepare_calls(routine_org.content)
-
-    # If there are no input gradients to propagate we can exit early
-    if not out_grad_args and not call_ad_vars:
-        subroutine.ad_content = ad_block
-        return subroutine, False
-
     saved_vars = []
-    ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True)[0]
+    ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True, routine_map=routine_map)[0]
     #print("subroutine: ", subroutine.name) # for debug
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
 
@@ -490,8 +417,7 @@ def generate_ad(in_file, out_file=None, warn=True):
     routine_map = {}
     for mod_org in modules_org:
         for r in mod_org.routines:
-            _prepare_ad_header(r)
-            routine_map[r.name] = r
+            routine_map[r.name] = _prepare_ad_header(r)
 
     for mod_org in modules_org:
         name = mod_org.name

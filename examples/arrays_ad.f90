@@ -23,6 +23,11 @@ contains
     integer, intent(in)  :: n
     real, intent(inout) :: a(n)
     real, intent(inout) :: a_ad(n)
+    integer :: i
+
+    do i = n, 1, - 1
+      a_ad(i) = a_ad(i) * 2.0 ! a(i) = a(i) * 2.0
+    end do
 
     return
   end subroutine scale_array_ad
