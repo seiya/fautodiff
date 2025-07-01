@@ -1,4 +1,5 @@
 module control_flow_ad
+  use control_flow
   implicit none
 
 contains

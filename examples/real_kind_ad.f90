@@ -1,4 +1,5 @@
 module real_kind_ad
+  use real_kind
   implicit none
 
 contains

@@ -473,6 +473,7 @@ class Block(Node):
             assigned_vars = child.check_initial(assigned_vars)
         return assigned_vars
 
+
 @dataclass
 class Statement(Node):
     """Representation of a Fortran statement."""
@@ -481,6 +482,20 @@ class Statement(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         lines = [f"{space}{self.body}\n"]
+        return lines
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+
+@dataclass
+class Use(Node):
+    """Representation of a Fortran use statement."""
+    name: str
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        lines = [f"{space}use {self.name}\n"]
         return lines
 
     def is_effectively_empty(self) -> bool:
@@ -650,6 +665,13 @@ class Module(Node):
         lines.append(f"{space}end module {self.name}\n")
         return lines
 
+
+    def find_use_modules(self) -> List[str]:
+        mods = []
+        for child in self.body.iter_children():
+            if isinstance(child, Use):
+                mods.append(child.name)
+        return mods
 
 @dataclass
 class Routine(Node):

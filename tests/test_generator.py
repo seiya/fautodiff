@@ -15,7 +15,7 @@ class TestGenerator(unittest.TestCase):
         code_tree.Node.reset()
         generated = generator.generate_ad("examples/store_vars.f90", warn=False)
         lines = generated.splitlines()
-        self.assertIn("use fautodiff_data_storage", lines[1])
+        self.assertIn("use fautodiff_data_storage", lines[2])
         idx_use = next(i for i, l in enumerate(lines) if "use fautodiff_data_storage" in l)
         idx_imp = next(i for i, l in enumerate(lines) if "implicit none" in l)
         self.assertLess(idx_use, idx_imp)
