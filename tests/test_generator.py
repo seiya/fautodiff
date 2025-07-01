@@ -23,7 +23,7 @@ class TestGenerator(unittest.TestCase):
     def test_cross_mod_a_writes_fadmod(self):
         code_tree.Node.reset()
         src = Path("examples/cross_mod_a.f90")
-        fadmod = src.with_name("cross_mod_a.fadmod")
+        fadmod = Path("cross_mod_a.fadmod")
         if fadmod.exists():
             fadmod.unlink()
         generated = generator.generate_ad(str(src), warn=False)
@@ -33,12 +33,12 @@ class TestGenerator(unittest.TestCase):
 
     def test_cross_mod_b_loads_fadmod(self):
         code_tree.Node.reset()
-        # ensure fadmod exists
+        # ensure fadmod exists in current directory
         generator.generate_ad("examples/cross_mod_a.f90", warn=False)
         generated = generator.generate_ad(
             "examples/cross_mod_b.f90",
             warn=False,
-            search_dirs=["examples"],
+            search_dirs=["."],
         )
         expected = Path("examples/cross_mod_b_ad.f90").read_text()
         self.assertEqual(generated, expected)
