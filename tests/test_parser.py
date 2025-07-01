@@ -95,6 +95,53 @@ class TestParser(unittest.TestCase):
         self.assertIsInstance(stmt.rhs, operators.OpFuncUser)
         self.assertEqual(stmt.rhs.name, "foo")
 
+    def test_parse_real_kind_8(self):
+        src = textwrap.dedent("""\
+        module test
+        contains
+          subroutine foo(x)
+            real(kind=8) :: x
+          end subroutine foo
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        decl = routine.decls.find_by_name("x")
+        self.assertIsNotNone(decl)
+        self.assertEqual(decl.kind, "8")
+
+    def test_parse_real_kind_rp(self):
+        src = textwrap.dedent("""\
+        module test
+        integer, parameter :: RP = kind(1.0d0)
+        contains
+          subroutine foo(x)
+            real(kind=RP) :: x
+          end subroutine foo
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        decl = routine.decls.find_by_name("x")
+        self.assertIsNotNone(decl)
+        self.assertEqual(decl.kind, "RP")
+
+    def test_parse_double_precision(self):
+        src = textwrap.dedent("""\
+        module test
+        contains
+          subroutine foo(x)
+            double precision :: x
+          end subroutine foo
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        decl = routine.decls.find_by_name("x")
+        self.assertIsNotNone(decl)
+        self.assertEqual(decl.typename.lower(), "double precision")
+        self.assertIsNone(decl.kind)
+
 
 
 if __name__ == "__main__":
