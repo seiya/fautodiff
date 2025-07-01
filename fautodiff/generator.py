@@ -169,19 +169,24 @@ def _prepare_ad_header(routine_org):
     out_grad_args = []
     has_grad_input = False
 
-    arg_info = {"args": [], "intents": [], "ad_name": None, "ad_args": [], "ad_intents": []}
+    arg_info = {"args": [], "intents": [], "dims" : [], "type": [], "kind": [],
+                "ad_name": None, "ad_args": [], "ad_intents": []}
 
     for arg in routine_org.arg_vars():
         name = arg.name
         typ = arg.typename
         dims = arg.dims
         intent = arg.intent or "inout"
+        kind = arg.kind
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
+        arg_info["type"].append(typ)
+        arg_info["dims"].append(dims)
+        arg_info["kind"].append(kind)
         if intent == "out":
             if arg.ad_target:
                 ad_name = f"{name}{AD_SUFFIX}"
-                var = Variable(ad_name, typ, arg.kind, dims, "inout")
+                var = Variable(ad_name, typ, kind, dims, "inout")
                 args.append(var)
                 grad_args.append(var)
                 has_grad_input = True
@@ -193,7 +198,7 @@ def _prepare_ad_header(routine_org):
                     "in": "out",
                     "inout": "inout",
                 }.get(intent)
-                var = Variable(ad_name, typ, arg.kind, dims, grad_intent)
+                var = Variable(ad_name, typ, kind, dims, grad_intent)
                 args.append(var)
                 grad_args.append(var)
                 if grad_intent == "out":
@@ -243,7 +248,8 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
         grad_lhs = lhs.add_suffix(AD_SUFFIX)
 
         #ad_info = f"{lhs} = {rhs} @ line {info.get('line','?')}"
-        ad_info = f"{lhs} = {rhs}"
+        #ad_info = f"{lhs} = {rhs}"
+        ad_info = info["code"]
 
         if isinstance(rhs, OpFunc):
             handler = rhs.special_handler(grad_lhs, rhs.args)
@@ -268,9 +274,6 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
         return assigns
 
         raise ValueError(f"Unsupported operation: {type(rhs)}")
-
-    # convert user functions from OpFuncUser to CallStatement
-    routine_org.content.convert_userfunc()[0]
 
     # populate CallStatement intents from routine map
     def _set_call_intents(node):
@@ -300,9 +303,10 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
                 if found:
                     continue # already declared
                 v_org = routine_org.get_var(name.removesuffix(AD_SUFFIX))
-                v = Variable(name=name, typename=v_org.typename, kind=v_org.kind, dims=v_org.dims)
-                if not subroutine.is_declared(name):
-                    subroutine.decls.append(v.to_decl())
+                if v_org is not None:
+                    v = Variable(name=name, typename=v_org.typename, kind=v_org.kind, dims=v_org.dims)
+                    if not subroutine.is_declared(name):
+                        subroutine.decls.append(v.to_decl())
 
         # check initialization for AD variables with intent(out)
         vars = []
@@ -372,26 +376,43 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
                     decl.intent = None
                 subroutine.decls.append(decl)
 
-    for sa in reversed(saved_vars):
-        try:
-            v_org = routine_org.get_var(sa.var.name)
-        except ValueError as e:
-            ad_block.extend(ad_code)
-            print("".join(subroutine.render()))
-            raise
-        if sa.reduced_dims:
-            dims = []
-            for i, idx in enumerate(v_org.dims):
-                if not i in sa.reduced_dims:
-                    dims.append(idx)
-            if len(dims) == 0:
-                dims = None
-            else:
-                dims = tuple(dims)
-        else:
+    for var in reversed(saved_vars):
+        v_org = None
+        if var.reference is not None:
+            try:
+                v_org = routine_org.get_var(var.reference.name)
+            except ValueError as e:
+                ad_block.extend(ad_code)
+                print("".join(subroutine.render()))
+                raise
+        if var.dims is not None:
             dims = v_org.dims
-        v = Variable(name=sa.tmpvar.name, typename=v_org.typename, kind=v_org.kind, dims=dims)
-        subroutine.decls.append(v.to_decl())
+        elif v_org is not None:
+            if var.reduced_dims is not None:
+                dims = []
+                for i, idx in enumerate(v_org.dims):
+                    if not i in var.reduced_dims:
+                        dims.append(idx)
+                if len(dims) == 0:
+                    dims = None
+                else:
+                    dims = tuple(dims)
+            else:
+                dims = v_org.dims
+        else:
+            dims = None
+        if v_org:
+            typename = v_org.typename
+        elif var.is_real:
+            typename = "real"
+        else:
+            raise RuntimeError("typename cannot be identified")
+        if v_org:
+            kind = v_org.kind
+        else:
+            kind = var.kind
+        var = Variable(name=var.name, typename=typename, kind=kind, dims=dims)
+        subroutine.decls.append(var.to_decl())
 
     subroutine = subroutine.prune_for(VarList([OpVar(var.name) for var in grad_args]))
 

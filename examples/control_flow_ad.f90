@@ -16,8 +16,8 @@ contains
       x_ad = z_ad ! z = x
       z_ad = 0.0 ! z = x
     else if (x < 0.0) then
-      x_ad = - z_ad ! z = - x
-      z_ad = 0.0 ! z = - x
+      x_ad = - z_ad ! z = -x
+      z_ad = 0.0 ! z = -x
     else
       z_ad = 0.0 ! z = 0.0
     end if

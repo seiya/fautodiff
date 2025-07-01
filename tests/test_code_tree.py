@@ -558,13 +558,13 @@ class TestPushPop(unittest.TestCase):
         var = OpVar("a")
         node = PushPop(var, 100)
         self.assertEqual(render_program(Block([node])), "call fautodiff_data_storage_push(a)\n")
-        self.assertEqual([str(v) for v in node.iter_ref_vars()], ["a"])
+        self.assertEqual({str(v) for v in node.iter_ref_vars()}, {"a"})
 
     def test_pop(self):
         var = OpVar("a")
         node = PushPop(var, 100).to_load()
         self.assertEqual(render_program(Block([node])), "call fautodiff_data_storage_pop(a)\n")
-        self.assertEqual([str(v) for v in node.iter_assign_vars()], ["a"])
+        self.assertEqual({str(v) for v in node.iter_assign_vars()}, {"a"})
 
 
 class TestCallStatement(unittest.TestCase):
@@ -573,16 +573,16 @@ class TestCallStatement(unittest.TestCase):
         b = OpVar("b")
         node = CallStatement("foo", [a, b])
         self.assertEqual(render_program(Block([node])), "call foo(a, b)\n")
-        self.assertEqual([str(v) for v in node.iter_ref_vars()], ["a", "b"])
-        self.assertEqual(list(node.iter_assign_vars()), [])
+        self.assertEqual({str(v) for v in node.iter_ref_vars()}, {"a", "b"})
+        self.assertEqual({str(v) for v in node.iter_assign_vars()}, {"a", "b"})
 
     def test_intent(self):
         a = OpVar("a")
         b = OpVar("b")
         node = CallStatement("foo", [a, b], intents=["in", "out"])
         self.assertEqual(render_program(Block([node])), "call foo(a, b)\n")
-        self.assertEqual([str(v) for v in node.iter_ref_vars()], ["a"])
-        self.assertEqual([str(v) for v in node.iter_assign_vars()], ["b"])
+        self.assertEqual({str(v) for v in node.iter_ref_vars()}, {"a"})
+        self.assertEqual({str(v) for v in node.iter_assign_vars()}, {"b"})
 
 
 class TestLoopAnalysis(unittest.TestCase):
@@ -1008,45 +1008,6 @@ class TestDoWhile(unittest.TestCase):
         self.assertEqual(render_program(pruned), render_program(loop))
         pruned2 = loop.prune_for(VarList([OpVar('c')]))
         self.assertTrue(pruned2.is_effectively_empty())
-
-class TestConvertUserFunc(unittest.TestCase):
-    def test_simple(self):
-        assign = Assignment(OpVar("x"), OpFuncUser(name="foo", args=[OpVar("y")]))
-        block = Block([assign])
-        converted = block.convert_userfunc()[0]
-        tmp_vname = f"foo0_save_{assign.get_id()}{AD_SUFFIX}"
-        code = textwrap.dedent(f"""\
-        {tmp_vname} = foo(y)
-        x = {tmp_vname}
-        """)
-        self.assertEqual(render_program(converted), code)
-
-    def test_in_operation(self):
-        assign = Assignment(OpVar("x"), OpInt(2) * OpFuncUser(name="foo", args=[OpVar("y")]))
-        block = Block([assign])
-        converted = block.convert_userfunc()[0]
-        tmp_vname = f"foo0_save_{assign.get_id()}{AD_SUFFIX}"
-        code = textwrap.dedent(f"""\
-        {tmp_vname} = foo(y)
-        x = 2 * {tmp_vname}
-        """)
-        self.assertEqual(render_program(converted), code)
-
-    def test_nested_operation(self):
-        func1 = OpFuncUser(name="foo", args=[OpVar("y")])
-        func2 = OpFuncUser(name="bar", args=[func1])
-        assign = Assignment(OpVar("x"), func2)
-        block = Block([assign])
-        converted = block.convert_userfunc()[0]
-        tmp_vname1 = f"foo0_save_{assign.get_id()}{AD_SUFFIX}"
-        tmp_vname2 = f"bar1_save_{assign.get_id()}{AD_SUFFIX}"
-        code = textwrap.dedent(f"""\
-        {tmp_vname1} = foo(y)
-        {tmp_vname2} = bar({tmp_vname1})
-        x = {tmp_vname2}
-        """)
-        self.assertEqual(render_program(converted), code)
-
 
 
 

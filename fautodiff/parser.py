@@ -294,17 +294,17 @@ def _parse_routine(content, src_name):
         return decls
 
     def _parse_stmt(stmt, decls) -> Node:
+        line_no = None
+        if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
+            line_no = stmt.item.span[0]
+        info = {
+            "file": src_name,
+            "line": line_no,
+            "code": stmt.string,
+        }
         if isinstance(stmt, Fortran2003.Assignment_Stmt):
             lhs = _stmt2op(stmt.items[0], decls)
             rhs = _stmt2op(stmt.items[2], decls)
-            line_no = None
-            if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
-                line_no = stmt.item.span[0]
-            info = {
-                "file": src_name,
-                "line": line_no,
-                "code": stmt.tofortran().strip(),
-            }
             return Assignment(lhs, rhs, False, info)
         if isinstance(stmt, Fortran2003.Call_Stmt):
             name = stmt.items[0].tofortran()
@@ -314,7 +314,7 @@ def _parse_routine(content, src_name):
                     if isinstance(arg, str):
                         continue
                     args.append(_stmt2op(arg, decls))
-            return CallStatement(name, args)
+            return CallStatement(name, args, info=info)
         if isinstance(stmt, Fortran2003.If_Construct):
             cond_blocks = []
             cond = _stmt2op(stmt.content[0].items[0], decls)
