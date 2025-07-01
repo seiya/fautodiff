@@ -264,6 +264,19 @@ def _parse_routine(content, src_name):
             if not isinstance(decl, Fortran2003.Type_Declaration_Stmt):
                 continue
             base_type = decl.items[0].string
+            kind = None
+            base_lower = base_type.lower()
+            if base_lower.startswith("real"):
+                # ``base_type`` may include a kind specification. Strip it so
+                # that ``typename`` is just ``real`` and store the kind value
+                # separately.
+                base_type = "real"
+                type_spec = decl.items[0]
+                if getattr(type_spec, "items", None) is not None and len(type_spec.items) > 1:
+                    selector = type_spec.items[1]
+                    if isinstance(selector, Fortran2003.Kind_Selector):
+                        kind_item = selector.items[1]
+                        kind = kind_item.tofortran()
             text = decl.tofortran().lower()
             if "intent(inout)" in text:
                 intent = "inout"
@@ -290,7 +303,7 @@ def _parse_routine(content, src_name):
                     dims = tuple(v.tofortran() for v in arrspec.items)
                 elif dim_attr is not None:
                     dims = dim_attr
-                decls.append(Declaration(name, base_type, None, dims, intent))
+                decls.append(Declaration(name, base_type, kind, dims, intent))
         return decls
 
     def _parse_stmt(stmt, decls) -> Node:
