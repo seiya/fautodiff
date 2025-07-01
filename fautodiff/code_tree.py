@@ -35,47 +35,11 @@ def _append_unique(items: List[str], name: str) -> None:
     if name not in items:
         items.append(name)
 
+
 def _extend_unique(items: List[str], names: List[str]) -> None:
     for name in names:
         if name not in items:
             items.append(name)
-
-@dataclass
-class Variable:
-    """Representation of a Fortran variable."""
-
-    name: str
-    typename: str
-    kind: Optional[str] = None
-    dims: Optional[Tuple[str]] = None
-    intent: Optional[str] = None
-    ad_target: Optional[bool] = None
-
-    def __post_init__(self) -> None:
-        if not _NAME_RE.fullmatch(self.name):
-            raise ValueError(f"invalid Fortran variable name: {self.name}")
-        if self.dims is not None and not isinstance(self.dims, tuple):
-            raise ValueError(f"dims must be tuple of str: {type(self.dims)}")
-        if self.dims is not None and len(self.dims) == 0:
-            raise ValueError("dimension must not be empty")
-        if self.ad_target is None:
-            typename = self.typename.lower()
-            self.ad_target = typename.startswith("real") or typename.startswith("double")
-
-    def is_array(self) -> bool:
-        """Return ``True`` if this variable represents an array."""
-        return self.dims is not None
-
-    def to_decl(self) -> Declaration:
-        """Return declaration node corresponding to self."""
-        return Declaration(self.name, self.typename, self.kind, self.dims, self.intent)
-
-    def __str__(self) -> str:
-        if self.dims is None:
-            return self.name
-        else:
-            dims = ",".join(self.dims)
-            return f"{self.name}({dims})"
 
 
 @dataclass
@@ -719,16 +683,24 @@ class Routine(Node):
         lines.append(f"{space}end {self.kind} {self.name}\n")
         return lines
 
-    def get_var(self, name: str) -> Optional[Variable]:
+    def get_var(self, name: str) -> Optional[OpVar]:
         decl = self.decls.find_by_name(name)
         if decl is None:
             return None
         intent = decl.intent
         if self.result == name:
             intent = "out"
-        return Variable(name, decl.typename, decl.kind, decl.dims, intent)
+        return OpVar(
+            name,
+            is_real=decl.is_real(),
+            kind=decl.kind,
+            dims=decl.dims,
+            typename=decl.typename,
+            intent=intent,
+            ad_target=None,
+        )
 
-    def arg_vars(self) -> List[Variable]:
+    def arg_vars(self) -> List[OpVar]:
         vars = []
         for arg in self.args:
             vars.append(self.get_var(arg))
