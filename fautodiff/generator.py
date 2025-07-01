@@ -160,17 +160,24 @@ def _contains_pushpop(node) -> bool:
             return True
     return False
 
-def _generate_ad_subroutine(routine_org, routine_map, warnings):
-    # Collect information of aruguments
+
+def _prepare_ad_header(routine_org):
+    """Prepare AD subroutine header and returns argument info."""
+
     args = []
-    out_grad_args = []
     grad_args = []
+    out_grad_args = []
     has_grad_input = False
+
+    arg_info = {"args": [], "intents": [], "ad_name": None, "ad_args": [], "ad_intents": []}
+
     for arg in routine_org.arg_vars():
         name = arg.name
         typ = arg.typename
         dims = arg.dims
-        intent = arg.intent
+        intent = arg.intent or "inout"
+        arg_info["args"].append(name)
+        arg_info["intents"].append(intent)
         if intent == "out":
             if arg.ad_target:
                 ad_name = f"{name}{AD_SUFFIX}"
@@ -182,31 +189,44 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
             args.append(arg)
             if arg.ad_target:
                 ad_name = f"{name}{AD_SUFFIX}"
-                grad_int = {
+                grad_intent = {
                     "in": "out",
                     "inout": "inout",
-                }.get(intent, "out")
-                var = Variable(ad_name, typ, arg.kind, dims, grad_int)
+                }.get(intent)
+                var = Variable(ad_name, typ, arg.kind, dims, grad_intent)
                 args.append(var)
                 grad_args.append(var)
-                if grad_int == "out":
+                if grad_intent == "out":
                     out_grad_args.append(var)
                 else:
                     has_grad_input = True
+    if routine_org.result is not None:
+        arg_info["intents"] = arg_info["intents"][:-1]
 
-    # Create Subroutine node for AD
-    name = routine_org.name
-    ad_name = f"{name}{AD_SUFFIX}"
-    arg_names = []
-    for arg in args:
-        arg_names.append(arg.name)
-    subroutine = Subroutine(ad_name, arg_names)
-    for arg in args:
-        subroutine.decls.append(arg.to_decl())
-    init_block = Block([])
-    ad_block = Block([])
-    subroutine.ad_init = init_block
-    subroutine.ad_content = ad_block
+    ad_name = f"{routine_org.name}{AD_SUFFIX}"
+    subroutine = Subroutine(ad_name, [v.name for v in args])
+    arg_info["ad_name"] = ad_name
+    for var in args:
+        subroutine.decls.append(var.to_decl())
+        arg_info["ad_args"].append(var.name)
+        arg_info["ad_intents"].append(var.intent)
+
+    subroutine.ad_init = Block([])
+    subroutine.ad_content = Block([])
+
+    routine_org._ad_routine = subroutine
+    routine_org._grad_args = grad_args
+    routine_org._out_grad_args = out_grad_args
+    routine_org._has_grad_input = has_grad_input
+
+    return arg_info
+
+def _generate_ad_subroutine(routine_org, routine_map, warnings):
+    subroutine = routine_org._ad_routine
+    grad_args = routine_org._grad_args
+    out_grad_args = routine_org._out_grad_args
+    has_grad_input = routine_org._has_grad_input
+    ad_block = subroutine.ad_content
 
     # If no derivative inputs exist, all output gradients remain zero
     if not has_grad_input:
@@ -216,10 +236,6 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
         subroutine.ad_content = ad_block
         return subroutine, False
 
-    # If there are no input gradients to propagate we can exit early
-    if not out_grad_args:
-        subroutine.ad_content = ad_block
-        return subroutine, False
 
     def _backward(lhs: OpVar, rhs: Operator, info: dict) -> List[Assignment]:
         if not lhs.is_real:
@@ -256,19 +272,19 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
     # convert user functions from OpFuncUser to CallStatement
     routine_org.content.convert_userfunc()[0]
 
-    # populate CallStatement intents from routine declarations
+    # populate CallStatement intents from routine map
     def _set_call_intents(node):
         if isinstance(node, CallStatement):
-            intents = routine_map.get(node.name)
-            if intents is not None:
-                node.intents = list(intents)
+            arg_info = routine_map.get(node.name)
+            if arg_info is not None and "intents" in arg_info:
+                node.intents = list(arg_info["intents"])
         for child in getattr(node, "iter_children", lambda: [])():
             _set_call_intents(child)
 
     _set_call_intents(routine_org.content)
 
     saved_vars = []
-    ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True)[0]
+    ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True, routine_map=routine_map)[0]
     #print("subroutine: ", subroutine.name) # for debug
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
 
@@ -340,6 +356,17 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
     for var in vars:
         if subroutine.decls.find_by_name(var) is None:
             decl = routine_org.decls.find_by_name(var)
+            if decl is None and var.endswith(AD_SUFFIX):
+                base = var.removesuffix(AD_SUFFIX)
+                base_decl = routine_org.decls.find_by_name(base)
+                if base_decl is not None:
+                    decl = Declaration(
+                        var,
+                        base_decl.typename,
+                        base_decl.kind,
+                        base_decl.dims,
+                        None,
+                    )
             if decl is not None:
                 if decl.intent is not None and decl.intent == "out":
                     decl.intent = None
@@ -390,10 +417,7 @@ def generate_ad(in_file, out_file=None, warn=True):
     routine_map = {}
     for mod_org in modules_org:
         for r in mod_org.routines:
-            intents = [v.intent or "in" for v in r.arg_vars()]
-            if r.result is not None:
-                intents = intents[:-1]
-            routine_map[r.name] = intents
+            routine_map[r.name] = _prepare_ad_header(r)
 
     for mod_org in modules_org:
         name = mod_org.name
