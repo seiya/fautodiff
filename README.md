@@ -60,6 +60,15 @@ differentiate.  Use ``--no-warn`` to silence these messages:
 python -m fautodiff.generator --no-warn examples/simple_math.f90
 ```
 
+Each module's routine signatures are also written to a `<module>.fadmod` file
+when AD code is generated.  These JSON files can be loaded when differentiating
+another file that uses the module.  Add search directories with ``-I`` (repeat
+as needed) and disable writing with ``--no-fadmod``:
+
+```bash
+python -m fautodiff.generator -I examples examples/cross_mod_b.f90
+```
+
 Run the included tests with:
 
 ```bash

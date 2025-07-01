@@ -7,6 +7,7 @@ AD_SUFFIX = "_ad"
 from pathlib import Path
 import sys
 import re
+import json
 
 from .operators import (
     OpReal,
@@ -159,6 +160,47 @@ def _contains_pushpop(node) -> bool:
         if _contains_pushpop(child):
             return True
     return False
+
+
+_USE_RE = re.compile(r"^\s*use\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
+
+
+def _find_used_modules(src: str) -> list[str]:
+    """Return module names referenced by ``use`` statements in ``src``."""
+    mods = []
+    for line in src.splitlines():
+        line = line.split("!")[0]
+        m = _USE_RE.match(line)
+        if m:
+            name = m.group(1)
+            if name not in mods:
+                mods.append(name)
+    return mods
+
+
+def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> dict:
+    """Load routine maps from ``mod_names`` using ``search_dirs``."""
+    result = {}
+    for mod in mod_names:
+        for d in search_dirs:
+            path = Path(d) / f"{mod}.fadmod"
+            if path.exists():
+                try:
+                    data = json.loads(path.read_text())
+                    result.update(data)
+                except Exception:
+                    pass
+                break
+    return result
+
+
+def _write_fadmod(mod_name: str, routines, routine_map: dict, directory: Path) -> None:
+    """Write ``routine_map`` info for ``mod_name`` to ``<mod_name>.fadmod``."""
+    data = {r.name: routine_map.get(r.name) for r in routines if r.name in routine_map}
+    if not data:
+        return
+    path = directory / f"{mod_name}.fadmod"
+    path.write_text(json.dumps(data, indent=2))
 
 
 def _prepare_ad_header(routine_org):
@@ -425,7 +467,7 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
     return subroutine, uses_pushpop
 
 
-def generate_ad(in_file, out_file=None, warn=True):
+def generate_ad(in_file, out_file=None, warn=True, search_dirs=None, write_fadmod=True):
     """Generate a very small reverse-mode AD version of ``in_file``.
 
     If ``out_file`` is ``None`` the generated code is returned as a string.
@@ -435,10 +477,17 @@ def generate_ad(in_file, out_file=None, warn=True):
     modules = []
     warnings = []
 
+    if search_dirs is None:
+        search_dirs = []
+
     routine_map = {}
     for mod_org in modules_org:
         for r in mod_org.routines:
             routine_map[r.name] = _prepare_ad_header(r)
+
+    if search_dirs:
+        used_mods = _find_used_modules(Path(in_file).read_text())
+        routine_map.update(_load_fadmods(used_mods, search_dirs))
 
     for mod_org in modules_org:
         name = mod_org.name
@@ -462,6 +511,9 @@ def generate_ad(in_file, out_file=None, warn=True):
     code = "\n".join(modules)
     if out_file:
         Path(out_file).write_text(code)
+    if write_fadmod:
+        for mod_org in modules_org:
+            _write_fadmod(mod_org.name, mod_org.routines, routine_map, Path(in_file).parent)
     if warn and warnings:
         for msg in warnings:
             print(f"Warning: {msg}", file=sys.stderr)
@@ -487,8 +539,26 @@ if __name__ == "__main__":
         action="store_true",
         help="suppress warnings about unsupported derivatives",
     )
+    parser_arg.add_argument(
+        "-I",
+        dest="search_dirs",
+        action="append",
+        default=[],
+        help="add directory to .fadmod search path (may be repeated)",
+    )
+    parser_arg.add_argument(
+        "--no-fadmod",
+        action="store_true",
+        help="do not write .fadmod information files",
+    )
     args = parser_arg.parse_args()
 
-    code = generate_ad(args.input, args.output, warn=not args.no_warn)
+    code = generate_ad(
+        args.input,
+        args.output,
+        warn=not args.no_warn,
+        search_dirs=args.search_dirs,
+        write_fadmod=not args.no_fadmod,
+    )
     if args.output is None:
         print(code, end="")
