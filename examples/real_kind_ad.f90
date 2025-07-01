@@ -25,7 +25,7 @@ contains
     double precision, intent(inout) :: x
     double precision, intent(inout) :: x_ad
 
-    x_ad = x_ad * 2.0e0d0 ! x = x * 2.0d0
+    x_ad = x_ad * 2.0d0 ! x = x * 2.0d0
 
     return
   end subroutine scale_dp_ad

@@ -554,17 +554,23 @@ class OpChr(OpLeaf):
 class OpReal(OpNum):
 
     val: str = field(default="-999.0e99")
+    expo: int = field(default=0)
 
-    def __init__(self, val, kind=None):
+    def __init__(self, val, kind=None, expo=None):
         super().__init__(args=[], kind=kind)
         self.val = val
 
     def __str__(self) -> str:
         if self.kind is not None:
+            if self.kind == "4":
+                return f"{self.val}e{self.expo}"
             if self.kind == "8":
-                return f"{self.val}d0"
+                return f"{self.val}d{self.expo}"
             if self.kind != "4":
-                return f"{self.val}_{self.kind}"
+                if self.expo != 0:
+                    return f"{self.val}e{self.expo}_{self.kind}"
+                else:
+                    return f"{self.val}_{self.kind}"
         return str(self.val)
 
 @dataclass

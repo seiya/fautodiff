@@ -202,7 +202,6 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path_a = tmp / 'cross_mod_a_ad.f90'
             ad_path_a.write_text(ad_code_a)
             ad_code_b = generator.generate_ad(str(tmp_b), warn=False, search_dirs=[str(tmp)])
-            ad_code_b = ad_code_b.replace('implicit none', 'use cross_mod_a_ad\n  implicit none', 1)
             ad_path_b = tmp / 'cross_mod_b_ad.f90'
             ad_path_b.write_text(ad_code_b)
             driver = Path(__file__).resolve().parent / 'fortran_runtime' / 'run_cross_mod.f90'
@@ -217,7 +216,6 @@ class TestFortranRuntime(unittest.TestCase):
         src = base / 'examples' / 'call_example.f90'
         code_tree.Node.reset()
         ad_code = generator.generate_ad(str(src), warn=False)
-        ad_code = ad_code.replace('implicit none', 'use call_example\n  implicit none', 1)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             ad_path = tmp / 'call_example_ad.f90'
@@ -235,8 +233,6 @@ class TestFortranRuntime(unittest.TestCase):
         src = base / 'examples' / 'real_kind.f90'
         code_tree.Node.reset()
         ad_code = generator.generate_ad(str(src), warn=False)
-        ad_code = ad_code.replace('implicit none', 'use real_kind\n  implicit none', 1)
-        ad_code = ad_code.replace('2.0e0d0', '2.0d0')
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             ad_path = tmp / 'real_kind_ad.f90'

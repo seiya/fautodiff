@@ -89,8 +89,8 @@ def _stmt2op(stmt, decls):
                 if expo[0].lower() == 'd':
                     kind = "8"
             if expo is not None:
-                val = f"{val}e{expo[1:]}"
-            ret = OpReal(val=val, kind=kind)
+                expo = int(expo[1:])
+            ret = OpReal(val=val, kind=kind, expo=expo)
             if sign is not None and sign[0] == '-':
                 ret = - ret
             return ret
