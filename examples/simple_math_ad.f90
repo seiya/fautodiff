@@ -1,4 +1,5 @@
 module simple_math_ad
+  use simple_math
   implicit none
 
 contains

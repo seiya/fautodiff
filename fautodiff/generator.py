@@ -29,6 +29,7 @@ from .code_tree import (
     ClearAssignment,
     SaveAssignment,
     PushPop,
+    Use,
     Statement,
     CallStatement,
     render_program,
@@ -89,22 +90,6 @@ def _contains_pushpop(node) -> bool:
         if _contains_pushpop(child):
             return True
     return False
-
-
-_USE_RE = re.compile(r"^\s*use\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
-
-
-def _find_used_modules(src: str) -> list[str]:
-    """Return module names referenced by ``use`` statements in ``src``."""
-    mods = []
-    for line in src.splitlines():
-        line = line.split("!")[0]
-        m = _USE_RE.match(line)
-        if m:
-            name = m.group(1)
-            if name not in mods:
-                mods.append(name)
-    return mods
 
 
 def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> dict:
@@ -415,7 +400,7 @@ def generate_ad(in_file, out_file=None, warn=True, search_dirs=None, write_fadmo
             routine_map[r.name] = _prepare_ad_header(r)
 
     if search_dirs:
-        used_mods = _find_used_modules(Path(in_file).read_text())
+        used_mods = mod_org.find_use_modules()
         routine_map.update(_load_fadmods(used_mods, search_dirs))
 
     for mod_org in modules_org:
@@ -429,10 +414,11 @@ def generate_ad(in_file, out_file=None, warn=True, search_dirs=None, write_fadmo
                 pushpop_used = True
 
         mod = Module(f"{name}{AD_SUFFIX}")
+        mod.body.append(Use(name))
         if pushpop_used:
-            mod.body.append(Statement("use fautodiff_data_storage"))
-        #mod.body.append(Statement(f"use {name}"))
-        mod.body.append(Statement("implicit none"))
+            mod.body.append(Use("fautodiff_data_storage"))
+        for child in mod_org.body.iter_children():
+            mod.body.append(child)
         for sub in routines:
             mod.routines.append(sub)
         modules.append(render_program(mod))

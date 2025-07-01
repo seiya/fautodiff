@@ -1,4 +1,5 @@
 module intrinsic_func_ad
+  use intrinsic_func
   implicit none
 
 contains

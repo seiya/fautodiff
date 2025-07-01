@@ -1,4 +1,5 @@
 module cross_mod_a_ad
+  use cross_mod_a
   implicit none
 
 contains

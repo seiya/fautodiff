@@ -1,4 +1,5 @@
 module array_ad
+  use array
   implicit none
 
 contains

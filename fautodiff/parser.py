@@ -11,7 +11,7 @@ import fparser
 from fparser.common.readfortran import FortranFileReader, FortranStringReader
 from fparser.two.parser import ParserFactory
 from fparser.two import Fortran2003
-from fparser.two.Fortran2008 import Block_Nonlabel_Do_Construct
+from fparser.two import Fortran2008
 from fparser.two.utils import walk
 
 from .operators import (
@@ -46,6 +46,7 @@ from .code_tree import (
     DoWhile,
     SelectBlock,
     Statement,
+    Use,
     CallStatement,
 )
 
@@ -89,8 +90,8 @@ def _stmt2op(stmt, decls):
                 if expo[0].lower() == 'd':
                     kind = "8"
             if expo is not None:
-                val = f"{val}e{expo[1:]}"
-            ret = OpReal(val=val, kind=kind)
+                expo = int(expo[1:])
+            ret = OpReal(val=val, kind=kind, expo=expo)
             if sign is not None and sign[0] == '-':
                 ret = - ret
             return ret
@@ -200,7 +201,6 @@ def _stmt2op(stmt, decls):
 __all__ = [
     "parse_file",
     "find_subroutines",
-    "_parse_routine",
 ]
 
 
@@ -224,11 +224,36 @@ def _parse_from_reader(reader, src_name):
         mod_node = Module(name)
         output.append(mod_node)
         for part in module.content:
+            if isinstance(part, Fortran2003.Module_Stmt):
+                continue
+            if isinstance(part, Fortran2003.End_Module_Stmt):
+                break
+            if isinstance(part, Fortran2003.Specification_Part):
+                for c in part.content:
+                    if isinstance(c, Fortran2003.Implicit_Part):
+                        mod_node.body.append(Statement("implicit none"))
+                        continue
+                    if isinstance(c, Fortran2003.Use_Stmt):
+                        mod_node.body.append(Use(c.items[2].string))
+                        continue
+                    if isinstance(c, Fortran2008.type_declaration_stmt_r501.Type_Declaration_Stmt):
+                        #mod_node.body.append(Statement(c.string))
+                        continue
+                    print(type(c), c)
+                    raise RuntimeError("Unsupported  statement: {type(c)} {c.string}")
+                continue
             if isinstance(part, Fortran2003.Module_Subprogram_Part):
                 for c in part.content:
+                    if isinstance(c, Fortran2003.Contains_Stmt):
+                        continue
                     if isinstance(c, (Fortran2003.Function_Subprogram, Fortran2003.Subroutine_Subprogram)):
                         mod_node.routines.append(_parse_routine(c, src_name))
-                break
+                    else:
+                        print(type(c), c)
+                        raise RuntimeError("Unsupported  statement: {type(c)} {c.string}")
+            else:
+                print(type(part), part)
+                raise RuntimeError("Unsupported  statement: {type(part)} {part.string}")
     return output
 
 
@@ -389,7 +414,7 @@ def _parse_routine(content, src_name):
                     conds = tuple(_stmt2op(cond, decls) for cond in stmt_cond.items[0].items[0].items)
                 cond_blocks.append((conds, blk))
             return SelectBlock(cond_blocks, expr)
-        if isinstance(stmt, Block_Nonlabel_Do_Construct):
+        if isinstance(stmt, Fortran2008.Block_Nonlabel_Do_Construct):
             body = _block(stmt.content[1:-1], decls)
             if stmt.content[0].tofortran().startswith("DO WHILE"):
                 cond = _stmt2op(stmt.content[0].items[1].items[0].items[0], decls)
