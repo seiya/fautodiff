@@ -573,8 +573,11 @@ class OpVar(OpLeaf):
     name: str = field(default="")
     index: Optional[AryIndex] = None
     is_real: Optional[bool] = None
+    reference: Optional["OpVar"] = field(repr=False, default=None)
+    dims: Optional[Tuple[str]] = field(repr=False, default=None)
+    reduced_dims: List[int] = field(init=False, repr=False, default=None)
 
-    def __init__(self, name: str, index: Optional[AryIndex] = None, is_real: bool = None, kind: str = None):
+    def __init__(self, name: str, index: Optional[AryIndex] = None, is_real: Optional[bool] = None, kind: Optional[str] = None, dims: Optional[Tuple[str]] = None, reference: Optional[OpVar] = None):
         super().__init__(args=[])
         if not isinstance(name, str):
             raise ValueError(f"name must be str: {type(name)}")
@@ -584,6 +587,8 @@ class OpVar(OpLeaf):
         self.index = index
         self.is_real = is_real
         self.kind = kind
+        self.dims = dims
+        self.reference = reference
 
     def change_index(self, index) -> OpVar:
         if index == self.index:

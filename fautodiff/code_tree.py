@@ -154,9 +154,6 @@ class Node:
         """Yield variables which is assigned in this node w/o children nodes."""
         return iter(())
 
-    def convert_userfunc(self) -> [Node]:
-        return [self]
-
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False, routine_map: Optional[dict] = None) -> List["Node"]:
         """New with converted assignment nodes."""
         return []
@@ -165,7 +162,7 @@ class Node:
         id = self.get_id()
         save = SaveAssignment(var, id)
         self.parent.insert_before(id, save)
-        saved_vars.append(save)
+        saved_vars.append(save.tmpvar)
         return save.to_load()
 
     def deep_clone(self) -> "Node":
@@ -324,8 +321,27 @@ class Node:
     # ------------------------------------------------------------------
     # other helpers
     # ------------------------------------------------------------------
-    def _save_var_name(self, name: str, id: int) -> str:
-        return f"{name}_save_{id}{AD_SUFFIX}"
+    def _save_var_name(self, name: str, id: int, no_suffix: bool = False) -> str:
+        if no_suffix:
+            return f"{name}_save_{id}"
+        else:
+            return f"{name}_save_{id}{AD_SUFFIX}"
+
+    def _generate_ad_backward(self, lhs: OpVar, rhs: OpVar, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], routine_map: Optional[dict] = None) -> List["Node"]:
+        rhs = rhs.deep_clone()
+        extras = []
+        for n, ufunc in enumerate(rhs.find_userfunc()):
+            arg_info = routine_map[ufunc.name]
+            name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
+            result = OpVar(name, is_real=arg_info["type"][-1]=="real")
+            saved_vars.append(OpVar(f"{name}{AD_SUFFIX}", is_real=result.is_real, kind=arg_info["kind"][-1], dims=arg_info["dims"][-1]))
+            callstmt = CallStatement(name=ufunc.name, args=ufunc.args, intents=ufunc.intents, result=result, info=self.info)
+            extras.extend(callstmt.convert_assignments(saved_vars, ufunc, True, routine_map))
+            rhs = rhs.replace_with(ufunc, result)
+        assigns = func(lhs, rhs, self.info)
+        assigns.extend(extras)
+        return assigns
+
 
 @dataclass
 class Block(Node):
@@ -338,12 +354,6 @@ class Block(Node):
 
     def __getitem__(self, index: int) -> Node:
         return self.__children[index]
-
-    def convert_userfunc(self) -> List[Node]:
-        children = []
-        for child in self.iter_children():
-            children.extend(child.convert_userfunc())
-        return [Block(children)]
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False, routine_map: Optional[dict] = None) -> List[Node]:
         children = []
@@ -485,6 +495,8 @@ class CallStatement(Node):
     args: List[Operator] = field(default_factory=list)
     intents: Optional[List[str]] = None
     result: Optional[OpVar] = None
+    info: Optional[dict] = field(repr=False, default=None)
+    ad_info: Optional[str] = field(repr=False, default=None)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -513,11 +525,11 @@ class CallStatement(Node):
                     yield var
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
-        intents = self.intents or ["in"] * len(self.args)
+        intents = self.intents or ["inout"] * len(self.args)
         yield from self._iter_vars(intents, ("in", "inout"))
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
-        intents = self.intents or ["in"] * len(self.args)
+        intents = self.intents or ["inout"] * len(self.args)
         yield from self._iter_vars(intents, ("out", "inout"))
         if self.result is not None:
             yield self.result
@@ -525,10 +537,13 @@ class CallStatement(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         args = ", ".join([str(a) for a in self.args])
+        ad_comment = ""
+        if self.ad_info is not None:
+            ad_comment = f" ! {self.ad_info}"
         if self.result is None:
-            return [f"{space}call {self.name}({args})\n"]
+            return [f"{space}call {self.name}({args}){ad_comment}\n"]
         else:
-            return [f"{space}{self.result} = {self.name}({args})\n"]
+            return [f"{space}{self.result} = {self.name}({args}){ad_comment}\n"]
 
     def is_effectively_empty(self) -> bool:
         return False
@@ -559,16 +574,23 @@ class CallStatement(Node):
             raise RuntimeError(f"Not found in routime_map: {name}")
         arg_info = routine_map[name]
 
-        nodes = []
+        def _push_arg(i, arg):
+            if not isinstance(arg, OpLeaf) and arg_info["type"][i] == "real":
+                name = self._save_var_name(f"{self.name}_arg{i}", self.get_id(), no_suffix=True)
+                tmp = OpVar(name, is_real=True)
+                tmp_vars.append((tmp, arg))
+                args_new.append(tmp)
+                saved_vars.append(OpVar(f"{tmp.name}{AD_SUFFIX}", is_real=True, kind=arg_info["kind"][i], dims=arg_info["dims"][i]))
+            else:
+                args_new.append(arg)
+        tmp_vars = []
         args = self.args
         args_new = []
         for i, arg in enumerate(args):
-            if isinstance(arg, OpLeaf):
-                args_new.append(arg)
-            else:
-                tmp = OpVar(_save_var_name(f"arg{i}", self.get_id()))
-                nodes.append(Assignment(tmp, arg))
-                args_new.append(tmp)
+            _push_arg(i, arg)
+        if self.result is not None:
+            _push_arg(len(args), self.result)
+            args.append(self.result)
         ad_args = []
         for ad_arg in arg_info["ad_args"]:
             if ad_arg.endswith(AD_SUFFIX):
@@ -576,35 +598,29 @@ class CallStatement(Node):
             else:
                 arg = ad_arg
             i = arg_info["args"].index(arg)
-            var = args_new[i]
+            var = args[i]
             if ad_arg.endswith(AD_SUFFIX):
+                if not isinstance(var, OpLeaf):
+                    var = args_new[i]
                 var = OpVar(f"{var.name}{AD_SUFFIX}", index=var.index, kind=var.kind, is_real=var.is_real)
             ad_args.append(var)
-        ad_call = CallStatement(name=arg_info["ad_name"], args=ad_args, intents=arg_info["ad_intents"])
+        ad_call = CallStatement(name=arg_info["ad_name"], args=ad_args, intents=arg_info["ad_intents"], ad_info=self.info["code"])
 
         ad_nodes = [ad_call]
-        if nodes:
-            for node in nodes:
-                ad_nodes.extend(node.convert_assignment(saved_vars, func, reverse, routine_map))
-        return ad_nodes
+        if tmp_vars:
+            for lhs, rhs in tmp_vars:
+                ad_nodes.extend(self._generate_ad_backward(lhs, rhs, saved_vars, func, routine_map))
 
-    def convert_userfunc(self) -> List[Node]:
-        assigns = []
-        args = copy.deepcopy(self.args)
-        found = False
-        for n, var in enumerate(self.collect_vars()):
-            if isinstance(var, OpFuncUser):
-                result = OpVar(name=_save_var_name(f"{var.name}{n}", self.get_id()))
-                callstmt = CallStatement(name=var.name, args=var.args, intents=var.intents, result=result)
-                assignes.extend(callstmt.convert_userfunc())
-                for i, arg in enumerate(args):
-                    args[i] = arg.replace_with(var, result)
-                found = True
-        if found:
-            assigns.append(CallStatement(name=self.name, args=args, intents=self.intents, result=self.result))
-            return assigns
-        else:
-            return [self]
+        loads = []
+        blocks = []
+        for var in ad_call.assigned_vars():
+            if not var.name.endswith(AD_SUFFIX):
+                load = self._save_vars(var, saved_vars)
+                loads.append(load)
+                blocks.insert(0, load)
+        blocks.extend(ad_nodes)
+        blocks.extend(loads)
+        return blocks
 
 @dataclass
 class Module(Node):
@@ -681,10 +697,10 @@ class Routine(Node):
         lines.append(f"{space}end {self.kind} {self.name}\n")
         return lines
 
-    def get_var(self, name: str) -> Variable:
+    def get_var(self, name: str) -> Optional[Variable]:
         decl = self.decls.find_by_name(name)
         if decl is None:
-            raise ValueError(f"variable ({name}) is not found in declarations")
+            return None
         intent = decl.intent
         if self.result == name:
             intent = "out"
@@ -756,6 +772,7 @@ class Assignment(Node):
     info: Optional[dict] = field(repr=False, default=None)
     ad_info: Optional[str] = field(repr=False, default=None)
     _rhs_vars: List[OpVar] = field(init=False, repr=False)
+    _ufuncs: List[OpFuncUser] = field(init=False, repr=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -766,6 +783,7 @@ class Assignment(Node):
         self._rhs_vars = []
         for var in self.rhs.collect_vars():
             self._rhs_vars.append(var)
+        self._ufuncs = self.rhs.find_userfunc()
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self._rhs_vars:
@@ -780,25 +798,12 @@ class Assignment(Node):
     def is_effectively_empty(self) -> bool:
         return self.lhs == self.rhs
 
-    def convert_userfunc(self) -> List[Node]:
-        assigns = []
-        rhs = self.rhs.deep_clone()
-        found = False
-        for n, func in enumerate(rhs.find_userfunc()):
-            result = OpVar(name=self._save_var_name(f"{func.name}{n}", self.get_id()))
-            callstmt = CallStatement(name=func.name, args=func.args, intents=func.intents, result=result)
-            assigns.extend(callstmt.convert_userfunc())
-            rhs = rhs.replace_with(func, result)
-            found = True
-        if found:
-            assigns.append(Assignment(lhs=self.lhs, rhs=rhs, info=self.info))
-            return assigns
-        else:
-            return [self]
-
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False, routine_map: Optional[dict] = None) -> List[Assignment]:
         assigns = [self._save_vars(self.lhs, saved_vars)]
-        assigns.extend(func(self.lhs, self.rhs, self.info))
+        if reverse:
+            assigns.extend(self._generate_ad_backward(self.lhs, self.rhs, saved_vars, func, routine_map))
+        else:
+            raise NotImplementedError
         return assigns
 
     def render(self, indent: int = 0) -> List[str]:
@@ -921,7 +926,6 @@ class SaveAssignment(Node):
     load: bool = False
     lhs: OpVar = field(init=False, repr=False, default=None)
     rhs: OpVar = field(init=False, repr=False, default=None)
-    reduced_dims: List[int] = field(init=False, repr=False, default=None)
 
     def __post_init__(self):
         super().__post_init__()
@@ -934,6 +938,7 @@ class SaveAssignment(Node):
                 self._save_var_name(name, self.id),
                 index=self.var.index,
                 is_real=self.var.is_real,
+                reference=self.var
             )
         if self.load:
             self.lhs = self.var
@@ -988,19 +993,6 @@ class SaveAssignment(Node):
     def to_load(self) -> "SaveAssignment":
         return SaveAssignment(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
 
-    def reduce_dim(self, dims: List[str]) -> None:
-        if self.reduced_dims is None:
-            self.reduced_dims = []
-        if self.tmpvar.index is None:
-            raise RuntimeError(f"No index {self.tmpvar.name}")
-        index_new = []
-        for i, idx in enumerate(self.tmpvar.index):
-            if isinstance(idx, OpVar) and idx.name in dims:
-                self.reduced_dims.append(i)
-            else:
-                index_new.append(idx)
-        self.tmpvar.index = AryIndex(index_new)
-
 
 @dataclass
 class PushPop(SaveAssignment):
@@ -1014,9 +1006,6 @@ class PushPop(SaveAssignment):
 
     def to_load(self) -> "PushPop":
         return PushPop(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
-
-    def reduce_dim(self, dims: List[str]) -> None:
-        pass
 
 @dataclass
 class Declaration(Node):
@@ -1135,8 +1124,7 @@ class BranchBlock(Node):
                 loads.append(load)
                 blocks.insert(0, load)
         blocks.append(block)
-        for load in loads:
-            blocks.append(load)
+        blocks.extend(loads)
         return blocks
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
@@ -1445,7 +1433,14 @@ class DoLoop(DoAbst):
                     name = child.tmpvar.name
                     if (not any(name == var.name for var in targets)) and child.tmpvar == child.lhs:
                         if set(self.do_index_list) <= set(child.tmpvar.index_list()):
-                            child.reduce_dim(self.do_index_list)
+                            index_new = []
+                            child.tmpvar.reduced_dims = []
+                            for i, idx in enumerate(child.tmpvar.index):
+                                if isinstance(idx, OpVar) and idx.name in self.do_index_list:
+                                    child.tmpvar.reduced_dims.append(i)
+                                else:
+                                    index_new.append(idx)
+                            child.tmpvar.index = AryIndex(index_new)
                     continue
                 if isinstance(child, DoLoop):
                     continue
