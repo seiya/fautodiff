@@ -16,7 +16,6 @@ from .operators import (
 )
 
 from .code_tree import (
-    Variable,
     Module,
     Subroutine,
     Function,
@@ -142,7 +141,15 @@ def _prepare_ad_header(routine_org):
         if intent == "out":
             if arg.ad_target:
                 ad_name = f"{name}{AD_SUFFIX}"
-                var = Variable(ad_name, typ, kind, dims, "inout")
+                var = OpVar(
+                    ad_name,
+                    typename=typ,
+                    kind=kind,
+                    dims=dims,
+                    intent="inout",
+                    ad_target=True,
+                    is_real=arg.is_real,
+                )
                 args.append(var)
                 grad_args.append(var)
                 has_grad_input = True
@@ -154,7 +161,15 @@ def _prepare_ad_header(routine_org):
                     "in": "out",
                     "inout": "inout",
                 }.get(intent)
-                var = Variable(ad_name, typ, kind, dims, grad_intent)
+                var = OpVar(
+                    ad_name,
+                    typename=typ,
+                    kind=kind,
+                    dims=dims,
+                    intent=grad_intent,
+                    ad_target=True,
+                    is_real=arg.is_real,
+                )
                 args.append(var)
                 grad_args.append(var)
                 if grad_intent == "out":
@@ -168,7 +183,9 @@ def _prepare_ad_header(routine_org):
     subroutine = Subroutine(ad_name, [v.name for v in args])
     arg_info["ad_name"] = ad_name
     for var in args:
-        subroutine.decls.append(var.to_decl())
+        subroutine.decls.append(
+            Declaration(var.name, var.typename, var.kind, var.dims, var.intent)
+        )
         arg_info["ad_args"].append(var.name)
         arg_info["ad_intents"].append(var.intent)
 
@@ -259,10 +276,10 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
                 if found:
                     continue # already declared
                 v_org = routine_org.get_var(name.removesuffix(AD_SUFFIX))
-                if v_org is not None:
-                    v = Variable(name=name, typename=v_org.typename, kind=v_org.kind, dims=v_org.dims)
-                    if not subroutine.is_declared(name):
-                        subroutine.decls.append(v.to_decl())
+                if v_org is not None and not subroutine.is_declared(name):
+                    subroutine.decls.append(
+                        Declaration(name, v_org.typename, v_org.kind, v_org.dims, None)
+                    )
 
         # check initialization for AD variables with intent(out)
         vars = []
@@ -367,8 +384,9 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
             kind = v_org.kind
         else:
             kind = var.kind
-        var = Variable(name=var.name, typename=typename, kind=kind, dims=dims)
-        subroutine.decls.append(var.to_decl())
+        subroutine.decls.append(
+            Declaration(var.name, typename, kind, dims, None)
+        )
 
     subroutine = subroutine.prune_for(VarList([OpVar(var.name) for var in grad_args]))
 

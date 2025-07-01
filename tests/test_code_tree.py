@@ -7,7 +7,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff.code_tree import (
     AD_SUFFIX,
-    Variable,
     Subroutine,
     Declaration,
     Block,
@@ -33,22 +32,21 @@ from fautodiff.var_list import (
     VarList
 )
 
-class TestVariable(unittest.TestCase):
+class TestOpVar(unittest.TestCase):
     def test_scalar(self):
-        var = Variable("x", "real")
+        var = OpVar("x", typename="real")
         self.assertEqual(var.name, "x")
         self.assertEqual(var.typename, "real")
         self.assertFalse(var.is_array())
 
     def test_array(self):
-        var = Variable("a", "real", dims=("n",))
+        var = OpVar("a", typename="real", dims=("n",))
         self.assertTrue(var.is_array())
         self.assertEqual(var.dims, ("n",))
-        self.assertEqual(str(var), "a(n)")
 
     def test_invalid_name(self):
         with self.assertRaises(ValueError):
-            Variable("a(i)", "real")
+            OpVar("a(i)", typename="real")
 
 
 class TestRenderProgram(unittest.TestCase):

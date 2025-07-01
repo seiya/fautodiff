@@ -8,6 +8,8 @@ from fractions import Fraction
 import re
 import copy
 
+_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
 
 @dataclass
 class AryIndex:
@@ -579,14 +581,31 @@ class OpVar(OpLeaf):
     name: str = field(default="")
     index: Optional[AryIndex] = None
     is_real: Optional[bool] = None
-    reference: Optional["OpVar"] = field(repr=False, default=None)
+    kind: Optional[str] = None
+    typename: Optional[str] = field(default=None, repr=False)
     dims: Optional[Tuple[str]] = field(repr=False, default=None)
+    intent: Optional[str] = field(default=None, repr=False)
+    ad_target: Optional[bool] = field(default=None, repr=False)
+    reference: Optional["OpVar"] = field(repr=False, default=None)
     reduced_dims: List[int] = field(init=False, repr=False, default=None)
 
-    def __init__(self, name: str, index: Optional[AryIndex] = None, is_real: Optional[bool] = None, kind: Optional[str] = None, dims: Optional[Tuple[str]] = None, reference: Optional[OpVar] = None):
+    def __init__(
+        self,
+        name: str,
+        index: Optional[AryIndex] = None,
+        is_real: Optional[bool] = None,
+        kind: Optional[str] = None,
+        dims: Optional[Tuple[str]] = None,
+        reference: Optional[OpVar] = None,
+        typename: Optional[str] = None,
+        intent: Optional[str] = None,
+        ad_target: Optional[bool] = None,
+    ):
         super().__init__(args=[])
         if not isinstance(name, str):
             raise ValueError(f"name must be str: {type(name)}")
+        if not _NAME_RE.fullmatch(name):
+            raise ValueError(f"invalid Fortran variable name: {name}")
         self.name = name
         if index is not None and not isinstance(index, AryIndex):
             index = AryIndex(index)
@@ -595,11 +614,33 @@ class OpVar(OpLeaf):
         self.kind = kind
         self.dims = dims
         self.reference = reference
+        self.typename = typename
+        self.intent = intent
+        self.ad_target = ad_target
+        if self.is_real is None and self.typename is not None:
+            typename = self.typename.lower()
+            self.is_real = typename.startswith("real") or typename.startswith("double")
+        if self.ad_target is None and self.typename is not None:
+            typename = self.typename.lower()
+            self.ad_target = typename.startswith("real") or typename.startswith("double")
+
+    def is_array(self) -> bool:
+        return self.dims is not None
 
     def change_index(self, index) -> OpVar:
         if index == self.index:
             return self
-        return OpVar(name=self.name, index=index, is_real=self.is_real, kind=self.kind)
+        return OpVar(
+            name=self.name,
+            index=index,
+            is_real=self.is_real,
+            kind=self.kind,
+            dims=self.dims,
+            reference=self.reference,
+            typename=self.typename,
+            intent=self.intent,
+            ad_target=self.ad_target,
+        )
 
     def add_suffix(self, suffix: str = None) -> str:
         if suffix is None:
@@ -608,7 +649,17 @@ class OpVar(OpLeaf):
         index = self.index
         if index is not None:
             index = AryIndex(list(index.dims))
-        return OpVar(name, index=index, is_real=self.is_real, kind=self.kind)
+        return OpVar(
+            name,
+            index=index,
+            is_real=self.is_real,
+            kind=self.kind,
+            dims=self.dims,
+            reference=self.reference,
+            typename=self.typename,
+            intent=self.intent,
+            ad_target=self.ad_target,
+        )
 
     def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         vars = [self]
