@@ -160,12 +160,15 @@ def _contains_pushpop(node) -> bool:
             return True
     return False
 
-def _generate_ad_subroutine(routine_org, routine_map, warnings):
-    # Collect information of aruguments
+
+def _prepare_ad_header(routine_org):
+    """Prepare AD subroutine header and store argument info to routine."""
+
     args = []
-    out_grad_args = []
     grad_args = []
+    out_grad_args = []
     has_grad_input = False
+
     for arg in routine_org.arg_vars():
         name = arg.name
         typ = arg.typename
@@ -194,19 +197,37 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
                 else:
                     has_grad_input = True
 
-    # Create Subroutine node for AD
-    name = routine_org.name
-    ad_name = f"{name}{AD_SUFFIX}"
-    arg_names = []
-    for arg in args:
-        arg_names.append(arg.name)
-    subroutine = Subroutine(ad_name, arg_names)
-    for arg in args:
-        subroutine.decls.append(arg.to_decl())
-    init_block = Block([])
-    ad_block = Block([])
-    subroutine.ad_init = init_block
-    subroutine.ad_content = ad_block
+    ad_name = f"{routine_org.name}{AD_SUFFIX}"
+    subroutine = Subroutine(ad_name, [v.name for v in args])
+    for var in args:
+        subroutine.decls.append(var.to_decl())
+    subroutine.ad_init = Block([])
+    subroutine.ad_content = Block([])
+
+    intents = [v.intent or "in" for v in routine_org.arg_vars()]
+    if routine_org.result is not None:
+        call_intents = intents[:-1]
+    else:
+        call_intents = intents
+
+    routine_org.ad_arg_info = (
+        list(routine_org.args),
+        call_intents,
+        list(subroutine.args),
+    )
+    routine_org._ad_header = subroutine
+    routine_org._grad_args = grad_args
+    routine_org._out_grad_args = out_grad_args
+    routine_org._has_grad_input = has_grad_input
+
+    return subroutine
+
+def _generate_ad_subroutine(routine_org, routine_map, warnings):
+    subroutine = routine_org._ad_header
+    grad_args = routine_org._grad_args
+    out_grad_args = routine_org._out_grad_args
+    has_grad_input = routine_org._has_grad_input
+    ad_block = subroutine.ad_content
 
     # If no derivative inputs exist, all output gradients remain zero
     if not has_grad_input:
@@ -256,9 +277,9 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
     # populate CallStatement intents from routine declarations
     def _set_call_intents(node):
         if isinstance(node, CallStatement):
-            intents = routine_map.get(node.name)
-            if intents is not None:
-                node.intents = list(intents)
+            callee = routine_map.get(node.name)
+            if callee is not None and callee.ad_arg_info is not None:
+                node.intents = list(callee.ad_arg_info[1])
         for child in getattr(node, "iter_children", lambda: [])():
             _set_call_intents(child)
 
@@ -268,30 +289,58 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
 
     def _prepare_calls(node):
         if isinstance(node, CallStatement):
-            intents = node.intents or ["in"] * len(node.args)
+            callee = routine_map.get(node.name)
+            if callee is not None and callee.ad_arg_info is not None:
+                call_intents = callee.ad_arg_info[1]
+            else:
+                call_intents = node.intents or ["in"] * len(node.args)
+            intents = node.intents or call_intents
+
             grad_args = []
             grad_intents = []
-            for arg, intent in zip(node.args, intents):
-                if isinstance(arg, OpVar):
-                    try:
-                        var = routine_org.get_var(arg.name)
-                    except ValueError:
-                        continue
-                    if var.ad_target:
-                        gname = f"{arg.name}{AD_SUFFIX}"
-                        grad_args.append(OpVar(gname, index=arg.index, kind=var.kind))
+
+            if callee is not None and callee.ad_arg_info is not None:
+                callee_vars = callee.arg_vars()
+                if callee.result is not None:
+                    callee_vars_nores = callee_vars[:-1]
+                else:
+                    callee_vars_nores = callee_vars
+                for arg_var, arg_op, intent in zip(callee_vars_nores, node.args, intents):
+                    if isinstance(arg_op, OpVar) and arg_var.ad_target:
+                        gname = f"{arg_op.name}{AD_SUFFIX}"
+                        grad_args.append(OpVar(gname, index=arg_op.index, kind=arg_var.kind))
                         grad_intents.append({"in": "out", "inout": "inout", "out": "inout"}.get(intent, "out"))
                         call_ad_vars.append(gname)
-            if node.result is not None and isinstance(node.result, OpVar):
-                try:
-                    var = routine_org.get_var(node.result.name)
-                except ValueError:
-                    var = None
-                if var is not None and var.ad_target:
-                    gname = f"{node.result.name}{AD_SUFFIX}"
-                    grad_args.append(OpVar(gname, index=node.result.index, kind=var.kind))
-                    grad_intents.append("inout")
-                    call_ad_vars.append(gname)
+                if node.result is not None and isinstance(node.result, OpVar) and callee.result is not None:
+                    rvar = callee.get_var(callee.result)
+                    if rvar.ad_target:
+                        gname = f"{node.result.name}{AD_SUFFIX}"
+                        grad_args.append(OpVar(gname, index=node.result.index, kind=rvar.kind))
+                        grad_intents.append("inout")
+                        call_ad_vars.append(gname)
+            else:
+                for arg, intent in zip(node.args, intents):
+                    if isinstance(arg, OpVar):
+                        try:
+                            var = routine_org.get_var(arg.name)
+                        except ValueError:
+                            continue
+                        if var.ad_target:
+                            gname = f"{arg.name}{AD_SUFFIX}"
+                            grad_args.append(OpVar(gname, index=arg.index, kind=var.kind))
+                            grad_intents.append({"in": "out", "inout": "inout", "out": "inout"}.get(intent, "out"))
+                            call_ad_vars.append(gname)
+                if node.result is not None and isinstance(node.result, OpVar):
+                    try:
+                        var = routine_org.get_var(node.result.name)
+                    except ValueError:
+                        var = None
+                    if var is not None and var.ad_target:
+                        gname = f"{node.result.name}{AD_SUFFIX}"
+                        grad_args.append(OpVar(gname, index=node.result.index, kind=var.kind))
+                        grad_intents.append("inout")
+                        call_ad_vars.append(gname)
+
             node.ad_call = CallStatement(
                 name=f"{node.name}{AD_SUFFIX}",
                 args=list(node.args) + grad_args,
@@ -441,10 +490,8 @@ def generate_ad(in_file, out_file=None, warn=True):
     routine_map = {}
     for mod_org in modules_org:
         for r in mod_org.routines:
-            intents = [v.intent or "in" for v in r.arg_vars()]
-            if r.result is not None:
-                intents = intents[:-1]
-            routine_map[r.name] = intents
+            _prepare_ad_header(r)
+            routine_map[r.name] = r
 
     for mod_org in modules_org:
         name = mod_org.name

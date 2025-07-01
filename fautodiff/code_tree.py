@@ -196,6 +196,14 @@ class Node:
     def set_parent(self, node: "Node") -> "Node":
         self.parent = node
 
+    def get_routine(self) -> Optional["Routine"]:
+        node: Optional[Node] = self
+        while node is not None:
+            if isinstance(node, Routine):
+                return node
+            node = node.parent
+        return None
+
     def find_by_id(self, node_id: int) -> Optional["Node"]:
         """Return the node with ``node_id`` from this subtree or ``None``."""
         if self.__id == node_id:
@@ -604,6 +612,7 @@ class Routine(Node):
     content: Block = field(default_factory=Block)
     ad_init: Optional[Block] = None
     ad_content: Optional[Block] = None
+    ad_arg_info: Optional[tuple] = None
     kind: ClassVar[str] = "subroutine"
 
     def _all_blocks(self):
