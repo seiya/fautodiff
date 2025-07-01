@@ -399,11 +399,20 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
     return subroutine, uses_pushpop
 
 
-def generate_ad(in_file, out_file=None, warn=True, search_dirs=None, write_fadmod=True):
+def generate_ad(
+    in_file,
+    out_file=None,
+    warn=True,
+    search_dirs=None,
+    write_fadmod=True,
+    fadmod_dir=None,
+):
     """Generate a very small reverse-mode AD version of ``in_file``.
 
     If ``out_file`` is ``None`` the generated code is returned as a string.
     When ``out_file`` is provided the code is also written to that path.
+    ``fadmod_dir`` selects where ``<module>.fadmod`` files are written (defaults
+    to the current working directory).
     """
     modules_org = parser.parse_file(in_file)
     modules = []
@@ -411,6 +420,10 @@ def generate_ad(in_file, out_file=None, warn=True, search_dirs=None, write_fadmo
 
     if search_dirs is None:
         search_dirs = []
+    if fadmod_dir is None:
+        fadmod_dir = Path.cwd()
+    else:
+        fadmod_dir = Path(fadmod_dir)
 
     routine_map = {}
     for mod_org in modules_org:
@@ -446,7 +459,12 @@ def generate_ad(in_file, out_file=None, warn=True, search_dirs=None, write_fadmo
         Path(out_file).write_text(code)
     if write_fadmod:
         for mod_org in modules_org:
-            _write_fadmod(mod_org.name, mod_org.routines, routine_map, Path(in_file).parent)
+            _write_fadmod(
+                mod_org.name,
+                mod_org.routines,
+                routine_map,
+                fadmod_dir,
+            )
     if warn and warnings:
         for msg in warnings:
             print(f"Warning: {msg}", file=sys.stderr)
@@ -480,6 +498,12 @@ if __name__ == "__main__":
         help="add directory to .fadmod search path (may be repeated)",
     )
     parser_arg.add_argument(
+        "-M",
+        dest="fadmod_dir",
+        default=None,
+        help="directory for .fadmod files (default: current directory)",
+    )
+    parser_arg.add_argument(
         "--no-fadmod",
         action="store_true",
         help="do not write .fadmod information files",
@@ -492,6 +516,7 @@ if __name__ == "__main__":
         warn=not args.no_warn,
         search_dirs=args.search_dirs,
         write_fadmod=not args.no_fadmod,
+        fadmod_dir=args.fadmod_dir,
     )
     if args.output is None:
         print(code, end="")

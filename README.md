@@ -63,9 +63,14 @@ python -m fautodiff.generator --no-warn examples/simple_math.f90
 Each module's routine signatures are also written to a `<module>.fadmod` file
 when AD code is generated.  These JSON files can be loaded when differentiating
 another file that uses the module.  Add search directories with ``-I`` (repeat
-as needed) and disable writing with ``--no-fadmod``:
+as needed), choose the output directory with ``-M DIR`` (defaults to the current
+directory), and disable writing with ``--no-fadmod``:
 
 ```bash
+# write ``cross_mod_a.fadmod`` under ``examples``
+python -m fautodiff.generator -M examples examples/cross_mod_a.f90
+
+# load that file when differentiating another module
 python -m fautodiff.generator -I examples examples/cross_mod_b.f90
 ```
 
