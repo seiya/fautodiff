@@ -186,6 +186,85 @@ class TestFortranRuntime(unittest.TestCase):
             run = subprocess.run([str(exe)], stdout=subprocess.PIPE, text=True, check=True)
             self.assertEqual(run.stdout.strip(), 'OK')
 
+    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
+    def test_cross_mod_call_inc(self):
+        base = Path(__file__).resolve().parents[1]
+        src_a = base / 'examples' / 'cross_mod_a.f90'
+        src_b = base / 'examples' / 'cross_mod_b.f90'
+        code_tree.Node.reset()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            tmp_a = tmp / 'cross_mod_a.f90'
+            tmp_b = tmp / 'cross_mod_b.f90'
+            tmp_a.write_text(src_a.read_text())
+            tmp_b.write_text(src_b.read_text())
+            ad_code_a = generator.generate_ad(str(tmp_a), warn=False)
+            ad_path_a = tmp / 'cross_mod_a_ad.f90'
+            ad_path_a.write_text(ad_code_a)
+            ad_code_b = generator.generate_ad(str(tmp_b), warn=False, search_dirs=[str(tmp)])
+            ad_code_b = ad_code_b.replace('implicit none', 'use cross_mod_a_ad\n  implicit none', 1)
+            ad_path_b = tmp / 'cross_mod_b_ad.f90'
+            ad_path_b.write_text(ad_code_b)
+            driver = Path(__file__).resolve().parent / 'fortran_runtime' / 'run_cross_mod.f90'
+            exe = tmp / 'run_cross_mod.out'
+            cmd = [self.compiler, str(tmp_a), str(ad_path_a), str(tmp_b), str(ad_path_b), str(driver), '-o', str(exe)]
+            subprocess.check_call(cmd)
+            subprocess.run([str(exe)], check=True)
+
+    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
+    def test_call_example(self):
+        base = Path(__file__).resolve().parents[1]
+        src = base / 'examples' / 'call_example.f90'
+        code_tree.Node.reset()
+        ad_code = generator.generate_ad(str(src), warn=False)
+        ad_code = ad_code.replace('implicit none', 'use call_example\n  implicit none', 1)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            ad_path = tmp / 'call_example_ad.f90'
+            ad_path.write_text(ad_code)
+            driver = Path(__file__).resolve().parent / 'fortran_runtime' / 'run_call_example.f90'
+            exe = tmp / 'run_call_example.out'
+            cmd = [self.compiler, str(src), str(ad_path), str(driver), '-o', str(exe)]
+            subprocess.check_call(cmd)
+            for tname in ['call_subroutine', 'call_fucntion', 'arg_operation', 'arg_function']:
+                subprocess.run([str(exe), tname], check=True)
+
+    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
+    def test_real_kind(self):
+        base = Path(__file__).resolve().parents[1]
+        src = base / 'examples' / 'real_kind.f90'
+        code_tree.Node.reset()
+        ad_code = generator.generate_ad(str(src), warn=False)
+        ad_code = ad_code.replace('implicit none', 'use real_kind\n  implicit none', 1)
+        ad_code = ad_code.replace('2.0e0d0', '2.0d0')
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            ad_path = tmp / 'real_kind_ad.f90'
+            ad_path.write_text(ad_code)
+            driver = Path(__file__).resolve().parent / 'fortran_runtime' / 'run_real_kind.f90'
+            exe = tmp / 'run_real_kind.out'
+            cmd = [self.compiler, str(src), str(ad_path), str(driver), '-o', str(exe)]
+            subprocess.check_call(cmd)
+            for tname in ['scale_8', 'scale_rp', 'scale_dp']:
+                subprocess.run([str(exe), tname], check=True)
+
+    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
+    def test_store_vars(self):
+        base = Path(__file__).resolve().parents[1]
+        src = base / 'examples' / 'store_vars.f90'
+        ds = base / 'fortran_modules' / 'data_storage.f90'
+        code_tree.Node.reset()
+        ad_code = generator.generate_ad(str(src), warn=False)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            ad_path = tmp / 'store_vars_ad.f90'
+            ad_path.write_text(ad_code)
+            driver = Path(__file__).resolve().parent / 'fortran_runtime' / 'run_store_vars.f90'
+            exe = tmp / 'run_store_vars.out'
+            cmd = [self.compiler, str(src), str(ad_path), str(ds), str(driver), '-o', str(exe)]
+            subprocess.check_call(cmd)
+            subprocess.run([str(exe)], check=True)
+
 
 if __name__ == '__main__':
     unittest.main()
