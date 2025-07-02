@@ -66,7 +66,7 @@ contains
 
     x_ad = 1.0
     y_ad = 0.0
-    call call_subroutine_ad(x, x_ad, y, y_ad)
+    call call_subroutine_rev_ad(x, x_ad, y, y_ad)
 
     exp_x = 4.0
     exp_x_ad = 2.0
@@ -90,7 +90,7 @@ contains
 
     x_ad = 1.0
     y_ad = 0.0
-    call call_fucntion_ad(x_ad, y, y_ad)
+    call call_fucntion_rev_ad(x_ad, y, y_ad)
 
     exp_x = y**2
     exp_x_ad = 0.0
@@ -115,7 +115,7 @@ contains
 
     x_ad = 1.0
     y_ad = 0.0
-    call arg_operation_ad(x, x_ad, y, y_ad)
+    call arg_operation_rev_ad(x, x_ad, y, y_ad)
 
     exp_x = 6.0
     exp_x_ad = 2.0
@@ -140,7 +140,7 @@ contains
 
     x_ad = 1.0
     y_ad = 0.0
-    call arg_function_ad(x, x_ad, y, y_ad)
+    call arg_function_rev_ad(x, x_ad, y, y_ad)
 
     exp_x = 6.0
     exp_x_ad = 2.0

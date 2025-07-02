@@ -55,7 +55,7 @@ contains
     x_ad = 0.0
     y_ad = 0.0
     z_ad = 1.0
-    call if_example_ad(x, x_ad, y, y_ad, z_ad)
+    call if_example_rev_ad(x, x_ad, y, y_ad, z_ad)
 
     exp_z = x
     exp_x = 1.0
@@ -79,7 +79,7 @@ contains
 
     x_ad = 0.0
     sum_ad = 1.0
-    call do_example_ad(n, x, x_ad, sum_ad)
+    call do_example_rev_ad(n, x, x_ad, sum_ad)
 
     exp_sum = x * real(n * (n + 1) / 2)
     exp_x = real(n * (n + 1) / 2)

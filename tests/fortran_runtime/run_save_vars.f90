@@ -49,7 +49,7 @@ contains
     x_ad = 0.0
     y_ad = 0.0
     z_ad = 1.0
-    call simple_ad(x, x_ad, y, y_ad, z_ad)
+    call simple_rev_ad(x, x_ad, y, y_ad, z_ad)
 
     exp_z = 2.0*x**3 + 2.0*x**2 + 2.0*x + (1.0 + y)
     exp_x = 6.0*x**2 + 4.0*x + 2.0

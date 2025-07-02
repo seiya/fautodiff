@@ -74,7 +74,7 @@ contains
     a_ad = 0.0
     b_ad = 0.0
     c_ad = 1.0
-    call add_numbers_ad(a, a_ad, b, b_ad, c_ad)
+    call add_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
 
     exp_c = 2.0 * a + b + 3.0
     exp_a = 2.0
@@ -100,7 +100,7 @@ contains
     a_ad = 0.0
     b_ad = 0.0
     c_ad = 1.0
-    call multiply_numbers_ad(a, a_ad, b, b_ad, c_ad)
+    call multiply_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
 
     exp_c = a * (3.0 * b + 4.0)
     exp_a = 3.0 * b + 4.0
@@ -126,7 +126,7 @@ contains
     a_ad = 0.0
     b_ad = 0.0
     c_ad = 1.0
-    call subtract_numbers_ad(a, a_ad, b, b_ad, c_ad)
+    call subtract_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
 
     exp_c = -a + 2.0*b
     exp_a = -1.0
@@ -152,7 +152,7 @@ contains
     a_ad = 0.0
     b_ad = 0.0
     c_ad = 1.0
-    call divide_numbers_ad(a, a_ad, b, b_ad, c_ad)
+    call divide_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
 
     t = b + 1.5
     exp_c = a / (2.0 * t) + a
@@ -179,7 +179,7 @@ contains
     a_ad = 0.0
     b_ad = 0.0
     c_ad = 1.0
-    call power_numbers_ad(a, a_ad, b, b_ad, c_ad)
+    call power_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
 
     exp_c = a**3 + b**5.5
     exp_c = exp_c + a**b + (4.0 * a + 2.0)**b + a**(b * 5.0 + 3.0)

@@ -21,7 +21,7 @@ contains
     x_ad = 0.0
     z_ad = 0.0
     z_ad(n) = 1.0
-    call do_with_recurrent_scalar_ad(n, x, x_ad, z_ad)
+    call do_with_recurrent_scalar_rev_ad(n, x, x_ad, z_ad)
 
     exp_z = x(1) * x(2) * x(3)
     exp_x1 = x(2) * x(3)
