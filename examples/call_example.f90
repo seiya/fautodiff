@@ -54,6 +54,7 @@ contains
 
     call foo(x, bar(y))
 
+    return
   end subroutine arg_function
 
 end module call_example

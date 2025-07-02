@@ -125,6 +125,7 @@ class Node:
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
@@ -300,6 +301,80 @@ class Node:
         else:
             return f"{name}_save_{id}{AD_SUFFIX}"
 
+    def _generate_ad_forward(
+        self,
+        lhs: OpVar,
+        rhs: Operator,
+        assigned_advars: VarList,
+        saved_vars: List[SaveAssignment],
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List["Node"]:
+        rhs = rhs.deep_clone()
+        assigns: List[Node] = []
+        for n, ufunc in enumerate(rhs.find_userfunc()):
+            if routine_map is None:
+                raise RuntimeError("routine_map is necessary for CallStatement")
+            arg_info = routine_map[ufunc.name]
+            name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
+            result = OpVar(name, typename=arg_info["type"][-1])
+            saved_vars.append(
+                OpVar(
+                    f"{name}{AD_SUFFIX}",
+                    typename=arg_info["type"][-1],
+                    kind=arg_info["kind"][-1],
+                    dims=arg_info["dims"][-1],
+                )
+            )
+            intents = ufunc.intents
+            if intents is None and ufunc.name in routine_map:
+                intents = routine_map[ufunc.name]["intents"]
+            callstmt = CallStatement(
+                name=ufunc.name,
+                args=ufunc.args,
+                intents=intents,
+                result=result,
+                info=self.info,
+            )
+            assigns.extend(
+                callstmt.generate_ad(
+                    saved_vars, reverse=False, assigned_advars=assigned_advars, routine_map=routine_map, warnings=warnings
+                )
+            )
+            rhs = rhs.replace_with(ufunc, result)
+
+        if lhs.ad_target:
+            grad_lhs = lhs.add_suffix(AD_SUFFIX)
+            ad_info = self.info.get("code") if self.info is not None else None
+
+            if isinstance(rhs, OpFunc):
+                handler = rhs.special_handler(lhs, rhs.args, AD_SUFFIX, reverse=False)
+                if handler is not None:
+                    assigns.append(Assignment(grad_lhs, handler, ad_info=ad_info))
+                    return assigns
+
+            vars = rhs.collect_vars()
+            expr = None
+            for var in vars:
+                if not var.ad_target:
+                    continue
+                v = var.add_suffix(AD_SUFFIX)
+                if assigned_advars is not None and not v in assigned_advars:
+                    continue
+                dev = rhs.derivative(var, target=grad_lhs, info=self.info, warnings=warnings)
+                term = v * dev
+                if expr is None:
+                    expr = term
+                else:
+                    expr = expr + term
+            if expr is None:
+                assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
+                assigned_advars.remove(grad_lhs)
+            else:
+                assigns.append(Assignment(grad_lhs, expr, ad_info=ad_info))
+                assigned_advars.push(grad_lhs)
+        return assigns
+
     def _generate_ad_reverse(
         self,
         lhs: OpVar,
@@ -344,7 +419,7 @@ class Node:
             ad_info = self.info.get("code") if self.info is not None else None
 
             if isinstance(rhs, OpFunc):
-                handler = rhs.special_handler(grad_lhs, rhs.args)
+                handler = rhs.special_handler(lhs, rhs.args, AD_SUFFIX, reverse=True)
                 if handler is not None:
                     v = rhs.args[0].add_suffix(AD_SUFFIX)
                     assigns.append(
@@ -376,75 +451,6 @@ class Node:
         assigns.extend(extras)
         return assigns
 
-    def _generate_ad_forward(
-        self,
-        lhs: OpVar,
-        rhs: Operator,
-        saved_vars: List[SaveAssignment],
-        routine_map: Optional[dict] = None,
-        warnings: Optional[list[str]] = None,
-    ) -> List["Node"]:
-        rhs = rhs.deep_clone()
-        extras: List[Node] = []
-        for n, ufunc in enumerate(rhs.find_userfunc()):
-            if routine_map is None:
-                raise RuntimeError("routine_map is necessary for CallStatement")
-            arg_info = routine_map[ufunc.name]
-            name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
-            result = OpVar(name, typename=arg_info["type"][-1])
-            saved_vars.append(
-                OpVar(
-                    f"{name}{AD_SUFFIX}",
-                    typename=arg_info["type"][-1],
-                    kind=arg_info["kind"][-1],
-                    dims=arg_info["dims"][-1],
-                )
-            )
-            callstmt = CallStatement(
-                name=ufunc.name,
-                args=ufunc.args,
-                intents=ufunc.intents,
-                result=result,
-                info=self.info,
-            )
-            extras.extend(
-                callstmt.generate_ad(
-                    saved_vars, reverse=False, routine_map=routine_map, warnings=warnings
-                )
-            )
-            rhs = rhs.replace_with(ufunc, result)
-
-        assigns: List[Node] = []
-        if lhs.ad_target:
-            grad_lhs = lhs.add_suffix(AD_SUFFIX)
-            ad_info = self.info.get("code") if self.info is not None else None
-
-            if isinstance(rhs, OpFunc):
-                handler = rhs.special_handler(lhs.add_suffix(AD_SUFFIX), rhs.args)
-                if handler is not None:
-                    assigns.append(Assignment(grad_lhs, handler, ad_info=ad_info))
-                    assigns.extend(extras)
-                    return assigns
-
-            vars = rhs.collect_vars()
-            expr = None
-            for var in vars:
-                if not var.ad_target:
-                    continue
-                dev = rhs.derivative(var, target=grad_lhs, info=self.info, warnings=warnings)
-                v = var.add_suffix(AD_SUFFIX)
-                term = v * dev
-                if expr is None:
-                    expr = term
-                else:
-                    expr = expr + term
-            if expr is None:
-                assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
-            else:
-                assigns.append(Assignment(grad_lhs, expr, ad_info=ad_info))
-        assigns.extend(extras)
-        return assigns
-
 
 @dataclass
 class Block(Node):
@@ -462,6 +468,7 @@ class Block(Node):
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
@@ -470,7 +477,7 @@ class Block(Node):
         if reverse:
             iterator = reversed(iterator)
         for node in iterator:
-            nodes = node.generate_ad(saved_vars, reverse, routine_map, warnings)
+            nodes = node.generate_ad(saved_vars, reverse, assigned_advars, routine_map, warnings)
             for res in nodes:
                 if res is not None and not res.is_effectively_empty():
                     children.append(res)
@@ -694,6 +701,7 @@ class CallStatement(Node):
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
@@ -714,7 +722,7 @@ class CallStatement(Node):
             else:
                 args_new.append(arg)
         tmp_vars = []
-        args = self.args
+        args = list(self.args)
         args_new = []
         for i, arg in enumerate(args):
             _push_arg(i, arg)
@@ -722,7 +730,15 @@ class CallStatement(Node):
             _push_arg(len(args), self.result)
             args.append(self.result)
         ad_args = []
-        for ad_arg in arg_info["ad_args"]:
+        if reverse:
+            name_key = "name_rev_ad"
+            args_key = "args_rev_ad"
+            intents_key = "intents_rev_ad"
+        else:
+            name_key = "name_fwd_ad"
+            args_key = "args_fwd_ad"
+            intents_key = "intents_fwd_ad"
+        for ad_arg in arg_info[args_key]:
             if ad_arg.endswith(AD_SUFFIX):
                 arg = ad_arg.removesuffix(AD_SUFFIX)
             else:
@@ -734,30 +750,53 @@ class CallStatement(Node):
                     var = args_new[i]
                 var = OpVar(f"{var.name}{AD_SUFFIX}", index=var.index, kind=var.kind, typename=var.typename, ad_target=var.ad_target, is_constant=var.is_constant)
             ad_args.append(var)
-        ad_call = CallStatement(name=arg_info["ad_name"], args=ad_args, intents=arg_info["ad_intents"], ad_info=self.info["code"])
-
-        ad_nodes = [ad_call]
+        ad_call = CallStatement(name=arg_info[name_key], args=ad_args, intents=arg_info[intents_key], ad_info=self.info["code"])
+        if not reverse:
+            for i, arg in enumerate(ad_args):
+                if arg_info["intents_fwd_ad"][i] in ("out", "inout"):
+                    assigned_advars.push(arg)
+        ad_nodes = []
         if tmp_vars:
-            for lhs, rhs in tmp_vars:
-                ad_nodes.extend(
-                    self._generate_ad_reverse(
-                        lhs,
-                        rhs,
-                        saved_vars,
-                        routine_map=routine_map,
-                        warnings=warnings,
+            if reverse:
+                for lhs, rhs in tmp_vars:
+                    ad_nodes.extend(
+                        self._generate_ad_reverse(
+                            lhs,
+                            rhs,
+                            saved_vars,
+                            routine_map=routine_map,
+                            warnings=warnings,
+                        )
                     )
-                )
+            else:
+                for lhs, rhs in tmp_vars:
+                    ad_nodes.extend(
+                        self._generate_ad_forward(
+                            lhs,
+                            rhs,
+                            assigned_advars,
+                            saved_vars,
+                            routine_map=routine_map,
+                            warnings=warnings,
+                        )
+                    )
 
-        loads = []
-        blocks = []
-        for var in ad_call.assigned_vars():
-            if not var.name.endswith(AD_SUFFIX):
-                load = self._save_vars(var, saved_vars)
-                loads.append(load)
-                blocks.insert(0, load)
-        blocks.extend(ad_nodes)
-        blocks.extend(loads)
+        if reverse:
+            ad_nodes.insert(0, ad_call)
+            loads = []
+            blocks = []
+            for var in ad_call.assigned_vars():
+                if not var.name.endswith(AD_SUFFIX):
+                    load = self._save_vars(var, saved_vars)
+                    loads.append(load)
+                    blocks.insert(0, load)
+            blocks.extend(ad_nodes)
+            blocks.extend(loads)
+        else:
+            ad_nodes.append(ad_call)
+            blocks = ad_nodes
+            blocks.append(self)
+
         return blocks
 
 @dataclass
@@ -825,6 +864,7 @@ class Routine(Node):
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Routine]:
@@ -962,11 +1002,12 @@ class Assignment(Node):
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Assignment]:
-        assigns = [self._save_vars(self.lhs, saved_vars)]
         if reverse:
+            assigns = [self._save_vars(self.lhs, saved_vars)]
             assigns.extend(
                 self._generate_ad_reverse(
                     self.lhs,
@@ -977,15 +1018,15 @@ class Assignment(Node):
                 )
             )
         else:
-            assigns.extend(
-                self._generate_ad_forward(
-                    self.lhs,
-                    self.rhs,
-                    saved_vars,
-                    routine_map=routine_map,
-                    warnings=warnings,
-                )
+            assigns = self._generate_ad_forward(
+                self.lhs,
+                self.rhs,
+                assigned_advars,
+                saved_vars,
+                routine_map=routine_map,
+                warnings=warnings,
             )
+            assigns.append(self)
         return assigns
 
     def render(self, indent: int = 0) -> List[str]:
@@ -1057,6 +1098,7 @@ class ClearAssignment(Node):
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Assignment]:
@@ -1302,17 +1344,19 @@ class BranchBlock(Node):
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         cond_blocks = []
         for cond, block in self.cond_blocks:
-            res = block.generate_ad(saved_vars, reverse, routine_map, warnings)[0]
-            new_res = block.deep_clone()
-            if not new_res.is_effectively_empty():
-                for node in res.iter_children():
-                    new_res.append(node)
-                res = new_res
+            res = block.generate_ad(saved_vars, reverse, assigned_advars, routine_map, warnings)[0]
+            if reverse:
+                new_res = block.deep_clone()
+                if not new_res.is_effectively_empty():
+                    for node in res.iter_children():
+                        new_res.append(node)
+                    res = new_res
             cond_blocks.append((cond, res))
         if isinstance(self, IfBlock):
             block = IfBlock(cond_blocks)
@@ -1320,15 +1364,18 @@ class BranchBlock(Node):
             block = SelectBlock(cond_blocks, self.expr)
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
-        loads = []
-        blocks = []
-        for var in block.assigned_vars():
-            if not var.name.endswith(AD_SUFFIX):
-                load = self._save_vars(var, saved_vars)
-                loads.append(load)
-                blocks.insert(0, load)
-        blocks.append(block)
-        blocks.extend(loads)
+        if reverse:
+            loads = []
+            blocks = []
+            for var in block.assigned_vars():
+                if not var.name.endswith(AD_SUFFIX):
+                    load = self._save_vars(var, saved_vars)
+                    loads.append(load)
+                    blocks.insert(0, load)
+            blocks.append(block)
+            blocks.extend(loads)
+        else:
+            blocks = [block]
         return blocks
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
@@ -1512,24 +1559,31 @@ class DoLoop(DoAbst):
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
-        body = self._body.generate_ad(saved_vars, reverse, routine_map, warnings)[0]
-        new_body = self._body.deep_clone()
-        recurrent_vars = self.recurrent_vars()
-        pushed = []
-        for node in self._body.iter_children():
-            for var in node.required_vars():
-                if var.name in recurrent_vars:
-                    if not var in pushed:
-                        pushpop = PushPop(var, node.get_id())
-                        self._body.insert_begin(pushpop)
-                        new_body.insert_begin(pushpop.to_load())
-                        pushed.append(var)
-        for node in body.iter_children():
-            new_body.append(node)
-        body = new_body
+
+        if not reverse:
+            for vname in self.recurrent_vars():
+                assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
+
+        body = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, warnings)[0]
+        if reverse:
+            new_body = self._body.deep_clone()
+            recurrent_vars = self.recurrent_vars()
+            pushed = []
+            for node in self._body.iter_children():
+                for var in node.required_vars():
+                    if var.name in recurrent_vars:
+                        if not var in pushed:
+                            pushpop = PushPop(var, node.get_id())
+                            self._body.insert_begin(pushpop)
+                            new_body.insert_begin(pushpop.to_load())
+                            pushed.append(var)
+            for node in body.iter_children():
+                new_body.append(node)
+            body = new_body
         index = self.index
         if reverse:
             start = self.end
@@ -1544,18 +1598,21 @@ class DoLoop(DoAbst):
             step = self.step
         block = DoLoop(body, index, start, end, step)
 
-        common_vars = block.required_vars() & block.assigned_vars()
-        loads = []
-        blocks = []
-        for cvar in common_vars:
-            if cvar == self.index or cvar.name.endswith(AD_SUFFIX):
-                continue
-            load = self._save_vars(cvar, saved_vars)
-            loads.append(load)
-            blocks.insert(0, load)
-        blocks.append(block)
-        for load in loads:
-            blocks.append(load)
+        if reverse:
+            common_vars = block.required_vars() & block.assigned_vars()
+            loads = []
+            blocks = []
+            for cvar in common_vars:
+                if cvar == self.index or cvar.name.endswith(AD_SUFFIX):
+                    continue
+                load = self._save_vars(cvar, saved_vars)
+                loads.append(load)
+                blocks.insert(0, load)
+            blocks.append(block)
+            for load in loads:
+                blocks.append(load)
+        else:
+            blocks = [block]
         return blocks
 
     def render(self, indent: int = 0) -> List[str]:
@@ -1695,25 +1752,30 @@ class DoWhile(DoAbst):
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
-        body = self._body.generate_ad(saved_vars, reverse, routine_map, warnings)[0]
-        new_body = self._body.deep_clone().remove_push()
-        if not new_body.is_effectively_empty():
-            for node in body.children:
-                new_body.append(node)
-            body = new_body
+        body = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, warnings)[0]
+        if reverse:
+            new_body = self._body.deep_clone().remove_push()
+            if not new_body.is_effectively_empty():
+                for node in body.children:
+                    new_body.append(node)
+                body = new_body
         block = DoWhile(body, self.cond)
-        loads = []
-        blocks = []
-        for var in block.assigned_vars():
-            load = self._save_vars(OpVar(var), saved_vars)
-            loads.append(load)
-            blocks.insert(0, load)
-        blocks.append(block)
-        for load in loads:
-            blocks.append(load)
+        if reverse:
+            loads = []
+            blocks = []
+            for var in block.assigned_vars():
+                load = self._save_vars(OpVar(var), saved_vars)
+                loads.append(load)
+                blocks.insert(0, load)
+            blocks.append(block)
+            for load in loads:
+                blocks.append(load)
+        else:
+            blocks = [block]
         return blocks
 
     def render(self, indent: int = 0) -> List[str]:

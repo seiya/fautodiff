@@ -173,10 +173,10 @@ class TestParser(unittest.TestCase):
         modules = parser.parse_file(str(src))
         routine = modules[0].routines[0]
         self.assertIn("CONSTANT_ARGS", routine.directives)
-        self.assertEqual(routine.directives["CONSTANT_ARGS"], ["k"])
-        decl = routine.decls.find_by_name("k")
+        self.assertEqual(routine.directives["CONSTANT_ARGS"], ["z"])
+        decl = routine.decls.find_by_name("z")
         self.assertTrue(decl.constant)
-        var = routine.get_var("k")
+        var = routine.get_var("z")
         self.assertTrue(var.is_constant)
 
 

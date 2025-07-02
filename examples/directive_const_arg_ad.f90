@@ -4,14 +4,25 @@ module directive_const_arg_ad
 
 contains
 
-  subroutine add_const_rev_ad(i, i_ad, j_ad, k)
-    real, intent(in)  :: i
-    real, intent(out) :: i_ad
-    real, intent(inout) :: j_ad
-    real, intent(in)  :: k
+  subroutine add_const_fwd_ad(x, x_ad, y_ad, z)
+    real, intent(in)  :: x
+    real, intent(in)  :: x_ad
+    real, intent(out) :: y_ad
+    real, intent(in)  :: z
 
-    i_ad = j_ad ! j = i + k
-    j_ad = 0.0 ! j = i + k
+    y_ad = x_ad ! y = x + z
+
+    return
+  end subroutine add_const_fwd_ad
+
+  subroutine add_const_rev_ad(x, x_ad, y_ad, z)
+    real, intent(in)  :: x
+    real, intent(out) :: x_ad
+    real, intent(inout) :: y_ad
+    real, intent(in)  :: z
+
+    x_ad = y_ad ! y = x + z
+    y_ad = 0.0 ! y = x + z
 
     return
   end subroutine add_const_rev_ad

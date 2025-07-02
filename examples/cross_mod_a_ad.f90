@@ -4,6 +4,13 @@ module cross_mod_a_ad
 
 contains
 
+  subroutine incval_fwd_ad(a, a_ad)
+    real, intent(inout) :: a
+    real, intent(inout) :: a_ad
+
+    return
+  end subroutine incval_fwd_ad
+
   subroutine incval_rev_ad(a, a_ad)
     real, intent(inout) :: a
     real, intent(inout) :: a_ad

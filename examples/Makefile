@@ -1,7 +1,7 @@
 OUTDIR ?= .
 
 FC ?= gfortran
-FFLAGS ?= -O2
+FFLAGS ?= -O2 -ffree-line-length-none
 
 SRCS := $(wildcard *.f90)
 OBJS := $(addprefix $(OUTDIR)/,$(SRCS:.f90=.o))

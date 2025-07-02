@@ -6,6 +6,15 @@ module cross_mod_b_ad
 
 contains
 
+  subroutine call_inc_fwd_ad(b, b_ad)
+    real, intent(inout) :: b
+    real, intent(inout) :: b_ad
+
+    call incval_fwd_ad(b, b_ad) ! call incval(b)
+
+    return
+  end subroutine call_inc_fwd_ad
+
   subroutine call_inc_rev_ad(b, b_ad)
     real, intent(inout) :: b
     real, intent(inout) :: b_ad
