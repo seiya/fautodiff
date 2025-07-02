@@ -52,7 +52,7 @@ contains
 
     r_ad = 0.0
     d_ad = 1.0d0
-    call casting_intrinsics_ad(i, r, r_ad, d_ad, c)
+    call casting_intrinsics_rev_ad(i, r, r_ad, d_ad, c)
 
     exp_d = dble(r) + dble(int(r))
     exp_r = 1.0

@@ -57,7 +57,7 @@ contains
     call scale_8(x)
 
     x_ad = 1.0_8
-    call scale_8_ad(x, x_ad)
+    call scale_8_rev_ad(x, x_ad)
 
     exp_x = 4.0_8
     exp_x_ad = 2.0_8
@@ -77,7 +77,7 @@ contains
     call scale_rp(x)
 
     x_ad = 1.0_RP
-    call scale_rp_ad(x, x_ad)
+    call scale_rp_rev_ad(x, x_ad)
 
     exp_x = 4.0_RP
     exp_x_ad = 2.0_RP
@@ -97,7 +97,7 @@ contains
     call scale_dp(x)
 
     x_ad = 1.0d0
-    call scale_dp_ad(x, x_ad)
+    call scale_dp_rev_ad(x, x_ad)
 
     exp_x = 4.0d0
     exp_x_ad = 2.0d0

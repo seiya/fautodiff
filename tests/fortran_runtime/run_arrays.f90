@@ -62,7 +62,7 @@ contains
     a_ad = 0.0
     b_ad = 0.0
     c_ad = 1.0
-    call elementwise_add_ad(n, a, a_ad, b, b_ad, c_ad)
+    call elementwise_add_rev_ad(n, a, a_ad, b, b_ad, c_ad)
 
     exp_c = a(1) + 2.0 * b(1)
     exp_a = 1.0
@@ -89,7 +89,7 @@ contains
     a_ad = 0.0
     b_ad = 0.0
     res_ad = 1.0
-    call dot_product_ad(n, a, a_ad, b, b_ad, res_ad)
+    call dot_product_rev_ad(n, a, a_ad, b, b_ad, res_ad)
 
     exp_res = a(1)*b(1) + a(2)*b(2) + a(3)*b(3)
     exp_a = b(1)
@@ -120,7 +120,7 @@ contains
     d_ad = 0.0
     d_ad(1,1) = 1.0
     c_ad = 0.0
-    call multidimension_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
+    call multidimension_rev_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
 
     exp_d = a(1,1) + b(1,1) * c
     exp_a = 1.0

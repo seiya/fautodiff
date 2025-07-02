@@ -18,7 +18,7 @@ contains
     call call_inc(x)
 
     x_ad = 1.0
-    call call_inc_ad(x, x_ad)
+    call call_inc_rev_ad(x, x_ad)
 
     exp_x = 2.0
     exp_x_ad = 1.0
