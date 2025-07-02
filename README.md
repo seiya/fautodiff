@@ -74,6 +74,27 @@ python -m fautodiff.generator -M examples examples/cross_mod_a.f90
 python -m fautodiff.generator -I examples examples/cross_mod_b.f90
 ```
 
+## Optimization Directives
+
+Comment directives may be placed immediately before a subroutine or function
+definition to influence how the AD code is generated. They are optional
+comments processed by ``fautodiff`` and do not change the original Fortran
+semantics.
+
+Use ``CONSTANT_ARGS`` to mark arguments that should be treated as constants
+during differentiation. Specify the argument names after a colon:
+
+```fortran
+!$FAD CONSTANT_ARGS: arg1, arg2
+subroutine foo(arg1, arg2, arg3)
+  ! ...
+end subroutine foo
+```
+
+Arguments listed in ``CONSTANT_ARGS`` do not receive corresponding ``_ad``
+variables in the generated routine. See ``examples/directive_const_arg.f90``
+for a full example.
+
 Run the included tests with:
 
 ```bash
