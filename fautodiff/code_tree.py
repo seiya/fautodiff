@@ -121,7 +121,7 @@ class Node:
         """Yield variables which is assigned in this node w/o children nodes."""
         return iter(())
 
-    def convert_assignments(
+    def generate_ad(
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
@@ -300,7 +300,7 @@ class Node:
         else:
             return f"{name}_save_{id}{AD_SUFFIX}"
 
-    def _generate_ad_backward(
+    def _generate_ad_reverse(
         self,
         lhs: OpVar,
         rhs: Operator,
@@ -332,7 +332,7 @@ class Node:
                 info=self.info,
             )
             extras.extend(
-                callstmt.convert_assignments(
+                callstmt.generate_ad(
                     saved_vars, reverse=True, routine_map=routine_map, warnings=warnings
                 )
             )
@@ -376,6 +376,75 @@ class Node:
         assigns.extend(extras)
         return assigns
 
+    def _generate_ad_forward(
+        self,
+        lhs: OpVar,
+        rhs: Operator,
+        saved_vars: List[SaveAssignment],
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List["Node"]:
+        rhs = rhs.deep_clone()
+        extras: List[Node] = []
+        for n, ufunc in enumerate(rhs.find_userfunc()):
+            if routine_map is None:
+                raise RuntimeError("routine_map is necessary for CallStatement")
+            arg_info = routine_map[ufunc.name]
+            name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
+            result = OpVar(name, typename=arg_info["type"][-1])
+            saved_vars.append(
+                OpVar(
+                    f"{name}{AD_SUFFIX}",
+                    typename=arg_info["type"][-1],
+                    kind=arg_info["kind"][-1],
+                    dims=arg_info["dims"][-1],
+                )
+            )
+            callstmt = CallStatement(
+                name=ufunc.name,
+                args=ufunc.args,
+                intents=ufunc.intents,
+                result=result,
+                info=self.info,
+            )
+            extras.extend(
+                callstmt.generate_ad(
+                    saved_vars, reverse=False, routine_map=routine_map, warnings=warnings
+                )
+            )
+            rhs = rhs.replace_with(ufunc, result)
+
+        assigns: List[Node] = []
+        if lhs.ad_target:
+            grad_lhs = lhs.add_suffix(AD_SUFFIX)
+            ad_info = self.info.get("code") if self.info is not None else None
+
+            if isinstance(rhs, OpFunc):
+                handler = rhs.special_handler(lhs.add_suffix(AD_SUFFIX), rhs.args)
+                if handler is not None:
+                    assigns.append(Assignment(grad_lhs, handler, ad_info=ad_info))
+                    assigns.extend(extras)
+                    return assigns
+
+            vars = rhs.collect_vars()
+            expr = None
+            for var in vars:
+                if not var.ad_target:
+                    continue
+                dev = rhs.derivative(var, target=grad_lhs, info=self.info, warnings=warnings)
+                v = var.add_suffix(AD_SUFFIX)
+                term = v * dev
+                if expr is None:
+                    expr = term
+                else:
+                    expr = expr + term
+            if expr is None:
+                assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
+            else:
+                assigns.append(Assignment(grad_lhs, expr, ad_info=ad_info))
+        assigns.extend(extras)
+        return assigns
+
 
 @dataclass
 class Block(Node):
@@ -389,7 +458,7 @@ class Block(Node):
     def __getitem__(self, index: int) -> Node:
         return self.__children[index]
 
-    def convert_assignments(
+    def generate_ad(
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
@@ -401,7 +470,7 @@ class Block(Node):
         if reverse:
             iterator = reversed(iterator)
         for node in iterator:
-            nodes = node.convert_assignments(saved_vars, reverse, routine_map, warnings)
+            nodes = node.generate_ad(saved_vars, reverse, routine_map, warnings)
             for res in nodes:
                 if res is not None and not res.is_effectively_empty():
                     children.append(res)
@@ -621,7 +690,7 @@ class CallStatement(Node):
                     vars.push(var)
         return vars
 
-    def convert_assignments(
+    def generate_ad(
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
@@ -671,7 +740,7 @@ class CallStatement(Node):
         if tmp_vars:
             for lhs, rhs in tmp_vars:
                 ad_nodes.extend(
-                    self._generate_ad_backward(
+                    self._generate_ad_reverse(
                         lhs,
                         rhs,
                         saved_vars,
@@ -752,14 +821,14 @@ class Routine(Node):
     def iter_children(self) -> Iterator[Node]:
         return iter(self._all_blocks())
 
-    def convert_assignments(
+    def generate_ad(
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Routine]:
-        raise RuntimeError("convert_assignments for Routine is not allowed")
+        raise RuntimeError("generate_ad for Routine is not allowed")
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -889,7 +958,7 @@ class Assignment(Node):
     def is_effectively_empty(self) -> bool:
         return self.lhs == self.rhs
 
-    def convert_assignments(
+    def generate_ad(
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
@@ -899,7 +968,7 @@ class Assignment(Node):
         assigns = [self._save_vars(self.lhs, saved_vars)]
         if reverse:
             assigns.extend(
-                self._generate_ad_backward(
+                self._generate_ad_reverse(
                     self.lhs,
                     self.rhs,
                     saved_vars,
@@ -908,7 +977,15 @@ class Assignment(Node):
                 )
             )
         else:
-            raise NotImplementedError
+            assigns.extend(
+                self._generate_ad_forward(
+                    self.lhs,
+                    self.rhs,
+                    saved_vars,
+                    routine_map=routine_map,
+                    warnings=warnings,
+                )
+            )
         return assigns
 
     def render(self, indent: int = 0) -> List[str]:
@@ -976,7 +1053,7 @@ class ClearAssignment(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
-    def convert_assignments(
+    def generate_ad(
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
@@ -1221,7 +1298,7 @@ class BranchBlock(Node):
         for _, block in self.cond_blocks:
             yield block
 
-    def convert_assignments(
+    def generate_ad(
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
@@ -1230,7 +1307,7 @@ class BranchBlock(Node):
     ) -> List[Node]:
         cond_blocks = []
         for cond, block in self.cond_blocks:
-            res = block.convert_assignments(saved_vars, reverse, routine_map, warnings)[0]
+            res = block.generate_ad(saved_vars, reverse, routine_map, warnings)[0]
             new_res = block.deep_clone()
             if not new_res.is_effectively_empty():
                 for node in res.iter_children():
@@ -1431,14 +1508,14 @@ class DoLoop(DoAbst):
                 var_names.append(name)
         return var_names
 
-    def convert_assignments(
+    def generate_ad(
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
-        body = self._body.convert_assignments(saved_vars, reverse, routine_map, warnings)[0]
+        body = self._body.generate_ad(saved_vars, reverse, routine_map, warnings)[0]
         new_body = self._body.deep_clone()
         recurrent_vars = self.recurrent_vars()
         pushed = []
@@ -1614,14 +1691,14 @@ class DoWhile(DoAbst):
         for child in self.iter_children():
             child.build_do_index_list(index_list)
 
-    def convert_assignments(
+    def generate_ad(
         self,
         saved_vars: List[SaveAssignment],
         reverse: bool = False,
         routine_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
-        body = self._body.convert_assignments(saved_vars, reverse, routine_map, warnings)[0]
+        body = self._body.generate_ad(saved_vars, reverse, routine_map, warnings)[0]
         new_body = self._body.deep_clone().remove_push()
         if not new_body.is_effectively_empty():
             for node in body.children:
