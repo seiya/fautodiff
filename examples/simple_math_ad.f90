@@ -4,7 +4,7 @@ module simple_math_ad
 
 contains
 
-  subroutine add_numbers_ad(a, a_ad, b, b_ad, c_ad)
+  subroutine add_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
     real, intent(in)  :: a
     real, intent(out) :: a_ad
     real, intent(in)  :: b
@@ -19,9 +19,9 @@ contains
     b_ad = work_ad ! work = a + b
 
     return
-  end subroutine add_numbers_ad
+  end subroutine add_numbers_rev_ad
 
-  subroutine subtract_numbers_ad(a, a_ad, b, b_ad, c_ad)
+  subroutine subtract_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
     real, intent(in)  :: a
     real, intent(out) :: a_ad
     real, intent(in)  :: b
@@ -35,9 +35,9 @@ contains
     c_ad = 0.0 ! c = a - b
 
     return
-  end subroutine subtract_numbers_ad
+  end subroutine subtract_numbers_rev_ad
 
-  subroutine multiply_numbers_ad(a, a_ad, b, b_ad, c_ad)
+  subroutine multiply_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
     real, intent(in)  :: a
     real, intent(out) :: a_ad
     real, intent(in)  :: b
@@ -51,9 +51,9 @@ contains
     c_ad = 0.0 ! c = a * b + a
 
     return
-  end subroutine multiply_numbers_ad
+  end subroutine multiply_numbers_rev_ad
 
-  subroutine divide_numbers_ad(a, a_ad, b, b_ad, c_ad)
+  subroutine divide_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
     real, intent(in)  :: a
     real, intent(out) :: a_ad
     real, intent(in)  :: b
@@ -67,9 +67,9 @@ contains
     c_ad = 0.0 ! c = a / (b + 1.5)
 
     return
-  end subroutine divide_numbers_ad
+  end subroutine divide_numbers_rev_ad
 
-  subroutine power_numbers_ad(a, a_ad, b, b_ad, c_ad)
+  subroutine power_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
     real, intent(in)  :: a
     real, intent(out) :: a_ad
     real, intent(in)  :: b
@@ -83,6 +83,6 @@ contains
     c_ad = 0.0 ! c = a**3 + b**5.5
 
     return
-  end subroutine power_numbers_ad
+  end subroutine power_numbers_rev_ad
 
 end module simple_math_ad

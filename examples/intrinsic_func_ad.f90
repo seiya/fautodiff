@@ -4,7 +4,7 @@ module intrinsic_func_ad
 
 contains
 
-  subroutine math_intrinsics_ad(x, x_ad, y, y_ad, z_ad)
+  subroutine math_intrinsics_rev_ad(x, x_ad, y, y_ad, z_ad)
     real, intent(in)  :: x
     real, intent(out) :: x_ad
     real, intent(inout) :: y
@@ -59,9 +59,9 @@ contains
     x_ad = a_ad * sign(1.0, x) / (2.0 * sqrt(abs(x))) + x_ad ! a = sqrt(abs(x))
 
     return
-  end subroutine math_intrinsics_ad
+  end subroutine math_intrinsics_rev_ad
 
-  subroutine non_differentiable_intrinsics_ad(str, arr, arr_ad, x, x_ad, y_ad)
+  subroutine non_differentiable_intrinsics_rev_ad(str, arr, arr_ad, x, x_ad, y_ad)
     character(len=*), intent(in)  :: str
     real, intent(in)  :: arr(:)
     real, intent(out) :: arr_ad(:)
@@ -75,9 +75,9 @@ contains
     x_ad = 0.0 ! c = tiny(x)
 
     return
-  end subroutine non_differentiable_intrinsics_ad
+  end subroutine non_differentiable_intrinsics_rev_ad
 
-  subroutine special_intrinsics_ad(mat_in, mat_in_ad, mat_out_ad)
+  subroutine special_intrinsics_rev_ad(mat_in, mat_in_ad, mat_out_ad)
     real, intent(in)  :: mat_in(:,:)
     real, intent(out) :: mat_in_ad(:,:)
     real, intent(inout) :: mat_out_ad(:,:)
@@ -86,9 +86,9 @@ contains
     mat_in_ad = transpose(mat_out_ad) ! mat_out = transpose(mat_in)
 
     return
-  end subroutine special_intrinsics_ad
+  end subroutine special_intrinsics_rev_ad
 
-  subroutine casting_intrinsics_ad(i, r, r_ad, d_ad, c)
+  subroutine casting_intrinsics_rev_ad(i, r, r_ad, d_ad, c)
     integer, intent(in)  :: i
     real, intent(in)  :: r
     real, intent(out) :: r_ad
@@ -99,6 +99,6 @@ contains
     d_ad = 0.0d0 ! d = dble(r) + dble(i2)
 
     return
-  end subroutine casting_intrinsics_ad
+  end subroutine casting_intrinsics_rev_ad
 
 end module intrinsic_func_ad

@@ -4,11 +4,11 @@ module cross_mod_a_ad
 
 contains
 
-  subroutine incval_ad(a, a_ad)
+  subroutine incval_rev_ad(a, a_ad)
     real, intent(inout) :: a
     real, intent(inout) :: a_ad
 
     return
-  end subroutine incval_ad
+  end subroutine incval_rev_ad
 
 end module cross_mod_a_ad

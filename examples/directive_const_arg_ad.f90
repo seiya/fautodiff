@@ -4,7 +4,7 @@ module directive_const_arg_ad
 
 contains
 
-  subroutine add_const_ad(i, i_ad, j_ad, k)
+  subroutine add_const_rev_ad(i, i_ad, j_ad, k)
     real, intent(in)  :: i
     real, intent(out) :: i_ad
     real, intent(inout) :: j_ad
@@ -14,6 +14,6 @@ contains
     j_ad = 0.0 ! j = i + k
 
     return
-  end subroutine add_const_ad
+  end subroutine add_const_rev_ad
 
 end module directive_const_arg_ad
