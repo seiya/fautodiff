@@ -385,14 +385,14 @@ class Operator:
                 return self / other.args[0]**(other.args[1].args[0])
             if isinstance(self, OpPow) and self.args[0] == other:
                 expo = self.args[1]
-                if isinstance(expo, OpVar) and expo.is_real:
+                if isinstance(expo, OpVar) and expo.is_real_type:
                     one = OpReal("1.0", kind=expo.kind)
                 else:
                     one = OpInt(1)
                 return (self.args[0])**(self.args[1] + one)
             if isinstance(other, OpPow) and other.args[0] == self:
                 expo = other.args[1]
-                if isinstance(expo, OpVar) and expo.is_real:
+                if isinstance(expo, OpVar) and expo.is_real_type:
                     one = OpReal("1.0", kind=expo.kind)
                 else:
                     one = OpInt(1)
@@ -429,14 +429,14 @@ class Operator:
                 return self * other.args[0]**(other.args[1].args[0])
             if isinstance(self, OpPow) and self.args[0] == other:
                 expo = self.args[1]
-                if isinstance(expo, OpVar) and expo.is_real:
+                if isinstance(expo, OpVar) and expo.is_real_type:
                     one = OpReal("1.0", kind=expo.kind)
                 else:
                     one = OpInt(1)
                 return (self.args[0])**(self.args[1] - one)
             if isinstance(other, OpPow) and other.args[0] == self:
                 expo = other.args[1]
-                if isinstance(expo, OpVar) and expo.is_real:
+                if isinstance(expo, OpVar) and expo.is_real_type:
                     one = OpReal("1.0", kind=expo.kind)
                 else:
                     one = OpInt(1)
@@ -530,7 +530,7 @@ class OpInt(OpNum):
         kind = None
         if self.target is not None:
             kind = self.target.kind
-            if self.target.is_real:
+            if self.target.is_real_type:
                 if self.kind is not None:
                     kind = self.kind
                 if kind == "8":
@@ -580,12 +580,12 @@ class OpVar(OpLeaf):
 
     name: str = field(default="")
     index: Optional[AryIndex] = None
-    is_real: Optional[bool] = None
     kind: Optional[str] = None
     typename: Optional[str] = field(default=None, repr=False)
     dims: Optional[Tuple[str]] = field(repr=False, default=None)
     intent: Optional[str] = field(default=None, repr=False)
     ad_target: Optional[bool] = field(default=None, repr=False)
+    is_constant: Optional[bool] = field(default=None, repr=False)
     reference: Optional["OpVar"] = field(repr=False, default=None)
     reduced_dims: List[int] = field(init=False, repr=False, default=None)
 
@@ -593,13 +593,13 @@ class OpVar(OpLeaf):
         self,
         name: str,
         index: Optional[AryIndex] = None,
-        is_real: Optional[bool] = None,
         kind: Optional[str] = None,
         dims: Optional[Tuple[str]] = None,
         reference: Optional[OpVar] = None,
         typename: Optional[str] = None,
         intent: Optional[str] = None,
         ad_target: Optional[bool] = None,
+        is_constant: Optional[bool] = None,
     ):
         super().__init__(args=[])
         if not isinstance(name, str):
@@ -610,19 +610,26 @@ class OpVar(OpLeaf):
         if index is not None and not isinstance(index, AryIndex):
             index = AryIndex(index)
         self.index = index
-        self.is_real = is_real
         self.kind = kind
         self.dims = dims
         self.reference = reference
         self.typename = typename
         self.intent = intent
         self.ad_target = ad_target
-        if self.is_real is None and self.typename is not None:
-            typename = self.typename.lower()
-            self.is_real = typename.startswith("real") or typename.startswith("double")
+        self.is_constant = is_constant
         if self.ad_target is None and self.typename is not None:
             typename = self.typename.lower()
-            self.ad_target = typename.startswith("real") or typename.startswith("double")
+            is_real_type = typename.startswith("real") or typename.startswith("double")
+            self.ad_target = is_real_type and not self.is_constant
+        elif self.ad_target is None:
+            self.ad_target = False
+
+    @property
+    def is_real_type(self) -> bool:
+        if self.typename is None:
+            return False
+        typename = self.typename.lower()
+        return typename.startswith("real") or typename.startswith("double")
 
     def is_array(self) -> bool:
         return self.dims is not None
@@ -633,13 +640,13 @@ class OpVar(OpLeaf):
         return OpVar(
             name=self.name,
             index=index,
-            is_real=self.is_real,
             kind=self.kind,
             dims=self.dims,
             reference=self.reference,
             typename=self.typename,
             intent=self.intent,
             ad_target=self.ad_target,
+            is_constant=self.is_constant,
         )
 
     def add_suffix(self, suffix: str = None) -> str:
@@ -652,13 +659,13 @@ class OpVar(OpLeaf):
         return OpVar(
             name,
             index=index,
-            is_real=self.is_real,
             kind=self.kind,
             dims=self.dims,
             reference=self.reference,
             typename=self.typename,
             intent=self.intent,
             ad_target=self.ad_target,
+            is_constant=self.is_constant,
         )
 
     def collect_vars(self, without_index: bool = False) -> List[OpVar]:
@@ -812,7 +819,7 @@ class OpPow(OpBinary):
         expo = self.args[1]
         dbase = base.derivative(var, target, info, warnings)
         dexpo = expo.derivative(var, target, info, warnings)
-        if isinstance(expo, OpVar) and expo.is_real:
+        if isinstance(expo, OpVar) and expo.is_real_type:
             one = OpReal("1.0", kind=expo.kind)
         else:
             one = OpInt(1)

@@ -102,7 +102,14 @@ class VarList:
                 else:
                     index_new.append(idx)
             if replaced:
-                return OpVar(var.name, index=index_new, is_real=var.is_real)
+                return OpVar(
+                    var.name,
+                    index=index_new,
+                    kind=var.kind,
+                    typename=var.typename,
+                    ad_target=var.ad_target,
+                    is_constant=var.is_constant,
+                )
         return var
 
     def push(self, var: OpVar, not_reorganize: bool = False) -> None:

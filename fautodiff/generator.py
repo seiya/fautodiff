@@ -148,7 +148,7 @@ def _prepare_ad_header(routine_org):
                     dims=dims,
                     intent="inout",
                     ad_target=True,
-                    is_real=arg.is_real,
+                    is_constant=arg.is_constant,
                 )
                 args.append(var)
                 grad_args.append(var)
@@ -168,7 +168,7 @@ def _prepare_ad_header(routine_org):
                     dims=dims,
                     intent=grad_intent,
                     ad_target=True,
-                    is_real=arg.is_real,
+                    is_constant=arg.is_constant,
                 )
                 args.append(var)
                 grad_args.append(var)
@@ -216,7 +216,7 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
 
 
     def _backward(lhs: OpVar, rhs: Operator, info: dict) -> List[Assignment]:
-        if not lhs.is_real:
+        if not lhs.ad_target:
             return Block([])
         grad_lhs = lhs.add_suffix(AD_SUFFIX)
 
@@ -236,7 +236,7 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
             vars.append(lhs)
         assigns = []
         for var in vars:
-            if not var.is_real:
+            if not var.ad_target:
                 continue
             dev = rhs.derivative(var, target=grad_lhs, info=info, warnings=warnings)
             v = var.add_suffix(AD_SUFFIX)
@@ -276,9 +276,18 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
                 if found:
                     continue # already declared
                 v_org = routine_org.get_var(name.removesuffix(AD_SUFFIX))
+                base_decl = routine_org.decls.find_by_name(name.removesuffix(AD_SUFFIX))
                 if v_org is not None and not subroutine.is_declared(name):
                     subroutine.decls.append(
-                        Declaration(name, v_org.typename, v_org.kind, v_org.dims, None)
+                        Declaration(
+                            name,
+                            v_org.typename,
+                            v_org.kind,
+                            v_org.dims,
+                            None,
+                            base_decl.parameter if base_decl else False,
+                            base_decl.init if base_decl else None,
+                        )
                     )
 
         # check initialization for AD variables with intent(out)
@@ -343,6 +352,8 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
                         base_decl.kind,
                         base_decl.dims,
                         None,
+                        base_decl.parameter,
+                        base_decl.init,
                     )
             if decl is not None:
                 if decl.intent is not None and decl.intent == "out":
@@ -351,9 +362,11 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
 
     for var in reversed(saved_vars):
         v_org = None
+        base_decl = None
         if var.reference is not None:
             try:
                 v_org = routine_org.get_var(var.reference.name)
+                base_decl = routine_org.decls.find_by_name(var.reference.name)
             except ValueError as e:
                 ad_block.extend(ad_code)
                 print("".join(subroutine.render()))
@@ -376,7 +389,9 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
             dims = None
         if v_org:
             typename = v_org.typename
-        elif var.is_real:
+        elif var.typename is not None:
+            typename = var.typename
+        elif var.ad_target:
             typename = "real"
         else:
             raise RuntimeError("typename cannot be identified")
@@ -385,7 +400,15 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
         else:
             kind = var.kind
         subroutine.decls.append(
-            Declaration(var.name, typename, kind, dims, None)
+            Declaration(
+                var.name,
+                typename,
+                kind,
+                dims,
+                None,
+                base_decl.parameter if base_decl else False,
+                base_decl.init if base_decl else None,
+            )
         )
 
     subroutine = subroutine.prune_for(VarList([OpVar(var.name) for var in grad_args]))
