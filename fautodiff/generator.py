@@ -11,7 +11,6 @@ import json
 from .operators import (
     OpReal,
     OpVar,
-    OpFunc,
 )
 
 from .code_tree import (
@@ -222,38 +221,6 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
         return subroutine, False, set()
 
 
-    def _backward(lhs: OpVar, rhs: Operator, info: dict) -> List[Assignment]:
-        if not lhs.ad_target:
-            return Block([])
-        grad_lhs = lhs.add_suffix(AD_SUFFIX)
-
-        #ad_info = f"{lhs} = {rhs} @ line {info.get('line','?')}"
-        #ad_info = f"{lhs} = {rhs}"
-        ad_info = info["code"]
-
-        if isinstance(rhs, OpFunc):
-            handler = rhs.special_handler(grad_lhs, rhs.args)
-            if handler is not None:
-                v = rhs.args[0].add_suffix(AD_SUFFIX)
-                return [Assignment(v, handler, accumulate=(not v==grad_lhs), ad_info=ad_info)]
-
-        vars = rhs.collect_vars()
-        if lhs in vars:
-            vars.remove(lhs)
-            vars.append(lhs)
-        assigns = []
-        for var in vars:
-            if not var.ad_target:
-                continue
-            dev = rhs.derivative(var, target=grad_lhs, info=info, warnings=warnings)
-            v = var.add_suffix(AD_SUFFIX)
-            res = grad_lhs * dev
-            assigns.append(Assignment(v, res, accumulate=(not v==grad_lhs), ad_info=ad_info))
-        if not lhs in vars:
-            assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
-        return assigns
-
-        raise ValueError(f"Unsupported operation: {type(rhs)}")
 
     # populate CallStatement intents from routine map
     def _set_call_intents(node):
@@ -267,7 +234,9 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
     _set_call_intents(routine_org.content)
 
     saved_vars = []
-    ad_code = routine_org.content.convert_assignments(saved_vars, _backward, reverse=True, routine_map=routine_map)[0]
+    ad_code = routine_org.content.convert_assignments(
+        saved_vars, reverse=True, routine_map=routine_map, warnings=warnings
+    )[0]
     #print("subroutine: ", subroutine.name) # for debug
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
 
