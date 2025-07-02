@@ -108,10 +108,24 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> dict:
 
 
 def _write_fadmod(mod_name: str, routines, routine_map: dict, directory: Path) -> None:
-    """Write ``routine_map`` info for ``mod_name`` to ``<mod_name>.fadmod``."""
-    data = {r.name: routine_map.get(r.name) for r in routines if r.name in routine_map}
+    """Write ``routine_map`` info for ``mod_name`` to ``<mod_name>.fadmod``.
+
+    The stored information now includes the defining module name so that
+    other files can ``use`` the appropriate ``*_ad`` module when calling
+    generated AD routines.
+    """
+
+    data = {}
+    for r in routines:
+        info = routine_map.get(r.name)
+        if info is not None:
+            info = dict(info)
+            info["module"] = mod_name
+            data[r.name] = info
+
     if not data:
         return
+
     path = directory / f"{mod_name}.fadmod"
     path.write_text(json.dumps(data, indent=2))
 
@@ -199,6 +213,26 @@ def _prepare_ad_header(routine_org):
 
     return arg_info
 
+def _collect_called_ad_modules(blocks, routine_map):
+    """Return a set of modules whose AD routines are called within ``blocks``."""
+
+    modules = set()
+
+    def _visit(node):
+        if isinstance(node, CallStatement):
+            for info in routine_map.values():
+                if info.get("ad_name") == node.name and "module" in info:
+                    modules.add(info["module"])
+                    break
+        for child in getattr(node, "iter_children", lambda: [])():
+            _visit(child)
+
+    for block in blocks:
+        for stmt in block:
+            _visit(stmt)
+    return modules
+
+
 def _generate_ad_subroutine(routine_org, routine_map, warnings):
     subroutine = routine_org._ad_routine
     grad_args = routine_org._grad_args
@@ -212,7 +246,7 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
             lhs = OpVar(arg.name, kind=arg.kind)
             ad_block.append(Assignment(lhs, OpReal("0.0", kind=arg.kind)))
         subroutine.ad_content = ad_block
-        return subroutine, False
+        return subroutine, False, set()
 
 
     def _backward(lhs: OpVar, rhs: Operator, info: dict) -> List[Assignment]:
@@ -396,7 +430,12 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
 
     uses_pushpop = _contains_pushpop(subroutine)
 
-    return subroutine, uses_pushpop
+    called_mods = _collect_called_ad_modules(
+        [subroutine.content, subroutine.ad_init, subroutine.ad_content],
+        routine_map,
+    )
+
+    return subroutine, uses_pushpop, called_mods
 
 
 def generate_ad(
@@ -438,9 +477,13 @@ def generate_ad(
         name = mod_org.name
         pushpop_used = False
         routines = []
+        ad_modules_used = set()
         for routine in mod_org.routines:
-            sub, used = _generate_ad_subroutine(routine, routine_map, warnings)
+            sub, used, mods_called = _generate_ad_subroutine(
+                routine, routine_map, warnings
+            )
             routines.append(sub)
+            ad_modules_used.update(mods_called)
             if used:
                 pushpop_used = True
 
@@ -448,8 +491,23 @@ def generate_ad(
         mod.body.append(Use(name))
         if pushpop_used:
             mod.body.append(Use("fautodiff_data_storage"))
+        inserted = False
         for child in mod_org.body.iter_children():
+            if (
+                not inserted
+                and not isinstance(child, Use)
+                and isinstance(child, Statement)
+                and child.body.lower().startswith("implicit none")
+            ):
+                for m in sorted(ad_modules_used):
+                    if m != name:
+                        mod.body.append(Use(f"{m}{AD_SUFFIX}"))
+                inserted = True
             mod.body.append(child)
+        if not inserted:
+            for m in sorted(ad_modules_used):
+                if m != name:
+                    mod.body.append(Use(f"{m}{AD_SUFFIX}"))
         for sub in routines:
             mod.routines.append(sub)
         modules.append(render_program(mod))

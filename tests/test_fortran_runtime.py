@@ -198,7 +198,9 @@ class TestFortranRuntime(unittest.TestCase):
             tmp_b = tmp / 'cross_mod_b.f90'
             tmp_a.write_text(src_a.read_text())
             tmp_b.write_text(src_b.read_text())
-            ad_code_a = generator.generate_ad(str(tmp_a), warn=False)
+            ad_code_a = generator.generate_ad(
+                str(tmp_a), warn=False, fadmod_dir=str(tmp)
+            )
             ad_path_a = tmp / 'cross_mod_a_ad.f90'
             ad_path_a.write_text(ad_code_a)
             ad_code_b = generator.generate_ad(str(tmp_b), warn=False, search_dirs=[str(tmp)])
