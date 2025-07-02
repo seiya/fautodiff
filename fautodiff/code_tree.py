@@ -262,11 +262,11 @@ class Node:
             _append_unique(vars, var)
         return vars
 
-    def build_do_index_list(self, list: List[str]) -> None:
-        """Build index list of do loop."""
-        self.do_index_list = list
+    def build_do_index_list(self, index_list: List[str]) -> None:
+        """Build index list of ``do`` loops."""
+        self.do_index_list = index_list
         for child in self.iter_children():
-            child.build_do_index_list(list)
+            child.build_do_index_list(index_list)
 
     # ------------------------------------------------------------------
     # optimization helpers
@@ -1263,9 +1263,9 @@ class DoLoop(DoAbst):
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[str]:
         yield self.index
 
-    def build_do_index_list(self, list: List[str]):
+    def build_do_index_list(self, index_list: List[str]):
         self.do_index_list = [self.index.name]
-        self.do_index_list.extend(list)
+        self.do_index_list.extend(index_list)
         self._body.build_do_index_list(self.do_index_list)
 
     def _build_index_map(self) -> dict:
@@ -1482,9 +1482,9 @@ class DoWhile(DoAbst):
     def iter_ref_vars(self) -> Iterator[OpVar]:
         iter(self.cond.collect_vars())
 
-    def build_do_index_list(self, list: List[str]) -> None:
+    def build_do_index_list(self, index_list: List[str]) -> None:
         for child in self.iter_children():
-            child.build_do_index_list(list)
+            child.build_do_index_list(index_list)
 
     def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False, routine_map: Optional[dict] = None) -> List[Node]:
         body = self._body.convert_assignments(saved_vars, func, reverse, routine_map)[0]
