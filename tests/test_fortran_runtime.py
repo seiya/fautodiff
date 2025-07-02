@@ -39,9 +39,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'simple_math.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'simple_math_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_simple_math')
@@ -52,9 +52,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'simple_math.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'simple_math_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_simple_math')
@@ -65,9 +65,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'simple_math.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'simple_math_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_simple_math')
@@ -78,9 +78,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'simple_math.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'simple_math_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_simple_math')
@@ -91,9 +91,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'simple_math.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'simple_math_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_simple_math')
@@ -104,9 +104,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'arrays.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'arrays_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_arrays')
@@ -117,9 +117,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'arrays.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'arrays_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_arrays')
@@ -130,9 +130,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'control_flow.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'control_flow_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_control_flow')
@@ -143,9 +143,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'intrinsic_func.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'intrinsic_func_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_intrinsic_func')
@@ -156,9 +156,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'save_vars.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'save_vars_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_save_vars')
@@ -192,7 +192,9 @@ class TestFortranRuntime(unittest.TestCase):
             )
             ad_path_a = tmp / 'cross_mod_a_ad.f90'
             ad_path_a.write_text(ad_code_a)
-            ad_code_b = generator.generate_ad(str(tmp_b), warn=False, search_dirs=[str(tmp)])
+            ad_code_b = generator.generate_ad(
+                str(tmp_b), warn=False, search_dirs=[str(tmp)], fadmod_dir=str(tmp)
+            )
             ad_path_b = tmp / 'cross_mod_b_ad.f90'
             ad_path_b.write_text(ad_code_b)
             exe = self._build(tmp, 'run_cross_mod')
@@ -203,9 +205,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'call_example.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'call_example_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_call_example')
@@ -217,9 +219,9 @@ class TestFortranRuntime(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         src = base / 'examples' / 'real_kind.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'real_kind_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_real_kind')
@@ -232,9 +234,9 @@ class TestFortranRuntime(unittest.TestCase):
         src = base / 'examples' / 'store_vars.f90'
         ds = base / 'fortran_modules' / 'data_storage.f90'
         code_tree.Node.reset()
-        ad_code = generator.generate_ad(str(src), warn=False)
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
+            ad_code = generator.generate_ad(str(src), warn=False, fadmod_dir=str(tmp))
             ad_path = tmp / 'store_vars_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_store_vars')
