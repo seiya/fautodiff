@@ -109,7 +109,7 @@ def _stmt2op(stmt, decls):
             raise ValueError(f"Not found in the declaration section: {name}")
             #is_real = True
             #kind = None
-        return OpVar(name=name, typename=decl.typename, kind=kind, is_constant=decl.parameter)
+        return OpVar(name=name, typename=decl.typename, kind=kind, is_constant=decl.parameter or getattr(decl, "constant", False))
 
     if isinstance(stmt, Fortran2003.Part_Ref):
         name = stmt.items[0].tofortran()
@@ -126,7 +126,7 @@ def _stmt2op(stmt, decls):
                 return OpFunc(name_l, args)
             return OpFuncUser(name_l, args)
         else:
-            return OpVar(name=name, index=index, typename=decl.typename, kind=decl.kind, is_constant=decl.parameter)
+            return OpVar(name=name, index=index, typename=decl.typename, kind=decl.kind, is_constant=decl.parameter or getattr(decl, "constant", False))
 
     if isinstance(stmt, Fortran2003.Subscript_Triplet):
         args = tuple((x and _stmt2op(x, decls)) for x in stmt.items)
@@ -205,15 +205,18 @@ __all__ = [
 
 def parse_file(path):
     """Parse ``path`` and return a list of :class:`Module` nodes."""
+    with open(path, "r") as f:
+        lines = f.readlines()
     reader = FortranFileReader(path)
-    return _parse_from_reader(reader, path)
+    return _parse_from_reader(reader, path, lines)
 
 def parse_src(src):
-    """Parse ``srch`` and return a list of :class:`Module` nodes."""
+    """Parse ``src`` and return a list of :class:`Module` nodes."""
+    lines = src.splitlines()
     reader = FortranStringReader(src)
-    return _parse_from_reader(reader, "<string>")
+    return _parse_from_reader(reader, "<string>", lines)
 
-def _parse_from_reader(reader, src_name):
+def _parse_from_reader(reader, src_name, lines=None):
     factory = ParserFactory().create(std="f2008")
     ast = factory(reader)
     output = []
@@ -246,7 +249,7 @@ def _parse_from_reader(reader, src_name):
                     if isinstance(c, Fortran2003.Contains_Stmt):
                         continue
                     if isinstance(c, (Fortran2003.Function_Subprogram, Fortran2003.Subroutine_Subprogram)):
-                        mod_node.routines.append(_parse_routine(c, src_name))
+                        mod_node.routines.append(_parse_routine(c, src_name, lines))
                     else:
                         print(type(c), c)
                         raise RuntimeError("Unsupported  statement: {type(c)} {c.string}")
@@ -254,6 +257,31 @@ def _parse_from_reader(reader, src_name):
                 print(type(part), part)
                 raise RuntimeError("Unsupported  statement: {type(part)} {part.string}")
     return output
+
+
+def _parse_directives(lines, line_no):
+    directives = {}
+    if lines is None or line_no is None:
+        return directives
+    idx = line_no - 2  # convert to zero-based index and move above stmt line
+    while idx >= 0:
+        text = lines[idx].strip()
+        if text.startswith("!$FAD"):
+            body = text[5:].strip()
+            if ":" in body:
+                key, rest = body.split(":", 1)
+                key = key.strip().upper()
+                values = [a.strip() for a in rest.split(",") if a.strip()]
+                directives[key] = values
+            else:
+                directives[body.strip().upper()] = True
+            idx -= 1
+            continue
+        if text.startswith("!") or text == "":
+            idx -= 1
+            continue
+        break
+    return directives
 
 
 def find_subroutines(modules):
@@ -277,7 +305,7 @@ def find_subroutines(modules):
     return names
 
 
-def _parse_routine(content, src_name):
+def _parse_routine(content, src_name, lines=None):
     """Return node tree correspoinding to the input AST"""
     def _parse_decls(spec):
         """Return mapping of variable names to ``(type, intent)``."""
@@ -334,7 +362,17 @@ def _parse_routine(content, src_name):
                 init = None
                 if len(entity.items) > 3 and entity.items[3] is not None:
                     init = entity.items[3].items[1].tofortran()
-                decls.append(Declaration(name, base_type, kind, dims, intent, parameter, init))
+                decls.append(
+                    Declaration(
+                        name,
+                        base_type,
+                        kind,
+                        dims,
+                        intent,
+                        parameter,
+                        init=init,
+                    )
+                )
         return decls
 
     def _parse_stmt(stmt, decls) -> Node:
@@ -451,6 +489,10 @@ def _parse_routine(content, src_name):
     stmt = content.content[0]
     name = _stmt_name(stmt)
     args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
+    line_no = None
+    if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
+        line_no = stmt.item.span[0]
+    directives = _parse_directives(lines, line_no)
     if isinstance(content, Fortran2003.Subroutine_Subprogram):
         routine = Subroutine(name, args)
     elif isinstance(content, Fortran2003.Function_Subprogram):
@@ -458,6 +500,7 @@ def _parse_routine(content, src_name):
         routine = Function(name, args, result)
     else:
         raise AttributeError("content must be Subroutine of Function")
+    routine.directives = directives
 
     for part in content.content:
         if isinstance(part, Fortran2003.Specification_Part):
@@ -468,5 +511,12 @@ def _parse_routine(content, src_name):
                 node = _parse_stmt(stmt, decls)
                 if node is not None:
                     routine.content.append(node)
+
+    const_args = directives.get("CONSTANT_ARGS")
+    if const_args:
+        for arg in const_args:
+            decl = routine.decls.find_by_name(arg)
+            if decl is not None:
+                setattr(decl, "constant", True)
 
     return routine
