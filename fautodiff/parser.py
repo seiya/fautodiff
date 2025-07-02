@@ -232,8 +232,14 @@ def _parse_from_reader(reader, src_name):
             if isinstance(part, Fortran2003.Specification_Part):
                 for c in part.content:
                     if isinstance(c, Fortran2003.Implicit_Part):
-                        if c.tofortran():
-                            mod_node.body.append(Statement("implicit none"))
+                        for cnt in c.content:
+                            if isinstance(cnt, Fortran2003.Comment):
+                                if cnt.items[0] != "":
+                                    mod_node.body.append(Statement(cnt.items[0]))
+                                continue
+                            if isinstance(cnt, Fortran2003.Implicit_Stmt):
+                                mod_node.body.append(Statement(cnt.string))
+                            continue
                         continue
                     if isinstance(c, Fortran2003.Use_Stmt):
                         mod_node.body.append(Use(c.items[2].string))
@@ -242,7 +248,7 @@ def _parse_from_reader(reader, src_name):
                         #mod_node.body.append(Statement(c.string))
                         continue
                     print(type(c), c)
-                    raise RuntimeError("Unsupported  statement: {type(c)} {c.string}")
+                    raise RuntimeError("Unsupported statement: {type(c)} {c.string}")
                 continue
             if isinstance(part, Fortran2003.Module_Subprogram_Part):
                 for c in part.content:
@@ -257,30 +263,8 @@ def _parse_from_reader(reader, src_name):
                         raise RuntimeError("Unsupported  statement: {type(c)} {c.string}")
             else:
                 print(type(part), part)
-                raise RuntimeError("Unsupported  statement: {type(part)} {part.string}")
+                raise RuntimeError("Unsupported statement: {type(part)} {part.string}")
     return output
-
-
-def _parse_directives(routine_ast):
-    """Extract FAD directives from comment nodes preceding the routine stmt."""
-    directives = {}
-    for item in routine_ast.content:
-        if isinstance(item, Fortran2003.Comment):
-            text = item.items[0].strip()
-            if text.startswith("!$FAD"):
-                body = text[5:].strip()
-                if ":" in body:
-                    key, rest = body.split(":", 1)
-                    key = key.strip().upper()
-                    values = [a.strip() for a in rest.split(",") if a.strip()]
-                    directives[key] = values
-                else:
-                    directives[body.strip().upper()] = True
-            continue
-        if isinstance(item, (Fortran2003.Subroutine_Stmt, Fortran2003.Function_Stmt)):
-            break
-        # Ignore non-comment items preceding the stmt
-    return directives
 
 
 def find_subroutines(modules):
@@ -312,7 +296,17 @@ def _parse_routine(content, src_name):
         if spec is None:
             return decls
         for decl in spec.content:
+            if isinstance(decl, Fortran2003.Implicit_Part):
+                for cnt in decl.content:
+                    if isinstance(cnt, Fortran2003.Comment):
+                        if cnt.items[0] != "":
+                            decls.append(Statement(cnt.items[0]))
+                        continue
+                    if isinstance(cnt, Fortran2003.Implicit_Stmt):
+                        decls.append(Statement(cnt.string))
+                continue
             if not isinstance(decl, Fortran2003.Type_Declaration_Stmt):
+                raise RuntimeError(f"Unsupported statement: {type(decl)} {decl}")
                 continue
             base_type = decl.items[0].string
             kind = None
@@ -493,33 +487,46 @@ def _parse_routine(content, src_name):
         return blk
 
     stmt = None
+    directives = {}
     for item in content.content:
+        if isinstance(item, Fortran2003.Comment):
+            text = item.items[0].strip()
+            if text.startswith("!$FAD"):
+                body = text[5:].strip()
+                if ":" in body:
+                    key, rest = body.split(":", 1)
+                    key = key.strip().upper()
+                    values = [a.strip() for a in rest.split(",") if a.strip()]
+                    directives[key] = values
+                else:
+                    directives[body.strip().upper()] = True
+            continue
         if isinstance(item, (Fortran2003.Subroutine_Stmt, Fortran2003.Function_Stmt)):
             stmt = item
-            break
-    if stmt is None:
-        raise AttributeError("Could not find routine statement")
-    name = _stmt_name(stmt)
-    args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
-    directives = _parse_directives(content)
-    if isinstance(content, Fortran2003.Subroutine_Subprogram):
-        routine = Subroutine(name, args)
-    elif isinstance(content, Fortran2003.Function_Subprogram):
-        result = str(stmt.items[3].items[0])
-        routine = Function(name, args, result)
-    else:
-        raise AttributeError("content must be Subroutine of Function")
-    routine.directives = directives
-
-    for part in content.content:
-        if isinstance(part, Fortran2003.Specification_Part):
-            routine.decls = _parse_decls(part)
-        elif isinstance(part, Fortran2003.Execution_Part):
+            name = _stmt_name(stmt)
+            args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
+            if isinstance(content, Fortran2003.Subroutine_Subprogram):
+                routine = Subroutine(name, args)
+            elif isinstance(content, Fortran2003.Function_Subprogram):
+                result = str(stmt.items[3].items[0])
+                routine = Function(name, args, result)
+            routine.directives = directives
+            continue
+        if isinstance(item, Fortran2003.Specification_Part):
+            routine.decls = _parse_decls(item)
+            continue
+        if isinstance(item, Fortran2003.Execution_Part):
             decls = routine.decls
-            for stmt in part.content:
+            for stmt in item.content:
                 node = _parse_stmt(stmt, decls)
                 if node is not None:
                     routine.content.append(node)
+            continue
+        if isinstance(item, Fortran2003.End_Subroutine_Stmt):
+            continue
+        if isinstance(item, Fortran2003.End_Function_Stmt):
+            continue
+        raise RuntimeError(f"Unsupported statement: {type(item)} {item.items}")
 
     const_args = directives.get("CONSTANT_ARGS")
     if const_args:

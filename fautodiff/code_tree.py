@@ -333,7 +333,7 @@ class Block(Node):
 
     def find_by_name(self, name: str) -> None:
         for child in self.iter_children():
-            if child.name == name:
+            if isinstance(child, Declaration) and child.name == name:
                 return child
         return None
 
