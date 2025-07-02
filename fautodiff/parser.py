@@ -205,18 +205,15 @@ __all__ = [
 
 def parse_file(path):
     """Parse ``path`` and return a list of :class:`Module` nodes."""
-    with open(path, "r") as f:
-        lines = f.readlines()
-    reader = FortranFileReader(path)
-    return _parse_from_reader(reader, path, lines)
+    reader = FortranFileReader(path, ignore_comments=False)
+    return _parse_from_reader(reader, path)
 
 def parse_src(src):
     """Parse ``src`` and return a list of :class:`Module` nodes."""
-    lines = src.splitlines()
-    reader = FortranStringReader(src)
-    return _parse_from_reader(reader, "<string>", lines)
+    reader = FortranStringReader(src, ignore_comments=False)
+    return _parse_from_reader(reader, "<string>")
 
-def _parse_from_reader(reader, src_name, lines=None):
+def _parse_from_reader(reader, src_name):
     factory = ParserFactory().create(std="f2008")
     ast = factory(reader)
     output = []
@@ -230,10 +227,13 @@ def _parse_from_reader(reader, src_name, lines=None):
                 continue
             if isinstance(part, Fortran2003.End_Module_Stmt):
                 break
+            if isinstance(part, Fortran2003.Comment):
+                continue
             if isinstance(part, Fortran2003.Specification_Part):
                 for c in part.content:
                     if isinstance(c, Fortran2003.Implicit_Part):
-                        mod_node.body.append(Statement("implicit none"))
+                        if c.tofortran():
+                            mod_node.body.append(Statement("implicit none"))
                         continue
                     if isinstance(c, Fortran2003.Use_Stmt):
                         mod_node.body.append(Use(c.items[2].string))
@@ -248,8 +248,10 @@ def _parse_from_reader(reader, src_name, lines=None):
                 for c in part.content:
                     if isinstance(c, Fortran2003.Contains_Stmt):
                         continue
+                    if isinstance(c, Fortran2003.Comment):
+                        continue
                     if isinstance(c, (Fortran2003.Function_Subprogram, Fortran2003.Subroutine_Subprogram)):
-                        mod_node.routines.append(_parse_routine(c, src_name, lines))
+                        mod_node.routines.append(_parse_routine(c, src_name))
                     else:
                         print(type(c), c)
                         raise RuntimeError("Unsupported  statement: {type(c)} {c.string}")
@@ -259,28 +261,25 @@ def _parse_from_reader(reader, src_name, lines=None):
     return output
 
 
-def _parse_directives(lines, line_no):
+def _parse_directives(routine_ast):
+    """Extract FAD directives from comment nodes preceding the routine stmt."""
     directives = {}
-    if lines is None or line_no is None:
-        return directives
-    idx = line_no - 2  # convert to zero-based index and move above stmt line
-    while idx >= 0:
-        text = lines[idx].strip()
-        if text.startswith("!$FAD"):
-            body = text[5:].strip()
-            if ":" in body:
-                key, rest = body.split(":", 1)
-                key = key.strip().upper()
-                values = [a.strip() for a in rest.split(",") if a.strip()]
-                directives[key] = values
-            else:
-                directives[body.strip().upper()] = True
-            idx -= 1
+    for item in routine_ast.content:
+        if isinstance(item, Fortran2003.Comment):
+            text = item.items[0].strip()
+            if text.startswith("!$FAD"):
+                body = text[5:].strip()
+                if ":" in body:
+                    key, rest = body.split(":", 1)
+                    key = key.strip().upper()
+                    values = [a.strip() for a in rest.split(",") if a.strip()]
+                    directives[key] = values
+                else:
+                    directives[body.strip().upper()] = True
             continue
-        if text.startswith("!") or text == "":
-            idx -= 1
-            continue
-        break
+        if isinstance(item, (Fortran2003.Subroutine_Stmt, Fortran2003.Function_Stmt)):
+            break
+        # Ignore non-comment items preceding the stmt
     return directives
 
 
@@ -305,7 +304,7 @@ def find_subroutines(modules):
     return names
 
 
-def _parse_routine(content, src_name, lines=None):
+def _parse_routine(content, src_name):
     """Return node tree correspoinding to the input AST"""
     def _parse_decls(spec):
         """Return mapping of variable names to ``(type, intent)``."""
@@ -376,6 +375,8 @@ def _parse_routine(content, src_name, lines=None):
         return decls
 
     def _parse_stmt(stmt, decls) -> Node:
+        if isinstance(stmt, Fortran2003.Comment):
+            return None
         line_no = None
         if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
             line_no = stmt.item.span[0]
@@ -459,20 +460,25 @@ def _parse_routine(content, src_name, lines=None):
                 cond_blocks.append((conds, blk))
             return SelectBlock(cond_blocks, expr)
         if isinstance(stmt, Fortran2008.Block_Nonlabel_Do_Construct):
-            body = _block(stmt.content[1:-1], decls)
-            if stmt.content[0].tofortran().startswith("DO WHILE"):
-                cond = _stmt2op(stmt.content[0].items[1].items[0].items[0], decls)
+            idx = 0
+            while idx < len(stmt.content) and isinstance(stmt.content[idx], Fortran2003.Comment):
+                idx += 1
+            # skip Nonlabel_Do_Stmt
+            idx += 1
+            body = _block(stmt.content[idx:-1], decls)
+            if stmt.content[idx-1].tofortran().startswith("DO WHILE"):
+                cond = _stmt2op(stmt.content[idx-1].items[1].items[0].items[0], decls)
                 return DoWhile(body, cond)
             else:
-                itm = stmt.content[0].items[1].items[1]
+                itm = stmt.content[idx-1].items[1].items[1]
                 index = _stmt2op(itm[0], decls)
-                start = _stmt2op(itm[1][0], decls)
-                end = _stmt2op(itm[1][1], decls)
+                start_val = _stmt2op(itm[1][0], decls)
+                end_val = _stmt2op(itm[1][1], decls)
                 if len(itm[1]) == 2:
                     step = None
                 else:
                     step = _stmt2op(itm[1][2], decls)
-                return DoLoop(body, index, start, end, step)
+                return DoLoop(body, index, start_val, end_val, step)
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return Statement("return")
 
@@ -486,13 +492,16 @@ def _parse_routine(content, src_name, lines=None):
                 blk.append(node)
         return blk
 
-    stmt = content.content[0]
+    stmt = None
+    for item in content.content:
+        if isinstance(item, (Fortran2003.Subroutine_Stmt, Fortran2003.Function_Stmt)):
+            stmt = item
+            break
+    if stmt is None:
+        raise AttributeError("Could not find routine statement")
     name = _stmt_name(stmt)
     args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
-    line_no = None
-    if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
-        line_no = stmt.item.span[0]
-    directives = _parse_directives(lines, line_no)
+    directives = _parse_directives(content)
     if isinstance(content, Fortran2003.Subroutine_Subprogram):
         routine = Subroutine(name, args)
     elif isinstance(content, Fortran2003.Function_Subprogram):
