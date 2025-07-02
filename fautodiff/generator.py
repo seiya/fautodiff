@@ -6,7 +6,6 @@ AD_SUFFIX = "_ad"
 
 from pathlib import Path
 import sys
-import re
 import json
 
 from .operators import (
@@ -52,32 +51,6 @@ def _warn(warnings, info, code, reason):
         line = info.get("line", "?")
         msg = f"{filename}:{line}: {code} - {reason}"
         warnings.append(msg)
-
-
-def _dims_spec(typ) -> str | None:
-    """Return dimension specification string from ``typ`` if present."""
-    text = str(typ).strip()
-    low = text.lower()
-    idx = low.find("dimension")
-    if idx == -1:
-        return None
-    start = low.find("(", idx)
-    if start == -1:
-        return None
-    depth = 0
-    end = None
-    for i in range(start, len(text)):
-        if text[i] == "(":
-            depth += 1
-        elif text[i] == ")":
-            depth -= 1
-            if depth == 0:
-                end = i
-                break
-    if end is not None:
-        return text[start:end + 1].strip()
-    return None
-
 
 
 
