@@ -4,7 +4,7 @@ module array_ad
 
 contains
 
-  subroutine elementwise_add_ad(n, a, a_ad, b, b_ad, c_ad)
+  subroutine elementwise_add_rev_ad(n, a, a_ad, b, b_ad, c_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: a(n)
     real, intent(out) :: a_ad(n)
@@ -18,9 +18,9 @@ contains
     c_ad(:) = 0.0 ! c(:) = a + b
 
     return
-  end subroutine elementwise_add_ad
+  end subroutine elementwise_add_rev_ad
 
-  subroutine scale_array_ad(n, a, a_ad)
+  subroutine scale_array_rev_ad(n, a, a_ad)
     integer, intent(in)  :: n
     real, intent(inout) :: a(n)
     real, intent(inout) :: a_ad(n)
@@ -31,9 +31,9 @@ contains
     end do
 
     return
-  end subroutine scale_array_ad
+  end subroutine scale_array_rev_ad
 
-  subroutine multidimension_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
+  subroutine multidimension_rev_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
     integer, intent(in)  :: n
     integer, intent(in)  :: m
     real, intent(in)  :: a(n,m)
@@ -58,9 +58,9 @@ contains
     end do
 
     return
-  end subroutine multidimension_ad
+  end subroutine multidimension_rev_ad
 
-  subroutine dot_product_ad(n, a, a_ad, b, b_ad, res_ad)
+  subroutine dot_product_rev_ad(n, a, a_ad, b, b_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: a(n)
     real, intent(out) :: a_ad(n)
@@ -76,9 +76,9 @@ contains
     res_ad = 0.0 ! res = 0.0
 
     return
-  end subroutine dot_product_ad
+  end subroutine dot_product_rev_ad
 
-  subroutine indirect_ad(n, a, a_ad, b_ad, c_ad, idx)
+  subroutine indirect_rev_ad(n, a, a_ad, b_ad, c_ad, idx)
     integer, intent(in)  :: n
     real, intent(in)  :: a(n)
     real, intent(out) :: a_ad(n)
@@ -97,9 +97,9 @@ contains
     end do
 
     return
-  end subroutine indirect_ad
+  end subroutine indirect_rev_ad
 
-  subroutine stencil_ad(n, a, a_ad, b_ad)
+  subroutine stencil_rev_ad(n, a, a_ad, b_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: a(n)
     real, intent(out) :: a_ad(n)
@@ -125,6 +125,6 @@ contains
     end do
 
     return
-  end subroutine stencil_ad
+  end subroutine stencil_rev_ad
 
 end module array_ad

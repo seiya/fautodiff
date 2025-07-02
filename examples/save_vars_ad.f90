@@ -4,7 +4,7 @@ module save_vars_ad
 
 contains
 
-  subroutine simple_ad(x, x_ad, y, y_ad, z_ad)
+  subroutine simple_rev_ad(x, x_ad, y, y_ad, z_ad)
     real, intent(in)  :: x
     real, intent(out) :: x_ad
     real, intent(in)  :: y
@@ -35,9 +35,9 @@ contains
     x_ad = work_ad + x_ad ! work = x + 1.0
 
     return
-  end subroutine simple_ad
+  end subroutine simple_rev_ad
 
-  subroutine if_example_ad(x, x_ad, y, y_ad, z_ad)
+  subroutine if_example_rev_ad(x, x_ad, y, y_ad, z_ad)
     real, intent(in)  :: x
     real, intent(out) :: x_ad
     real, intent(in)  :: y
@@ -96,9 +96,9 @@ contains
     x_ad = work_ad + x_ad ! work = x + 1.0
 
     return
-  end subroutine if_example_ad
+  end subroutine if_example_rev_ad
 
-  subroutine do_with_array_private_ad(n, m, x, x_ad, y, y_ad, z_ad)
+  subroutine do_with_array_private_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
     integer, intent(in)  :: n
     integer, intent(in)  :: m
     real, intent(in)  :: x(n,m)
@@ -154,9 +154,9 @@ contains
     x_ad(:,:) = ary_ad(:,:) + x_ad(:,:) ! ary(:,:) = x(:,:)
 
     return
-  end subroutine do_with_array_private_ad
+  end subroutine do_with_array_private_rev_ad
 
-  subroutine do_with_array_ad(n, m, x, x_ad, y, y_ad, z_ad)
+  subroutine do_with_array_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
     integer, intent(in)  :: n
     integer, intent(in)  :: m
     real, intent(in)  :: x(n,m)
@@ -218,9 +218,9 @@ contains
     end do
 
     return
-  end subroutine do_with_array_ad
+  end subroutine do_with_array_rev_ad
 
-  subroutine do_with_local_array_ad(n, m, x, x_ad, y, y_ad, z_ad)
+  subroutine do_with_local_array_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
     integer, intent(in)  :: n
     integer, intent(in)  :: m
     real, intent(in)  :: x(n,m)
@@ -319,11 +319,11 @@ contains
     end do
 
     return
-  end subroutine do_with_local_array_ad
+  end subroutine do_with_local_array_rev_ad
 
-  subroutine do_with_stencil_array_ad()
+  subroutine do_with_stencil_array_rev_ad()
 
     return
-  end subroutine do_with_stencil_array_ad
+  end subroutine do_with_stencil_array_rev_ad
 
 end module save_vars_ad

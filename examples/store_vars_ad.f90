@@ -5,7 +5,7 @@ module store_vars_ad
 
 contains
 
-  subroutine do_with_recurrent_scalar_ad(n, x, x_ad, z_ad)
+  subroutine do_with_recurrent_scalar_rev_ad(n, x, x_ad, z_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x(n)
     real, intent(out) :: x_ad(n)
@@ -34,6 +34,6 @@ contains
     end do
 
     return
-  end subroutine do_with_recurrent_scalar_ad
+  end subroutine do_with_recurrent_scalar_rev_ad
 
 end module store_vars_ad

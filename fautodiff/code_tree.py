@@ -8,6 +8,8 @@ import re
 import copy
 
 AD_SUFFIX = "_ad"
+FWD_SUFFIX = "_fwd_ad"
+REV_SUFFIX = "_rev_ad"
 
 from .operators import (
     AryIndex,
