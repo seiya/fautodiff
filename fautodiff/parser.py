@@ -102,15 +102,14 @@ def _stmt2op(stmt, decls):
         name = stmt.tofortran()
         decl = decls.find_by_name(name)
         if decl is not None:
-            is_real = decl.is_real()
             kind = decl.kind
-            if kind is None and is_real and decl.typename.lower().startswith("double"):
+            if kind is None and decl.is_real() and decl.typename.lower().startswith("double"):
                 kind = "8"
         else:
             raise ValueError(f"Not found in the declaration section: {name}")
             #is_real = True
             #kind = None
-        return OpVar(name=name, is_real=is_real, kind=kind)
+        return OpVar(name=name, typename=decl.typename, kind=kind, is_constant=decl.parameter)
 
     if isinstance(stmt, Fortran2003.Part_Ref):
         name = stmt.items[0].tofortran()
@@ -127,7 +126,7 @@ def _stmt2op(stmt, decls):
                 return OpFunc(name_l, args)
             return OpFuncUser(name_l, args)
         else:
-            return OpVar(name=name, index=index, is_real=decl.is_real())
+            return OpVar(name=name, index=index, typename=decl.typename, kind=decl.kind, is_constant=decl.parameter)
 
     if isinstance(stmt, Fortran2003.Subscript_Triplet):
         args = tuple((x and _stmt2op(x, decls)) for x in stmt.items)
@@ -313,12 +312,16 @@ def _parse_routine(content, src_name):
                 intent = None
 
             dim_attr = None
+            parameter = False
             attrs = decl.items[1]
             if attrs is not None:
                 for attr in attrs.items:
-                    if hasattr(attr, "items") and str(attr.items[0]).lower() == "dimension":
+                    name = getattr(attr, "string", str(getattr(attr, "items", [None])[0])).lower()
+                    if name.startswith("dimension"):
                         dims = tuple(v.tofortran() for v in attr.items[1].items)
                         break
+                    if name == "parameter":
+                        parameter = True
 
             for entity in decl.items[2].items:
                 name = entity.items[0].tofortran()
@@ -328,7 +331,10 @@ def _parse_routine(content, src_name):
                     dims = tuple(v.tofortran() for v in arrspec.items)
                 elif dim_attr is not None:
                     dims = dim_attr
-                decls.append(Declaration(name, base_type, kind, dims, intent))
+                init = None
+                if len(entity.items) > 3 and entity.items[3] is not None:
+                    init = entity.items[3].items[1].tofortran()
+                decls.append(Declaration(name, base_type, kind, dims, intent, parameter, init))
         return decls
 
     def _parse_stmt(stmt, decls) -> Node:

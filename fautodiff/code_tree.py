@@ -297,8 +297,8 @@ class Node:
         for n, ufunc in enumerate(rhs.find_userfunc()):
             arg_info = routine_map[ufunc.name]
             name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
-            result = OpVar(name, is_real=arg_info["type"][-1]=="real")
-            saved_vars.append(OpVar(f"{name}{AD_SUFFIX}", is_real=result.is_real, kind=arg_info["kind"][-1], dims=arg_info["dims"][-1]))
+            result = OpVar(name, typename=arg_info["type"][-1])
+            saved_vars.append(OpVar(f"{name}{AD_SUFFIX}", typename=arg_info["type"][-1], kind=arg_info["kind"][-1], dims=arg_info["dims"][-1]))
             callstmt = CallStatement(name=ufunc.name, args=ufunc.args, intents=ufunc.intents, result=result, info=self.info)
             extras.extend(callstmt.convert_assignments(saved_vars, ufunc, True, routine_map))
             rhs = rhs.replace_with(ufunc, result)
@@ -556,10 +556,10 @@ class CallStatement(Node):
         def _push_arg(i, arg):
             if not isinstance(arg, OpLeaf) and arg_info["type"][i] == "real":
                 name = self._save_var_name(f"{self.name}_arg{i}", self.get_id(), no_suffix=True)
-                tmp = OpVar(name, is_real=True)
+                tmp = OpVar(name, typename="real")
                 tmp_vars.append((tmp, arg))
                 args_new.append(tmp)
-                saved_vars.append(OpVar(f"{tmp.name}{AD_SUFFIX}", is_real=True, kind=arg_info["kind"][i], dims=arg_info["dims"][i]))
+                saved_vars.append(OpVar(f"{tmp.name}{AD_SUFFIX}", typename="real", kind=arg_info["kind"][i], dims=arg_info["dims"][i]))
             else:
                 args_new.append(arg)
         tmp_vars = []
@@ -581,7 +581,7 @@ class CallStatement(Node):
             if ad_arg.endswith(AD_SUFFIX):
                 if not isinstance(var, OpLeaf):
                     var = args_new[i]
-                var = OpVar(f"{var.name}{AD_SUFFIX}", index=var.index, kind=var.kind, is_real=var.is_real)
+                var = OpVar(f"{var.name}{AD_SUFFIX}", index=var.index, kind=var.kind, typename=var.typename, ad_target=var.ad_target, is_constant=var.is_constant)
             ad_args.append(var)
         ad_call = CallStatement(name=arg_info["ad_name"], args=ad_args, intents=arg_info["ad_intents"], ad_info=self.info["code"])
 
@@ -692,12 +692,12 @@ class Routine(Node):
             intent = "out"
         return OpVar(
             name,
-            is_real=decl.is_real(),
             kind=decl.kind,
             dims=decl.dims,
             typename=decl.typename,
             intent=intent,
             ad_target=None,
+            is_constant=decl.parameter,
         )
 
     def arg_vars(self) -> List[OpVar]:
@@ -931,8 +931,11 @@ class SaveAssignment(Node):
             self.tmpvar = OpVar(
                 self._save_var_name(name, self.id),
                 index=self.var.index,
-                is_real=self.var.is_real,
-                reference=self.var
+                kind=self.var.kind,
+                typename=self.var.typename,
+                ad_target=self.var.ad_target,
+                is_constant=self.var.is_constant,
+                reference=self.var,
             )
         if self.load:
             self.lhs = self.var
@@ -1010,6 +1013,8 @@ class Declaration(Node):
     kind: Optional[str] = None
     dims: Optional[Tuple[str]] = None
     intent: Optional[str] = None
+    parameter: bool = False
+    init: Optional[str] = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -1018,7 +1023,7 @@ class Declaration(Node):
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         if self.intent in ("in", "inout"):
-            yield OpVar(name=self.name, is_real=self.is_real(), kind=self.kind)
+            yield OpVar(name=self.name, typename=self.typename, kind=self.kind, is_constant=self.parameter)
         else:
             return iter(())
 
@@ -1030,6 +1035,8 @@ class Declaration(Node):
         line = f"{space}{self.typename}"
         if self.kind is not None:
             line += f"({self.kind})"
+        if self.parameter:
+            line += ", parameter"
         if self.intent is not None:
             pad = "  " if self.intent == "in" else " "
             line += f", intent({self.intent})" + pad + f":: {self.name}"
@@ -1038,6 +1045,8 @@ class Declaration(Node):
         if self.dims is not None:
             dims = ",".join(self.dims)
             line += f"({dims})"
+        if self.parameter and self.init is not None:
+            line += f" = {self.init}"
         line += "\n"
         return [line]
 
@@ -1059,7 +1068,7 @@ class Declaration(Node):
         if self.intent in ("in", "inout"):
             if self.name.endswith(AD_SUFFIX):
                 vars = vars.copy()
-                vars.push(OpVar(self.name, is_real=self.is_real, kind=self.kind))
+                vars.push(OpVar(self.name, typename=self.typename, kind=self.kind, is_constant=self.parameter))
         return vars
 
 
