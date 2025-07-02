@@ -167,6 +167,18 @@ class TestParser(unittest.TestCase):
         var = routine.get_var("x")
         self.assertTrue(var.is_constant)
 
+    def test_parse_file_directive_constant_args(self):
+        base = Path(__file__).resolve().parents[1]
+        src = base / "examples" / "directive_const_arg.f90"
+        modules = parser.parse_file(str(src))
+        routine = modules[0].routines[0]
+        self.assertIn("CONSTANT_ARGS", routine.directives)
+        self.assertEqual(routine.directives["CONSTANT_ARGS"], ["k"])
+        decl = routine.decls.find_by_name("k")
+        self.assertTrue(decl.constant)
+        var = routine.get_var("k")
+        self.assertTrue(var.is_constant)
+
 
 
 if __name__ == "__main__":
