@@ -984,6 +984,13 @@ class TestDoWhile(unittest.TestCase):
         self.assertEqual(render_program(loop), code)
         self.assertEqual({str(v) for v in loop.required_vars()}, {"b", "cond"})
 
+    def test_iter_ref_vars(self):
+        body = Block([
+            Assignment(OpVar('a'), OpVar('b'))
+        ])
+        loop = DoWhile(body, OpVar('cond'))
+        self.assertEqual({str(v) for v in loop.iter_ref_vars()}, {"cond"})
+
     def test_check_initial(self):
         code = textwrap.dedent("""\
         do while (flag)
