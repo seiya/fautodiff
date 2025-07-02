@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar, Callable
+from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar
 import re
 import copy
 
@@ -17,6 +17,7 @@ from .operators import (
     OpInt,
     OpReal,
     OpRange,
+    OpFunc,
     OpFuncUser
 )
 
@@ -118,8 +119,14 @@ class Node:
         """Yield variables which is assigned in this node w/o children nodes."""
         return iter(())
 
-    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False, routine_map: Optional[dict] = None) -> List["Node"]:
-        """New with converted assignment nodes."""
+    def convert_assignments(
+        self,
+        saved_vars: List[SaveAssignment],
+        reverse: bool = False,
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List["Node"]:
+        """Return AD converted nodes."""
         return []
 
     def _save_vars(self, var: OpVar, saved_vars: List[SaveAssignment]) -> SaveAssignment:
@@ -291,18 +298,79 @@ class Node:
         else:
             return f"{name}_save_{id}{AD_SUFFIX}"
 
-    def _generate_ad_backward(self, lhs: OpVar, rhs: OpVar, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], routine_map: Optional[dict] = None) -> List["Node"]:
+    def _generate_ad_backward(
+        self,
+        lhs: OpVar,
+        rhs: Operator,
+        saved_vars: List[SaveAssignment],
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List["Node"]:
         rhs = rhs.deep_clone()
-        extras = []
+        extras: List[Node] = []
         for n, ufunc in enumerate(rhs.find_userfunc()):
+            if routine_map is None:
+                raise RuntimeError("routine_map is necessary for CallStatement")
             arg_info = routine_map[ufunc.name]
             name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
             result = OpVar(name, typename=arg_info["type"][-1])
-            saved_vars.append(OpVar(f"{name}{AD_SUFFIX}", typename=arg_info["type"][-1], kind=arg_info["kind"][-1], dims=arg_info["dims"][-1]))
-            callstmt = CallStatement(name=ufunc.name, args=ufunc.args, intents=ufunc.intents, result=result, info=self.info)
-            extras.extend(callstmt.convert_assignments(saved_vars, ufunc, True, routine_map))
+            saved_vars.append(
+                OpVar(
+                    f"{name}{AD_SUFFIX}",
+                    typename=arg_info["type"][-1],
+                    kind=arg_info["kind"][-1],
+                    dims=arg_info["dims"][-1],
+                )
+            )
+            callstmt = CallStatement(
+                name=ufunc.name,
+                args=ufunc.args,
+                intents=ufunc.intents,
+                result=result,
+                info=self.info,
+            )
+            extras.extend(
+                callstmt.convert_assignments(
+                    saved_vars, reverse=True, routine_map=routine_map, warnings=warnings
+                )
+            )
             rhs = rhs.replace_with(ufunc, result)
-        assigns = func(lhs, rhs, self.info)
+
+        assigns: List[Node] = []
+        if lhs.ad_target:
+            grad_lhs = lhs.add_suffix(AD_SUFFIX)
+            ad_info = self.info.get("code") if self.info is not None else None
+
+            if isinstance(rhs, OpFunc):
+                handler = rhs.special_handler(grad_lhs, rhs.args)
+                if handler is not None:
+                    v = rhs.args[0].add_suffix(AD_SUFFIX)
+                    assigns.append(
+                        Assignment(
+                            v,
+                            handler,
+                            accumulate=(v != grad_lhs),
+                            ad_info=ad_info,
+                        )
+                    )
+                    assigns.extend(extras)
+                    return assigns
+
+            vars = rhs.collect_vars()
+            if lhs in vars:
+                vars.remove(lhs)
+                vars.append(lhs)
+            for var in vars:
+                if not var.ad_target:
+                    continue
+                dev = rhs.derivative(var, target=grad_lhs, info=self.info, warnings=warnings)
+                v = var.add_suffix(AD_SUFFIX)
+                res = grad_lhs * dev
+                assigns.append(
+                    Assignment(v, res, accumulate=(v != grad_lhs), ad_info=ad_info)
+                )
+            if lhs not in vars:
+                assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
         assigns.extend(extras)
         return assigns
 
@@ -319,13 +387,19 @@ class Block(Node):
     def __getitem__(self, index: int) -> Node:
         return self.__children[index]
 
-    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False, routine_map: Optional[dict] = None) -> List[Node]:
-        children = []
+    def convert_assignments(
+        self,
+        saved_vars: List[SaveAssignment],
+        reverse: bool = False,
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        children: List[Node] = []
         iterator = self.__children
         if reverse:
             iterator = reversed(iterator)
         for node in iterator:
-            nodes = node.convert_assignments(saved_vars, func, reverse, routine_map)
+            nodes = node.convert_assignments(saved_vars, reverse, routine_map, warnings)
             for res in nodes:
                 if res is not None and not res.is_effectively_empty():
                     children.append(res)
@@ -545,7 +619,13 @@ class CallStatement(Node):
                     vars.push(var)
         return vars
 
-    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False, routine_map: Optional[dict] = None) -> List[Node]:
+    def convert_assignments(
+        self,
+        saved_vars: List[SaveAssignment],
+        reverse: bool = False,
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
         if routine_map is None:
             raise RuntimeError("routine_map is necessary for CallStatement")
         name = self.name
@@ -588,7 +668,15 @@ class CallStatement(Node):
         ad_nodes = [ad_call]
         if tmp_vars:
             for lhs, rhs in tmp_vars:
-                ad_nodes.extend(self._generate_ad_backward(lhs, rhs, saved_vars, func, routine_map))
+                ad_nodes.extend(
+                    self._generate_ad_backward(
+                        lhs,
+                        rhs,
+                        saved_vars,
+                        routine_map=routine_map,
+                        warnings=warnings,
+                    )
+                )
 
         loads = []
         blocks = []
@@ -662,7 +750,13 @@ class Routine(Node):
     def iter_children(self) -> Iterator[Node]:
         return iter(self._all_blocks())
 
-    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False, routine_map: Optional[dict] = None) -> List[Routine]:
+    def convert_assignments(
+        self,
+        saved_vars: List[SaveAssignment],
+        reverse: bool = False,
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Routine]:
         raise RuntimeError("convert_assignments for Routine is not allowed")
 
     def render(self, indent: int = 0) -> List[str]:
@@ -793,10 +887,24 @@ class Assignment(Node):
     def is_effectively_empty(self) -> bool:
         return self.lhs == self.rhs
 
-    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False, routine_map: Optional[dict] = None) -> List[Assignment]:
+    def convert_assignments(
+        self,
+        saved_vars: List[SaveAssignment],
+        reverse: bool = False,
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Assignment]:
         assigns = [self._save_vars(self.lhs, saved_vars)]
         if reverse:
-            assigns.extend(self._generate_ad_backward(self.lhs, self.rhs, saved_vars, func, routine_map))
+            assigns.extend(
+                self._generate_ad_backward(
+                    self.lhs,
+                    self.rhs,
+                    saved_vars,
+                    routine_map=routine_map,
+                    warnings=warnings,
+                )
+            )
         else:
             raise NotImplementedError
         return assigns
@@ -866,7 +974,13 @@ class ClearAssignment(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
-    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False, routine_map: Optional[dict] = None) -> List[Assignment]:
+    def convert_assignments(
+        self,
+        saved_vars: List[SaveAssignment],
+        reverse: bool = False,
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Assignment]:
         raise RuntimeError("This is AD code")
 
     def render(self, indent: int = 0) -> List[str]:
@@ -1105,10 +1219,16 @@ class BranchBlock(Node):
         for _, block in self.cond_blocks:
             yield block
 
-    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse: bool = False, routine_map: Optional[dict] = None) -> List[Node]:
+    def convert_assignments(
+        self,
+        saved_vars: List[SaveAssignment],
+        reverse: bool = False,
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
         cond_blocks = []
         for cond, block in self.cond_blocks:
-            res = block.convert_assignments(saved_vars, func, reverse, routine_map)[0]
+            res = block.convert_assignments(saved_vars, reverse, routine_map, warnings)[0]
             new_res = block.deep_clone()
             if not new_res.is_effectively_empty():
                 for node in res.iter_children():
@@ -1309,8 +1429,14 @@ class DoLoop(DoAbst):
                 var_names.append(name)
         return var_names
 
-    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False, routine_map: Optional[dict] = None) -> List[Node]:
-        body = self._body.convert_assignments(saved_vars, func, reverse, routine_map)[0]
+    def convert_assignments(
+        self,
+        saved_vars: List[SaveAssignment],
+        reverse: bool = False,
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        body = self._body.convert_assignments(saved_vars, reverse, routine_map, warnings)[0]
         new_body = self._body.deep_clone()
         recurrent_vars = self.recurrent_vars()
         pushed = []
@@ -1486,8 +1612,14 @@ class DoWhile(DoAbst):
         for child in self.iter_children():
             child.build_do_index_list(index_list)
 
-    def convert_assignments(self, saved_vars: List[SaveAssignment], func: Callable[[OpVar, Operator, dict], List[Assignment]], reverse=False, routine_map: Optional[dict] = None) -> List[Node]:
-        body = self._body.convert_assignments(saved_vars, func, reverse, routine_map)[0]
+    def convert_assignments(
+        self,
+        saved_vars: List[SaveAssignment],
+        reverse: bool = False,
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        body = self._body.convert_assignments(saved_vars, reverse, routine_map, warnings)[0]
         new_body = self._body.deep_clone().remove_push()
         if not new_body.is_effectively_empty():
             for node in body.children:
