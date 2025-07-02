@@ -320,7 +320,7 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, warnings):
     _set_call_intents(routine_org.content)
 
     saved_vars = []
-    ad_code = routine_org.content.convert_assignments(
+    ad_code = routine_org.content.generate_ad(
         saved_vars, reverse=True, routine_map=routine_map, warnings=warnings
     )[0]
     #print("subroutine: ", subroutine.name) # for debug
@@ -514,7 +514,7 @@ def _generate_fwd_ad_subroutine(routine_org, routine_map, warnings):
     _set_call_intents(routine_org.content)
 
     saved_vars = []
-    ad_code = routine_org.content.convert_assignments(
+    ad_code = routine_org.content.generate_ad(
         saved_vars, reverse=False, routine_map=routine_map, warnings=warnings
     )[0]
 
