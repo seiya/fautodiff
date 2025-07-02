@@ -1243,8 +1243,8 @@ class DoLoop(DoAbst):
     """A ``do`` loop."""
 
     index: OpVar
-    start: Operaion
-    end: Operaion
+    start: Operator
+    end: Operator
     step: Optional[Operator] = None
 
     def __post_init__(self):
@@ -1477,7 +1477,7 @@ class DoWhile(DoAbst):
     cond: OpVar
 
     def __post_init__(self):
-        self.do_index_list = ["__nerver_match__"]
+        self.do_index_list = ["__never_match__"]
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         yield from self.cond.collect_vars()
