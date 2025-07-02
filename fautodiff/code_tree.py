@@ -1480,7 +1480,7 @@ class DoWhile(DoAbst):
         self.do_index_list = ["__nerver_match__"]
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
-        iter(self.cond.collect_vars())
+        yield from self.cond.collect_vars()
 
     def build_do_index_list(self, index_list: List[str]) -> None:
         for child in self.iter_children():
