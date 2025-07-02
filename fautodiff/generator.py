@@ -320,7 +320,7 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
                             v_org.dims,
                             None,
                             base_decl.parameter if base_decl else False,
-                            base_decl.init if base_decl else None,
+                            init=base_decl.init if base_decl else None,
                         )
                     )
 
@@ -387,7 +387,7 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
                         base_decl.dims,
                         None,
                         base_decl.parameter,
-                        base_decl.init,
+                        init=base_decl.init,
                     )
             if decl is not None:
                 if decl.intent is not None and decl.intent == "out":
@@ -441,7 +441,7 @@ def _generate_ad_subroutine(routine_org, routine_map, warnings):
                 dims,
                 None,
                 base_decl.parameter if base_decl else False,
-                base_decl.init if base_decl else None,
+                init=base_decl.init if base_decl else None,
             )
         )
 

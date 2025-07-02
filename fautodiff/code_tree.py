@@ -333,7 +333,7 @@ class Block(Node):
 
     def find_by_name(self, name: str) -> None:
         for child in self.iter_children():
-            if child.name == name:
+            if isinstance(child, Declaration) and child.name == name:
                 return child
         return None
 
@@ -646,6 +646,7 @@ class Routine(Node):
     result: Optional[str] = None
     decls: Block = field(default_factory=Block)
     content: Block = field(default_factory=Block)
+    directives: dict = field(default_factory=dict)
     ad_init: Optional[Block] = None
     ad_content: Optional[Block] = None
     kind: ClassVar[str] = "subroutine"
@@ -697,7 +698,7 @@ class Routine(Node):
             typename=decl.typename,
             intent=intent,
             ad_target=None,
-            is_constant=decl.parameter,
+            is_constant=decl.parameter or getattr(decl, "constant", False),
         )
 
     def arg_vars(self) -> List[OpVar]:
@@ -1014,6 +1015,7 @@ class Declaration(Node):
     dims: Optional[Tuple[str]] = None
     intent: Optional[str] = None
     parameter: bool = False
+    constant: bool = False
     init: Optional[str] = None
 
     def __post_init__(self):
@@ -1023,7 +1025,7 @@ class Declaration(Node):
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         if self.intent in ("in", "inout"):
-            yield OpVar(name=self.name, typename=self.typename, kind=self.kind, is_constant=self.parameter)
+            yield OpVar(name=self.name, typename=self.typename, kind=self.kind, is_constant=self.parameter or self.constant)
         else:
             return iter(())
 
@@ -1068,7 +1070,7 @@ class Declaration(Node):
         if self.intent in ("in", "inout"):
             if self.name.endswith(AD_SUFFIX):
                 vars = vars.copy()
-                vars.push(OpVar(self.name, typename=self.typename, kind=self.kind, is_constant=self.parameter))
+                vars.push(OpVar(self.name, typename=self.typename, kind=self.kind, is_constant=self.parameter or self.constant))
         return vars
 
 

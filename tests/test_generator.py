@@ -43,6 +43,31 @@ class TestGenerator(unittest.TestCase):
         expected = Path("examples/cross_mod_b_ad.f90").read_text()
         self.assertEqual(generated, expected)
 
+    def test_constant_args_directive(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+        import textwrap
+
+        with TemporaryDirectory() as tmp:
+            src = Path(tmp) / "const.f90"
+            src.write_text(
+                textwrap.dedent(
+                    """
+                    module test
+                    contains
+                    !$FAD CONSTANT_ARGS: a
+                      subroutine foo(a, b)
+                        real, intent(in) :: a
+                        real, intent(inout) :: b
+                        b = a + b
+                      end subroutine foo
+                    end module test
+                    """
+                )
+            )
+            generated = generator.generate_ad(str(src), warn=False)
+            self.assertNotIn("a_ad", generated)
+
 
 def _make_example_test(src: Path):
     def test(self):

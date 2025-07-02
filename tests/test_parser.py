@@ -142,6 +142,31 @@ class TestParser(unittest.TestCase):
         self.assertEqual(decl.typename.lower(), "double precision")
         self.assertIsNone(decl.kind)
 
+    def test_parse_directives_constant_args(self):
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+            !$FAD CONSTANT_ARGS: x, y
+              subroutine foo(x, y, z)
+                real, intent(in) :: x, y
+                real, intent(out) :: z
+                z = x + y
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        self.assertIn("CONSTANT_ARGS", routine.directives)
+        self.assertEqual(routine.directives["CONSTANT_ARGS"], ["x", "y"])
+        decl_x = routine.decls.find_by_name("x")
+        decl_y = routine.decls.find_by_name("y")
+        self.assertTrue(decl_x.constant)
+        self.assertTrue(decl_y.constant)
+        var = routine.get_var("x")
+        self.assertTrue(var.is_constant)
+
 
 
 if __name__ == "__main__":

@@ -109,7 +109,7 @@ def _stmt2op(stmt, decls):
             raise ValueError(f"Not found in the declaration section: {name}")
             #is_real = True
             #kind = None
-        return OpVar(name=name, typename=decl.typename, kind=kind, is_constant=decl.parameter)
+        return OpVar(name=name, typename=decl.typename, kind=kind, is_constant=decl.parameter or getattr(decl, "constant", False))
 
     if isinstance(stmt, Fortran2003.Part_Ref):
         name = stmt.items[0].tofortran()
@@ -126,7 +126,7 @@ def _stmt2op(stmt, decls):
                 return OpFunc(name_l, args)
             return OpFuncUser(name_l, args)
         else:
-            return OpVar(name=name, index=index, typename=decl.typename, kind=decl.kind, is_constant=decl.parameter)
+            return OpVar(name=name, index=index, typename=decl.typename, kind=decl.kind, is_constant=decl.parameter or getattr(decl, "constant", False))
 
     if isinstance(stmt, Fortran2003.Subscript_Triplet):
         args = tuple((x and _stmt2op(x, decls)) for x in stmt.items)
@@ -205,12 +205,12 @@ __all__ = [
 
 def parse_file(path):
     """Parse ``path`` and return a list of :class:`Module` nodes."""
-    reader = FortranFileReader(path)
+    reader = FortranFileReader(path, ignore_comments=False)
     return _parse_from_reader(reader, path)
 
 def parse_src(src):
-    """Parse ``srch`` and return a list of :class:`Module` nodes."""
-    reader = FortranStringReader(src)
+    """Parse ``src`` and return a list of :class:`Module` nodes."""
+    reader = FortranStringReader(src, ignore_comments=False)
     return _parse_from_reader(reader, "<string>")
 
 def _parse_from_reader(reader, src_name):
@@ -227,10 +227,19 @@ def _parse_from_reader(reader, src_name):
                 continue
             if isinstance(part, Fortran2003.End_Module_Stmt):
                 break
+            if isinstance(part, Fortran2003.Comment):
+                continue
             if isinstance(part, Fortran2003.Specification_Part):
                 for c in part.content:
                     if isinstance(c, Fortran2003.Implicit_Part):
-                        mod_node.body.append(Statement("implicit none"))
+                        for cnt in c.content:
+                            if isinstance(cnt, Fortran2003.Comment):
+                                if cnt.items[0] != "":
+                                    mod_node.body.append(Statement(cnt.items[0]))
+                                continue
+                            if isinstance(cnt, Fortran2003.Implicit_Stmt):
+                                mod_node.body.append(Statement(cnt.string))
+                            continue
                         continue
                     if isinstance(c, Fortran2003.Use_Stmt):
                         mod_node.body.append(Use(c.items[2].string))
@@ -239,11 +248,13 @@ def _parse_from_reader(reader, src_name):
                         #mod_node.body.append(Statement(c.string))
                         continue
                     print(type(c), c)
-                    raise RuntimeError("Unsupported  statement: {type(c)} {c.string}")
+                    raise RuntimeError("Unsupported statement: {type(c)} {c.string}")
                 continue
             if isinstance(part, Fortran2003.Module_Subprogram_Part):
                 for c in part.content:
                     if isinstance(c, Fortran2003.Contains_Stmt):
+                        continue
+                    if isinstance(c, Fortran2003.Comment):
                         continue
                     if isinstance(c, (Fortran2003.Function_Subprogram, Fortran2003.Subroutine_Subprogram)):
                         mod_node.routines.append(_parse_routine(c, src_name))
@@ -252,7 +263,7 @@ def _parse_from_reader(reader, src_name):
                         raise RuntimeError("Unsupported  statement: {type(c)} {c.string}")
             else:
                 print(type(part), part)
-                raise RuntimeError("Unsupported  statement: {type(part)} {part.string}")
+                raise RuntimeError("Unsupported statement: {type(part)} {part.string}")
     return output
 
 
@@ -285,7 +296,17 @@ def _parse_routine(content, src_name):
         if spec is None:
             return decls
         for decl in spec.content:
+            if isinstance(decl, Fortran2003.Implicit_Part):
+                for cnt in decl.content:
+                    if isinstance(cnt, Fortran2003.Comment):
+                        if cnt.items[0] != "":
+                            decls.append(Statement(cnt.items[0]))
+                        continue
+                    if isinstance(cnt, Fortran2003.Implicit_Stmt):
+                        decls.append(Statement(cnt.string))
+                continue
             if not isinstance(decl, Fortran2003.Type_Declaration_Stmt):
+                raise RuntimeError(f"Unsupported statement: {type(decl)} {decl}")
                 continue
             base_type = decl.items[0].string
             kind = None
@@ -334,10 +355,22 @@ def _parse_routine(content, src_name):
                 init = None
                 if len(entity.items) > 3 and entity.items[3] is not None:
                     init = entity.items[3].items[1].tofortran()
-                decls.append(Declaration(name, base_type, kind, dims, intent, parameter, init))
+                decls.append(
+                    Declaration(
+                        name,
+                        base_type,
+                        kind,
+                        dims,
+                        intent,
+                        parameter,
+                        init=init,
+                    )
+                )
         return decls
 
     def _parse_stmt(stmt, decls) -> Node:
+        if isinstance(stmt, Fortran2003.Comment):
+            return None
         line_no = None
         if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
             line_no = stmt.item.span[0]
@@ -421,20 +454,25 @@ def _parse_routine(content, src_name):
                 cond_blocks.append((conds, blk))
             return SelectBlock(cond_blocks, expr)
         if isinstance(stmt, Fortran2008.Block_Nonlabel_Do_Construct):
-            body = _block(stmt.content[1:-1], decls)
-            if stmt.content[0].tofortran().startswith("DO WHILE"):
-                cond = _stmt2op(stmt.content[0].items[1].items[0].items[0], decls)
+            idx = 0
+            while idx < len(stmt.content) and isinstance(stmt.content[idx], Fortran2003.Comment):
+                idx += 1
+            # skip Nonlabel_Do_Stmt
+            idx += 1
+            body = _block(stmt.content[idx:-1], decls)
+            if stmt.content[idx-1].tofortran().startswith("DO WHILE"):
+                cond = _stmt2op(stmt.content[idx-1].items[1].items[0].items[0], decls)
                 return DoWhile(body, cond)
             else:
-                itm = stmt.content[0].items[1].items[1]
+                itm = stmt.content[idx-1].items[1].items[1]
                 index = _stmt2op(itm[0], decls)
-                start = _stmt2op(itm[1][0], decls)
-                end = _stmt2op(itm[1][1], decls)
+                start_val = _stmt2op(itm[1][0], decls)
+                end_val = _stmt2op(itm[1][1], decls)
                 if len(itm[1]) == 2:
                     step = None
                 else:
                     step = _stmt2op(itm[1][2], decls)
-                return DoLoop(body, index, start, end, step)
+                return DoLoop(body, index, start_val, end_val, step)
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return Statement("return")
 
@@ -448,25 +486,53 @@ def _parse_routine(content, src_name):
                 blk.append(node)
         return blk
 
-    stmt = content.content[0]
-    name = _stmt_name(stmt)
-    args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
-    if isinstance(content, Fortran2003.Subroutine_Subprogram):
-        routine = Subroutine(name, args)
-    elif isinstance(content, Fortran2003.Function_Subprogram):
-        result = str(stmt.items[3].items[0])
-        routine = Function(name, args, result)
-    else:
-        raise AttributeError("content must be Subroutine of Function")
-
-    for part in content.content:
-        if isinstance(part, Fortran2003.Specification_Part):
-            routine.decls = _parse_decls(part)
-        elif isinstance(part, Fortran2003.Execution_Part):
+    stmt = None
+    directives = {}
+    for item in content.content:
+        if isinstance(item, Fortran2003.Comment):
+            text = item.items[0].strip()
+            if text.startswith("!$FAD"):
+                body = text[5:].strip()
+                if ":" in body:
+                    key, rest = body.split(":", 1)
+                    key = key.strip().upper()
+                    values = [a.strip() for a in rest.split(",") if a.strip()]
+                    directives[key] = values
+                else:
+                    directives[body.strip().upper()] = True
+            continue
+        if isinstance(item, (Fortran2003.Subroutine_Stmt, Fortran2003.Function_Stmt)):
+            stmt = item
+            name = _stmt_name(stmt)
+            args = [str(a) for a in (stmt.items[2].items if stmt.items[2] else [])]
+            if isinstance(content, Fortran2003.Subroutine_Subprogram):
+                routine = Subroutine(name, args)
+            elif isinstance(content, Fortran2003.Function_Subprogram):
+                result = str(stmt.items[3].items[0])
+                routine = Function(name, args, result)
+            routine.directives = directives
+            continue
+        if isinstance(item, Fortran2003.Specification_Part):
+            routine.decls = _parse_decls(item)
+            continue
+        if isinstance(item, Fortran2003.Execution_Part):
             decls = routine.decls
-            for stmt in part.content:
+            for stmt in item.content:
                 node = _parse_stmt(stmt, decls)
                 if node is not None:
                     routine.content.append(node)
+            continue
+        if isinstance(item, Fortran2003.End_Subroutine_Stmt):
+            continue
+        if isinstance(item, Fortran2003.End_Function_Stmt):
+            continue
+        raise RuntimeError(f"Unsupported statement: {type(item)} {item.items}")
+
+    const_args = directives.get("CONSTANT_ARGS")
+    if const_args:
+        for arg in const_args:
+            decl = routine.decls.find_by_name(arg)
+            if decl is not None:
+                setattr(decl, "constant", True)
 
     return routine
