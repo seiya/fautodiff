@@ -9,6 +9,10 @@ program run_call_example
   integer, parameter :: I_call_fucntion = 2
   integer, parameter :: I_arg_operation = 3
   integer, parameter :: I_arg_function = 4
+  integer, parameter :: I_call_subroutine_fwd = 5
+  integer, parameter :: I_call_fucntion_fwd = 6
+  integer, parameter :: I_arg_operation_fwd = 7
+  integer, parameter :: I_arg_function_fwd = 8
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -30,6 +34,14 @@ program run_call_example
               i_test = I_arg_operation
            case ("arg_function")
               i_test = I_arg_function
+           case ("call_subroutine_fwd")
+              i_test = I_call_subroutine_fwd
+           case ("call_fucntion_fwd")
+              i_test = I_call_fucntion_fwd
+           case ("arg_operation_fwd")
+              i_test = I_arg_operation_fwd
+           case ("arg_function_fwd")
+              i_test = I_arg_function_fwd
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -50,6 +62,18 @@ program run_call_example
   end if
   if (i_test == I_arg_function .or. i_test == I_all) then
      call test_arg_function
+  end if
+  if (i_test == I_call_subroutine_fwd) then
+     call test_call_subroutine_fwd
+  end if
+  if (i_test == I_call_fucntion_fwd) then
+     call test_call_fucntion_fwd
+  end if
+  if (i_test == I_arg_operation_fwd) then
+     call test_arg_operation_fwd
+  end if
+  if (i_test == I_arg_function_fwd) then
+     call test_arg_function_fwd
   end if
 
   stop
@@ -153,5 +177,94 @@ contains
     end if
     return
   end subroutine test_arg_function
+
+  subroutine test_call_subroutine_fwd
+    real :: x, y, x_ad, fd, eps, x_base, x_eps
+
+    eps = 1.0e-6
+    x = 1.0
+    y = 2.0
+    call call_subroutine(x, y)
+    x_base = x
+    x = 1.0 + eps
+    y = 2.0 + eps
+    call call_subroutine(x, y)
+    x_eps = x
+    fd = (x_eps - x_base) / eps
+    x = 1.0
+    y = 2.0
+    x_ad = 1.0
+    call call_subroutine_fwd_ad(x, x_ad, y, 1.0)
+    if (abs(x_ad - fd) > tol) then
+       print *, 'test_call_subroutine_fwd failed', x_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_call_subroutine_fwd
+
+  subroutine test_call_fucntion_fwd
+    real :: x, y, x_eps, res_fd, x_ad, eps
+
+    eps = 1.0e-6
+    y = 3.0
+    call call_fucntion(x, y)
+    x_eps = 0.0
+    call call_fucntion(x_eps, y + eps)
+    res_fd = (x_eps - x) / eps
+    call call_fucntion_fwd_ad(x_ad, y, 1.0)
+    if (abs(x_ad - res_fd) > tol) then
+       print *, 'test_call_fucntion_fwd failed', x_ad, res_fd
+       error stop 1
+    end if
+    return
+  end subroutine test_call_fucntion_fwd
+
+  subroutine test_arg_operation_fwd
+    real :: x, y, x_base, x_eps, x_ad, fd, eps
+
+    eps = 1.0e-6
+    x = 1.0
+    y = 2.0
+    call arg_operation(x, y)
+    x_base = x
+    x = 1.0 + eps
+    y = 2.0 + eps
+    call arg_operation(x, y)
+    x_eps = x
+    fd = (x_eps - x_base) / eps
+    x = 1.0
+    y = 2.0
+    x_ad = 1.0
+    call arg_operation_fwd_ad(x, x_ad, y, 1.0)
+    if (abs(x_ad - fd) > tol) then
+       print *, 'test_arg_operation_fwd failed', x_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_arg_operation_fwd
+
+  subroutine test_arg_function_fwd
+    real :: x, y, x_base, x_eps, x_ad, fd, eps
+
+    eps = 1.0e-6
+    x = 1.0
+    y = 2.0
+    call arg_function(x, y)
+    x_base = x
+    x = 1.0 + eps
+    y = 2.0 + eps
+    call arg_function(x, y)
+    x_eps = x
+    fd = (x_eps - x_base) / eps
+    x = 1.0
+    y = 2.0
+    x_ad = 1.0
+    call arg_function_fwd_ad(x, x_ad, y, 1.0)
+    if (abs(x_ad - fd) > tol) then
+       print *, 'test_arg_function_fwd failed', x_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_arg_function_fwd
 
 end program run_call_example

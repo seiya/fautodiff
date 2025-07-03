@@ -8,6 +8,9 @@ program run_real_kind
   integer, parameter :: I_scale_8 = 1
   integer, parameter :: I_scale_rp = 2
   integer, parameter :: I_scale_dp = 3
+  integer, parameter :: I_scale_8_fwd = 4
+  integer, parameter :: I_scale_rp_fwd = 5
+  integer, parameter :: I_scale_dp_fwd = 6
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -27,6 +30,12 @@ program run_real_kind
               i_test = I_scale_rp
            case("scale_dp")
               i_test = I_scale_dp
+           case("scale_8_fwd")
+              i_test = I_scale_8_fwd
+           case("scale_rp_fwd")
+              i_test = I_scale_rp_fwd
+           case("scale_dp_fwd")
+              i_test = I_scale_dp_fwd
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -44,6 +53,15 @@ program run_real_kind
   end if
   if (i_test == I_scale_dp .or. i_test == I_all) then
      call test_scale_dp
+  end if
+  if (i_test == I_scale_8_fwd) then
+     call test_scale_8_fwd
+  end if
+  if (i_test == I_scale_rp_fwd) then
+     call test_scale_rp_fwd
+  end if
+  if (i_test == I_scale_dp_fwd) then
+     call test_scale_dp_fwd
   end if
 
   stop
@@ -108,5 +126,62 @@ contains
     end if
     return
   end subroutine test_scale_dp
+
+  subroutine test_scale_8_fwd
+    real(8) :: x, x_eps, x_ad, fd, eps
+
+    eps = 1.0e-6_8
+    x = 2.0_8
+    call scale_8(x)
+    x_eps = 2.0_8 + eps
+    call scale_8(x_eps)
+    fd = (x_eps - x) / eps
+    x = 2.0_8
+    x_ad = 1.0_8
+    call scale_8_fwd_ad(x, x_ad)
+    if (abs(x_ad - fd) > tol) then
+       print *, 'test_scale_8_fwd failed', x_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_scale_8_fwd
+
+  subroutine test_scale_rp_fwd
+    real(RP) :: x, x_eps, x_ad, fd, eps
+
+    eps = 1.0e-6_RP
+    x = 2.0_RP
+    call scale_rp(x)
+    x_eps = 2.0_RP + eps
+    call scale_rp(x_eps)
+    fd = (x_eps - x) / eps
+    x = 2.0_RP
+    x_ad = 1.0_RP
+    call scale_rp_fwd_ad(x, x_ad)
+    if (abs(x_ad - fd) > tol) then
+       print *, 'test_scale_rp_fwd failed', x_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_scale_rp_fwd
+
+  subroutine test_scale_dp_fwd
+    double precision :: x, x_eps, x_ad, fd, eps
+
+    eps = 1.0d-6
+    x = 2.0d0
+    call scale_dp(x)
+    x_eps = 2.0d0 + eps
+    call scale_dp(x_eps)
+    fd = (x_eps - x) / eps
+    x = 2.0d0
+    x_ad = 1.0d0
+    call scale_dp_fwd_ad(x, x_ad)
+    if (abs(x_ad - fd) > tol) then
+       print *, 'test_scale_dp_fwd failed', x_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_scale_dp_fwd
 
 end program run_real_kind

@@ -7,6 +7,8 @@ program run_control_flow
   integer, parameter :: I_all = 0
   integer, parameter :: I_if_example = 1
   integer, parameter :: I_do_example = 2
+  integer, parameter :: I_if_example_fwd = 3
+  integer, parameter :: I_do_example_fwd = 4
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -24,6 +26,10 @@ program run_control_flow
               i_test = I_if_example
            case ("do_example")
               i_test = I_do_example
+           case ("if_example_fwd")
+              i_test = I_if_example_fwd
+           case ("do_example_fwd")
+              i_test = I_do_example_fwd
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -38,6 +44,12 @@ program run_control_flow
   end if
   if (i_test == I_do_example .or. i_test == I_all) then
      call test_do_example
+  end if
+  if (i_test == I_if_example_fwd) then
+     call test_if_example_fwd
+  end if
+  if (i_test == I_do_example_fwd) then
+     call test_do_example_fwd
   end if
 
   stop
@@ -90,5 +102,40 @@ contains
     end if
     return
   end subroutine test_do_example
+
+  subroutine test_if_example_fwd
+    real :: x, y, z, z_eps, z_ad, fd, eps
+
+    eps = 1.0e-6
+    x = 1.0
+    y = 2.0
+    call if_example(x, y, z)
+    call if_example(x + eps, y + eps, z_eps)
+    fd = (z_eps - z) / eps
+    call if_example_fwd_ad(x, 1.0, y, 1.0, z_ad)
+    if (abs(z_ad - fd) > tol) then
+       print *, 'test_if_example_fwd failed', z_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_if_example_fwd
+
+  subroutine test_do_example_fwd
+    integer :: n
+    real :: x, sum, sum_eps, sum_ad, fd, eps
+
+    eps = 1.0e-6
+    n = 3
+    x = 2.0
+    call do_example(n, x, sum)
+    call do_example(n, x + eps, sum_eps)
+    fd = (sum_eps - sum) / eps
+    call do_example_fwd_ad(n, x, 1.0, sum_ad)
+    if (abs(sum_ad - fd) > tol) then
+       print *, 'test_do_example_fwd failed', sum_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_do_example_fwd
 
 end program run_control_flow
