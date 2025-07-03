@@ -3,12 +3,42 @@ import sys
 import shutil
 import subprocess
 import tempfile
+import json
 from pathlib import Path
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff import generator, code_tree
+
+
+def _generate_examples(tmp: Path) -> dict:
+    """Generate forward AD code for all examples and load fadmod info."""
+    base = Path(__file__).resolve().parents[1]
+    examples = base / "examples"
+    fadmods = {}
+    loaded = set()
+
+    for src in sorted(examples.glob("*.f90")):
+        if src.name.endswith("_ad.f90"):
+            continue
+        code_tree.Node.reset()
+        ad_code = generator.generate_ad(
+            str(src), mode="forward", warn=False, fadmod_dir=str(tmp)
+        )
+        (tmp / f"{src.stem}_ad.f90").write_text(ad_code)
+
+        for fad in tmp.glob("*.fadmod"):
+            if fad.name in loaded:
+                continue
+            try:
+                data = json.loads(fad.read_text())
+            except Exception:
+                continue
+            fadmods.update(data)
+            loaded.add(fad.name)
+
+    return fadmods
 
 
 class TestForwardRuntime(unittest.TestCase):
