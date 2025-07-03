@@ -5,7 +5,7 @@ program run_intrinsic_func
   real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all = 0
-  integer, parameter :: I_casting = 1
+  integer, parameter :: I_casting_rev = 1
   integer, parameter :: I_casting_fwd = 2
 
   integer :: length, status
@@ -20,8 +20,8 @@ program run_intrinsic_func
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("casting")
-              i_test = I_casting
+           case ("casting_rev")
+              i_test = I_casting_rev
            case ("casting_fwd")
               i_test = I_casting_fwd
            case default
@@ -33,8 +33,8 @@ program run_intrinsic_func
      end if
   end if
 
-  if (i_test == I_casting .or. i_test == I_all) then
-     call test_casting
+  if (i_test == I_casting_rev .or. i_test == I_all) then
+     call test_casting_rev
   end if
   if (i_test == I_casting_fwd) then
      call test_casting_fwd
@@ -43,7 +43,7 @@ program run_intrinsic_func
   stop
 contains
 
-  subroutine test_casting
+  subroutine test_casting_rev
     integer :: i, n
     real :: r, r_ad
     double precision :: d, d_ad
@@ -68,7 +68,7 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_casting
+  end subroutine test_casting_rev
 
   subroutine test_casting_fwd
     integer :: i, n

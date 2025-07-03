@@ -5,9 +5,9 @@ program run_real_kind
   real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all = 0
-  integer, parameter :: I_scale_8 = 1
-  integer, parameter :: I_scale_rp = 2
-  integer, parameter :: I_scale_dp = 3
+  integer, parameter :: I_scale_8_rev = 1
+  integer, parameter :: I_scale_rp_rev = 2
+  integer, parameter :: I_scale_dp_rev = 3
   integer, parameter :: I_scale_8_fwd = 4
   integer, parameter :: I_scale_rp_fwd = 5
   integer, parameter :: I_scale_dp_fwd = 6
@@ -24,12 +24,12 @@ program run_real_kind
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case("scale_8")
-              i_test = I_scale_8
-           case("scale_rp")
-              i_test = I_scale_rp
-           case("scale_dp")
-              i_test = I_scale_dp
+           case("scale_8_rev")
+              i_test = I_scale_8_rev
+           case("scale_rp_rev")
+              i_test = I_scale_rp_rev
+           case("scale_dp_rev")
+              i_test = I_scale_dp_rev
            case("scale_8_fwd")
               i_test = I_scale_8_fwd
            case("scale_rp_fwd")
@@ -45,14 +45,14 @@ program run_real_kind
      end if
   end if
 
-  if (i_test == I_scale_8 .or. i_test == I_all) then
-     call test_scale_8
+  if (i_test == I_scale_8_rev .or. i_test == I_all) then
+     call test_scale_8_rev
   end if
-  if (i_test == I_scale_rp .or. i_test == I_all) then
-     call test_scale_rp
+  if (i_test == I_scale_rp_rev .or. i_test == I_all) then
+     call test_scale_rp_rev
   end if
-  if (i_test == I_scale_dp .or. i_test == I_all) then
-     call test_scale_dp
+  if (i_test == I_scale_dp_rev .or. i_test == I_all) then
+     call test_scale_dp_rev
   end if
   if (i_test == I_scale_8_fwd) then
      call test_scale_8_fwd
@@ -67,7 +67,7 @@ program run_real_kind
   stop
 contains
 
-  subroutine test_scale_8
+  subroutine test_scale_8_rev
     real(8) :: x, x_ad
     real(8) :: exp_x, exp_x_ad
 
@@ -85,9 +85,9 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_scale_8
+  end subroutine test_scale_8_rev
 
-  subroutine test_scale_rp
+  subroutine test_scale_rp_rev
     real(RP) :: x, x_ad
     real(RP) :: exp_x, exp_x_ad
 
@@ -105,9 +105,9 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_scale_rp
+  end subroutine test_scale_rp_rev
 
-  subroutine test_scale_dp
+  subroutine test_scale_dp_rev
     double precision :: x, x_ad
     double precision :: exp_x, exp_x_ad
 
@@ -125,7 +125,7 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_scale_dp
+  end subroutine test_scale_dp_rev
 
   subroutine test_scale_8_fwd
     real(8) :: x, x_eps, x_ad, fd, eps

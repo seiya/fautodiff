@@ -30,7 +30,7 @@ program run_cross_mod
   end if
 
   if (i_test == I_all) then
-     call test_call_inc
+     call test_call_inc_rev
   else if (i_test == I_call_inc_fwd) then
      call test_call_inc_fwd
   end if
@@ -38,7 +38,7 @@ program run_cross_mod
   stop
 contains
 
-  subroutine test_call_inc
+  subroutine test_call_inc_rev
     real :: x
     real :: x_ad
     real :: exp_x, exp_x_ad
@@ -57,7 +57,7 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_call_inc
+  end subroutine test_call_inc_rev
 
   subroutine test_call_inc_fwd
     real :: x, x_eps, x_ad, fd, eps

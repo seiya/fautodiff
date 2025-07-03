@@ -5,8 +5,8 @@ program run_control_flow
   real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all = 0
-  integer, parameter :: I_if_example = 1
-  integer, parameter :: I_do_example = 2
+  integer, parameter :: I_if_example_rev = 1
+  integer, parameter :: I_do_example_rev = 2
   integer, parameter :: I_if_example_fwd = 3
   integer, parameter :: I_do_example_fwd = 4
 
@@ -22,10 +22,10 @@ program run_control_flow
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("if_example")
-              i_test = I_if_example
-           case ("do_example")
-              i_test = I_do_example
+           case ("if_example_rev")
+              i_test = I_if_example_rev
+           case ("do_example_rev")
+              i_test = I_do_example_rev
            case ("if_example_fwd")
               i_test = I_if_example_fwd
            case ("do_example_fwd")
@@ -39,11 +39,11 @@ program run_control_flow
      end if
   end if
 
-  if (i_test == I_if_example .or. i_test == I_all) then
-     call test_if_example
+  if (i_test == I_if_example_rev .or. i_test == I_all) then
+     call test_if_example_rev
   end if
-  if (i_test == I_do_example .or. i_test == I_all) then
-     call test_do_example
+  if (i_test == I_do_example_rev .or. i_test == I_all) then
+     call test_do_example_rev
   end if
   if (i_test == I_if_example_fwd) then
      call test_if_example_fwd
@@ -55,7 +55,7 @@ program run_control_flow
   stop
 contains
 
-  subroutine test_if_example
+  subroutine test_if_example_rev
     real :: x, y, z
     real :: x_ad, y_ad, z_ad
     real :: exp_z, exp_x
@@ -77,9 +77,9 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_if_example
+  end subroutine test_if_example_rev
 
-  subroutine test_do_example
+  subroutine test_do_example_rev
     integer :: n
     real :: x, sum
     real :: x_ad, sum_ad
@@ -101,7 +101,7 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_do_example
+  end subroutine test_do_example_rev
 
   subroutine test_if_example_fwd
     real :: x, y, z, z_eps, z_ad, fd, eps

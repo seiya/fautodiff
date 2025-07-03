@@ -5,10 +5,10 @@ program run_call_example
   real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all = 0
-  integer, parameter :: I_call_subroutine = 1
-  integer, parameter :: I_call_fucntion = 2
-  integer, parameter :: I_arg_operation = 3
-  integer, parameter :: I_arg_function = 4
+  integer, parameter :: I_call_subroutine_rev = 1
+  integer, parameter :: I_call_fucntion_rev = 2
+  integer, parameter :: I_arg_operation_rev = 3
+  integer, parameter :: I_arg_function_rev = 4
   integer, parameter :: I_call_subroutine_fwd = 5
   integer, parameter :: I_call_fucntion_fwd = 6
   integer, parameter :: I_arg_operation_fwd = 7
@@ -26,14 +26,14 @@ program run_call_example
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("call_subroutine")
-              i_test = I_call_subroutine
-           case ("call_fucntion")
-              i_test = I_call_fucntion
-           case ("arg_operation")
-              i_test = I_arg_operation
-           case ("arg_function")
-              i_test = I_arg_function
+           case ("call_subroutine_rev")
+              i_test = I_call_subroutine_rev
+           case ("call_fucntion_rev")
+              i_test = I_call_fucntion_rev
+           case ("arg_operation_rev")
+              i_test = I_arg_operation_rev
+           case ("arg_function_rev")
+              i_test = I_arg_function_rev
            case ("call_subroutine_fwd")
               i_test = I_call_subroutine_fwd
            case ("call_fucntion_fwd")
@@ -51,17 +51,17 @@ program run_call_example
      end if
   end if
 
-  if (i_test == I_call_subroutine .or. i_test == I_all) then
-     call test_call_subroutine
+  if (i_test == I_call_subroutine_rev .or. i_test == I_all) then
+     call test_call_subroutine_rev
   end if
-  if (i_test == I_call_fucntion .or. i_test == I_all) then
-     call test_call_fucntion
+  if (i_test == I_call_fucntion_rev .or. i_test == I_all) then
+     call test_call_fucntion_rev
   end if
-  if (i_test == I_arg_operation .or. i_test == I_all) then
-     call test_arg_operation
+  if (i_test == I_arg_operation_rev .or. i_test == I_all) then
+     call test_arg_operation_rev
   end if
-  if (i_test == I_arg_function .or. i_test == I_all) then
-     call test_arg_function
+  if (i_test == I_arg_function_rev .or. i_test == I_all) then
+     call test_arg_function_rev
   end if
   if (i_test == I_call_subroutine_fwd) then
      call test_call_subroutine_fwd
@@ -79,7 +79,7 @@ program run_call_example
   stop
 contains
 
-  subroutine test_call_subroutine
+  subroutine test_call_subroutine_rev
     real :: x, y
     real :: x_ad, y_ad
     real :: exp_x, exp_x_ad, exp_y_ad
@@ -102,9 +102,9 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_call_subroutine
+  end subroutine test_call_subroutine_rev
 
-  subroutine test_call_fucntion
+  subroutine test_call_fucntion_rev
     real :: x, y
     real :: x_ad, y_ad
     real :: exp_x, exp_x_ad, exp_y_ad
@@ -126,9 +126,9 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_call_fucntion
+  end subroutine test_call_fucntion_rev
 
-  subroutine test_arg_operation
+  subroutine test_arg_operation_rev
     real :: x, y
     real :: x_ad, y_ad
     real :: exp_x, exp_x_ad, exp_y_ad
@@ -151,9 +151,9 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_arg_operation
+  end subroutine test_arg_operation_rev
 
-  subroutine test_arg_function
+  subroutine test_arg_function_rev
     real :: x, y
     real :: x_ad, y_ad
     real :: exp_x, exp_x_ad, exp_y_ad
@@ -176,7 +176,7 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_arg_function
+  end subroutine test_arg_function_rev
 
   subroutine test_call_subroutine_fwd
     real :: x, y, x_ad, fd, eps, x_base, x_eps

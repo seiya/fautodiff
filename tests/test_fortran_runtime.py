@@ -45,7 +45,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'simple_math_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_simple_math')
-            subprocess.run([str(exe), "add_numbers"], check=True)
+            subprocess.run([str(exe), "add_numbers_rev"], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_multiply_numbers(self):
@@ -58,7 +58,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'simple_math_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_simple_math')
-            subprocess.run([str(exe), "multiply_numbers"], check=True)
+            subprocess.run([str(exe), "multiply_numbers_rev"], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_subtract_numbers(self):
@@ -71,7 +71,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'simple_math_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_simple_math')
-            subprocess.run([str(exe), "subtract_numbers"], check=True)
+            subprocess.run([str(exe), "subtract_numbers_rev"], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_divide_numbers(self):
@@ -84,7 +84,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'simple_math_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_simple_math')
-            subprocess.run([str(exe), "divide_numbers"], check=True)
+            subprocess.run([str(exe), "divide_numbers_rev"], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_power_numbers(self):
@@ -97,7 +97,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'simple_math_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_simple_math')
-            subprocess.run([str(exe), "power_numbers"], check=True)
+            subprocess.run([str(exe), "power_numbers_rev"], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_arrays_elementwise_add(self):
@@ -110,7 +110,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'arrays_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_arrays')
-            subprocess.run([str(exe), 'elementwise_add'], check=True)
+            subprocess.run([str(exe), 'elementwise_add_rev'], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_arrays_multidimension_fd(self):
@@ -123,7 +123,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'arrays_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_arrays')
-            subprocess.run([str(exe), 'multidimension'], check=True)
+            subprocess.run([str(exe), 'multidimension_rev'], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_control_flow_if_example(self):
@@ -136,7 +136,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'control_flow_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_control_flow')
-            subprocess.run([str(exe), 'if_example'], check=True)
+            subprocess.run([str(exe), 'if_example_rev'], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_intrinsic_casting(self):
@@ -149,7 +149,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'intrinsic_func_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_intrinsic_func')
-            subprocess.run([str(exe), 'casting'], check=True)
+            subprocess.run([str(exe), 'casting_rev'], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_save_vars_simple(self):
@@ -162,7 +162,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'save_vars_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_save_vars')
-            subprocess.run([str(exe), 'simple'], check=True)
+            subprocess.run([str(exe), 'simple_rev'], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_data_storage_push_pop(self):
@@ -211,7 +211,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'call_example_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_call_example')
-            for tname in ['call_subroutine', 'call_fucntion', 'arg_operation', 'arg_function']:
+            for tname in ['call_subroutine_rev', 'call_fucntion_rev', 'arg_operation_rev', 'arg_function_rev']:
                 subprocess.run([str(exe), tname], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
@@ -225,7 +225,7 @@ class TestFortranRuntime(unittest.TestCase):
             ad_path = tmp / 'real_kind_ad.f90'
             ad_path.write_text(ad_code)
             exe = self._build(tmp, 'run_real_kind')
-            for tname in ['scale_8', 'scale_rp', 'scale_dp']:
+            for tname in ['scale_8_rev', 'scale_rp_rev', 'scale_dp_rev']:
                 subprocess.run([str(exe), tname], check=True)
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
