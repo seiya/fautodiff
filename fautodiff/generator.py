@@ -67,6 +67,16 @@ def _contains_pushpop(node) -> bool:
     return False
 
 
+def _set_call_intents(node, routine_map):
+    """Populate ``CallStatement.intents`` using ``routine_map`` recursively."""
+    if isinstance(node, CallStatement):
+        arg_info = routine_map.get(node.name)
+        if arg_info is not None and "intents" in arg_info:
+            node.intents = list(arg_info["intents"])
+    for child in getattr(node, "iter_children", lambda: [])():
+        _set_call_intents(child, routine_map)
+
+
 def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> dict:
     """Load routine maps from ``mod_names`` using ``search_dirs``."""
     result = {}
@@ -299,15 +309,7 @@ def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings
         subroutine.ad_content = ad_block
         return subroutine, set()
 
-    def _set_call_intents(node):
-        if isinstance(node, CallStatement):
-            arg_info = routine_map.get(node.name)
-            if arg_info is not None and "intents" in arg_info:
-                node.intents = list(arg_info["intents"])
-        for child in getattr(node, "iter_children", lambda: [])():
-            _set_call_intents(child)
-
-    _set_call_intents(routine_org.content)
+    _set_call_intents(routine_org.content, routine_map)
 
     saved_vars = []
     ad_code = routine_org.content.generate_ad(
@@ -474,15 +476,7 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
         return subroutine, False, set()
 
     # populate CallStatement intents from routine map
-    def _set_call_intents(node):
-        if isinstance(node, CallStatement):
-            arg_info = routine_map.get(node.name)
-            if arg_info is not None and "intents" in arg_info:
-                node.intents = list(arg_info["intents"])
-        for child in getattr(node, "iter_children", lambda: [])():
-            _set_call_intents(child)
-
-    _set_call_intents(routine_org.content)
+    _set_call_intents(routine_org.content, routine_map)
 
     saved_vars = []
     ad_code = routine_org.content.generate_ad(
