@@ -71,13 +71,13 @@ run_save_vars: $(OUTDIR)/run_save_vars.o $(OUTDIR)/save_vars.o $(OUTDIR)/save_va
 	$(FC) $^ -o $@
 
 run_store_vars: $(OUTDIR)/run_store_vars.o $(OUTDIR)/store_vars.o $(OUTDIR)/store_vars_ad.o $(OUTDIR)/data_storage.o
-        $(FC) $^ -o $@
+	$(FC) $^ -o $@
 
 run_directive_const_arg: $(OUTDIR)/run_directive_const_arg.o $(OUTDIR)/directive_const_arg.o $(OUTDIR)/directive_const_arg_ad.o
-        $(FC) $^ -o $@
+	$(FC) $^ -o $@
 
 run_parameter_var: $(OUTDIR)/run_parameter_var.o $(OUTDIR)/parameter_var.o $(OUTDIR)/parameter_var_ad.o
-        $(FC) $^ -o $@
+	$(FC) $^ -o $@
 
 clean:
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.mod
