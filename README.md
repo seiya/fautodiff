@@ -35,12 +35,14 @@ for mod in modules:
 
 ## Generating AD code
 
-For simple examples the ``fautodiff.generator`` module can create a reverse
-mode automatic differentiation version of a Fortran source file. The generator
+For simple examples the ``fautodiff.generator`` module can create a forward or
+reverse mode automatic differentiation version of a Fortran source file. The generator
 parses the input via :mod:`fautodiff.parser` (which internally relies on
 ``fparser2``) and retains the original structure with ``_ad`` appended to
 routine names. Integer variables are treated as constants, so no ``_ad``
-variables are generated for them.
+variables are generated for them. The generated module is named ``<module>_ad``
+and provides both a forward (``<name>_fwd_ad``) and a reverse
+(``<name>_rev_ad``) version of each original routine.
 
 Generate the AD code for ``examples/simple_math.f90``:
 
@@ -66,12 +68,28 @@ another file that uses the module.  Add search directories with ``-I`` (repeat
 as needed), choose the output directory with ``-M DIR`` (defaults to the current
 directory), and disable writing with ``--no-fadmod``:
 
+You can select the differentiation mode with ``--mode``.  Pass ``forward`` for
+forward mode only or ``reverse`` for reverse mode only.  The default ``both``
+generates both sets of routines.
+
 ```bash
 # write ``cross_mod_a.fadmod`` under ``examples``
 python -m fautodiff.generator -M examples examples/cross_mod_a.f90
 
 # load that file when differentiating another module
 python -m fautodiff.generator -I examples examples/cross_mod_b.f90
+```
+
+Generate forward mode only:
+
+```bash
+python -m fautodiff.generator --mode forward examples/simple_math.f90
+```
+
+Generate reverse mode only:
+
+```bash
+python -m fautodiff.generator --mode reverse examples/simple_math.f90
 ```
 
 ## Optimization Directives
