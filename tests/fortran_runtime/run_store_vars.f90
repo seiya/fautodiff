@@ -30,7 +30,7 @@ program run_store_vars
   end if
 
   if (i_test == I_all) then
-     call test_do_with_recurrent_scalar
+     call test_do_with_recurrent_scalar_rev
   else if (i_test == I_do_with_recurrent_scalar_fwd) then
      call test_do_with_recurrent_scalar_fwd
   end if
@@ -38,7 +38,7 @@ program run_store_vars
   stop
 contains
 
-  subroutine test_do_with_recurrent_scalar
+  subroutine test_do_with_recurrent_scalar_rev
     integer, parameter :: n = 3
     real :: x(n), z(n)
     real :: x_ad(n), z_ad(n)
@@ -63,7 +63,7 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_do_with_recurrent_scalar
+  end subroutine test_do_with_recurrent_scalar_rev
 
   subroutine test_do_with_recurrent_scalar_fwd
     integer, parameter :: n = 3

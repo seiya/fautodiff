@@ -5,11 +5,11 @@ program run_simple_math
   real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all              = 0
-  integer, parameter :: I_add_numbers      = 1
-  integer, parameter :: I_multiply_numbers = 2
-  integer, parameter :: I_subtract_numbers = 3
-  integer, parameter :: I_divide_numbers   = 4
-  integer, parameter :: I_power_numbers    = 5
+  integer, parameter :: I_add_numbers_rev      = 1
+  integer, parameter :: I_multiply_numbers_rev = 2
+  integer, parameter :: I_subtract_numbers_rev = 3
+  integer, parameter :: I_divide_numbers_rev   = 4
+  integer, parameter :: I_power_numbers_rev    = 5
   integer, parameter :: I_add_numbers_fwd      = 6
   integer, parameter :: I_multiply_numbers_fwd = 7
   integer, parameter :: I_subtract_numbers_fwd = 8
@@ -28,16 +28,16 @@ program run_simple_math
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("add_numbers")
-              i_test = I_add_numbers
-           case ("multiply_numbers")
-              i_test = I_multiply_numbers
-           case ("subtract_numbers")
-              i_test = I_subtract_numbers
-           case ("divide_numbers")
-              i_test = I_divide_numbers
-           case ("power_numbers")
-              i_test = I_power_numbers
+           case ("add_numbers_rev")
+              i_test = I_add_numbers_rev
+           case ("multiply_numbers_rev")
+              i_test = I_multiply_numbers_rev
+           case ("subtract_numbers_rev")
+              i_test = I_subtract_numbers_rev
+           case ("divide_numbers_rev")
+              i_test = I_divide_numbers_rev
+           case ("power_numbers_rev")
+              i_test = I_power_numbers_rev
            case ("add_numbers_fwd")
               i_test = I_add_numbers_fwd
            case ("multiply_numbers_fwd")
@@ -57,20 +57,20 @@ program run_simple_math
      end if
   end if
            
-  if (i_test == I_add_numbers .or. i_test == I_all) then
-     call test_add_numbers
+  if (i_test == I_add_numbers_rev .or. i_test == I_all) then
+     call test_add_numbers_rev
   end if
-  if (i_test == I_multiply_numbers .or. i_test == I_all) then
-     call test_multiply_numbers
+  if (i_test == I_multiply_numbers_rev .or. i_test == I_all) then
+     call test_multiply_numbers_rev
   end if
-  if (i_test == I_subtract_numbers .or. i_test == I_all) then
-     call test_subtract_numbers
+  if (i_test == I_subtract_numbers_rev .or. i_test == I_all) then
+     call test_subtract_numbers_rev
   end if
-  if (i_test == I_divide_numbers .or. i_test == I_all) then
-     call test_divide_numbers
+  if (i_test == I_divide_numbers_rev .or. i_test == I_all) then
+     call test_divide_numbers_rev
   end if
-  if (i_test == I_power_numbers .or. i_test == I_all) then
-     call test_power_numbers
+  if (i_test == I_power_numbers_rev .or. i_test == I_all) then
+     call test_power_numbers_rev
   end if
   if (i_test == I_add_numbers_fwd) then
      call test_add_numbers_fwd
@@ -92,7 +92,7 @@ program run_simple_math
 
 contains
 
-  subroutine test_add_numbers
+  subroutine test_add_numbers_rev
     real :: a, b, c
     real :: a_ad, b_ad, c_ad
     real :: exp_c, exp_a, exp_b
@@ -116,9 +116,9 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_add_numbers
+  end subroutine test_add_numbers_rev
 
-  subroutine test_multiply_numbers
+  subroutine test_multiply_numbers_rev
     real :: a, b, c
     real :: a_ad, b_ad, c_ad
     real :: exp_c, exp_a, exp_b
@@ -142,9 +142,9 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_multiply_numbers
+  end subroutine test_multiply_numbers_rev
 
-  subroutine test_subtract_numbers
+  subroutine test_subtract_numbers_rev
     real :: a, b, c
     real :: a_ad, b_ad, c_ad
     real :: exp_c, exp_a, exp_b
@@ -168,9 +168,9 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_subtract_numbers
+  end subroutine test_subtract_numbers_rev
 
-  subroutine test_divide_numbers
+  subroutine test_divide_numbers_rev
     real :: a, b, c
     real :: a_ad, b_ad, c_ad
     real :: exp_c, exp_a, exp_b, t
@@ -195,9 +195,9 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_divide_numbers
+  end subroutine test_divide_numbers_rev
 
-  subroutine test_power_numbers
+  subroutine test_power_numbers_rev
     real :: a, b, c
     real :: a_ad, b_ad, c_ad
     real :: exp_c, exp_a, exp_b
@@ -225,7 +225,7 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_power_numbers
+  end subroutine test_power_numbers_rev
 
   subroutine test_add_numbers_fwd
     real :: a, b, c, c_eps, c_ad, fd, eps

@@ -5,7 +5,7 @@ program run_save_vars
   real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all = 0
-  integer, parameter :: I_simple = 1
+  integer, parameter :: I_simple_rev = 1
   integer, parameter :: I_simple_fwd = 2
 
   integer :: length, status
@@ -20,8 +20,8 @@ program run_save_vars
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("simple")
-              i_test = I_simple
+           case ("simple_rev")
+              i_test = I_simple_rev
            case ("simple_fwd")
               i_test = I_simple_fwd
            case default
@@ -33,8 +33,8 @@ program run_save_vars
      end if
   end if
 
-  if (i_test == I_simple .or. i_test == I_all) then
-     call test_simple
+  if (i_test == I_simple_rev .or. i_test == I_all) then
+     call test_simple_rev
   end if
   if (i_test == I_simple_fwd) then
      call test_simple_fwd
@@ -43,7 +43,7 @@ program run_save_vars
   stop
 contains
 
-  subroutine test_simple
+  subroutine test_simple_rev
     real :: x, y, z
     real :: x_ad, y_ad, z_ad
     real :: exp_z, exp_x, exp_y
@@ -67,7 +67,7 @@ contains
        error stop 1
     end if
     return
-  end subroutine test_simple
+  end subroutine test_simple_rev
 
   subroutine test_simple_fwd
     real :: x, y, z, z_eps, z_ad, fd, eps
