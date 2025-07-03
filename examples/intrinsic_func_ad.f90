@@ -4,6 +4,42 @@ module intrinsic_func_ad
 
 contains
 
+  subroutine math_intrinsics_fwd_ad(x, x_ad, y, y_ad, z_ad)
+    real, intent(in)  :: x
+    real, intent(in)  :: x_ad
+    real, intent(inout) :: y
+    real, intent(inout) :: y_ad
+    real, intent(out) :: z_ad
+    real :: a_ad
+    real :: b_ad
+    real :: c_ad
+    real :: d_ad
+    real :: e_ad
+    real :: f_ad
+    real :: g_ad
+    real :: h_ad
+    real :: o_ad
+    real :: p_ad
+    real :: q_ad
+    real :: pi
+
+    pi = acos(- 1.0)
+    a_ad = x_ad * sign(1.0, x) / (2.0 * sqrt(abs(x))) ! a = sqrt(abs(x))
+    b_ad = x_ad * (exp(x) + sign(1.0, x) / ((abs(x) + 1.0) * log(10.0))) + y_ad / y ! b = exp(x) + log(y) + log10(abs(x) + 1.0)
+    c_ad = x_ad * (cos(x) + 1.0 / cos(x)**2) - y_ad * sin(y) ! c = sin(x) + cos(y) + tan(x)
+    d_ad = x_ad * (1.0 / (pi * sqrt(1.0 - (x / pi)**2)) + 1.0 / (1.0 + x**2)) - y_ad / ((pi + 1.0) * sqrt(1.0 - (y / (pi + 1.0))**2)) ! d = asin(x / pi) + acos(y / (pi + 1.0)) + atan(x)
+    e_ad = x_ad * (1.0 / sqrt(x**2 + 1.0) + 1.0 / (1.0 - x**2)) + y_ad / (sqrt(y - 1.0) * sqrt(y + 1.0)) ! e = asinh(x) + acosh(y) + atanh(x)
+    f_ad = x_ad * (y / (x**2 + y**2) + sinh(x) + 1.0 / cosh(x)**2) + y_ad * (- x / (x**2 + y**2) + cosh(y)) ! f = atan2(x, y) + cosh(x) + sinh(y) + tanh(x)
+    g_ad = x_ad * sign(1.0, x) * sign(1.0, y) ! g = sign(x, y)
+    h_ad = x_ad * merge(1.0, 0.0, x <= y) + y_ad * merge(0.0, 1.0, x <= y) ! h = max(x, y)
+    o_ad = x_ad * merge(1.0, 0.0, x >= y) + y_ad * merge(0.0, 1.0, x >= y) ! o = min(x, y)
+    p_ad = x_ad * 2.0 / sqrt(acos(- 1.0)) * exp(- x**2) - y_ad * 2.0 / sqrt(acos(- 1.0)) * exp(- y**2) ! p = erf(x) + erfc(y)
+    q_ad = x_ad - y_ad * real(int(x / y), kind(x)) ! q = mod(x, y)
+    z_ad = a_ad + b_ad + c_ad + d_ad + e_ad + f_ad + g_ad + h_ad + o_ad + p_ad + q_ad ! z = a + b + c + d + e + f + g + h + o + p + q
+
+    return
+  end subroutine math_intrinsics_fwd_ad
+
   subroutine math_intrinsics_rev_ad(x, x_ad, y, y_ad, z_ad)
     real, intent(in)  :: x
     real, intent(out) :: x_ad
@@ -61,6 +97,25 @@ contains
     return
   end subroutine math_intrinsics_rev_ad
 
+  subroutine non_differentiable_intrinsics_fwd_ad(str, arr, arr_ad, x, x_ad, y_ad)
+    character(len=*), intent(in)  :: str
+    real, intent(in)  :: arr(:)
+    real, intent(in)  :: arr_ad(:)
+    real, intent(in)  :: x
+    real, intent(in)  :: x_ad
+    real, intent(out) :: y_ad
+    real :: a_ad
+    real :: b_ad
+    real :: c_ad
+
+    a_ad = 0.0 ! a = epsilon(x)
+    b_ad = 0.0 ! b = huge(x)
+    c_ad = 0.0 ! c = tiny(x)
+    y_ad = a_ad + b_ad + c_ad ! y = a + b + c
+
+    return
+  end subroutine non_differentiable_intrinsics_fwd_ad
+
   subroutine non_differentiable_intrinsics_rev_ad(str, arr, arr_ad, x, x_ad, y_ad)
     character(len=*), intent(in)  :: str
     real, intent(in)  :: arr(:)
@@ -77,6 +132,17 @@ contains
     return
   end subroutine non_differentiable_intrinsics_rev_ad
 
+  subroutine special_intrinsics_fwd_ad(mat_in, mat_in_ad, mat_out_ad)
+    real, intent(in)  :: mat_in(:,:)
+    real, intent(in)  :: mat_in_ad(:,:)
+    real, intent(out) :: mat_out_ad(:,:)
+
+    mat_out_ad = transpose(mat_in_ad) ! mat_out = transpose(mat_in)
+    mat_out_ad = cshift(mat_out_ad, - 1, 2) ! mat_out = cshift(mat_out, 1, 2)
+
+    return
+  end subroutine special_intrinsics_fwd_ad
+
   subroutine special_intrinsics_rev_ad(mat_in, mat_in_ad, mat_out_ad)
     real, intent(in)  :: mat_in(:,:)
     real, intent(out) :: mat_in_ad(:,:)
@@ -87,6 +153,18 @@ contains
 
     return
   end subroutine special_intrinsics_rev_ad
+
+  subroutine casting_intrinsics_fwd_ad(i, r, r_ad, d_ad, c)
+    integer, intent(in)  :: i
+    real, intent(in)  :: r
+    real, intent(in)  :: r_ad
+    double precision, intent(out) :: d_ad
+    character(len=1), intent(inout) :: c
+
+    d_ad = r_ad ! d = dble(r) + dble(i2)
+
+    return
+  end subroutine casting_intrinsics_fwd_ad
 
   subroutine casting_intrinsics_rev_ad(i, r, r_ad, d_ad, c)
     integer, intent(in)  :: i

@@ -581,7 +581,7 @@ class OpVar(OpLeaf):
     name: str = field(default="")
     index: Optional[AryIndex] = None
     kind: Optional[str] = None
-    typename: Optional[str] = field(default=None, repr=False)
+    typename: Optional[str] = field(default=None)
     dims: Optional[Tuple[str]] = field(repr=False, default=None)
     intent: Optional[str] = field(default=None, repr=False)
     ad_target: Optional[bool] = field(default=None, repr=False)
@@ -975,15 +975,23 @@ class OpFunc(Operator):
 
         raise ValueError(f"Function ({self.name}) is not supported")
 
-    def special_handler(self, dsc, args):
+    def special_handler(self, dsc, args, suffix, reverse: bool):
         if self.name == "transpose":
             """Propagate gradient through ``transpose``."""
-            return OpFunc(name="transpose", args=[dsc])
+            if reverse:
+                src = dsc
+            else:
+                src = args[0]
+            return OpFunc(name="transpose", args=[src.add_suffix(suffix)])
         if self.name == "cshift":
             """Propagate gradient through ``cshift``."""
+            if reverse:
+                src = dsc
+            else:
+                src = args[0]
             shift = - args[1]
             dim = args[2]
-            return OpFunc(name="cshift", args=[dsc, shift, dim])
+            return OpFunc(name="cshift", args=[src.add_suffix(suffix), shift, dim])
         return None
 
 @dataclass

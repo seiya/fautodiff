@@ -1,7 +1,7 @@
 OUTDIR ?= .
 
 FC ?= gfortran
-FFLAGS ?= -O2
+FFLAGS ?= -O2 -ffree-line-length-none
 
 vpath %.f90 ../../examples
 vpath %.f90 ../../fortran_modules

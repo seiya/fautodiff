@@ -290,7 +290,7 @@ def find_subroutines(modules):
 
 def _parse_routine(content, src_name):
     """Return node tree correspoinding to the input AST"""
-    def _parse_decls(spec):
+    def _parse_decls(spec, directives):
         """Return mapping of variable names to ``(type, intent)``."""
         decls = Block([])
         if spec is None:
@@ -355,6 +355,9 @@ def _parse_routine(content, src_name):
                 init = None
                 if len(entity.items) > 3 and entity.items[3] is not None:
                     init = entity.items[3].items[1].tofortran()
+                constant = False
+                if "CONSTANT_ARGS" in directives and name in directives["CONSTANT_ARGS"]:
+                    constant = True
                 decls.append(
                     Declaration(
                         name,
@@ -363,6 +366,7 @@ def _parse_routine(content, src_name):
                         dims,
                         intent,
                         parameter,
+                        constant,
                         init=init,
                     )
                 )
@@ -513,7 +517,7 @@ def _parse_routine(content, src_name):
             routine.directives = directives
             continue
         if isinstance(item, Fortran2003.Specification_Part):
-            routine.decls = _parse_decls(item)
+            routine.decls = _parse_decls(item, routine.directives)
             continue
         if isinstance(item, Fortran2003.Execution_Part):
             decls = routine.decls
@@ -527,12 +531,5 @@ def _parse_routine(content, src_name):
         if isinstance(item, Fortran2003.End_Function_Stmt):
             continue
         raise RuntimeError(f"Unsupported statement: {type(item)} {item.items}")
-
-    const_args = directives.get("CONSTANT_ARGS")
-    if const_args:
-        for arg in const_args:
-            decl = routine.decls.find_by_name(arg)
-            if decl is not None:
-                setattr(decl, "constant", True)
 
     return routine
