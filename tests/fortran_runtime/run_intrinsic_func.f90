@@ -6,6 +6,7 @@ program run_intrinsic_func
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_casting = 1
+  integer, parameter :: I_casting_fwd = 2
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -21,6 +22,8 @@ program run_intrinsic_func
            select case(arg)
            case ("casting")
               i_test = I_casting
+           case ("casting_fwd")
+              i_test = I_casting_fwd
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -32,6 +35,9 @@ program run_intrinsic_func
 
   if (i_test == I_casting .or. i_test == I_all) then
      call test_casting
+  end if
+  if (i_test == I_casting_fwd) then
+     call test_casting_fwd
   end if
 
   stop
@@ -63,5 +69,26 @@ contains
     end if
     return
   end subroutine test_casting
+
+  subroutine test_casting_fwd
+    integer :: i, n
+    real :: r, r_eps, r_ad, fd, eps
+    double precision :: d, d_eps, d_ad
+    character(len=1) :: c
+
+    eps = 1.0e-6
+    i = 3
+    r = 4.5
+    c = 'A'
+    call casting_intrinsics(i, r, d, c, n)
+    call casting_intrinsics(i, r + eps, d_eps, c, n)
+    fd = (d_eps - d) / eps
+    call casting_intrinsics_fwd_ad(i, r, 1.0, d_ad, c)
+    if (abs(d_ad - fd) > tol) then
+       print *, 'test_casting_fwd failed', d_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_casting_fwd
 
 end program run_intrinsic_func
