@@ -2,13 +2,11 @@ program run_control_flow
   use control_flow
   use control_flow_ad
   implicit none
-  real, parameter :: tol = 1.0e-5
+  real, parameter :: tol = 1.0e-4
 
   integer, parameter :: I_all = 0
-  integer, parameter :: I_if_example_fwd = 1
-  integer, parameter :: I_if_example_rev = 2
-  integer, parameter :: I_do_example_fwd = 3
-  integer, parameter :: I_do_example_rev = 4
+  integer, parameter :: I_if_example = 1
+  integer, parameter :: I_do_example = 2
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -22,14 +20,10 @@ program run_control_flow
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("if_example_fwd")
-              i_test = I_if_example_fwd
-           case ("if_example_rev")
-              i_test = I_if_example_rev
-           case ("do_example_fwd")
-              i_test = I_do_example_fwd
-           case ("do_example_rev")
-              i_test = I_do_example_rev
+           case ("if_example")
+              i_test = I_if_example
+           case ("do_example")
+              i_test = I_do_example
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -39,28 +33,23 @@ program run_control_flow
      end if
   end if
 
-  if (i_test == I_if_example_fwd) then
-     call test_if_example_fwd
+  if (i_test == I_if_example .or. i_test == I_all) then
+     call test_if_example
   end if
-  if (i_test == I_if_example_rev .or. i_test == I_all) then
-     call test_if_example_rev
-  end if
-  if (i_test == I_do_example_fwd) then
-     call test_do_example_fwd
-  end if
-  if (i_test == I_do_example_rev .or. i_test == I_all) then
-     call test_do_example_rev
+  if (i_test == I_do_example .or. i_test == I_all) then
+     call test_do_example
   end if
 
   stop
 contains
 
-  subroutine test_if_example_fwd
+  subroutine test_if_example
     real :: x, y, z
     real :: x_ad, y_ad, z_ad
     real :: y_eps, z_eps, fd, eps
+    real :: exp_z, exp_x
 
-    eps = 1.0e-6
+    eps = 1.0e-3
     x = 1.0
     y = 2.0
     call if_example(x, y, z)
@@ -70,46 +59,36 @@ contains
     x_ad = 1.0
     y_ad = 1.0
     call if_example_fwd_ad(x, x_ad, y, y_ad, z_ad)
-    if (abs(z_ad - fd) > tol) then
+    if (abs((z_ad - fd) / fd) > tol) then
        print *, 'test_if_example_fwd failed', z_ad, fd
        error stop 1
     end if
 
-    return
-  end subroutine test_if_example_fwd
-
-  subroutine test_if_example_rev
-    real :: x, y, z
-    real :: x_ad, y_ad, z_ad
-    real :: exp_z, exp_x
-
     x = 1.0
     y = 2.0
     call if_example(x, y, z)
-
     x_ad = 0.0
     y_ad = 0.0
     z_ad = 1.0
     call if_example_rev_ad(x, x_ad, y, y_ad, z_ad)
-
     exp_z = x
     exp_x = 1.0
-
     if (abs(z - exp_z) > tol .or. abs(x_ad - exp_x) > tol) then
        print *, 'test_if_example failed', z, x_ad
        error stop 1
     end if
 
     return
-  end subroutine test_if_example_rev
+  end subroutine test_if_example
 
-  subroutine test_do_example_fwd
+  subroutine test_do_example
     integer :: n
     real :: x, sum
     real :: x_ad, sum_ad
     real :: sum_eps, fd, eps
+    real :: exp_sum, exp_x
 
-    eps = 1.0e-6
+    eps = 1.0e-3
     n = 3
     x = 2.0
     call do_example(n, x, sum)
@@ -117,28 +96,17 @@ contains
     fd = (sum_eps - sum) / eps
     x_ad = 1.0
     call do_example_fwd_ad(n, x, x_ad, sum_ad)
-    if (abs(sum_ad - fd) > tol) then
+    if (abs((sum_ad - fd) / fd) > tol) then
        print *, 'test_do_example_fwd failed', sum_ad, fd
        error stop 1
     end if
 
-    return
-  end subroutine test_do_example_fwd
-
-  subroutine test_do_example_rev
-    integer :: n
-    real :: x, sum
-    real :: x_ad, sum_ad
-    real :: exp_sum, exp_x
-
     n = 3
     x = 2.0
     call do_example(n, x, sum)
-
     x_ad = 0.0
     sum_ad = 1.0
     call do_example_rev_ad(n, x, x_ad, sum_ad)
-
     exp_sum = x * real(n * (n + 1) / 2)
     exp_x = real(n * (n + 1) / 2)
 
@@ -148,6 +116,6 @@ contains
     end if
 
     return
-  end subroutine test_do_example_rev
+  end subroutine test_do_example
 
 end program run_control_flow

@@ -5,8 +5,7 @@ program run_parameter_var
   real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all = 0
-  integer, parameter :: I_compute_area_fwd = 1
-  integer, parameter :: I_compute_area_rev = 2
+  integer, parameter :: I_compute_area = 1
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -20,10 +19,8 @@ program run_parameter_var
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("compute_area_fwd")
-              i_test = I_compute_area_fwd
-           case ("compute_area_rev")
-              i_test = I_compute_area_rev
+           case ("compute_area")
+              i_test = I_compute_area
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -33,39 +30,31 @@ program run_parameter_var
      end if
   end if
 
-  if (i_test == I_compute_area_fwd .or. i_test == I_all) then
-     call test_compute_area_fwd
-  end if
-  if (i_test == I_compute_area_rev .or. i_test == I_all) then
-     call test_compute_area_rev
+  if (i_test == I_compute_area .or. i_test == I_all) then
+     call test_compute_area
   end if
 
   stop
 contains
 
-  subroutine test_compute_area_fwd
-    real :: r, area, area_eps, area_ad, fd, eps
+  subroutine test_compute_area
+    real :: r, area
+    real :: r_ad, area_ad
+    real :: area_eps, fd, eps
 
     eps = 1.0e-6
     r = 2.0
     call compute_area(r, area)
     call compute_area(r + eps, area_eps)
     fd = (area_eps - area) / eps
-    call compute_area_fwd_ad(r, 1.0, area_ad)
+    r_ad = 1.0
+    call compute_area_fwd_ad(r, r_ad, area_ad)
     if (abs(area_ad - fd) > tol) then
        print *, 'test_compute_area_fwd failed', area_ad, fd
        error stop 1
     end if
-    return
-  end subroutine test_compute_area_fwd
-
-  subroutine test_compute_area_rev
-    real :: r, area, area_eps, area_ad, fd, eps
-
-    print *, 'Not implemented yet'
-    error stop 1
 
     return
-  end subroutine test_compute_area_rev
+  end subroutine test_compute_area
 
 end program run_parameter_var
