@@ -5,8 +5,8 @@ program run_save_vars
   real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all = 0
-  integer, parameter :: I_simple_rev = 1
-  integer, parameter :: I_simple_fwd = 2
+  integer, parameter :: I_simple_fwd = 1
+  integer, parameter :: I_simple_rev = 2
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -20,10 +20,10 @@ program run_save_vars
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("simple_rev")
-              i_test = I_simple_rev
            case ("simple_fwd")
               i_test = I_simple_fwd
+           case ("simple_rev")
+              i_test = I_simple_rev
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -33,15 +33,32 @@ program run_save_vars
      end if
   end if
 
+  if (i_test == I_simple_fwd .or. i_test == I_all) then
+     call test_simple_fwd
+  end if
   if (i_test == I_simple_rev .or. i_test == I_all) then
      call test_simple_rev
-  end if
-  if (i_test == I_simple_fwd) then
-     call test_simple_fwd
   end if
 
   stop
 contains
+
+  subroutine test_simple_fwd
+    real :: x, y, z, z_eps, z_ad, fd, eps
+
+    eps = 1.0e-6
+    x = 2.0
+    y = 3.0
+    call simple(x, y, z)
+    call simple(x + eps, y + eps, z_eps)
+    fd = (z_eps - z) / eps
+    call simple_fwd_ad(x, 1.0, y, 1.0, z_ad)
+    if (abs(z_ad - fd) > tol) then
+       print *, 'test_simple_fwd failed', z_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_simple_fwd
 
   subroutine test_simple_rev
     real :: x, y, z
@@ -68,22 +85,5 @@ contains
     end if
     return
   end subroutine test_simple_rev
-
-  subroutine test_simple_fwd
-    real :: x, y, z, z_eps, z_ad, fd, eps
-
-    eps = 1.0e-6
-    x = 2.0
-    y = 3.0
-    call simple(x, y, z)
-    call simple(x + eps, y + eps, z_eps)
-    fd = (z_eps - z) / eps
-    call simple_fwd_ad(x, 1.0, y, 1.0, z_ad)
-    if (abs(z_ad - fd) > tol) then
-       print *, 'test_simple_fwd failed', z_ad, fd
-       error stop 1
-    end if
-    return
-  end subroutine test_simple_fwd
 
 end program run_save_vars
