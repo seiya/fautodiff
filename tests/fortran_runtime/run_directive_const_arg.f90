@@ -6,6 +6,7 @@ program run_directive_const_arg
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_add_const_fwd = 1
+  integer, parameter :: I_add_const_rev = 2
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -21,6 +22,8 @@ program run_directive_const_arg
            select case(arg)
            case ("add_const_fwd")
               i_test = I_add_const_fwd
+           case ("add_const_rev")
+              i_test = I_add_const_rev
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -32,6 +35,9 @@ program run_directive_const_arg
 
   if (i_test == I_add_const_fwd .or. i_test == I_all) then
      call test_add_const_fwd
+  end if
+  if (i_test == I_add_const_rev .or. i_test == I_all) then
+     call test_add_const_rev
   end if
 
   stop
@@ -52,5 +58,14 @@ contains
     end if
     return
   end subroutine test_add_const_fwd
+
+  subroutine test_add_const_rev
+    real :: x, y, y_eps, y_ad, fd, eps
+
+    print *, 'Not impremented yet'
+    error stop 1
+
+    return
+  end subroutine test_add_const_rev
 
 end program run_directive_const_arg

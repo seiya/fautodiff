@@ -6,6 +6,7 @@ program run_store_vars
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_do_with_recurrent_scalar_fwd = 1
+  integer, parameter :: I_do_with_recurrent_scalar_rev = 2
   integer :: length, status
   character(:), allocatable :: arg
   integer :: i_test
@@ -20,6 +21,8 @@ program run_store_vars
            select case(arg)
            case ("do_with_recurrent_scalar_fwd")
               i_test = I_do_with_recurrent_scalar_fwd
+           case ("do_with_recurrent_scalar_rev")
+              i_test = I_do_with_recurrent_scalar_rev
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -29,14 +32,39 @@ program run_store_vars
      end if
   end if
 
-  if (i_test == I_all) then
-     call test_do_with_recurrent_scalar_rev
-  else if (i_test == I_do_with_recurrent_scalar_fwd) then
+  if (i_test == I_do_with_recurrent_scalar_fwd .or. i_test == I_all) then
      call test_do_with_recurrent_scalar_fwd
+  end if
+  if (i_test == I_do_with_recurrent_scalar_rev .or. i_test == I_all) then
+     call test_do_with_recurrent_scalar_rev
   end if
 
   stop
 contains
+
+  subroutine test_do_with_recurrent_scalar_fwd
+    integer, parameter :: n = 3
+    real, parameter :: tol = 3e-4
+    real :: x(n), z(n)
+    real :: x_ad(n), z_ad(n)
+    real :: z_eps(n), fd(n), eps
+
+    eps = 1.0e-3
+    x = (/2.0, 3.0, 4.0/)
+    call do_with_recurrent_scalar(n, x, z)
+    call do_with_recurrent_scalar(n, x + eps, z_eps)
+    fd(:) = (z_eps(:) - z(:)) / eps
+    x_ad(:) = 1.0
+    call do_with_recurrent_scalar_fwd_ad(n, x, x_ad, z_ad)
+    if (maxval(abs((z_ad(:) - fd(:)) / fd(:))) > tol) then
+       print *, 'test_do_with_recurrent_scalar_fwd failed'
+       print *, maxval(abs((z_ad(:) - fd(:)) / fd(:)))
+       print *, z_ad(:)
+       print *, fd(:)
+       error stop 1
+    end if
+    return
+  end subroutine test_do_with_recurrent_scalar_fwd
 
   subroutine test_do_with_recurrent_scalar_rev
     integer, parameter :: n = 3
@@ -64,23 +92,5 @@ contains
     end if
     return
   end subroutine test_do_with_recurrent_scalar_rev
-
-  subroutine test_do_with_recurrent_scalar_fwd
-    integer, parameter :: n = 3
-    real :: x(n), z(n), z_eps(n)
-    real :: z_ad(n), fd, eps
-
-    eps = 1.0e-6
-    x = (/2.0, 3.0, 4.0/)
-    call do_with_recurrent_scalar(n, x, z)
-    call do_with_recurrent_scalar(n, x + eps, z_eps)
-    fd = (z_eps(n) - z(n)) / eps
-    call do_with_recurrent_scalar_fwd_ad(n, x, 1.0, z_ad)
-    if (abs(z_ad(n) - fd) > tol) then
-       print *, 'test_do_with_recurrent_scalar_fwd failed', z_ad(n), fd
-       error stop 1
-    end if
-    return
-  end subroutine test_do_with_recurrent_scalar_fwd
 
 end program run_store_vars

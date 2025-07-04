@@ -5,8 +5,8 @@ program run_intrinsic_func
   real, parameter :: tol = 1.0e-5
 
   integer, parameter :: I_all = 0
-  integer, parameter :: I_casting_rev = 1
-  integer, parameter :: I_casting_fwd = 2
+  integer, parameter :: I_casting_fwd = 1
+  integer, parameter :: I_casting_rev = 2
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -20,10 +20,10 @@ program run_intrinsic_func
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("casting_rev")
-              i_test = I_casting_rev
            case ("casting_fwd")
               i_test = I_casting_fwd
+           case ("casting_rev")
+              i_test = I_casting_rev
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -33,15 +33,36 @@ program run_intrinsic_func
      end if
   end if
 
+  if (i_test == I_casting_fwd .or. i_test == I_all) then
+     call test_casting_fwd
+  end if
   if (i_test == I_casting_rev .or. i_test == I_all) then
      call test_casting_rev
-  end if
-  if (i_test == I_casting_fwd) then
-     call test_casting_fwd
   end if
 
   stop
 contains
+
+  subroutine test_casting_fwd
+    integer :: i, n
+    real :: r, r_eps, r_ad, fd, eps
+    double precision :: d, d_eps, d_ad
+    character(len=1) :: c
+
+    eps = 1.0e-6
+    i = 3
+    r = 4.5
+    c = 'A'
+    call casting_intrinsics(i, r, d, c, n)
+    call casting_intrinsics(i, r + eps, d_eps, c, n)
+    fd = (d_eps - d) / eps
+    call casting_intrinsics_fwd_ad(i, r, 1.0, d_ad, c)
+    if (abs(d_ad - fd) > tol) then
+       print *, 'test_casting_fwd failed', d_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_casting_fwd
 
   subroutine test_casting_rev
     integer :: i, n
@@ -69,26 +90,5 @@ contains
     end if
     return
   end subroutine test_casting_rev
-
-  subroutine test_casting_fwd
-    integer :: i, n
-    real :: r, r_eps, r_ad, fd, eps
-    double precision :: d, d_eps, d_ad
-    character(len=1) :: c
-
-    eps = 1.0e-6
-    i = 3
-    r = 4.5
-    c = 'A'
-    call casting_intrinsics(i, r, d, c, n)
-    call casting_intrinsics(i, r + eps, d_eps, c, n)
-    fd = (d_eps - d) / eps
-    call casting_intrinsics_fwd_ad(i, r, 1.0, d_ad, c)
-    if (abs(d_ad - fd) > tol) then
-       print *, 'test_casting_fwd failed', d_ad, fd
-       error stop 1
-    end if
-    return
-  end subroutine test_casting_fwd
 
 end program run_intrinsic_func

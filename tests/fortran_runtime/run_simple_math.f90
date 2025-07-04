@@ -4,17 +4,17 @@ program run_simple_math
   implicit none
   real, parameter :: tol = 1.0e-5
 
-  integer, parameter :: I_all              = 0
-  integer, parameter :: I_add_numbers_rev      = 1
-  integer, parameter :: I_multiply_numbers_rev = 2
-  integer, parameter :: I_subtract_numbers_rev = 3
-  integer, parameter :: I_divide_numbers_rev   = 4
-  integer, parameter :: I_power_numbers_rev    = 5
-  integer, parameter :: I_add_numbers_fwd      = 6
-  integer, parameter :: I_multiply_numbers_fwd = 7
-  integer, parameter :: I_subtract_numbers_fwd = 8
-  integer, parameter :: I_divide_numbers_fwd   = 9
-  integer, parameter :: I_power_numbers_fwd    = 10
+  integer, parameter :: I_all = 0
+  integer, parameter :: I_add_numbers_fwd      = 1
+  integer, parameter :: I_add_numbers_rev      = 2
+  integer, parameter :: I_multiply_numbers_fwd = 3
+  integer, parameter :: I_multiply_numbers_rev = 4
+  integer, parameter :: I_subtract_numbers_fwd = 5
+  integer, parameter :: I_subtract_numbers_rev = 6
+  integer, parameter :: I_divide_numbers_fwd   = 7
+  integer, parameter :: I_divide_numbers_rev   = 8
+  integer, parameter :: I_power_numbers_fwd    = 9
+  integer, parameter :: I_power_numbers_rev    = 10
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -28,26 +28,26 @@ program run_simple_math
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("add_numbers_rev")
-              i_test = I_add_numbers_rev
-           case ("multiply_numbers_rev")
-              i_test = I_multiply_numbers_rev
-           case ("subtract_numbers_rev")
-              i_test = I_subtract_numbers_rev
-           case ("divide_numbers_rev")
-              i_test = I_divide_numbers_rev
-           case ("power_numbers_rev")
-              i_test = I_power_numbers_rev
            case ("add_numbers_fwd")
               i_test = I_add_numbers_fwd
+           case ("add_numbers_rev")
+              i_test = I_add_numbers_rev
            case ("multiply_numbers_fwd")
               i_test = I_multiply_numbers_fwd
+           case ("multiply_numbers_rev")
+              i_test = I_multiply_numbers_rev
            case ("subtract_numbers_fwd")
               i_test = I_subtract_numbers_fwd
+           case ("subtract_numbers_rev")
+              i_test = I_subtract_numbers_rev
            case ("divide_numbers_fwd")
               i_test = I_divide_numbers_fwd
+           case ("divide_numbers_rev")
+              i_test = I_divide_numbers_rev
            case ("power_numbers_fwd")
               i_test = I_power_numbers_fwd
+           case ("power_numbers_rev")
+              i_test = I_power_numbers_rev
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -57,40 +57,57 @@ program run_simple_math
      end if
   end if
            
+  if (i_test == I_add_numbers_fwd .or. i_test == I_all) then
+     call test_add_numbers_fwd
+  end if
   if (i_test == I_add_numbers_rev .or. i_test == I_all) then
      call test_add_numbers_rev
+  end if
+  if (i_test == I_multiply_numbers_fwd .or. i_test == I_all) then
+     call test_multiply_numbers_fwd
   end if
   if (i_test == I_multiply_numbers_rev .or. i_test == I_all) then
      call test_multiply_numbers_rev
   end if
+  if (i_test == I_subtract_numbers_fwd .or. i_test == I_all) then
+     call test_subtract_numbers_fwd
+  end if
   if (i_test == I_subtract_numbers_rev .or. i_test == I_all) then
      call test_subtract_numbers_rev
+  end if
+  if (i_test == I_divide_numbers_fwd .or. i_test == I_all) then
+     call test_divide_numbers_fwd
   end if
   if (i_test == I_divide_numbers_rev .or. i_test == I_all) then
      call test_divide_numbers_rev
   end if
+  if (i_test == I_power_numbers_fwd .or. i_test == I_all) then
+     call test_power_numbers_fwd
+  end if
   if (i_test == I_power_numbers_rev .or. i_test == I_all) then
      call test_power_numbers_rev
-  end if
-  if (i_test == I_add_numbers_fwd) then
-     call test_add_numbers_fwd
-  end if
-  if (i_test == I_multiply_numbers_fwd) then
-     call test_multiply_numbers_fwd
-  end if
-  if (i_test == I_subtract_numbers_fwd) then
-     call test_subtract_numbers_fwd
-  end if
-  if (i_test == I_divide_numbers_fwd) then
-     call test_divide_numbers_fwd
-  end if
-  if (i_test == I_power_numbers_fwd) then
-     call test_power_numbers_fwd
   end if
 
   stop
 
 contains
+
+  subroutine test_add_numbers_fwd
+    real :: a, b, c, c_eps, c_ad, fd, eps
+
+    eps = 1.0e-6
+    a = 2.0
+    b = 3.0
+    c = add_numbers(a, b)
+    c_eps = add_numbers(a + eps, b + eps)
+    fd = (c_eps - c) / eps
+    call add_numbers_fwd_ad(a, 1.0, b, 1.0, c_ad)
+    if (abs(c_ad - fd) > tol) then
+       print *, 'test_add_numbers_fwd failed', c_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_add_numbers_fwd
 
   subroutine test_add_numbers_rev
     real :: a, b, c
@@ -118,6 +135,23 @@ contains
     return
   end subroutine test_add_numbers_rev
 
+  subroutine test_multiply_numbers_fwd
+    real :: a, b, c, c_eps, c_ad, fd, eps
+
+    eps = 1.0e-6
+    a = 2.0
+    b = 3.0
+    call multiply_numbers(a, b, c)
+    call multiply_numbers(a + eps, b + eps, c_eps)
+    fd = (c_eps - c) / eps
+    call multiply_numbers_fwd_ad(a, 1.0, b, 1.0, c_ad)
+    if (abs(c_ad - fd) > tol) then
+       print *, 'test_multiply_numbers_fwd failed', c_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_multiply_numbers_fwd
+
   subroutine test_multiply_numbers_rev
     real :: a, b, c
     real :: a_ad, b_ad, c_ad
@@ -143,6 +177,23 @@ contains
     end if
     return
   end subroutine test_multiply_numbers_rev
+
+  subroutine test_subtract_numbers_fwd
+    real :: a, b, c, c_eps, c_ad, fd, eps
+
+    eps = 1.0e-6
+    a = 2.0
+    b = 3.0
+    c = subtract_numbers(a, b)
+    c_eps = subtract_numbers(a + eps, b + eps)
+    fd = (c_eps - c) / eps
+    call subtract_numbers_fwd_ad(a, 1.0, b, 1.0, c_ad)
+    if (abs(c_ad - fd) > tol) then
+       print *, 'test_subtract_numbers_fwd failed', c_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_subtract_numbers_fwd
 
   subroutine test_subtract_numbers_rev
     real :: a, b, c
@@ -170,6 +221,23 @@ contains
     return
   end subroutine test_subtract_numbers_rev
 
+  subroutine test_divide_numbers_fwd
+    real :: a, b, c, c_eps, c_ad, fd, eps
+
+    eps = 1.0e-6
+    a = 2.0
+    b = 3.0
+    call divide_numbers(a, b, c)
+    call divide_numbers(a + eps, b + eps, c_eps)
+    fd = (c_eps - c) / eps
+    call divide_numbers_fwd_ad(a, 1.0, b, 1.0, c_ad)
+    if (abs(c_ad - fd) > tol) then
+       print *, 'test_divide_numbers_fwd failed', c_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_divide_numbers_fwd
+
   subroutine test_divide_numbers_rev
     real :: a, b, c
     real :: a_ad, b_ad, c_ad
@@ -196,6 +264,23 @@ contains
     end if
     return
   end subroutine test_divide_numbers_rev
+
+  subroutine test_power_numbers_fwd
+    real :: a, b, c, c_eps, c_ad, fd, eps
+
+    eps = 1.0e-6
+    a = 2.0
+    b = 3.0
+    c = power_numbers(a, b)
+    c_eps = power_numbers(a + eps, b + eps)
+    fd = (c_eps - c) / eps
+    call power_numbers_fwd_ad(a, 1.0, b, 1.0, c_ad)
+    if (abs(c_ad - fd) > tol) then
+       print *, 'test_power_numbers_fwd failed', c_ad, fd
+       error stop 1
+    end if
+    return
+  end subroutine test_power_numbers_fwd
 
   subroutine test_power_numbers_rev
     real :: a, b, c
@@ -226,90 +311,5 @@ contains
     end if
     return
   end subroutine test_power_numbers_rev
-
-  subroutine test_add_numbers_fwd
-    real :: a, b, c, c_eps, c_ad, fd, eps
-
-    eps = 1.0e-6
-    a = 2.0
-    b = 3.0
-    c = add_numbers(a, b)
-    c_eps = add_numbers(a + eps, b + eps)
-    fd = (c_eps - c) / eps
-    call add_numbers_fwd_ad(a, 1.0, b, 1.0, c_ad)
-    if (abs(c_ad - fd) > tol) then
-       print *, 'test_add_numbers_fwd failed', c_ad, fd
-       error stop 1
-    end if
-    return
-  end subroutine test_add_numbers_fwd
-
-  subroutine test_multiply_numbers_fwd
-    real :: a, b, c, c_eps, c_ad, fd, eps
-
-    eps = 1.0e-6
-    a = 2.0
-    b = 3.0
-    call multiply_numbers(a, b, c)
-    call multiply_numbers(a + eps, b + eps, c_eps)
-    fd = (c_eps - c) / eps
-    call multiply_numbers_fwd_ad(a, 1.0, b, 1.0, c_ad)
-    if (abs(c_ad - fd) > tol) then
-       print *, 'test_multiply_numbers_fwd failed', c_ad, fd
-       error stop 1
-    end if
-    return
-  end subroutine test_multiply_numbers_fwd
-
-  subroutine test_subtract_numbers_fwd
-    real :: a, b, c, c_eps, c_ad, fd, eps
-
-    eps = 1.0e-6
-    a = 2.0
-    b = 3.0
-    c = subtract_numbers(a, b)
-    c_eps = subtract_numbers(a + eps, b + eps)
-    fd = (c_eps - c) / eps
-    call subtract_numbers_fwd_ad(a, 1.0, b, 1.0, c_ad)
-    if (abs(c_ad - fd) > tol) then
-       print *, 'test_subtract_numbers_fwd failed', c_ad, fd
-       error stop 1
-    end if
-    return
-  end subroutine test_subtract_numbers_fwd
-
-  subroutine test_divide_numbers_fwd
-    real :: a, b, c, c_eps, c_ad, fd, eps
-
-    eps = 1.0e-6
-    a = 2.0
-    b = 3.0
-    call divide_numbers(a, b, c)
-    call divide_numbers(a + eps, b + eps, c_eps)
-    fd = (c_eps - c) / eps
-    call divide_numbers_fwd_ad(a, 1.0, b, 1.0, c_ad)
-    if (abs(c_ad - fd) > tol) then
-       print *, 'test_divide_numbers_fwd failed', c_ad, fd
-       error stop 1
-    end if
-    return
-  end subroutine test_divide_numbers_fwd
-
-  subroutine test_power_numbers_fwd
-    real :: a, b, c, c_eps, c_ad, fd, eps
-
-    eps = 1.0e-6
-    a = 2.0
-    b = 3.0
-    c = power_numbers(a, b)
-    c_eps = power_numbers(a + eps, b + eps)
-    fd = (c_eps - c) / eps
-    call power_numbers_fwd_ad(a, 1.0, b, 1.0, c_ad)
-    if (abs(c_ad - fd) > tol) then
-       print *, 'test_power_numbers_fwd failed', c_ad, fd
-       error stop 1
-    end if
-    return
-  end subroutine test_power_numbers_fwd
 
 end program run_simple_math
