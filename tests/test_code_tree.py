@@ -118,14 +118,12 @@ class TestNodeMethods(unittest.TestCase):
                 )
             ]),
             index=OpVar("i"),
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1),OpVar("n")])
         )
         outer = DoLoop(
             Block([inner]),
             index=OpVar("j"),
-            start=OpInt(1),
-            end=OpVar("m"),
+            range=OpRange([OpInt(1),OpVar("m")])
         )
         self.assertTrue(outer.has_assignment_to("a"))
         self.assertFalse(outer.has_assignment_to("b"))
@@ -191,12 +189,10 @@ class TestNodeMethods(unittest.TestCase):
         a = Assignment(OpVar("a"), OpInt(0))
         blk = Block([a])
         self.assertEqual(a.do_index_list, [])
-        doblk = DoLoop(blk, index=OpVar("i"), start=OpInt(1), end=OpVar("n"))
+        doblk = DoLoop(blk, index=OpVar("i"), range=OpRange([OpInt(1), OpVar("n")]))
         self.assertEqual(a.do_index_list, ["i"])
         blk2 = Block([doblk])
-        doblk = DoLoop(blk2,
-                                  index=OpVar("j"), start=OpInt(1), end=OpVar("m")
-                                  )
+        doblk = DoLoop(blk2, index=OpVar("j"), range=OpRange([OpInt(1), OpVar("m")]))
         self.assertEqual(a.do_index_list, ["i","j"])
         b = Assignment(OpVar("b"), OpInt(0))
         blk.append(b)
@@ -273,7 +269,7 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(xa, OpInt(0)),
             DoLoop(
                 Block([Assignment(yi, xi)]),
-                index=i, start=OpInt(1), end=OpVar("n")
+                index=i, range=OpRange([OpInt(1), OpVar("n")])
             )
         ])
         self.assertEqual({str(v) for v in blk.required_vars(VarList([ya]))}, {"n"})
@@ -295,7 +291,7 @@ class TestNodeMethods(unittest.TestCase):
         w2 = OpVar("w", index=[2])
         inner = DoLoop(
             Block([Assignment(v, k)]),
-            index=k, start=OpInt(1), end=OpInt(2)
+            index=k, range=OpRange([OpInt(1), OpInt(2)])
         )
         outer = DoLoop(
             Block([
@@ -304,7 +300,7 @@ class TestNodeMethods(unittest.TestCase):
                 inner,
                 Assignment(y, v1 + v2 + w1 + w2 + a)
             ]),
-            index=i, start=OpInt(1), end=n
+            index=i, range=OpRange([OpInt(1), n])
         )
         self.assertEqual({str(v) for v in outer.required_vars()}, {"x(1:n)", "n"})
 
@@ -319,7 +315,7 @@ class TestNodeMethods(unittest.TestCase):
         save_assign2 = SaveAssignment(w2, id=1)
         inner = DoLoop(
             Block([Assignment(x_ad, v_ad, accumulate=True)]),
-            index=k, start=OpInt(2), end=OpInt(1), step=OpInt(-1)
+            index=k, range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
         )
         outer = DoLoop(
             Block([
@@ -334,7 +330,7 @@ class TestNodeMethods(unittest.TestCase):
                 save_assign1.to_load(),
                 save_assign2.to_load()
             ]),
-            index=i, start=OpVar("n"), end=OpInt(1), step=OpInt(-1)
+            index=i, range=OpRange([OpVar("n"), OpInt(1), OpInt(-1)])
         )
         self.assertEqual({str(v) for v in outer.required_vars(no_accumulate=True, without_savevar=True)}, {"y_ad(1:n)", "w(1:2)", "n"})
 
@@ -345,10 +341,10 @@ class TestNodeMethods(unittest.TestCase):
             Block([
                 Assignment(a_ad, b_ad, accumulate=True),
             ]),
-            index=i, start=n, end=one, step=-one)
+            index=i, range=OpRange([n, one, -one]))
         outer = DoLoop(
             Block([inner]),
-            index=j, start=m, end=one, step=-one)
+            index=j, range=OpRange([m, one, -one]))
         self.assertEqual({str(v) for v in outer.required_vars()}, {"a_ad(1:n,1:m)","b_ad(1:n,1:m)", "m", "n"})
 
     def test_required_vars_in_if(self):
@@ -395,7 +391,7 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(a_ad, b_ad, accumulate=True),
             Assignment(a_ad, c_ad, accumulate=True)
         ]),
-        index=i, start=OpInt(1), end=n)
+        index=i, range=OpRange([OpInt(1), n]))
         loop.check_initial()
         self.assertEqual(render_program(loop), code)
 
@@ -411,7 +407,7 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(b_ad, a_ad, accumulate=True),
             ClearAssignment(a_ad)
         ]),
-        index=i, start=OpInt(1), end=n)
+        index=i, range=OpRange([OpInt(1), n]))
         loop.check_initial()
         self.assertEqual(render_program(loop), code)
 
@@ -427,7 +423,7 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(b_ad, a_ad, accumulate=True),
             Assignment(a_ad, b_ad, accumulate=True)
         ]),
-        index=i, start=OpInt(1), end=n)
+        index=i, range=OpRange([OpInt(1), n]))
         loop.check_initial()
         self.assertEqual(render_program(loop), code)
 
@@ -440,7 +436,7 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(a_ad, a_ad),
             Assignment(a_ad, b_ad, accumulate=True)
         ]),
-        index=OpVar("i"), start=OpInt(1), end=OpVar("n"))
+        index=OpVar("i"), range=OpRange([OpInt(1), OpVar("n")]))
         loop.check_initial()
         self.assertEqual(render_program(loop), code)
 
@@ -463,7 +459,7 @@ class TestNodeMethods(unittest.TestCase):
                 Assignment(x_ad, c_ad, accumulate=True),
                 ClearAssignment(x_ad)
             ]),
-                   index=OpVar("i"), start=OpInt(1), end=OpVar("n"))
+                   index=OpVar("i"), range=OpRange([OpInt(1), OpVar("n")]))
         ])
         body.check_initial()
         self.assertEqual(render_program(body), code)
@@ -481,7 +477,7 @@ class TestNodeMethods(unittest.TestCase):
             Assignment(xi_ad, y_ad, accumulate=True),
             Assignment(xip_ad, y_ad, accumulate=True),
         ]),
-        index=i, start=OpInt(1), end=n)
+        index=i, range=OpRange([OpInt(1), n]))
         loop.check_initial()
         self.assertEqual(render_program(loop), code)
 
@@ -506,12 +502,11 @@ class TestNodeMethods(unittest.TestCase):
                 Assignment(c_ad, y_ad, accumulate=True),
                 ClearAssignment(c_ad)
             ]),
-            index=i, start=OpInt(1), end=n)
+            index=i, range=OpRange([OpInt(1), n]))
         outer = DoLoop(
             Block([inner]),
             index=OpVar("j"),
-            start=OpInt(1),
-            end=OpVar("m"),
+            range=OpRange([OpInt(1),OpVar("m")])
         )
         outer.check_initial()
         self.assertEqual(render_program(outer), code)
@@ -595,8 +590,7 @@ class TestLoopAnalysis(unittest.TestCase):
         loop = DoLoop(
             body,
             index=i,
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1),OpVar("n")])
         )
         self.assertEqual({str(v) for v in loop.required_vars()}, {"b(1:n)", "n"})
         self.assertEqual(set(loop.recurrent_vars()), set())
@@ -613,8 +607,7 @@ class TestLoopAnalysis(unittest.TestCase):
         loop = DoLoop(
             body,
             index=i,
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1), OpVar("n")])
         )
         self.assertEqual({str(v) for v in loop.required_vars()}, {"a_ad(1:n)", "b_ad(1:n)", "c", "n"})
         self.assertEqual({str(v) for v in loop.required_vars(no_accumulate=True)}, {"c", "n"})
@@ -629,8 +622,7 @@ class TestLoopAnalysis(unittest.TestCase):
                 Assignment(a, a + OpVar("c"))
             ]),
             index=i,
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1), OpVar("n")])
         )
         self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "c", "n"})
         self.assertEqual(set(loop.recurrent_vars()), set())
@@ -646,8 +638,7 @@ class TestLoopAnalysis(unittest.TestCase):
         loop = DoLoop(
             body,
             index=i,
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1), OpVar("n")])
         )
         self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "n"})
         self.assertEqual(set(loop.recurrent_vars()), set())
@@ -663,8 +654,7 @@ class TestLoopAnalysis(unittest.TestCase):
         loop = DoLoop(
             body,
             index=i,
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1), OpVar("n")])
         )
         self.assertEqual({str(v) for v in loop.required_vars()}, {"c", "n"})
         self.assertEqual(set(loop.recurrent_vars()), {"c"})
@@ -690,8 +680,7 @@ class TestLoopAnalysis(unittest.TestCase):
                 )
             ]),
             index=i,
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1), OpVar("n")])
         )
         self.assertEqual("".join(loop.render()), code)
         self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "c", "n"})
@@ -717,8 +706,7 @@ class TestLoopAnalysis(unittest.TestCase):
                 Assignment(a2, a2 + c)
             ]),
             index=i,
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1), OpVar("n")])
         )
         self.assertEqual("".join(loop.render()), code)
         self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "c", "n"})
@@ -735,14 +723,12 @@ class TestLoopAnalysis(unittest.TestCase):
                 )
             ]),
             index=i,
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1), OpVar("n")])
         )
         outer = DoLoop(
             Block([inner]),
             index=j,
-            start=OpInt(1),
-            end=OpVar("m"),
+            range=OpRange([OpInt(1), OpVar("m")])
         )
         self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n,1:m)", "c", "n", "m"})
         self.assertEqual(set(outer.recurrent_vars()), set())
@@ -772,16 +758,14 @@ class TestLoopAnalysis(unittest.TestCase):
                 Assignment(d, k)
             ]),
             index=k,
-            start=OpInt(1),
-            end=OpInt(2)
+            range=OpRange([OpInt(1), OpInt(2)])
         )
         inner2 = DoLoop(
             Block([
                 Assignment(b, b + d),
             ]),
             index=k,
-            start=OpInt(1),
-            end=OpInt(2)
+            range=OpRange([OpInt(1), OpInt(2)])
         )
         outer = DoLoop(
             Block([
@@ -792,8 +776,7 @@ class TestLoopAnalysis(unittest.TestCase):
                 inner2,
             ]),
             index=i,
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1), OpVar("n")])
         )
         self.assertEqual("".join(outer.render()), code)
         self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n)", "n"})
@@ -818,14 +801,12 @@ class TestLoopAnalysis(unittest.TestCase):
                 )
             ]),
             index=i,
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1), OpVar("n")])
         )
         outer = DoLoop(
             Block([inner]),
             index=j,
-            start=OpInt(1),
-            end=OpVar("m"),
+            range=OpRange([OpInt(1), OpVar("m")])
         )
         self.assertEqual("".join(outer.render()), code)
         self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n,k)", "k", "c", "n", "m"})
@@ -850,14 +831,12 @@ class TestLoopAnalysis(unittest.TestCase):
                 )
             ]),
             index=i,
-            start=OpInt(1),
-            end=OpVar("n"),
+            range=OpRange([OpInt(1), OpVar("n")])
         )
         outer = DoLoop(
             Block([inner]),
             index=j,
-            start=OpInt(1),
-            end=OpVar("m"),
+            range=OpRange([OpInt(1), OpVar("m")])
         )
         self.assertEqual("".join(outer.render()), code)
         self.assertEqual({str(v) for v in outer.required_vars()}, {"b(1:n,k)", "k", "c", "n", "m"})
@@ -890,16 +869,12 @@ class TestLoopAnalysis(unittest.TestCase):
                 Assignment(y_ad, work2_ad * y, accumulate=True),
             ]),
             index=i,
-            start=OpVar("n"),
-            end=OpInt(1),
-            step=OpInt(-1),
+            range=OpRange([OpVar("n"), OpInt(1), OpInt(-1)])
         )
         outer = DoLoop(
             Block([inner]),
             index=j,
-            start=OpVar("m"),
-            end=OpInt(1),
-            step=OpInt(-1),
+            range=OpRange([OpVar("m"), OpInt(1), OpInt(-1)])
         )
         self.assertEqual({str(v) for v in outer.required_vars()}, {"x(1:n,1:m)", "y(1:n,1:m)", "x_ad(1:n,1:m)", "y_ad(1:n,1:m)", "work_ad(1:2)", "n", "m"})
         self.assertEqual(set(outer.recurrent_vars()), {"work_ad"})
@@ -941,16 +916,14 @@ class TestLoopAnalysis(unittest.TestCase):
                         Assignment(work, k),
                         Assignment(work_ad, x_ad * k, accumulate=True),
                     ]),
-                    index=k, start=OpInt(2), end=OpInt(1), step=OpInt(-1)),
+                    index=k, range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])),
                 Assignment(x_ad, work1_ad * work1, accumulate=True),
                 Assignment(work1_ad, OpReal("0.0"), accumulate=False),
                 Assignment(y_ad, work2_ad * work2, accumulate=True),
                 Assignment(work2_ad, OpReal("0.0"), accumulate=False)
             ]),
             index=i,
-            start=OpVar("n"),
-            end=OpInt(1),
-            step=OpInt(-1),
+            range=OpRange([OpVar("n"), OpInt(1), OpInt(-1)])
         )
         outer = DoLoop(
             Block([
@@ -959,9 +932,7 @@ class TestLoopAnalysis(unittest.TestCase):
                 save1.to_load(), save2.to_load()
             ]),
             index=j,
-            start=OpVar("m"),
-            end=OpInt(1),
-            step=OpInt(-1),
+            range=OpRange([OpVar("m"), OpInt(1), OpInt(-1)])
         )
         self.assertEqual({str(v) for v in outer.required_vars()}, {"x_ad(1:n,1:m)", "y_ad(1:n,1:m)", "work(1:2)", "work_ad(1:2)", "n", "m"})
         self.assertEqual(set(outer.recurrent_vars()), {"work_ad", "work"})

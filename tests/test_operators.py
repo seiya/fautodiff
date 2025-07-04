@@ -70,6 +70,20 @@ class TestOperatorsBasic(unittest.TestCase):
         self.assertEqual(str((x/y) / z), "x / (y * z)")
         self.assertEqual(str((x/y) / (z/t)), "x * t / (y * z)")
 
+    def test_sub(self):
+        n = OpVar("n")
+        zero = OpInt(0)
+        one = OpInt(1)
+        self.assertEqual(n-n, zero)
+        self.assertEqual((n+1)-n, one)
+        self.assertEqual((n-1)-n, -one)
+        self.assertEqual(n-(n-1), one)
+        self.assertEqual(n-(n+1), -one)
+        self.assertEqual((one-n)+n, one)
+        self.assertEqual((-one-n)+n, -one)
+        self.assertEqual(n+(one-n), one)
+        self.assertEqual(n+(-one-n), -one)
+
     def test_power_special_cases(self):
         x = OpVar("x")
         self.assertEqual(str(x ** OpInt(0)), "1")
@@ -103,7 +117,7 @@ class TestOperatorsBasic(unittest.TestCase):
     def test_oprange_str(self):
         one = OpInt(1)
         n = OpVar("n")
-        rng = OpRange(args=[one, n])
+        rng = OpRange([one, n])
         self.assertEqual(str(rng), "1:n")
         rng = OpRange(args=[None, n])
         self.assertEqual(str(rng), ":n")
@@ -117,6 +131,19 @@ class TestOperatorsBasic(unittest.TestCase):
         self.assertEqual(str(rng), "::n")
         rng = OpRange(args=[one, None, None])
         self.assertEqual(str(rng), "1:")
+
+    def test_oprange_in(self):
+        one = OpInt(1)
+        two = OpInt(2)
+        three = OpInt(3)
+        n = OpVar("n")
+        rng = OpRange([two, n])
+        self.assertFalse(one in rng)
+        self.assertTrue(two in rng)
+        self.assertTrue(three in rng)
+        self.assertTrue(n in rng)
+        self.assertTrue(n-1 in rng)
+        self.assertFalse(n+1 in rng)
 
 
 if __name__ == "__main__":

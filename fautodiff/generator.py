@@ -478,11 +478,15 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
     # populate CallStatement intents from routine map
     _set_call_intents(routine_org.content, routine_map)
 
+    #print("subroutine: ", subroutine.name) # for debug
+
     saved_vars = []
     ad_code = routine_org.content.generate_ad(
         saved_vars, reverse=True, routine_map=routine_map, warnings=warnings
     )[0]
-    #print("subroutine: ", subroutine.name) # for debug
+
+    #print(render_program(ad_code)) # for debug
+
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
 
         # check undeclared reference for AD variables
@@ -540,7 +544,9 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
         # now ad_code is completed
         ad_block.extend(ad_code)
 
+    #print(render_program(routine_org.content)) # debug
     fw_block = routine_org.content.prune_for(ad_block.required_vars())
+    #print(render_program(fw_block)) # debug
 
     flag = True
     while flag:

@@ -18,6 +18,7 @@ from .operators import (
     OpLeaf,
     OpInt,
     OpReal,
+    OpNeg,
     OpRange,
     OpFunc,
     OpFuncUser
@@ -295,11 +296,15 @@ class Node:
     # ------------------------------------------------------------------
     # other helpers
     # ------------------------------------------------------------------
-    def _save_var_name(self, name: str, id: int, no_suffix: bool = False) -> str:
-        if no_suffix:
-            return f"{name}_save_{id}"
+    def _save_var_name(self, name: str, id: int, no_suffix: bool = False, pushpop: bool = False) -> str:
+        if pushpop:
+            ext = "_pushpop"
         else:
-            return f"{name}_save_{id}{AD_SUFFIX}"
+            ext = ""
+        if no_suffix:
+            return f"{name}_save_{id}{ext}"
+        else:
+            return f"{name}_save_{id}{ext}{AD_SUFFIX}"
 
     def _generate_ad_forward(
         self,
@@ -435,6 +440,7 @@ class Node:
 
             vars = rhs.collect_vars()
             if lhs in vars:
+                # move lhs to the last of vars
                 vars.remove(lhs)
                 vars.append(lhs)
             for var in vars:
@@ -573,9 +579,9 @@ class Block(Node):
         if len(children) >= 2:
             new_children = []
             for child in children:
-                if len(new_children) > 0 and isinstance(child, SaveAssignment):
+                if len(new_children) > 0 and isinstance(child, SaveAssignment) and not child.pushpop:
                     last = new_children[-1]
-                    if isinstance(last, SaveAssignment) and last.id == child.id and last.load != child.load:
+                    if isinstance(last, SaveAssignment) and not last.pushpop and last.id == child.id and last.load != child.load:
                         new_children.remove(last)
                         continue
                 new_children.append(child)
@@ -1156,6 +1162,7 @@ class SaveAssignment(Node):
     load: bool = False
     lhs: OpVar = field(init=False, repr=False, default=None)
     rhs: OpVar = field(init=False, repr=False, default=None)
+    pushpop: ClassVar[bool] = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1165,7 +1172,7 @@ class SaveAssignment(Node):
         if self.tmpvar is None:
             self.var = self.var.deep_clone()
             self.tmpvar = OpVar(
-                self._save_var_name(name, self.id),
+                self._save_var_name(name, self.id, pushpop=self.pushpop),
                 index=self.var.index,
                 kind=self.var.kind,
                 typename=self.var.typename,
@@ -1187,7 +1194,8 @@ class SaveAssignment(Node):
         yield self.rhs
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
-        if without_savevar and self.lhs == self.tmpvar:
+        #if without_savevar and self.lhs == self.tmpvar:
+        if without_savevar:
             return iter(())
         else:
             yield self.lhs
@@ -1206,7 +1214,7 @@ class SaveAssignment(Node):
             vars = vars.copy()
             vars.remove(self.lhs)
         rhs = self.rhs
-        if (not without_savevar) or rhs == self.var: # rhs is not saved var
+        if (not without_savevar) or rhs == self.var: # if rhs is not saved var
             vars.push(rhs)
         return vars
 
@@ -1223,6 +1231,43 @@ class SaveAssignment(Node):
                 vars.push(self.lhs)
         return vars
 
+    def prune_for(self, targets: VarList) -> "Node":
+        if self.load:
+            name = self.var.name
+            index = self.var.index
+            if not self.var.name in targets.names():
+                raise RuntimeError
+            index_target = None
+            flag = True
+            for idx in targets[name]:
+                if idx is None or idx >= index:
+                    flag = False
+                    break
+                if index_target is None or idx >= index_target:
+                    index_target = idx
+            if flag:
+                self.var.index = index_target
+                self.tmpvar.index = index_target
+
+        if self.tmpvar.index is not None and self.tmpvar.reduced_dims is None:
+            if not isinstance(self.tmpvar.index, AryIndex):
+                print(type(self.tmpvar.index))
+                raise RuntimeError
+            index_new = []
+            for i, idx in enumerate(self.tmpvar.index):
+                if isinstance(idx, OpInt) or (isinstance(idx, OpRange) and isinstance(idx[0], OpInt) and idx[0]==idx[1]):
+                    if self.tmpvar.reduced_dims is None:
+                        self.tmpvar.reduced_dims = []
+                    self.tmpvar.reduced_dims.append(i)
+                else:
+                    index_new.append(idx)
+            if index_new:
+                self.tmpvar.index = AryIndex(index_new)
+            else:
+                self.tmpvar.index = None
+            
+        return self
+
     def to_load(self) -> "SaveAssignment":
         return SaveAssignment(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
 
@@ -1230,6 +1275,8 @@ class SaveAssignment(Node):
 @dataclass
 class PushPop(SaveAssignment):
     """Push or pop a variable to/from a stack."""
+
+    pushpop: ClassVar[bool] = True
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -1489,22 +1536,17 @@ class DoLoop(DoAbst):
     """A ``do`` loop."""
 
     index: OpVar
-    start: Operator
-    end: Operator
-    step: Optional[Operator] = None
+    range: OpRange
 
     def __post_init__(self):
         super().__post_init__()
         self.build_do_index_list([])
+        if not isinstance(self.range, OpRange):
+            raise ValueError(f"range must be OpRange: f{type(self.range)}")
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
-        for var in self.start.collect_vars():
+        for var in self.range.collect_vars():
             yield var
-        for var in self.end.collect_vars():
-            yield var
-        if self.step is not None:
-            for var in self.step.collect_vars():
-                yield var
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[str]:
         yield self.index
@@ -1555,6 +1597,27 @@ class DoLoop(DoAbst):
                 var_names.append(name)
         return var_names
 
+    def private_vars(self) -> List[str]:
+        required_vars = self._body.required_vars()
+        assigned_vars = self._body.assigned_vars()
+        common_var_names = sorted(set(required_vars.names()) & set(assigned_vars.names()))
+        do_index_list = set(self.do_index_list)
+        var_names = []
+        for name in common_var_names:
+            flag = True
+            for index in required_vars[name]:
+                if index is not None and do_index_list <= set(index.list()):
+                    flag = False
+                    break
+            if flag:
+                for index in assigned_vars[name]:
+                    if index is not None and do_index_list <= set(index.list()):
+                        flag = False
+                        break
+            if flag:
+                var_names.append(name)
+        return var_names
+
     def generate_ad(
         self,
         saved_vars: List[SaveAssignment],
@@ -1570,46 +1633,44 @@ class DoLoop(DoAbst):
 
         body = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, warnings)[0]
         if reverse:
-            new_body = self._body.deep_clone()
+            body_org = self._body.deep_clone()
+            new_body = []
             recurrent_vars = self.recurrent_vars()
+            private_vars = self.private_vars()
             pushed = []
             for node in self._body.iter_children():
-                for var in node.required_vars():
+                for var in node.assigned_vars():
                     if var.name in recurrent_vars:
                         if not var in pushed:
-                            pushpop = PushPop(var, node.get_id())
-                            self._body.insert_begin(pushpop)
-                            new_body.insert_begin(pushpop.to_load())
+                            if var.name in private_vars:
+                                save = PushPop(var, node.get_id())
+                            else:
+                                save = SaveAssignment(var, node.get_id())
+                            self._body.insert_begin(save)
+                            new_body.append(save.to_load())
                             pushed.append(var)
+            for node in body_org.iter_children():
+                new_body.append(node)
             for node in body.iter_children():
                 new_body.append(node)
-            body = new_body
+            body = Block(new_body)
         index = self.index
+        range = self.range
         if reverse:
-            start = self.end
-            end = self.start
-            if self.step is not None:
-                step = - self.step
-            else:
-                step = - OpInt(1)
-        else:
-            start = self.start
-            end = self.end
-            step = self.step
-        block = DoLoop(body, index, start, end, step)
+            range = range.reverse()
+        block = DoLoop(body, index, range)
+        #block = block.prune_for(VarList(block.collect_vars()))
 
         if reverse:
-            common_vars = block.required_vars() & block.assigned_vars()
-            loads = []
-            blocks = []
+            #common_vars = block.required_vars() & block.assigned_vars(without_savevar=True)
+            common_vars = self._body.required_vars() & self._body.assigned_vars()
+            common_vars.update_index_upward(self._build_index_map(), range=self.range)
+            blocks = [block]
             for cvar in common_vars:
                 if cvar == self.index or cvar.name.endswith(AD_SUFFIX):
                     continue
                 load = self._save_vars(cvar, saved_vars)
-                loads.append(load)
                 blocks.insert(0, load)
-            blocks.append(block)
-            for load in loads:
                 blocks.append(load)
         else:
             blocks = [block]
@@ -1617,9 +1678,9 @@ class DoLoop(DoAbst):
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        header = f"{space}do {self.index} = {self.start}, {self.end}"
-        if self.step is not None:
-            header = f"{header}, {self.step}"
+        header = f"{space}do {self.index} = {self.range[0]}, {self.range[1]}"
+        if self.range[2] is not None:
+            header = f"{header}, {self.range[2]}"
         lines = [f"{header}\n"]
         lines.extend(self._body.render(indent+1))
         lines.append(f"{space}end do\n")
@@ -1633,54 +1694,51 @@ class DoLoop(DoAbst):
             vars.update_index_downward(self._build_index_map(), self.index)
         vars = self._body.required_vars(vars, no_accumulate, without_savevar)
 
-        # remove private variables
-        #for var in self.private_vars():
-        #    for v in list(vars):
-        #        if var == v:
-        #            vars.remove(v)
-        #            continue
-        #        if var.name == v.name:
-        #            if var.index is None or v.index <= var.index:
-        #                vars.remove(v)
-        #                continue
-        #            # tentative (integer index is assumed to cover all)
-        #            check = True
-        #            for i, dim in enumerate(var.index):
-        #                if dim is None or isinstance(dim, OpInt):
-        #                    continue
-        #                check = False
-        #                break
-        #            if check:
-        #                vars.remove(v)
-        #                continue
-
         if self.index in vars:
             vars.remove(self.index)
-        vars.update_index_upward(self._build_index_map(), range=OpRange([self.start,self.end,self.step]))
-        for op in [self.start, self.end, self.step]:
-            if op is not None:
-                for var in op.collect_vars():
-                    vars.push(var)
+        index_map = self._build_index_map()
+        if self.range[2] is None or (isinstance(self.range[2], OpInt) and self.range[2].val==1) or (isinstance(self.range[2], OpNeg) and isinstance(self.range[2].args[0], OpInt) and self.range[2].args[0].val==1):
+            step = 1 if self.range[2] is None else self.range[2]
+            plusOne = self.index + step
+            minusOne = self.index - step
+            for name in vars.names():
+                if name in index_map:
+                    do_index, _ = index_map[name]
+                else:
+                    continue
+                index_new = []
+                for index in vars.vars[name]:
+                    if index is not None and index[do_index] is not None:
+                        if index[do_index] == plusOne:
+                            index = index.copy()
+                            index[do_index] = self.range[1] + step
+                        elif index[do_index] == minusOne:
+                            index = index.copy()
+                            index[do_index] = self.range[0] - step
+                    index_new.append(index)
+                vars.vars[name] = index_new
+        vars.update_index_upward(index_map, range=self.range)
+        for var in self.range.collect_vars():
+            vars.push(var)
         return vars
 
     def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False, check_init_advars: bool = False) -> VarList:
         vars = self._body.assigned_vars(vars, without_savevar=without_savevar, check_init_advars=check_init_advars)
-        vars.update_index_upward(self._build_index_map(), range=OpRange([self.start,self.end,self.step]))
+        vars.update_index_upward(self._build_index_map(), range=self.range)
         if not check_init_advars:
             vars.push(self.index)
         return vars
 
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
         vars = self._body.unrefered_advars(vars)
-        vars.update_index_upward(self._build_index_map(), range=OpRange([self.start,self.end,self.step]))
+        vars.update_index_upward(self._build_index_map(), range=self.range)
         return vars
 
     def prune_for(self, targets: VarList) -> Node:
         targets = targets.copy()
-        targets.update_index_downward(self._build_index_map(), self.index)
+        #targets.update_index_downward(self._build_index_map(), self.index)
         new_body = self._body.prune_for(targets)
 
-        #for var in new_body.required_vars(targets, no_accumulate=True, without_savevar=True):
         for var in new_body.required_vars(targets):
             if var.name == self.index.name:
                 continue
@@ -1716,7 +1774,7 @@ class DoLoop(DoAbst):
 
         if new_body.is_effectively_empty():
             return Block([])
-        return DoLoop(new_body, self.index, self.start, self.end, self.step)
+        return DoLoop(new_body, self.index, self.range)
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         if assigned_vars is None:
@@ -1729,7 +1787,7 @@ class DoLoop(DoAbst):
             if not set(self.do_index_list) <= set(var.index_list()):
                 assigned_vars.push(var)
         assigned_vars = self._body.check_initial(assigned_vars)
-        assigned_vars.update_index_upward(self._build_index_map(), range=OpRange([self.start,self.end,self.step]))
+        assigned_vars.update_index_upward(self._build_index_map(), range=self.range)
         return assigned_vars
 
 @dataclass
