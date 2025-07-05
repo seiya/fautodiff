@@ -133,7 +133,16 @@ contains
     return
   end subroutine do_with_local_array
 
-  subroutine do_with_stencil_array()
+  subroutine do_with_stencil_array(n, x)
+    integer, intent(in) :: n
+    real, intent(inout) :: x(n)
+    integer :: i
+
+    x(1) = x(1) * x(2) * 0.5
+    do i = 2, n-1
+       x(i) = x(i) * (x(i+1) - x(i-1)) * 0.5
+    end do
+    x(n) = - x(n) * x(n-1) * 0.5
 
     return
   end subroutine do_with_stencil_array

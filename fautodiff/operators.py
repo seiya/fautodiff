@@ -295,6 +295,10 @@ class Operator:
                 return - other.args[1] + (other.args[0] + self)
             if isinstance(other, OpSub) and isinstance(other.args[1], OpNum) and isinstance(self, OpNum):
                 return other.args[0] + (self - other.args[1])
+            if isinstance(self, OpSub) and self.args[1] == other:
+                return self.args[0]
+            if isinstance(other, OpSub) and other.args[1] == self:
+                return other.args[0]
             if isinstance(other, OpNeg):
                 return self - other.args[0]
             return OpAdd(args=[self, other])
@@ -304,6 +308,8 @@ class Operator:
         if isinstance(other, int):
             return self - OpInt(other)
         if isinstance(other, Operator):
+            if self == other:
+                return OpInt(0)
             if isinstance(self, OpInt) and self.val == 0:
                 return - other
             if isinstance(other, OpInt) and other.val == 0:
@@ -328,6 +334,14 @@ class Operator:
                 return - other.args[1] + (self - other.args[0])
             if isinstance(other, OpAdd) and isinstance(other.args[1], OpNum) and isinstance(self, OpNum):
                 return - other.args[0] + (self - other.args[1])
+            if isinstance(self, OpAdd) and self.args[0] == other:
+                return self.args[1]
+            if isinstance(self, OpAdd) and self.args[1] == other:
+                return self.args[0]
+            if isinstance(other, OpAdd) and other.args[0] == self:
+                return - other.args[1]
+            if isinstance(other, OpAdd) and other.args[1] == self:
+                return other.args[0]
             if isinstance(self, OpSub) and isinstance(self.args[0], OpNum) and isinstance(other, OpNum):
                 return - self.args[1] + (self.args[0] - other)
             if isinstance(self, OpSub) and isinstance(self.args[1], OpNum) and isinstance(other, OpNum):
@@ -336,6 +350,10 @@ class Operator:
                 return other.args[1] + (self - other.args[0])
             if isinstance(other, OpSub) and isinstance(other.args[1], OpNum) and isinstance(self, OpNum):
                 return - other.args[0] + (self + other.args[1])
+            if isinstance(self, OpSub) and self.args[0] == other:
+                return - self.args[1]
+            if isinstance(other, OpSub) and other.args[0] == self:
+                return other.args[1]
             if isinstance(other, OpNeg):
                 return self + other.args[0]
             return OpSub(args=[self, other])
@@ -1046,6 +1064,22 @@ class OpRange(Operator):
                             vars.append(v)
         return vars
 
+    def reverse(self) -> OpRange:
+        if len(self.args) == 0:
+            args = []
+        if len(self.args) == 1:
+            args = [None, self.args[0], -1]
+        if len(self.args) == 2:
+            args = [self.args[1], self.args[0], -1]
+        if len(self.args) == 3:
+            if self.args[2] == -OpInt(1):
+                args = [self.args[1], self.args[0]]
+            elif self.args[2] is None:
+                args = [self.args[1], self.args[0], -OpInt(1)]
+            else:
+                args = [self.args[1], self.args[0], -self.args[2]]
+        return OpRange(args)
+
     def __str__(self) -> str:
         if len(self.args) == 0:
             args = [None, None]
@@ -1069,3 +1103,18 @@ class OpRange(Operator):
         if not isinstance(other, Operator):
             return NotImplemented
         return str(self) == str(other)
+
+    def __contains__(self, other) -> bool:
+        i0 = self.args[0] if len(self.args) > 0 else None
+        i1 = self.args[1] if len(self.args) > 1 else None
+        if len(self.args) > 2 and isinstance(self.args[2], OpNeg):
+            i0, i1 = i1, i0
+        if other is None:
+            return True
+        v = i0 - other
+        if isinstance(v, OpInt) and v.val > 0:
+            return False
+        v = i1 - other
+        if isinstance(v, OpNeg) and isinstance(v.args[0], OpInt):
+            return False
+        return True

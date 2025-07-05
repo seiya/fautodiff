@@ -507,12 +507,52 @@ contains
     return
   end subroutine do_with_local_array_rev_ad
 
-  subroutine do_with_stencil_array_fwd_ad()
+  subroutine do_with_stencil_array_fwd_ad(n, x, x_ad)
+    integer, intent(in)  :: n
+    real, intent(inout) :: x(n)
+    real, intent(inout) :: x_ad(n)
+    integer :: i
+
+    x_ad(1) = x_ad(1) * x(2) * 0.5 + x_ad(2) * x(1) * 0.5 ! x(1) = x(1) * x(2) * 0.5
+    x(1) = x(1) * x(2) * 0.5
+    do i = 2, n - 1
+      x_ad(i) = x_ad(i) * (x(i + 1) - x(i - 1)) * 0.5 + x_ad(i + 1) * x(i) * 0.5 - x_ad(i - 1) * x(i) * 0.5 ! x(i) = x(i) * (x(i+1) - x(i-1)) * 0.5
+      x(i) = x(i) * (x(i + 1) - x(i - 1)) * 0.5
+    end do
+    x_ad(n) = - x_ad(n) * x(n - 1) * 0.5 - x_ad(n - 1) * x(n) * 0.5 ! x(n) = - x(n) * x(n-1) * 0.5
 
     return
   end subroutine do_with_stencil_array_fwd_ad
 
-  subroutine do_with_stencil_array_rev_ad()
+  subroutine do_with_stencil_array_rev_ad(n, x, x_ad)
+    integer, intent(in)  :: n
+    real, intent(inout) :: x(n)
+    real, intent(inout) :: x_ad(n)
+    integer :: i
+    real :: x_save_144_ad
+    real :: x_save_147_ad
+    real :: x_save_146_ad(n)
+
+    x_save_144_ad = x(1)
+    x(1) = x(1) * x(2) * 0.5
+    x_save_147_ad = x(2)
+    do i = 2, n - 1
+      x_save_146_ad(i) = x(i)
+      x(i) = x(i) * (x(i + 1) - x(i - 1)) * 0.5
+    end do
+
+    x_ad(n - 1) = - x_ad(n) * x(n) * 0.5 + x_ad(n - 1) ! x(n) = - x(n) * x(n-1) * 0.5
+    x_ad(n) = - x_ad(n) * x(n - 1) * 0.5 ! x(n) = - x(n) * x(n-1) * 0.5
+    do i = n - 1, 2, - 1
+      x(i) = x_save_146_ad(i)
+      x_ad(i + 1) = x_ad(i) * x(i) * 0.5 + x_ad(i + 1) ! x(i) = x(i) * (x(i+1) - x(i-1)) * 0.5
+      x_ad(i - 1) = - x_ad(i) * x(i) * 0.5 + x_ad(i - 1) ! x(i) = x(i) * (x(i+1) - x(i-1)) * 0.5
+      x_ad(i) = x_ad(i) * (x(i + 1) - x(i - 1)) * 0.5 ! x(i) = x(i) * (x(i+1) - x(i-1)) * 0.5
+    end do
+    x(2) = x_save_147_ad
+    x(1) = x_save_144_ad
+    x_ad(2) = x_ad(1) * x(1) * 0.5 + x_ad(2) ! x(1) = x(1) * x(2) * 0.5
+    x_ad(1) = x_ad(1) * x(2) * 0.5 ! x(1) = x(1) * x(2) * 0.5
 
     return
   end subroutine do_with_stencil_array_rev_ad

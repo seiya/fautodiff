@@ -20,13 +20,22 @@ class VarList:
     """List of variable."""
 
     vars: dict[str, List] = field(init=False, default=None)
+    exclude: dict[str, List] = field(init=False, default=None)
 
     def __init__(self, vars: Optional[List[OpVar]] = None):
         super().__init__()
         self.vars = {}
+        self.exclude = {}
         if vars is not None:
             for var in vars:
                 self.push(var, not_reorganize=True)
+
+    def add_exclude(self, var: OpVar):
+        name = var.name
+        if not name in self.exclude:
+            self.exclude[name] = []
+        if not var.index in self.exclude[name]:
+            self.exclude[name].append(var.index)
 
     def copy(self) -> VarList:
         var_list = VarList()
@@ -35,14 +44,22 @@ class VarList:
             for index in self.vars[name]:
                 list.append(index)
             var_list.vars[name] = list
+        for name in self.exclude:
+            list = []
+            for index in self.exclude[name]:
+                list.append(index)
+            var_list.exclude[name] = list
         return var_list
 
     def __contains__(self, item: OpVar):
         if not isinstance(item, OpVar):
             raise ValueError(f"Must be OpVar: {type(item)}")
-        if not item.name in self.vars:
+        name = item.name
+        if not name in self.vars:
             return False
-        index_list = self.vars[item.name]
+        if name in self.exclude and item.index in self.exclude[name]:
+            return False
+        index_list = self.vars[name]
         for index in index_list:
             if index is None:
                 return True
@@ -55,7 +72,15 @@ class VarList:
         for name, index_list in sorted(self.vars.items()):
             for index in index_list:
                 ary.append(str(OpVar(name, index=index)))
-        return ", ".join(ary)
+        res = ", ".join(ary)
+        if self.exclude:
+            ary = []
+            for name, index_list in sorted(self.exclude.items()):
+                for index in index_list:
+                    ary.append(str(OpVar(name, index=index)))
+            if len(ary) > 0:
+                res = f"{res}, exclude: {', '.join(ary)}"
+        return res
 
     def __len__(self) -> int:
         return len(self.vars)
@@ -88,6 +113,12 @@ class VarList:
             raise ValueError("Must be VarList: {type(other)}")
         for var in other:
             self.push(var, not_reorganize=True)
+        for name in other.exclude:
+            if not name in self.exclude:
+                self.exclude[name] = []
+            for index in other.exclude[name]:
+                self.exclude[name].append(index)
+        self._reorganize
 
     @staticmethod
     def _force_stride_one(var) -> OpVar:
@@ -117,6 +148,11 @@ class VarList:
             raise ValueError(f"Must be OpVar: {type(var)}")
 
         name = var.name
+
+        if name in self.exclude:
+            for index in self.exclude[name]:
+                if var.index >= index:
+                    self.exclude[name].remove(index)
 
         if not name in self.vars:
             self.vars[name] = [var.index]
@@ -232,6 +268,7 @@ class VarList:
                 continue
 
             if index is None:
+                self.add_exclude(var)
                 continue
 
             i = AryIndex.get_diff_dim(index, var.index) # index and var.index is either OpInt or OpRange
@@ -245,7 +282,8 @@ class VarList:
             dim2 = var.index[i]
 
             if AryIndex.dim_is_entire(dim1):
-                continue # do nothing
+                self.add_exclude(var)
+                continue
 
             if AryIndex.dim_is_entire(dim2):
                 self.vars[name].remove(index) # remove all
@@ -253,6 +291,7 @@ class VarList:
 
             if isinstance(dim1, OpRange):
                 if not(dim1[2] is None or self._get_int(dim1[2]) == 1): # stride must be 1
+                    self.add_exclude(var)
                     continue
                 i0 = self._get_int(dim1[0])
                 i1 = self._get_int(dim1[1])
@@ -311,10 +350,13 @@ class VarList:
 
             if isinstance(dim1, OpRange):
                 if v2 is None:
-                    # do nothing
+                    self.add_exclude(var)
                     continue
 
                 if (i0 is not None and v2 < i0) or (i1 is not None and i1 < v2): # outside
+                    continue
+                if (i0 is not None and i0+1 < v2) or (i1 is not None and v2 < i1-1): # inside
+                    self.add_exclude(var)
                     continue
                 if i0 is not None and v2 == i0:
                     if i1 is not None and v2 + 1 == i1:
@@ -344,7 +386,7 @@ class VarList:
 
             if isinstance(dim2, OpRange):
                 if isinstance(v1, int):
-                    if (j0 is not None and v1 < j0) or (j0 is not None and j1 < v1): # outsize
+                    if (j0 is not None and v1 < j0) or (j1 is not None and j1 < v1): # outsize
                         continue
                 self.vars[name].remove(index)
 
@@ -480,8 +522,19 @@ class VarList:
 
         index_list = self.vars[name]
         self.vars[name] = []
+        if name in self.exclude:
+            exclude = list(self.exclude[name])
+        else:
+            exclude = []
         for index in index_list:
-            self.push(OpVar(name, index=index), not_reorganize=True)
+            if index in exclude:
+                exclude.remove(index)
+            else:
+                self.push(OpVar(name, index=index), not_reorganize=True)
+        if exclude:
+            self.exclude[name] = exclude
+        elif name in self.exclude:
+            del self.exclude[name]
 
     def update_index_upward(self, index_map: dict, range: OpRange) -> None:
         if range[2] is not None and isinstance(range[2], OpNeg):
@@ -496,7 +549,7 @@ class VarList:
                 continue
             index_new = []
             for index in self.vars[name]:
-                if index is not None:
+                if index is not None and index[do_index] is not None and index[do_index] in range:
                     index = index.copy()
                     index[do_index] = range
                 index_new.append(index)

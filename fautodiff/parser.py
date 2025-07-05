@@ -476,7 +476,7 @@ def _parse_routine(content, src_name):
                     step = None
                 else:
                     step = _stmt2op(itm[1][2], decls)
-                return DoLoop(body, index, start_val, end_val, step)
+                return DoLoop(body, index, OpRange([start_val, end_val, step]))
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return Statement("return")
 
