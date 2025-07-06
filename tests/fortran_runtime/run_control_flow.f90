@@ -132,20 +132,46 @@ contains
 
   subroutine test_select_example
     integer :: i
-    real :: x, z_ad
+    real :: x, z, z_eps, z_ad, fd, eps
+    real :: x_ad
+    real :: inner1, inner2
 
+    eps = 1.0e-3
+
+    ! Case 1
     i = 1
     x = 2.0
+    call select_example(i, x, z)
+    call select_example(i, x + eps, z_eps)
+    fd = (z_eps - z) / eps
     call select_example_fwd_ad(i, x, 1.0, z_ad)
-    if (abs(z_ad - 1.0) > tol) then
-       print *, 'test_select_example_fwd failed case1', z_ad
+    if (abs((z_ad - fd) / fd) > tol) then
+       print *, 'test_select_example_fwd failed case1', z_ad, fd
+       error stop 1
+    end if
+    inner1 = z_ad**2
+    call select_example_rev_ad(i, x, x_ad, z_ad)
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_select_example_rev failed case1', inner1, inner2
        error stop 1
     end if
 
+    ! Default case
     i = 4
+    call select_example(i, x, z)
+    call select_example(i, x + eps, z_eps)
+    fd = (z_eps - z) / eps
     call select_example_fwd_ad(i, x, 1.0, z_ad)
-    if (z_ad /= 0.0) then
-       print *, 'test_select_example_fwd failed default', z_ad
+    if (abs(z_ad - fd) > tol) then
+       print *, 'test_select_example_fwd failed default', z_ad, fd
+       error stop 1
+    end if
+    inner1 = z_ad**2
+    call select_example_rev_ad(i, x, x_ad, z_ad)
+    inner2 = x_ad
+    if (abs(inner2 - inner1) > tol) then
+       print *, 'test_select_example_rev failed default', inner1, inner2
        error stop 1
     end if
 
@@ -153,11 +179,33 @@ contains
   end subroutine test_select_example
 
   subroutine test_do_while_example
-    real :: x, limit
+    real :: x, limit, eps
+    integer :: count, count_eps
+    real :: fd
+    real :: x_ad, limit_ad
+    real :: inner1, inner2
 
+    eps = 1.0e-3
     x = 0.5
     limit = 1.0
-    call do_while_example_fwd_ad(x, 1.0, limit, 0.0)
+    call do_while_example(x, limit, count)
+    call do_while_example(x + eps, limit + eps, count_eps)
+    fd = real(count_eps - count) / eps
+    call do_while_example_fwd_ad(x, 1.0, limit, 1.0)
+    if (abs(fd) > tol) then
+       print *, 'test_do_while_example_fwd failed', fd
+       error stop 1
+    end if
+
+    inner1 = 0.0
+    x_ad = 0.0
+    limit_ad = 0.0
+    call do_while_example_rev_ad(x, x_ad, limit, limit_ad)
+    inner2 = x_ad + limit_ad
+    if (abs(inner2 - inner1) > tol) then
+       print *, 'test_do_while_example_rev failed', inner1, inner2
+       error stop 1
+    end if
 
     return
   end subroutine test_do_while_example
