@@ -6,8 +6,8 @@ program run_simple_math
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_add_numbers      = 1
-  integer, parameter :: I_multiply_numbers = 2
-  integer, parameter :: I_subtract_numbers = 3
+  integer, parameter :: I_subtract_numbers = 2
+  integer, parameter :: I_multiply_numbers = 3
   integer, parameter :: I_divide_numbers   = 4
   integer, parameter :: I_power_numbers    = 5
 
@@ -25,10 +25,10 @@ program run_simple_math
            select case(arg)
            case ("add_numbers")
               i_test = I_add_numbers
-           case ("multiply_numbers")
-              i_test = I_multiply_numbers
            case ("subtract_numbers")
               i_test = I_subtract_numbers
+           case ("multiply_numbers")
+              i_test = I_multiply_numbers
            case ("divide_numbers")
               i_test = I_divide_numbers
            case ("power_numbers")
@@ -45,11 +45,11 @@ program run_simple_math
   if (i_test == I_add_numbers .or. i_test == I_all) then
      call test_add_numbers
   end if
-  if (i_test == I_multiply_numbers .or. i_test == I_all) then
-     call test_multiply_numbers
-  end if
   if (i_test == I_subtract_numbers .or. i_test == I_all) then
      call test_subtract_numbers
+  end if
+  if (i_test == I_multiply_numbers .or. i_test == I_all) then
+     call test_multiply_numbers
   end if
   if (i_test == I_divide_numbers .or. i_test == I_all) then
      call test_divide_numbers
@@ -66,7 +66,7 @@ contains
     real :: a, b, c
     real :: a_ad, b_ad, c_ad
     real :: c_eps, fd, eps
-    real :: exp_c, exp_a, exp_b
+    real :: inner1, inner2
 
     eps = 1.0e-3
     a = 2.0
@@ -82,70 +82,22 @@ contains
        error stop 1
     end if
 
-    a = 2.0
-    b = 3.0
-    c = add_numbers(a, b)
-    a_ad = 0.0
-    b_ad = 0.0
-    c_ad = 1.0
+    inner1 = c_ad**2
     call add_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
-    exp_c = 2.0 * a + b + 3.0
-    exp_a = 2.0
-    exp_b = 1.0
-    if (abs((c - exp_c) / exp_c) > tol .or. abs((a_ad - exp_a) / exp_a) > tol .or. &
-        abs((b_ad - exp_b) / exp_b) > tol) then
-       print *, 'test_add_numbers_rev failed', c, a_ad, b_ad
+    inner2 = a_ad + b_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_add_numbers_rev failed', inner1, inner2
        error stop 1
     end if
 
     return
   end subroutine test_add_numbers
 
-  subroutine test_multiply_numbers
-    real :: a, b, c
-    real :: a_ad, b_ad, c_ad
-    real :: c_eps, fd, eps
-    real :: exp_c, exp_a, exp_b
-
-    eps = 1.0e-3
-    a = 2.0
-    b = 3.0
-    call multiply_numbers(a, b, c)
-    call multiply_numbers(a + eps, b + eps, c_eps)
-    fd = (c_eps - c) / eps
-    a_ad = 1.0
-    b_ad = 1.0
-    call multiply_numbers_fwd_ad(a, a_ad, b, b_ad, c_ad)
-    if (abs((c_ad - fd) / fd) > tol) then
-       print *, 'test_multiply_numbers_fwd failed', c_ad, fd
-       error stop 1
-    end if
-
-    a = 2.0
-    b = 3.0
-    call multiply_numbers(a, b, c)
-    a_ad = 0.0
-    b_ad = 0.0
-    c_ad = 1.0
-    call multiply_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
-    exp_c = a * (3.0 * b + 4.0)
-    exp_a = 3.0 * b + 4.0
-    exp_b = 3.0 * a
-
-    if (abs(c - exp_c) > tol .or. abs(a_ad - exp_a) > tol .or. &
-        abs(b_ad - exp_b) > tol) then
-       print *, 'test_multiply_numbers_rev failed', c, a_ad, b_ad
-       error stop 1
-    end if
-
-    return
-  end subroutine test_multiply_numbers
-
   subroutine test_subtract_numbers
     real :: a, b, c
     real :: a_ad, b_ad, c_ad
     real :: c_eps, fd, eps
-    real :: exp_c, exp_a, exp_b
+    real :: inner1, inner2
 
     eps = 1.0e-3
     a = 2.0
@@ -161,31 +113,54 @@ contains
        error stop 1
     end if
 
-    a = 2.0
-    b = 3.0
-    c = subtract_numbers(a, b)
-    a_ad = 0.0
-    b_ad = 0.0
-    c_ad = 1.0
+    inner1 = c_ad**2
     call subtract_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
-    exp_c = -a + 2.0*b
-    exp_a = -1.0
-    exp_b = 2.0
-    if (abs(c - exp_c) > tol .or. abs(a_ad - exp_a) > tol .or. &
-        abs(b_ad - exp_b) > tol) then
-       print *, 'test_subtract_numbers_rev failed', c, a_ad, b_ad
+    inner2 = a_ad + b_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_subtract_numbers_rev failed', inner1, inner2
        error stop 1
     end if
 
     return
   end subroutine test_subtract_numbers
 
+  subroutine test_multiply_numbers
+    real :: a, b, c
+    real :: a_ad, b_ad, c_ad
+    real :: c_eps, fd, eps
+    real :: inner1, inner2
+
+    eps = 1.0e-3
+    a = 2.0
+    b = 3.0
+    call multiply_numbers(a, b, c)
+    call multiply_numbers(a + eps, b + eps, c_eps)
+    fd = (c_eps - c) / eps
+    a_ad = 1.0
+    b_ad = 1.0
+    call multiply_numbers_fwd_ad(a, a_ad, b, b_ad, c_ad)
+    if (abs((c_ad - fd) / fd) > tol) then
+       print *, 'test_multiply_numbers_fwd failed', c_ad, fd
+       error stop 1
+    end if
+
+    inner1 = c_ad**2
+    call multiply_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
+    inner2 = a_ad + b_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_multiply_numbers_rev failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_multiply_numbers
+
   subroutine test_divide_numbers
     real, parameter :: tol = 3e-4
     real :: a, b, c
     real :: a_ad, b_ad, c_ad
     real :: c_eps, fd, eps
-    real :: exp_c, exp_a, exp_b, t
+    real :: inner1, inner2
 
     eps = 1.0e-3
     a = 2.0
@@ -201,20 +176,11 @@ contains
        error stop 1
     end if
 
-    a = 2.0
-    b = 3.0
-    call divide_numbers(a, b, c)
-    a_ad = 0.0
-    b_ad = 0.0
-    c_ad = 1.0
+    inner1 = c_ad**2
     call divide_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
-    t = b + 1.5
-    exp_c = a / (2.0 * t) + a
-    exp_a = 1.0 / (2.0 * t) + 1.0
-    exp_b = -a / (2.0 * t * t)
-    if (abs(c - exp_c) > tol .or. abs(a_ad - exp_a) > tol .or. &
-        abs(b_ad - exp_b) > tol) then
-       print *, 'test_divide_numbers_rev failed', c, a_ad, b_ad
+    inner2 = a_ad + b_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_divide_numbers_rev failed', inner1, inner2
        error stop 1
     end if
 
@@ -226,7 +192,7 @@ contains
     real :: a, b, c
     real :: a_ad, b_ad, c_ad
     real :: c_eps, fd, eps
-    real :: exp_c, exp_a, exp_b
+    real :: inner1, inner2
 
     eps = 1.0e-3
     a = 2.0
@@ -242,23 +208,11 @@ contains
        error stop 1
     end if
 
-    a = 2.0
-    b = 3.0
-    c = power_numbers(a, b)
-    a_ad = 0.0
-    b_ad = 0.0
-    c_ad = 1.0
+    inner1 = c_ad**2
     call power_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
-    exp_c = a**3 + b**5.5
-    exp_c = exp_c + a**b + (4.0 * a + 2.0)**b + a**(b * 5.0 + 3.0)
-
-    exp_a = 3.0 * a**2 + b * a**(b - 1.0) + b * 4.0 * (4.0 * a + 2.0)**(b - 1.0) + &
-             (5.0 * b + 3.0) * a**(5.0 * b + 2.0)
-    exp_b = 5.5 * b**4.5 + log(a) * a**b + log(4.0 * a + 2.0) * (4.0 * a + 2.0)**b + &
-             5.0 * log(a) * a**(5.0 * b + 3.0)
-    if (abs(c - exp_c) > tol .or. abs(a_ad - exp_a) > tol .or. &
-        abs(b_ad - exp_b) > tol) then
-       print *, 'test_power_numbers_rev failed', c, a_ad, b_ad
+    inner2 = a_ad + b_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_power_numbers_rev failed', inner1, inner2
        error stop 1
     end if
 

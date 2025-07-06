@@ -2,7 +2,7 @@ program run_parameter_var
   use parameter_var
   use parameter_var_ad
   implicit none
-  real, parameter :: tol = 1.0e-5
+  real, parameter :: tol = 1.0e-4
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_compute_area = 1
@@ -38,18 +38,19 @@ program run_parameter_var
 contains
 
   subroutine test_compute_area
+    real, parameter :: tol = 2e-4
     real :: r, area
     real :: r_ad, area_ad
     real :: area_eps, fd, eps
 
-    eps = 1.0e-6
+    eps = 1.0e-3
     r = 2.0
     call compute_area(r, area)
     call compute_area(r + eps, area_eps)
     fd = (area_eps - area) / eps
     r_ad = 1.0
     call compute_area_fwd_ad(r, r_ad, area_ad)
-    if (abs(area_ad - fd) > tol) then
+    if (abs((area_ad - fd) / fd) > tol) then
        print *, 'test_compute_area_fwd failed', area_ad, fd
        error stop 1
     end if

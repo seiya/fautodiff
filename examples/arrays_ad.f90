@@ -1,5 +1,5 @@
-module array_ad
-  use array
+module arrays_ad
+  use arrays
   implicit none
 
 contains
@@ -235,4 +235,4 @@ contains
     return
   end subroutine stencil_rev_ad
 
-end module array_ad
+end module arrays_ad

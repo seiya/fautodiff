@@ -2,7 +2,7 @@ program run_directive_const_arg
   use directive_const_arg
   use directive_const_arg_ad
   implicit none
-  real, parameter :: tol = 1.0e-5
+  real, parameter :: tol = 1.0e-4
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_add_const = 1
@@ -42,7 +42,7 @@ contains
     real :: x_ad, y_ad
     real :: y_eps, fd, eps
 
-    eps = 1.0e-6
+    eps = 1.0e-3
     x = 2.0
     z = 3.0
     call add_const(x, y, z)

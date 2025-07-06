@@ -20,7 +20,7 @@ $(OUTDIR)/%.o: %.f90
 $(OUTDIR)/%_ad.o: $(OUTDIR)/%.mod
 
 # Special case: module 'array' is defined in arrays.f90
-$(OUTDIR)/arrays_ad.o: $(OUTDIR)/array.mod
+$(OUTDIR)/arrays_ad.o: $(OUTDIR)/arrays.mod
 
 # driver module dependencies
 $(OUTDIR)/run_simple_math.o: $(OUTDIR)/simple_math.o $(OUTDIR)/simple_math_ad.o
