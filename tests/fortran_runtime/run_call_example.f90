@@ -227,14 +227,35 @@ contains
   subroutine test_foo
     real :: a, b
     real :: a_ad, b_ad
+    real :: eps, a_eps, b_eps, fd
+    real :: inner1, inner2
 
+    eps = 1.0e-3
+    a = 1.0
+    b = 2.0
+    call foo(a, b)
+    a_eps = 1.0 + eps
+    b_eps = 2.0 + eps * 0.5
+    call foo(a_eps, b_eps)
+    fd = (a_eps - a) / eps
     a = 1.0
     b = 2.0
     a_ad = 1.0
     b_ad = 0.5
     call foo_fwd_ad(a, a_ad, b, b_ad)
-    if (abs(a_ad - (2.0 * 1.0 + 0.5)) > tol) then
-       print *, 'test_foo_fwd failed', a_ad
+    if (abs((a_ad - fd) / fd) > tol) then
+       print *, 'test_foo_fwd failed', a_ad, fd
+       error stop 1
+    end if
+
+    inner1 = a_ad**2
+    a = 1.0
+    b = 2.0
+    call foo(a, b)
+    call foo_rev_ad(a, a_ad, b, b_ad)
+    inner2 = a_ad + 0.5 * b_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_foo_rev failed', inner1, inner2
        error stop 1
     end if
 
@@ -245,12 +266,28 @@ contains
     real :: a
     real :: a_ad
     real :: b_ad
+    real :: eps, b, b_eps, fd
+    real :: inner1, inner2
 
+    eps = 1.0e-3
     a = 2.0
+    b = bar(a)
+    b_eps = bar(a + eps)
+    fd = (b_eps - b) / eps
     a_ad = 1.0
     call bar_fwd_ad(a, a_ad, b_ad)
-    if (abs(b_ad - 4.0) > tol) then
-       print *, 'test_bar_fwd failed', b_ad
+    if (abs((b_ad - fd) / fd) > tol) then
+       print *, 'test_bar_fwd failed', b_ad, fd
+       error stop 1
+    end if
+
+    inner1 = b_ad**2
+    a = 2.0
+    b = bar(a)
+    call bar_rev_ad(a, a_ad, b_ad)
+    inner2 = a_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_bar_rev failed', inner1, inner2
        error stop 1
     end if
 
