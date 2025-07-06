@@ -108,6 +108,7 @@ contains
   end subroutine test_simple
 
   subroutine test_if_example
+    real, parameter :: tol = 8e-4
     real :: x, y, z, z_eps
     real :: x_ad, y_ad, z_ad
     real :: fd, eps
@@ -139,6 +140,7 @@ contains
   end subroutine test_if_example
 
   subroutine test_array_private
+    real, parameter :: tol = 4e-3
     integer, parameter :: n = 2, m = 2
     real :: x(n,m), y(n,m), z(n,m), z_eps(n,m), z_ad(n,m)
     real :: x_ad(n,m), y_ad(n,m), fd(n,m)
@@ -153,7 +155,7 @@ contains
     x_ad = 1.0
     y_ad = 1.0
     call do_with_array_private_fwd_ad(n, m, x, x_ad, y, y_ad, z_ad)
-    if (maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:))) > tol) then
+    if (any(abs((z_ad(:,:) - fd(:,:)) / fd(:,:)) > tol)) then
        print *, 'test_array_private_fwd failed'
        print *, maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:)))
        error stop 1
@@ -171,6 +173,7 @@ contains
   end subroutine test_array_private
 
   subroutine test_array
+    real, parameter :: tol = 7e-4
     integer, parameter :: n = 2, m = 2
     real :: x(n,m), y(n,m), z(n,m), z_eps(n,m), z_ad(n,m)
     real :: x_ad(n,m), y_ad(n,m), fd(n,m)
@@ -203,6 +206,7 @@ contains
   end subroutine test_array
 
   subroutine test_local_array
+    real, parameter :: tol = 1.5e-3
     integer, parameter :: n = 2, m = 2
     real :: x(n,m), y(n,m), z(n,m), z_eps(n,m), z_ad(n,m)
     real :: x_ad(n,m), y_ad(n,m), fd(n,m)
@@ -235,6 +239,7 @@ contains
   end subroutine test_local_array
 
   subroutine test_stencil_array
+    real, parameter :: tol = 2.0e-3
     integer, parameter :: n = 3
     real :: x(n), x_base(n), x_eps(n)
     real :: x_ad(n), fd(n), eps
