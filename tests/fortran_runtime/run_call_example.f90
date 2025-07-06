@@ -9,6 +9,8 @@ program run_call_example
   integer, parameter :: I_call_fucntion = 2
   integer, parameter :: I_arg_operation = 3
   integer, parameter :: I_arg_function = 4
+  integer, parameter :: I_foo = 5
+  integer, parameter :: I_bar = 6
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -30,6 +32,10 @@ program run_call_example
               i_test = I_arg_operation
            case ("arg_function")
               i_test = I_arg_function
+           case ("foo")
+              i_test = I_foo
+           case ("bar")
+              i_test = I_bar
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -50,6 +56,12 @@ program run_call_example
   end if
   if (i_test == I_arg_function .or. i_test == I_all) then
      call test_arg_function
+  end if
+  if (i_test == I_foo .or. i_test == I_all) then
+     call test_foo
+  end if
+  if (i_test == I_bar .or. i_test == I_all) then
+     call test_bar
   end if
 
   stop
@@ -211,5 +223,38 @@ contains
     end if
     return
   end subroutine test_arg_function
+
+  subroutine test_foo
+    real :: a, b
+    real :: a_ad, b_ad
+
+    a = 1.0
+    b = 2.0
+    a_ad = 1.0
+    b_ad = 0.5
+    call foo_fwd_ad(a, a_ad, b, b_ad)
+    if (abs(a_ad - (2.0 * 1.0 + 0.5)) > tol) then
+       print *, 'test_foo_fwd failed', a_ad
+       error stop 1
+    end if
+
+    return
+  end subroutine test_foo
+
+  subroutine test_bar
+    real :: a
+    real :: a_ad
+    real :: b_ad
+
+    a = 2.0
+    a_ad = 1.0
+    call bar_fwd_ad(a, a_ad, b_ad)
+    if (abs(b_ad - 4.0) > tol) then
+       print *, 'test_bar_fwd failed', b_ad
+       error stop 1
+    end if
+
+    return
+  end subroutine test_bar
 
 end program run_call_example
