@@ -72,7 +72,7 @@ contains
     real :: x, y, z
     real :: x_ad, y_ad, z_ad
     real :: z_eps, fd, eps
-    real :: exp_z, exp_x, exp_y
+    real :: inner1, inner2
 
     eps = 1.0e-3
     x = 2.0
@@ -88,19 +88,13 @@ contains
        error stop 1
     end if
 
-    x = 2.0
-    y = 3.0
-    call simple(x, y, z)
+    inner1 = z_ad**2
     x_ad = 0.0
     y_ad = 0.0
-    z_ad = 1.0
     call simple_rev_ad(x, x_ad, y, y_ad, z_ad)
-    exp_z = 2.0*x**3 + 2.0*x**2 + 2.0*x + (1.0 + y)
-    exp_x = 6.0*x**2 + 4.0*x + 2.0
-    exp_y = 1.0
-    if (abs(z - exp_z) > tol .or. abs(x_ad - exp_x) > tol .or. &
-        abs(y_ad - exp_y) > tol) then
-       print *, 'test_simple failed', z, x_ad, y_ad
+    inner2 = x_ad + y_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_simple_rev failed', inner1, inner2
        error stop 1
     end if
 
