@@ -50,7 +50,7 @@ class TestFortranADCode(unittest.TestCase):
             exe = self._build(tmp, f'run_{name}')
             for sub_name in sub_names:
                 # Allow runtime failures to keep coverage high
-                subprocess.run([str(exe), sub_name])
+                subprocess.run([str(exe), sub_name], check=True)
         
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')

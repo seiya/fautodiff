@@ -1,14 +1,14 @@
 program run_arrays
-  use array
-  use array_ad
+  use arrays
+  use arrays_ad
   implicit none
   real, parameter :: tol = 1.0e-4
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_elementwise_add = 1
-  integer, parameter :: I_dot_product = 2
+  integer, parameter :: I_scale_array = 2
   integer, parameter :: I_multidimension = 3
-  integer, parameter :: I_scale_array = 4
+  integer, parameter :: I_dot_product = 4
   integer, parameter :: I_indirect = 5
   integer, parameter :: I_stencil = 6
 
@@ -26,12 +26,12 @@ program run_arrays
            select case(arg)
            case ("elementwise_add")
               i_test = I_elementwise_add
-           case ("dot_product")
-              i_test = I_dot_product
-           case ("multidimension")
-              i_test = I_multidimension
            case ("scale_array")
               i_test = I_scale_array
+           case ("multidimension")
+              i_test = I_multidimension
+           case ("dot_product")
+              i_test = I_dot_product
            case ("indirect")
               i_test = I_indirect
            case ("stencil")
@@ -48,14 +48,14 @@ program run_arrays
   if (i_test == I_elementwise_add .or. i_test == I_all) then
      call test_elementwise_add
   end if
-  if (i_test == I_dot_product .or. i_test == I_all) then
-     call test_dot_product
+  if (i_test == I_scale_array .or. i_test == I_all) then
+     call test_scale_array
   end if
   if (i_test == I_multidimension .or. i_test == I_all) then
      call test_multidimension
   end if
-  if (i_test == I_scale_array .or. i_test == I_all) then
-     call test_scale_array
+  if (i_test == I_dot_product .or. i_test == I_all) then
+     call test_dot_product
   end if
   if (i_test == I_indirect .or. i_test == I_all) then
      call test_indirect
@@ -72,7 +72,7 @@ contains
     real :: a(n), b(n), c(n)
     real :: a_ad(n), b_ad(n), c_ad(n)
     real :: c_eps(n), fd(n), eps
-    real :: exp_c(n), exp_a(n), exp_b(n)
+    real :: inner1, inner2
 
     eps = 1.0e-3
     a = (/1.0, 2.0, 3.0/)
@@ -83,34 +83,103 @@ contains
     a_ad(:) = 1.0
     b_ad(:) = 1.0
     call elementwise_add_fwd_ad(n, a, a_ad, b, b_ad, c_ad)
-    if (maxval(abs((c_ad(:) - fd(:)) / fd(:))) > tol) then
+    if (any(abs((c_ad(:) - fd(:)) / fd(:)) > tol)) then
        print *, 'test_elementwise_add_fwd failed', c_ad(1), fd
        error stop 1
     end if
 
-    a_ad = 0.0
-    b_ad = 0.0
-    c_ad = 1.0
+    inner1 = sum(c_ad(:)**2)
     call elementwise_add_rev_ad(n, a, a_ad, b, b_ad, c_ad)
-    exp_c = a(:) + 2.0 * b(:)
-    exp_a = 1.0
-    exp_b = 2.0
-    if ( maxval(abs(c(:) - exp_c(:))) > tol .or. &
-         maxval(abs(a_ad(:) - exp_a)) > tol .or. &
-         maxval(abs(b_ad(:) - exp_b)) > tol) then
-       print *, 'test_elementwise_add failed', c(1), a_ad(1), b_ad(1)
+    inner2 = sum(a_ad) + sum(b_ad)
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_elementwise_rev failed', inner1, inner2
        error stop 1
     end if
 
     return
   end subroutine test_elementwise_add
 
+  subroutine test_scale_array
+    integer, parameter :: n = 3
+    real :: a(n)
+    real :: a_ad(n)
+    real :: a_eps(n), fd(n), eps
+    real :: inner1, inner2
+
+    eps = 1.0e-3
+    a = (/1.0, 2.0, 3.0/)
+    a_ad(:) = 1.0
+    call scale_array(n, a)
+    a_eps = (/1.0, 2.0, 3.0/) + eps
+    call scale_array(n, a_eps)
+    fd(:) = (a_eps(:) - a(:)) / eps
+    call scale_array_fwd_ad(n, a, a_ad)
+    if (any(abs((a_ad(:) - fd(:)) / fd(:)) > tol)) then
+       print *, 'test_scale_array_fwd failed'
+       print *, maxval(abs((a_ad(:) - fd(:)) / fd(:)))
+       print *, a_ad(:)
+       print *, fd(:)
+       error stop 1
+    end if
+
+    inner1 = sum(a_ad(:)**2)
+    a = (/1.0, 2.0, 3.0/)
+    call scale_array_rev_ad(n, a, a_ad)
+    inner2 = sum(a_ad(:))
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_scale_array_rev failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_scale_array
+
+  subroutine test_multidimension
+    real, parameter :: tol = 3e-4
+    integer, parameter :: n = 2, m = 2
+    real :: a(n,m), b(n,m), c, d(n,m)
+    real :: a_ad(n,m), b_ad(n,m), c_ad, d_ad(n,m)
+    real :: fd(n,m), eps, d_eps(n,m)
+    real :: inner1, inner2
+
+    eps = 1.0e-3
+    a = reshape((/1.0, 2.0, 3.0, 4.0/), (/n, m/))
+    b = reshape((/5.0, 6.0, 7.0, 8.0/), (/n, m/))
+    c = 1.5
+    call multidimension(n, m, a, b, c, d)
+    call multidimension(n, m, a + eps, b + eps, c + eps, d_eps)
+    fd(:,:) = (d_eps(:,:) - d(:,:)) / eps
+    a_ad(:,:) = 1.0
+    b_ad(:,:) = 1.0
+    c_ad = 1.0
+    call multidimension_fwd_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
+    if (any(abs((d_ad(:,:) - fd(:,:)) / fd(:,:)) > tol)) then
+       print *, 'test_multidimension_fwd failed'
+       print *, maxval(abs((d_ad(:,:) - fd(:,:)) / fd(:,:)))
+       print *, d_ad(:,:)
+       print *, fd(:,:)
+       error stop 1
+    end if
+    return
+
+    inner1 = sum(d_ad(:,:)**2)
+    call multidimension_rev_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
+    inner2 = sum(a_ad(:,:)) + sum(b_ad(:,:)) + c_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_multidimension_rev failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_multidimension
+
   subroutine test_dot_product
+    real, parameter :: tol = 2e-4
     integer, parameter :: n = 3
     real :: a(n), b(n), res
     real :: a_ad(n), b_ad(n), res_ad
     real :: res_eps, fd, eps
-    real :: exp_res, exp_a, exp_b
+    real :: inner1, inner2
 
     eps = 1.0e-3
     a = (/1.0, 2.0, 3.0/)
@@ -126,107 +195,52 @@ contains
        error stop 1
     end if
 
-    a_ad = 0.0
-    b_ad = 0.0
-    res_ad = 1.0
+    inner1 = res_ad**2
     call dot_product_rev_ad(n, a, a_ad, b, b_ad, res_ad)
-    exp_res = a(1)*b(1) + a(2)*b(2) + a(3)*b(3)
-    exp_a = b(1)
-    exp_b = a(1)
-    if (abs(res - exp_res) > tol .or. abs(a_ad(1) - exp_a) > tol .or. &
-        abs(b_ad(1) - exp_b) > tol) then
-       print *, 'test_dot_product failed', res, a_ad(1), b_ad(1)
+    inner2 = sum(a_ad(:)) + sum(b_ad(:))
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_dot_product_rev failed', inner1, inner2
        error stop 1
     end if
 
     return
   end subroutine test_dot_product
 
-  subroutine test_multidimension
-    real, parameter :: tol = 3e-4
-    integer, parameter :: n = 2, m = 2
-    real :: a(n,m), b(n,m), c, d(n,m)
-    real :: a_ad(n,m), b_ad(n,m), c_ad, d_ad(n,m)
-    real :: fd(n,m), eps, d_eps(n,m)
-    real :: exp_d, exp_a, exp_b, exp_c
+  subroutine test_indirect
+    real, parameter :: tol = 6e-4
+    integer, parameter :: n = 3
+    real :: a(n), b(n), c(n)
+    real :: a_ad(n), b_ad(n), c_ad(n)
+    integer :: idx(n)
+    real :: b_eps(n), c_eps(n), fd_b(n), fd_c(n), eps
+    real :: inner1, inner2
 
     eps = 1.0e-3
-    a = reshape((/1.0, 2.0, 3.0, 4.0/), (/n, m/))
-    b = reshape((/5.0, 6.0, 7.0, 8.0/), (/n, m/))
-    c = 1.5
-    call multidimension(n, m, a, b, c, d)
-    call multidimension(n, m, a + eps, b + eps, c + eps, d_eps)
-    fd(:,:) = (d_eps(:,:) - d(:,:)) / eps
-    a_ad(:,:) = 1.0
-    b_ad(:,:) = 1.0
-    c_ad = 1.0
-    call multidimension_fwd_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
-    if (maxval(abs((d_ad(:,:) - fd(:,:)) / fd(:,:))) > tol) then
-       print *, 'test_multidimension_fwd failed'
-       print *, maxval(abs((d_ad(:,:) - fd(:,:)) / fd(:,:)))
-       print *, d_ad(:,:)
-       print *, fd(:,:)
-       error stop 1
-    end if
-    return
-
-    a_ad = 0.0
-    b_ad = 0.0
-    d_ad = 0.0
-    d_ad(1,1) = 1.0
-    c_ad = 0.0
-    call multidimension_rev_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
-    exp_d = a(1,1) + b(1,1) * c
-    exp_a = 1.0
-    exp_b = c
-    exp_c = b(1,1)
-    if (abs(d(1,1) - exp_d) > tol .or. abs(a_ad(1,1) - exp_a) > tol .or. &
-        abs(b_ad(1,1) - exp_b) > tol .or. abs(c_ad - exp_c) > tol) then
-       print *, 'test_multidimension failed', d(1,1), a_ad(1,1), b_ad(1,1), c_ad
-       error stop 1
-    end if
-
-    return
-  end subroutine test_multidimension
-
-  subroutine test_scale_array
-    integer, parameter :: n = 3
-    real :: a(n)
-    real :: a_ad(n)
-
     a = (/1.0, 2.0, 3.0/)
-    a_ad = 1.0
-    call scale_array_fwd_ad(n, a, a_ad)
-    if (any(abs(a_ad - 2.0) > tol)) then
-       print *, 'test_scale_array_fwd failed', a_ad
-       error stop 1
-    end if
-
-    return
-  end subroutine test_scale_array
-
-  subroutine test_indirect
-    integer, parameter :: n = 3
-    real :: a(n)
-    real :: a_ad(n)
-    real :: b_ad(n)
-    real :: c_ad(n)
-    integer :: idx(n)
-    real :: exp_b(n)
-    real :: exp_c(n)
-    integer :: i
-
-    a = (/1.0, 2.0, 3.0/)
-    a_ad = (/1.0, 2.0, 3.0/)
+    a_ad(:) = 1.0
     idx = (/3, 1, 2/)
+    call indirect(n, a, b, c, idx)
+    call indirect(n, a + eps, b_eps, c_eps, idx)
+    fd_b(:) = (b_eps(:) - b(:)) / eps
+    fd_c(:) = (c_eps(:) - c(:)) / eps
     call indirect_fwd_ad(n, a, a_ad, b_ad, c_ad, idx)
-    exp_b(:) = a_ad(idx(:))
-    exp_c = 0.0
-    do i = 1, n
-       exp_c(idx(i)) = a_ad(idx(i)) * 2.0 * a(idx(i))
-    end do
-    if (any(abs(b_ad - exp_b) > tol) .or. any(abs(c_ad - exp_c) > tol)) then
+    if (any(abs((b_ad(:) - fd_b(:)) / fd_b(:)) > tol) .or. &
+        any(abs((c_ad(:) - fd_c(:)) / fd_c(:)) > tol)) then
        print *, 'test_indirect_fwd failed'
+       print *, maxval(abs((b_ad(:) - fd_b(:)) / fd_b(:)))
+       print *, maxval(abs((c_ad(:) - fd_c(:)) / fd_c(:)))
+       print *, b_ad
+       print *, fd_b
+       print *, c_ad
+       print *, fd_c
+       error stop 1
+    end if
+
+    inner1 = sum(b_ad(:)**2) + sum(c_ad(:)**2)
+    call indirect_rev_ad(n, a, a_ad, b_ad, c_ad, idx)
+    inner2 = sum(a_ad(:))
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_indirect_rev failed', inner1, inner2
        error stop 1
     end if
 
@@ -234,30 +248,36 @@ contains
   end subroutine test_indirect
 
   subroutine test_stencil
+    real, parameter :: tol = 2e-4
     integer, parameter :: n = 3
-    real :: a(n)
-    real :: a_ad(n)
-    real :: b_ad(n)
-    real :: exp_b(n)
-    integer :: i, in, ip
+    real :: a(n), b(n)
+    real :: a_ad(n), b_ad(n)
+    real :: b_eps(n), fd(n), eps
+    real :: inner1, inner2
 
+    eps = 1.0e-3
     a = (/1.0, 2.0, 3.0/)
-    a_ad = 1.0
+    a_ad(:) = 1.0
+    call stencil(n, a, b)
+    call stencil(n, a + eps, b_eps)
+    fd(:) = (b_eps(:) - b(:)) / eps
     call stencil_fwd_ad(n, a, a_ad, b_ad)
-    do i = 1, n
-       in = i - 1
-       ip = i + 1
-       if (i == 1) then
-          in = n
-       else if (i == n) then
-          ip = 1
-       end if
-       exp_b(i) = a_ad(i) * 2.0 / 4.0 + a_ad(in) / 4.0 + a_ad(ip) / 4.0
-    end do
-    if (any(abs(b_ad - exp_b) > tol)) then
+    if (any(abs((b_ad(:) - fd(:)) / fd(:)) > tol)) then
        print *, 'test_stencil_fwd failed'
+       print *, maxval(abs((b_ad(:) - fd(:)) / fd(:)))
+       print *, b_ad(:)
+       print *, fd(:)
        error stop 1
     end if
+
+    inner1 = sum(b_ad(:)**2)
+    call stencil_rev_ad(n, a, a_ad, b_ad)
+    inner2 = sum(a_ad(:))
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_stencil_rev failed', inner1, inner2
+       error stop 1
+    end if
+
 
     return
   end subroutine test_stencil

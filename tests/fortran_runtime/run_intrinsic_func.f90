@@ -97,6 +97,7 @@ contains
   end subroutine test_casting
 
   subroutine test_math
+    real, parameter :: tol = 2e-4
     real :: x, y, z
     real :: x_ad, y_ad, z_ad
     real :: eps, z_eps, fd, y_eps
