@@ -79,10 +79,31 @@ contains
 
   subroutine test_incval
     real :: a, a_ad
+    real :: a_eps, fd, eps
+    real :: inner1, inner2
 
+    eps = 1.0e-3
+    a = 1.0
+    call incval(a)
+    a_eps = 1.0 + eps
+    call incval(a_eps)
+    fd = (a_eps - a) / eps
     a = 1.0
     a_ad = 1.0
     call incval_fwd_ad(a, a_ad)
+    if (abs((a_ad - fd) / fd) > tol) then
+       print *, 'test_incval_fwd failed', a_ad, fd
+       error stop 1
+    end if
+
+    inner1 = a_ad**2
+    a = 1.0
+    call incval_rev_ad(a, a_ad)
+    inner2 = a_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_incval_rev failed', inner1, inner2
+       error stop 1
+    end if
 
     return
   end subroutine test_incval
