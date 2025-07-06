@@ -160,7 +160,6 @@ contains
        print *, fd(:,:)
        error stop 1
     end if
-    return
 
     inner1 = sum(d_ad(:,:)**2)
     call multidimension_rev_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
