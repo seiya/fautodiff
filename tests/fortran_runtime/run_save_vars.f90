@@ -108,54 +108,163 @@ contains
   end subroutine test_simple
 
   subroutine test_if_example
-    real :: z_ad
-    call if_example_fwd_ad(1.0, 1.0, 2.0, 1.0, z_ad)
+    real :: x, y, z, z_eps
+    real :: x_ad, y_ad, z_ad
+    real :: fd, eps
+    real :: inner1, inner2
+
+    eps = 1.0e-3
+    x = 1.0
+    y = 2.0
+    call if_example(x, y, z)
+    call if_example(x + eps, y + eps, z_eps)
+    fd = (z_eps - z) / eps
+    x_ad = 1.0
+    y_ad = 1.0
+    call if_example_fwd_ad(x, x_ad, y, y_ad, z_ad)
+    if (abs((z_ad - fd) / fd) > tol) then
+       print *, 'test_if_example_fwd failed', z_ad, fd
+       error stop 1
+    end if
+
+    inner1 = z_ad**2
+    call if_example_rev_ad(x, x_ad, y, y_ad, z_ad)
+    inner2 = x_ad + y_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_if_example_rev failed', inner1, inner2
+       error stop 1
+    end if
+
     return
   end subroutine test_if_example
 
   subroutine test_array_private
     integer, parameter :: n = 2, m = 2
-    real :: x(n,m), y(n,m), z_ad(n,m)
-    real :: x_ad(n,m), y_ad(n,m)
+    real :: x(n,m), y(n,m), z(n,m), z_eps(n,m), z_ad(n,m)
+    real :: x_ad(n,m), y_ad(n,m), fd(n,m)
+    real :: eps, inner1, inner2
+
+    eps = 1.0e-3
     x = 1.0
     y = 2.0
+    call do_with_array_private(n, m, x, y, z)
+    call do_with_array_private(n, m, x + eps, y + eps, z_eps)
+    fd(:,:) = (z_eps(:,:) - z(:,:)) / eps
     x_ad = 1.0
     y_ad = 1.0
     call do_with_array_private_fwd_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    if (maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:))) > tol) then
+       print *, 'test_array_private_fwd failed'
+       print *, maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:)))
+       error stop 1
+    end if
+
+    inner1 = sum(z_ad(:,:)**2)
+    call do_with_array_private_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    inner2 = sum(x_ad(:,:)) + sum(y_ad(:,:))
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_array_private_rev failed', inner1, inner2
+       error stop 1
+    end if
+
     return
   end subroutine test_array_private
 
   subroutine test_array
     integer, parameter :: n = 2, m = 2
-    real :: x(n,m), y(n,m), z_ad(n,m)
-    real :: x_ad(n,m), y_ad(n,m)
+    real :: x(n,m), y(n,m), z(n,m), z_eps(n,m), z_ad(n,m)
+    real :: x_ad(n,m), y_ad(n,m), fd(n,m)
+    real :: eps, inner1, inner2
+
+    eps = 1.0e-3
     x = 1.0
     y = 2.0
+    call do_with_array(n, m, x, y, z)
+    call do_with_array(n, m, x + eps, y + eps, z_eps)
+    fd(:,:) = (z_eps(:,:) - z(:,:)) / eps
     x_ad = 1.0
     y_ad = 1.0
     call do_with_array_fwd_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    if (maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:))) > tol) then
+       print *, 'test_array_fwd failed'
+       print *, maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:)))
+       error stop 1
+    end if
+
+    inner1 = sum(z_ad(:,:)**2)
+    call do_with_array_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    inner2 = sum(x_ad(:,:)) + sum(y_ad(:,:))
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_array_rev failed', inner1, inner2
+       error stop 1
+    end if
+
     return
   end subroutine test_array
 
   subroutine test_local_array
     integer, parameter :: n = 2, m = 2
-    real :: x(n,m), y(n,m), z_ad(n,m)
-    real :: x_ad(n,m), y_ad(n,m)
+    real :: x(n,m), y(n,m), z(n,m), z_eps(n,m), z_ad(n,m)
+    real :: x_ad(n,m), y_ad(n,m), fd(n,m)
+    real :: eps, inner1, inner2
+
+    eps = 1.0e-3
     x = 1.0
     y = 2.0
+    call do_with_local_array(n, m, x, y, z)
+    call do_with_local_array(n, m, x + eps, y + eps, z_eps)
+    fd(:,:) = (z_eps(:,:) - z(:,:)) / eps
     x_ad = 1.0
     y_ad = 1.0
     call do_with_local_array_fwd_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    if (maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:))) > tol) then
+       print *, 'test_local_array_fwd failed'
+       print *, maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:)))
+       error stop 1
+    end if
+
+    inner1 = sum(z_ad(:,:)**2)
+    call do_with_local_array_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    inner2 = sum(x_ad(:,:)) + sum(y_ad(:,:))
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_local_array_rev failed', inner1, inner2
+       error stop 1
+    end if
+
     return
   end subroutine test_local_array
 
   subroutine test_stencil_array
     integer, parameter :: n = 3
-    real :: x(n)
-    real :: x_ad(n)
-    x = (/1.0, 2.0, 3.0/)
+    real :: x(n), x_base(n), x_eps(n)
+    real :: x_ad(n), fd(n), eps
+    real :: inner1, inner2
+
+    eps = 1.0e-3
+    x_base = (/1.0, 2.0, 3.0/)
+    x = x_base
+    call do_with_stencil_array(n, x)
+    x_eps = x_base + eps
+    call do_with_stencil_array(n, x_eps)
+    fd(:) = (x_eps(:) - x(:)) / eps
+    x = x_base
     x_ad = 1.0
     call do_with_stencil_array_fwd_ad(n, x, x_ad)
+    if (maxval(abs((x_ad(:) - fd(:)) / fd(:))) > tol) then
+       print *, 'test_stencil_array_fwd failed'
+       print *, maxval(abs((x_ad(:) - fd(:)) / fd(:)))
+       error stop 1
+    end if
+
+    inner1 = sum(x_ad(:)**2)
+    x = x_base
+    call do_with_stencil_array_rev_ad(n, x, x_ad)
+    inner2 = sum(x_ad(:))
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_stencil_array_rev failed', inner1, inner2
+       error stop 1
+    end if
+
     return
   end subroutine test_stencil_array
 
