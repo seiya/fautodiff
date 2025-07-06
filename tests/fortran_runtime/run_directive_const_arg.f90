@@ -41,6 +41,7 @@ contains
     real :: x, y, z
     real :: x_ad, y_ad
     real :: y_eps, fd, eps
+    real :: inner1, inner2
 
     eps = 1.0e-3
     x = 2.0
@@ -52,6 +53,14 @@ contains
     call add_const_fwd_ad(x, x_ad, y_ad, z)
     if (abs(y_ad - fd) > tol) then
        print *, 'test_add_const_fwd failed', y_ad, fd
+       error stop 1
+    end if
+
+    inner1 = y_ad**2
+    call add_const_rev_ad(x, x_ad, y_ad, z)
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_add_const_rev failed', inner1, inner2
        error stop 1
     end if
 

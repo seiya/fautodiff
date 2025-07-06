@@ -42,6 +42,7 @@ contains
     real :: r, area
     real :: r_ad, area_ad
     real :: area_eps, fd, eps
+    real :: inner1, inner2
 
     eps = 1.0e-3
     r = 2.0
@@ -52,6 +53,14 @@ contains
     call compute_area_fwd_ad(r, r_ad, area_ad)
     if (abs((area_ad - fd) / fd) > tol) then
        print *, 'test_compute_area_fwd failed', area_ad, fd
+       error stop 1
+    end if
+
+    inner1 = area_ad**2
+    call compute_area_rev_ad(r, r_ad, area_ad)
+    inner2 = r_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_compute_area_rev failed', inner1, inner2
        error stop 1
     end if
 
