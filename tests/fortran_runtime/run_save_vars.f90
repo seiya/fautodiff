@@ -95,6 +95,7 @@ contains
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_simple_rev failed', inner1, inner2
+
        error stop 1
     end if
 

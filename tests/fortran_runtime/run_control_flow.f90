@@ -59,7 +59,7 @@ contains
     real :: x, y, z
     real :: x_ad, y_ad, z_ad
     real :: y_eps, z_eps, fd, eps
-    real :: exp_z, exp_x
+    real :: inner1, inner2
 
     eps = 1.0e-3
     x = 1.0
@@ -76,17 +76,13 @@ contains
        error stop 1
     end if
 
-    x = 1.0
-    y = 2.0
-    call if_example(x, y, z)
+    inner1 = z_ad**2
     x_ad = 0.0
     y_ad = 0.0
-    z_ad = 1.0
     call if_example_rev_ad(x, x_ad, y, y_ad, z_ad)
-    exp_z = x
-    exp_x = 1.0
-    if (abs(z - exp_z) > tol .or. abs(x_ad - exp_x) > tol) then
-       print *, 'test_if_example failed', z, x_ad
+    inner2 = x_ad + y_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_if_example_rev failed', inner1, inner2
        error stop 1
     end if
 
@@ -98,7 +94,7 @@ contains
     real :: x, sum
     real :: x_ad, sum_ad
     real :: sum_eps, fd, eps
-    real :: exp_sum, exp_x
+    real :: inner1, inner2
 
     eps = 1.0e-3
     n = 3
@@ -113,17 +109,12 @@ contains
        error stop 1
     end if
 
-    n = 3
-    x = 2.0
-    call do_example(n, x, sum)
+    inner1 = sum_ad**2
     x_ad = 0.0
-    sum_ad = 1.0
     call do_example_rev_ad(n, x, x_ad, sum_ad)
-    exp_sum = x * real(n * (n + 1) / 2)
-    exp_x = real(n * (n + 1) / 2)
-
-    if (abs(sum - exp_sum) > tol .or. abs(x_ad - exp_x) > tol) then
-       print *, 'test_do_example failed', sum, x_ad
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_do_example_rev failed', inner1, inner2
        error stop 1
     end if
 
