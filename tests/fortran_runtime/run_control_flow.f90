@@ -7,6 +7,8 @@ program run_control_flow
   integer, parameter :: I_all = 0
   integer, parameter :: I_if_example = 1
   integer, parameter :: I_do_example = 2
+  integer, parameter :: I_select_example = 3
+  integer, parameter :: I_do_while_example = 4
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -24,6 +26,10 @@ program run_control_flow
               i_test = I_if_example
            case ("do_example")
               i_test = I_do_example
+           case ("select_example")
+              i_test = I_select_example
+           case ("do_while_example")
+              i_test = I_do_while_example
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -38,6 +44,12 @@ program run_control_flow
   end if
   if (i_test == I_do_example .or. i_test == I_all) then
      call test_do_example
+  end if
+  if (i_test == I_select_example .or. i_test == I_all) then
+     call test_select_example
+  end if
+  if (i_test == I_do_while_example .or. i_test == I_all) then
+     call test_do_while_example
   end if
 
   stop
@@ -117,5 +129,37 @@ contains
 
     return
   end subroutine test_do_example
+
+  subroutine test_select_example
+    integer :: i
+    real :: x, z_ad
+
+    i = 1
+    x = 2.0
+    call select_example_fwd_ad(i, x, 1.0, z_ad)
+    if (abs(z_ad - 1.0) > tol) then
+       print *, 'test_select_example_fwd failed case1', z_ad
+       error stop 1
+    end if
+
+    i = 4
+    call select_example_fwd_ad(i, x, 1.0, z_ad)
+    if (z_ad /= 0.0) then
+       print *, 'test_select_example_fwd failed default', z_ad
+       error stop 1
+    end if
+
+    return
+  end subroutine test_select_example
+
+  subroutine test_do_while_example
+    real :: x, limit
+
+    x = 0.5
+    limit = 1.0
+    call do_while_example_fwd_ad(x, 1.0, limit, 0.0)
+
+    return
+  end subroutine test_do_while_example
 
 end program run_control_flow

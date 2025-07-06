@@ -1,11 +1,13 @@
 program run_cross_mod
   use cross_mod_b
   use cross_mod_b_ad
+  use cross_mod_a_ad
   implicit none
   real, parameter :: tol = 1.0e-4
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_call_inc = 1
+  integer, parameter :: I_incval = 2
   integer :: length, status
   character(:), allocatable :: arg
   integer :: i_test
@@ -20,6 +22,8 @@ program run_cross_mod
            select case(arg)
            case ("call_inc")
               i_test = I_call_inc
+           case ("incval")
+              i_test = I_incval
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -31,6 +35,9 @@ program run_cross_mod
 
   if (i_test == I_call_inc .or. i_test == I_all) then
      call test_call_inc
+  end if
+  if (i_test == I_incval .or. i_test == I_all) then
+     call test_incval
   end if
 
   stop
@@ -69,5 +76,15 @@ contains
 
     return
   end subroutine test_call_inc
+
+  subroutine test_incval
+    real :: a, a_ad
+
+    a = 1.0
+    a_ad = 1.0
+    call incval_fwd_ad(a, a_ad)
+
+    return
+  end subroutine test_incval
 
 end program run_cross_mod

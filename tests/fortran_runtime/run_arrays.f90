@@ -8,6 +8,9 @@ program run_arrays
   integer, parameter :: I_elementwise_add = 1
   integer, parameter :: I_dot_product = 2
   integer, parameter :: I_multidimension = 3
+  integer, parameter :: I_scale_array = 4
+  integer, parameter :: I_indirect = 5
+  integer, parameter :: I_stencil = 6
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -27,6 +30,12 @@ program run_arrays
               i_test = I_dot_product
            case ("multidimension")
               i_test = I_multidimension
+           case ("scale_array")
+              i_test = I_scale_array
+           case ("indirect")
+              i_test = I_indirect
+           case ("stencil")
+              i_test = I_stencil
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -44,6 +53,15 @@ program run_arrays
   end if
   if (i_test == I_multidimension .or. i_test == I_all) then
      call test_multidimension
+  end if
+  if (i_test == I_scale_array .or. i_test == I_all) then
+     call test_scale_array
+  end if
+  if (i_test == I_indirect .or. i_test == I_all) then
+     call test_indirect
+  end if
+  if (i_test == I_stencil .or. i_test == I_all) then
+     call test_stencil
   end if
 
   stop
@@ -170,5 +188,78 @@ contains
 
     return
   end subroutine test_multidimension
+
+  subroutine test_scale_array
+    integer, parameter :: n = 3
+    real :: a(n)
+    real :: a_ad(n)
+
+    a = (/1.0, 2.0, 3.0/)
+    a_ad = 1.0
+    call scale_array_fwd_ad(n, a, a_ad)
+    if (any(abs(a_ad - 2.0) > tol)) then
+       print *, 'test_scale_array_fwd failed', a_ad
+       error stop 1
+    end if
+
+    return
+  end subroutine test_scale_array
+
+  subroutine test_indirect
+    integer, parameter :: n = 3
+    real :: a(n)
+    real :: a_ad(n)
+    real :: b_ad(n)
+    real :: c_ad(n)
+    integer :: idx(n)
+    real :: exp_b(n)
+    real :: exp_c(n)
+    integer :: i
+
+    a = (/1.0, 2.0, 3.0/)
+    a_ad = (/1.0, 2.0, 3.0/)
+    idx = (/3, 1, 2/)
+    call indirect_fwd_ad(n, a, a_ad, b_ad, c_ad, idx)
+    exp_b(:) = a_ad(idx(:))
+    exp_c = 0.0
+    do i = 1, n
+       exp_c(idx(i)) = a_ad(idx(i)) * 2.0 * a(idx(i))
+    end do
+    if (any(abs(b_ad - exp_b) > tol) .or. any(abs(c_ad - exp_c) > tol)) then
+       print *, 'test_indirect_fwd failed'
+       error stop 1
+    end if
+
+    return
+  end subroutine test_indirect
+
+  subroutine test_stencil
+    integer, parameter :: n = 3
+    real :: a(n)
+    real :: a_ad(n)
+    real :: b_ad(n)
+    real :: exp_b(n)
+    integer :: i, in, ip
+
+    a = (/1.0, 2.0, 3.0/)
+    a_ad = 1.0
+    call stencil_fwd_ad(n, a, a_ad, b_ad)
+    do i = 1, n
+       in = i - 1
+       ip = i + 1
+       if (i == 1) then
+          in = n
+       else if (i == n) then
+          ip = 1
+       end if
+       exp_b(i) = a_ad(i) * 2.0 / 4.0 + a_ad(in) / 4.0 + a_ad(ip) / 4.0
+    end do
+    if (any(abs(b_ad - exp_b) > tol)) then
+       print *, 'test_stencil_fwd failed'
+       error stop 1
+    end if
+
+    return
+  end subroutine test_stencil
 
 end program run_arrays

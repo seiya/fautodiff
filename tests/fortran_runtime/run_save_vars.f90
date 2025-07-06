@@ -6,6 +6,11 @@ program run_save_vars
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_simple = 1
+  integer, parameter :: I_if_example = 2
+  integer, parameter :: I_array_private = 3
+  integer, parameter :: I_array = 4
+  integer, parameter :: I_local_array = 5
+  integer, parameter :: I_stencil_array = 6
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -21,6 +26,16 @@ program run_save_vars
            select case(arg)
            case ("simple")
               i_test = I_simple
+           case ("if_example")
+              i_test = I_if_example
+           case ("array_private")
+              i_test = I_array_private
+           case ("array")
+              i_test = I_array
+           case ("local_array")
+              i_test = I_local_array
+           case ("stencil_array")
+              i_test = I_stencil_array
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -32,6 +47,21 @@ program run_save_vars
 
   if (i_test == I_simple .or. i_test == I_all) then
      call test_simple
+  end if
+  if (i_test == I_if_example .or. i_test == I_all) then
+     call test_if_example
+  end if
+  if (i_test == I_array_private .or. i_test == I_all) then
+     call test_array_private
+  end if
+  if (i_test == I_array .or. i_test == I_all) then
+     call test_array
+  end if
+  if (i_test == I_local_array .or. i_test == I_all) then
+     call test_local_array
+  end if
+  if (i_test == I_stencil_array .or. i_test == I_all) then
+     call test_stencil_array
   end if
 
   stop
@@ -76,5 +106,57 @@ contains
 
     return
   end subroutine test_simple
+
+  subroutine test_if_example
+    real :: z_ad
+    call if_example_fwd_ad(1.0, 1.0, 2.0, 1.0, z_ad)
+    return
+  end subroutine test_if_example
+
+  subroutine test_array_private
+    integer, parameter :: n = 2, m = 2
+    real :: x(n,m), y(n,m), z_ad(n,m)
+    real :: x_ad(n,m), y_ad(n,m)
+    x = 1.0
+    y = 2.0
+    x_ad = 1.0
+    y_ad = 1.0
+    call do_with_array_private_fwd_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    return
+  end subroutine test_array_private
+
+  subroutine test_array
+    integer, parameter :: n = 2, m = 2
+    real :: x(n,m), y(n,m), z_ad(n,m)
+    real :: x_ad(n,m), y_ad(n,m)
+    x = 1.0
+    y = 2.0
+    x_ad = 1.0
+    y_ad = 1.0
+    call do_with_array_fwd_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    return
+  end subroutine test_array
+
+  subroutine test_local_array
+    integer, parameter :: n = 2, m = 2
+    real :: x(n,m), y(n,m), z_ad(n,m)
+    real :: x_ad(n,m), y_ad(n,m)
+    x = 1.0
+    y = 2.0
+    x_ad = 1.0
+    y_ad = 1.0
+    call do_with_local_array_fwd_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    return
+  end subroutine test_local_array
+
+  subroutine test_stencil_array
+    integer, parameter :: n = 3
+    real :: x(n)
+    real :: x_ad(n)
+    x = (/1.0, 2.0, 3.0/)
+    x_ad = 1.0
+    call do_with_stencil_array_fwd_ad(n, x, x_ad)
+    return
+  end subroutine test_stencil_array
 
 end program run_save_vars
