@@ -263,6 +263,7 @@ contains
   end subroutine test_foo
 
   subroutine test_bar
+    real, parameter :: tol = 2e-4
     real :: a
     real :: a_ad
     real :: b_ad
