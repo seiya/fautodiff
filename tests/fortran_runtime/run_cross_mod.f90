@@ -47,7 +47,7 @@ contains
     real :: x
     real :: x_ad
     real :: x_eps, fd, eps
-    real :: exp_x, exp_x_ad
+    real :: inner1, inner2
 
     eps = 1.0e-3
     x = 1.0
@@ -63,14 +63,13 @@ contains
        error stop 1
     end if
 
+    inner1 = x_ad**2
     x = 1.0
     call call_inc(x)
-    x_ad = 1.0
     call call_inc_rev_ad(x, x_ad)
-    exp_x = 2.0
-    exp_x_ad = 1.0
-    if (abs(x - exp_x) > tol .or. abs(x_ad - exp_x_ad) > tol) then
-       print *, 'test_call_inc failed', x, x_ad
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_call_inc failed', inner1, inner2
        error stop 1
     end if
 

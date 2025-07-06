@@ -53,7 +53,7 @@ contains
     real(8) :: x
     real(8) :: x_ad
     real(8) :: x_eps, fd, eps
-    real(8) :: exp_x, exp_x_ad
+    real(8) :: inner1, inner2
 
     eps = 1.0e-6_8
     x = 2.0_8
@@ -69,14 +69,13 @@ contains
        error stop 1
     end if
 
+    inner1 = x_ad**2
     x = 2.0_8
     call scale_8(x)
-    x_ad = 1.0_8
     call scale_8_rev_ad(x, x_ad)
-    exp_x = 4.0_8
-    exp_x_ad = 2.0_8
-    if (abs(x - exp_x) > tol .or. abs(x_ad - exp_x_ad) > tol) then
-       print *, 'test_scale_8 failed', x, x_ad
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_scale_8 failed', inner1, inner2
        error stop 1
     end if
 
@@ -87,7 +86,7 @@ contains
     real(RP) :: x
     real(RP) :: x_ad
     real(RP) :: x_eps, fd, eps
-    real(RP) :: exp_x, exp_x_ad
+    real(RP) :: inner1, inner2
 
     eps = 1.0e-6_RP
     x = 2.0_RP
@@ -103,14 +102,13 @@ contains
        error stop 1
     end if
 
+    inner1 = x_ad**2
     x = 2.0_RP
     call scale_rp(x)
-    x_ad = 1.0_RP
     call scale_rp_rev_ad(x, x_ad)
-    exp_x = 4.0_RP
-    exp_x_ad = 2.0_RP
-    if (abs(x - exp_x) > tol .or. abs(x_ad - exp_x_ad) > tol) then
-       print *, 'test_scale_rp failed', x, x_ad
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_scale_rp failed', inner1, inner2
        error stop 1
     end if
 
@@ -121,7 +119,7 @@ contains
     double precision :: x
     double precision :: x_ad
     double precision :: x_eps, fd, eps
-    double precision :: exp_x, exp_x_ad
+    double precision :: inner1, inner2
 
     eps = 1.0d-6
     x = 2.0d0
@@ -137,14 +135,13 @@ contains
        error stop 1
     end if
 
+    inner1 = x_ad**2
     x = 2.0d0
     call scale_dp(x)
-    x_ad = 1.0d0
     call scale_dp_rev_ad(x, x_ad)
-    exp_x = 4.0d0
-    exp_x_ad = 2.0d0
-    if (abs(x - exp_x) > tol .or. abs(x_ad - exp_x_ad) > tol) then
-       print *, 'test_scale_dp failed', x, x_ad
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_scale_dp failed', inner1, inner2
        error stop 1
     end if
 

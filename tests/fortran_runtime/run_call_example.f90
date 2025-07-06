@@ -71,7 +71,7 @@ contains
     real :: x, y
     real :: x_ad, y_ad
     real :: fd, eps, x_eps, y_eps
-    real :: exp_x, exp_x_ad, exp_y_ad
+    real :: inner1, inner2
 
     eps = 1.0e-3
     x = 1.0
@@ -89,18 +89,14 @@ contains
        error stop 1
     end if
 
+    inner1 = x_ad**2
     x = 1.0
     y = 2.0
     call call_subroutine(x, y)
-    x_ad = 1.0
-    y_ad = 0.0
     call call_subroutine_rev_ad(x, x_ad, y, y_ad)
-    exp_x = 4.0
-    exp_x_ad = 2.0
-    exp_y_ad = 1.0
-    if (abs(x - exp_x) > tol .or. abs(x_ad - exp_x_ad) > tol .or. &
-        abs(y_ad - exp_y_ad) > tol) then
-       print *, 'test_call_subroutine failed', x, x_ad, y_ad
+    inner2 = x_ad + y_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_call_subroutine failed', inner1, inner2
        error stop 1
     end if
 
@@ -111,7 +107,7 @@ contains
     real :: x, y
     real :: x_ad, y_ad
     real :: x_eps, res_fd, eps
-    real :: exp_x, exp_x_ad, exp_y_ad
+    real :: inner1, inner2
 
     eps = 1.0e-3
     y = 3.0
@@ -126,17 +122,13 @@ contains
        error stop 1
     end if
 
+    inner1 = x_ad**2
     y = 3.0
     call call_fucntion(x, y)
-    x_ad = 1.0
-    y_ad = 0.0
     call call_fucntion_rev_ad(x_ad, y, y_ad)
-    exp_x = y**2
-    exp_x_ad = 0.0
-    exp_y_ad = 2.0 * y
-    if (abs(x - exp_x) > tol .or. abs(x_ad - exp_x_ad) > tol .or. &
-        abs(y_ad - exp_y_ad) > tol) then
-       print *, 'test_call_fucntion failed', x, x_ad, y_ad
+    inner2 = x_ad + y_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_call_fucntion failed', inner1, inner2
        error stop 1
     end if
 
@@ -147,7 +139,7 @@ contains
     real :: x, y
     real :: x_ad, y_ad
     real :: x_eps, y_eps, fd, eps
-    real :: exp_x, exp_x_ad, exp_y_ad
+    real :: inner1, inner2
 
     eps = 1.0e-3
     x = 1.0
@@ -166,18 +158,14 @@ contains
        error stop 1
     end if
 
+    inner1 = x_ad**2
     x = 1.0
     y = 2.0
     call arg_operation(x, y)
-    x_ad = 1.0
-    y_ad = 0.0
     call arg_operation_rev_ad(x, x_ad, y, y_ad)
-    exp_x = 6.0
-    exp_x_ad = 2.0
-    exp_y_ad = 2.0
-    if (abs(x - exp_x) > tol .or. abs(x_ad - exp_x_ad) > tol .or. &
-        abs(y_ad - exp_y_ad) > tol) then
-       print *, 'test_arg_operation failed', x, x_ad, y_ad
+    inner2 = x_ad + y_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_arg_operation failed', inner1, inner2
        error stop 1
     end if
 
@@ -188,7 +176,7 @@ contains
     real :: x, y
     real :: x_ad, y_ad
     real :: x_eps, y_eps, fd, eps
-    real :: exp_x, exp_x_ad, exp_y_ad
+    real :: inner1, inner2
 
     eps = 1.0e-3
     x = 1.0
@@ -207,18 +195,14 @@ contains
        error stop 1
     end if
 
+    inner1 = x_ad**2
     x = 1.0
     y = 2.0
     call arg_function(x, y)
-    x_ad = 1.0
-    y_ad = 0.0
     call arg_function_rev_ad(x, x_ad, y, y_ad)
-    exp_x = 6.0
-    exp_x_ad = 2.0
-    exp_y_ad = 4.0
-    if (abs(x - exp_x) > tol .or. abs(x_ad - exp_x_ad) > tol .or. &
-        abs(y_ad - exp_y_ad) > tol) then
-       print *, 'test_arg_function failed', x, x_ad, y_ad
+    inner2 = x_ad + y_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_arg_function failed', inner1, inner2
        error stop 1
     end if
     return
