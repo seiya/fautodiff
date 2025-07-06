@@ -197,6 +197,7 @@ cython_debug/
 *.out
 *.o
 *.mod
+*.fadmod
 
 # Emacs
 *~
