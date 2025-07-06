@@ -62,8 +62,7 @@ contains
     real ::  r_eps, fd, eps
     double precision :: d, d_eps, d_ad
     character(len=1) :: c
-    double precision :: exp_d
-    real :: exp_r
+    double precision :: inner1, inner2
 
     eps = 1.0e-3
     i = 3
@@ -79,17 +78,15 @@ contains
        error stop 1
     end if
 
+    inner1 = d_ad**2
     i = 3
     r = 4.5
     c = 'A'
     call casting_intrinsics(i, r, d, c, n)
-    r_ad = 0.0
-    d_ad = 1.0d0
     call casting_intrinsics_rev_ad(i, r, r_ad, d_ad, c)
-    exp_d = dble(r) + dble(int(r))
-    exp_r = 1.0
-    if (abs(d - exp_d) > tol .or. abs(r_ad - exp_r) > tol) then
-       print *, 'test_casting failed', d, r_ad
+    inner2 = r_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_casting failed', inner1, inner2
        error stop 1
     end if
 
