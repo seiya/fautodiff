@@ -65,11 +65,10 @@ contains
 
     inner1 = x_ad**2
     x = 1.0
-    call call_inc(x)
     call call_inc_rev_ad(x, x_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
-       print *, 'test_call_inc failed', inner1, inner2
+       print *, 'test_call_inc_rev failed', inner1, inner2
        error stop 1
     end if
 

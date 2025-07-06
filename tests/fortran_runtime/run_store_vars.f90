@@ -43,7 +43,6 @@ contains
     real :: x_ad(n), z_ad(n)
     real :: z_eps(n), fd(n), eps
     real :: inner1, inner2
-    real :: z_seed(n)
 
     eps = 1.0e-3
     x = (/2.0, 3.0, 4.0/)
@@ -61,12 +60,7 @@ contains
     end if
 
     inner1 = sum(z_ad(:)**2)
-    z_seed(:) = z_ad(:)
-    x = (/2.0, 3.0, 4.0/)
-    call do_with_recurrent_scalar(n, x, z)
     x_ad = 0.0
-    z_ad = 0.0
-    z_ad(:) = z_seed(:)
     call do_with_recurrent_scalar_rev_ad(n, x, x_ad, z_ad)
     inner2 = sum(x_ad(:))
     if (abs((inner2 - inner1) / inner1) > tol) then

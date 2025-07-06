@@ -96,7 +96,7 @@ contains
     call call_subroutine_rev_ad(x, x_ad, y, y_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
-       print *, 'test_call_subroutine failed', inner1, inner2
+       print *, 'test_call_subroutine_rev failed', inner1, inner2
        error stop 1
     end if
 
@@ -128,7 +128,7 @@ contains
     call call_fucntion_rev_ad(x_ad, y, y_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
-       print *, 'test_call_fucntion failed', inner1, inner2
+       print *, 'test_call_fucntion_rev failed', inner1, inner2
        error stop 1
     end if
 
@@ -165,7 +165,7 @@ contains
     call arg_operation_rev_ad(x, x_ad, y, y_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
-       print *, 'test_arg_operation failed', inner1, inner2
+       print *, 'test_arg_operation_rev failed', inner1, inner2
        error stop 1
     end if
 
@@ -202,7 +202,7 @@ contains
     call arg_function_rev_ad(x, x_ad, y, y_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
-       print *, 'test_arg_function failed', inner1, inner2
+       print *, 'test_arg_function_rev failed', inner1, inner2
        error stop 1
     end if
     return

@@ -77,13 +77,12 @@ contains
     end if
 
     inner1 = z_ad**2
-    x = 1.0
-    y = 2.0
-    call if_example(x, y, z)
+    x_ad = 0.0
+    y_ad = 0.0
     call if_example_rev_ad(x, x_ad, y, y_ad, z_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
-       print *, 'test_if_example failed', inner1, inner2
+       print *, 'test_if_example_rev failed', inner1, inner2
        error stop 1
     end if
 
@@ -111,13 +110,11 @@ contains
     end if
 
     inner1 = sum_ad**2
-    n = 3
-    x = 2.0
-    call do_example(n, x, sum)
+    x_ad = 0.0
     call do_example_rev_ad(n, x, x_ad, sum_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
-       print *, 'test_do_example failed', inner1, inner2
+       print *, 'test_do_example_rev failed', inner1, inner2
        error stop 1
     end if
 
