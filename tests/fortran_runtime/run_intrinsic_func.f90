@@ -101,6 +101,7 @@ contains
     real :: x, y, z
     real :: x_ad, y_ad, z_ad
     real :: eps, z_eps, fd, y_eps
+    real :: inner1, inner2
 
     eps = 1.0e-3
     x = 0.5
@@ -117,6 +118,16 @@ contains
        error stop 1
     end if
 
+    inner1 = z_ad**2
+    x_ad = 0.0
+    y_ad = 0.0
+    call math_intrinsics_rev_ad(x, x_ad, y, y_ad, z_ad)
+    inner2 = x_ad + y_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_math_rev failed', inner1, inner2
+       error stop 1
+    end if
+
     return
   end subroutine test_math
 
@@ -124,14 +135,29 @@ contains
     character(len=4) :: str
     real :: arr(2)
     real :: arr_ad(2)
-    real :: y_ad
+    real :: y, y_eps, y_ad, eps, fd
+    real :: x_ad
+    integer :: idx, lb, ub
+    real :: inner1, inner2
 
     str = 'abcd'
     arr = (/1.0, 2.0/)
+    eps = 1.0e-3
     arr_ad = 0.0
+    call non_differentiable_intrinsics(str, arr, idx, lb, ub, 1.0, y)
+    call non_differentiable_intrinsics(str, arr, idx, lb, ub, 1.0 + eps, y_eps)
+    fd = (y_eps - y) / eps
     call non_differentiable_intrinsics_fwd_ad(str, arr, arr_ad, 1.0, 1.0, y_ad)
-    if (y_ad /= 0.0) then
-       print *, 'test_non_diff_fwd failed', y_ad
+    if (abs(y_ad - fd) > tol) then
+       print *, 'test_non_diff_fwd failed', y_ad, fd
+       error stop 1
+    end if
+
+    inner1 = y_ad**2
+    call non_differentiable_intrinsics_rev_ad(str, arr, arr_ad, 1.0, x_ad, y_ad)
+    inner2 = x_ad
+    if (abs(inner2 - inner1) > tol) then
+       print *, 'test_non_diff_rev failed', inner1, inner2
        error stop 1
     end if
 
@@ -140,18 +166,42 @@ contains
 
   subroutine test_special
     real, parameter :: tol2 = 1.0e-6
+    real, parameter :: tol_fd = 1.0e-4
     real :: mat_in(2,2)
     real :: mat_in_ad(2,2)
     real :: mat_out_ad(2,2)
     real :: exp(2,2)
+    real :: eps
+    real :: mat_in_eps(2,2)
+    real :: mat_out(2,2)
+    real :: mat_out_eps(2,2)
+    real :: fd(2,2)
+    real :: inner1, inner2
 
+    eps = 1.0e-3
     mat_in_ad = 1.0
     mat_in = reshape((/1.0,2.0,3.0,4.0/), (/2,2/))
+    call special_intrinsics(mat_in, mat_out)
+    mat_in_eps = mat_in + eps
+    call special_intrinsics(mat_in_eps, mat_out_eps)
+    fd(:,:) = (mat_out_eps(:,:) - mat_out(:,:)) / eps
     call special_intrinsics_fwd_ad(mat_in, mat_in_ad, mat_out_ad)
     exp = transpose(mat_in_ad)
     exp = cshift(exp, -1, 2)
+    if (any(abs(mat_out_ad - fd) > tol_fd)) then
+       print *, 'test_special_fwd failed fd compare'
+       error stop 1
+    end if
     if (any(abs(mat_out_ad - exp) > tol2)) then
        print *, 'test_special_fwd failed'
+       error stop 1
+    end if
+
+    inner1 = sum(mat_out_ad(:,:)**2)
+    call special_intrinsics_rev_ad(mat_in, mat_in_ad, mat_out_ad)
+    inner2 = sum(mat_in_ad(:,:))
+    if (abs((inner2 - inner1) / inner1) > tol2) then
+       print *, 'test_special_rev failed', inner1, inner2
        error stop 1
     end if
 
