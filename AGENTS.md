@@ -71,3 +71,29 @@ This file provides guidelines for contributors about the repository and develop 
   name followed by an underscore.  For example, ``data_storage`` becomes
   ``fautodiff_data_storage`` and its public routine ``push`` is renamed to
   ``fautodiff_data_storage_push``.
+
+## 10. Runtime Verification in `tests/fortran_runtime`
+The programs under `tests/fortran_runtime` check that the generated AD code
+produces correct derivatives. Follow these steps when adding or updating the
+checks.
+
+### Forward code tests
+1. Provide reasonable input values for the original routine.
+2. Run the original routine with these inputs and record the outputs.
+3. Perturb the inputs by a small amount `eps` and run the routine again. Use
+   `1.0e-3` for single precision and `1.0e-6` for double precision.
+4. Divide the difference between the results of steps 2 and 3 by `eps` to obtain
+   a reference derivative.
+5. Execute the forward AD version with the derivative of each input set to `1`
+   and record the output derivatives.
+6. Compare the derivatives from step 5 with the reference from step 4.
+
+### Reverse code tests
+1. Compute the inner product of the derivatives obtained in the forward test
+   (the sum of squares of all derivative components).
+2. Use these derivatives as inputs to the reverse AD code and record the output
+   derivatives.
+3. Take the inner product between the results of step 2 and the forward-test
+   input derivatives (which are `1`, so this is the sum of the derivatives from
+   step 2).
+4. Verify that the value from step 1 matches the value from step 3.
