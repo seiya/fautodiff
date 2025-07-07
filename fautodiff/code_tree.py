@@ -614,10 +614,15 @@ class Statement(Node):
 class Use(Node):
     """Representation of a Fortran use statement."""
     name: str
+    only: List[str] = field(default=None)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        lines = [f"{space}use {self.name}\n"]
+        if self.only is not None:
+            only = f" only: {', '.join(self.only)}"
+        else:
+            only = ""
+        lines = [f"{space}use {self.name}{only}\n"]
         return lines
 
     def is_effectively_empty(self) -> bool:
@@ -715,6 +720,7 @@ class CallStatement(Node):
             raise RuntimeError("routine_map is necessary for CallStatement")
         name = self.name
         if not name in routine_map:
+            print(routine_map)
             raise RuntimeError(f"Not found in routime_map: {name}")
         arg_info = routine_map[name]
 

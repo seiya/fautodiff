@@ -246,8 +246,10 @@ def _parse_from_reader(reader, src_name):
                             continue
                         continue
                     if isinstance(c, Fortran2003.Use_Stmt):
-                        #mod_node.body.append(Use(c.items[2].string))
-                        mod_node.body.append(Use(c.string))
+                        only = None
+                        if c.items[4] is not None:
+                            only = [s.string for s in c.items[4].items]
+                        mod_node.body.append(Use(c.items[2].string, only=only))
                         continue
                     if isinstance(c, Fortran2003.Access_Stmt):
                         mod_node.body.append(Statement(c.items[0]))
@@ -316,7 +318,10 @@ def _parse_routine(content, src_name):
                         decls.append(Statement(cnt.string))
                 continue
             if isinstance(decl, Fortran2003.Use_Stmt):
-                decls.append(Use(decl.string))
+                only = None
+                if decl.items[4] is not None:
+                    only = [s.string for s in decl.items[4].items]
+                decls.append(Use(decl.items[2].string, only=only))
                 continue
             if not isinstance(decl, Fortran2003.Type_Declaration_Stmt):
                 raise RuntimeError(f"Unsupported statement: {type(decl)} {decl}")
