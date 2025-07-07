@@ -110,8 +110,18 @@ end subroutine foo
 ```
 
 Arguments listed in ``CONSTANT_ARGS`` do not receive corresponding ``_ad``
-variables in the generated routine. See ``examples/directive_const_arg.f90``
-for a full example.
+variables in the generated routine. See ``examples/directives.f90``
+for a full example that also demonstrates skipping a routine with ``NO_AD``.
+
+Use ``NO_AD`` to indicate that a routine should be parsed but skipped when
+generating AD code:
+
+```fortran
+!$FAD NO_AD
+subroutine skip_me(x)
+  ! ...
+end subroutine skip_me
+```
 
 Run the included tests with:
 

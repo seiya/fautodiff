@@ -94,8 +94,8 @@ class TestFortranADCode(unittest.TestCase):
         self._run_test('store_vars', ['do_with_recurrent_scalar'])
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
-    def test_directive_const_arg(self):
-        self._run_test('directive_const_arg', ['add_const'])
+    def test_directives(self):
+        self._run_test('directives', ['add_const'])
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_parameter_var(self):

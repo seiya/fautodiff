@@ -169,7 +169,7 @@ class TestParser(unittest.TestCase):
 
     def test_parse_file_directive_constant_args(self):
         base = Path(__file__).resolve().parents[1]
-        src = base / "examples" / "directive_const_arg.f90"
+        src = base / "examples" / "directives.f90"
         modules = parser.parse_file(str(src))
         routine = modules[0].routines[0]
         self.assertIn("CONSTANT_ARGS", routine.directives)
@@ -178,6 +178,23 @@ class TestParser(unittest.TestCase):
         self.assertTrue(decl.constant)
         var = routine.get_var("z")
         self.assertTrue(var.is_constant)
+
+    def test_parse_directive_no_ad(self):
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+            !$FAD NO_AD
+              subroutine foo(x)
+                real :: x
+                x = x + 1.0
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        self.assertIn("NO_AD", routine.directives)
 
 
 

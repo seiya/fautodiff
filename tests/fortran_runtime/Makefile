@@ -9,7 +9,7 @@ vpath %.f90 .
 
 PROGRAMS = run_simple_math run_arrays run_call_example run_control_flow run_cross_mod \
            run_data_storage run_intrinsic_func run_real_kind run_save_vars run_store_vars \
-           run_directive_const_arg run_parameter_var
+           run_directives run_parameter_var
 
 all: $(PROGRAMS)
 
@@ -35,7 +35,7 @@ $(OUTDIR)/run_real_kind.o: $(OUTDIR)/real_kind.o $(OUTDIR)/real_kind_ad.o
 $(OUTDIR)/run_save_vars.o: $(OUTDIR)/save_vars.o $(OUTDIR)/save_vars_ad.o
 $(OUTDIR)/run_store_vars.o: $(OUTDIR)/store_vars.o $(OUTDIR)/store_vars_ad.o \
   $(OUTDIR)/data_storage.o
-$(OUTDIR)/run_directive_const_arg.o: $(OUTDIR)/directive_const_arg.o $(OUTDIR)/directive_const_arg_ad.o
+$(OUTDIR)/run_directives.o: $(OUTDIR)/directives.o $(OUTDIR)/directives_ad.o
 $(OUTDIR)/run_parameter_var.o: $(OUTDIR)/parameter_var.o $(OUTDIR)/parameter_var_ad.o
 
 # Additional module dependencies
@@ -73,8 +73,8 @@ run_save_vars: $(OUTDIR)/run_save_vars.o $(OUTDIR)/save_vars.o $(OUTDIR)/save_va
 run_store_vars: $(OUTDIR)/run_store_vars.o $(OUTDIR)/store_vars.o $(OUTDIR)/store_vars_ad.o $(OUTDIR)/data_storage.o
 	$(FC) $^ -o $@
 
-run_directive_const_arg: $(OUTDIR)/run_directive_const_arg.o $(OUTDIR)/directive_const_arg.o $(OUTDIR)/directive_const_arg_ad.o
-	$(FC) $^ -o $@
+run_directives: $(OUTDIR)/run_directives.o $(OUTDIR)/directives.o $(OUTDIR)/directives_ad.o
+       $(FC) $^ -o $@
 
 run_parameter_var: $(OUTDIR)/run_parameter_var.o $(OUTDIR)/parameter_var.o $(OUTDIR)/parameter_var_ad.o
 	$(FC) $^ -o $@

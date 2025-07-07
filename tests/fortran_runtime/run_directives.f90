@@ -1,6 +1,6 @@
-program run_directive_const_arg
-  use directive_const_arg
-  use directive_const_arg_ad
+program run_directives
+  use directives
+  use directives_ad
   implicit none
   real, parameter :: tol = 1.0e-4
 
@@ -67,4 +67,4 @@ contains
     return
   end subroutine test_add_const
 
-end program run_directive_const_arg
+end program run_directives
