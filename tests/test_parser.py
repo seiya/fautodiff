@@ -6,6 +6,7 @@ import textwrap
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff import parser, code_tree, operators
+from fautodiff.code_tree import Block, render_program
 
 
 class TestParser(unittest.TestCase):
@@ -43,6 +44,22 @@ class TestParser(unittest.TestCase):
         stmt = routine.content.first()
         self.assertIsInstance(stmt, code_tree.CallStatement)
         self.assertEqual(stmt.name, "foo")
+
+    def test_parse_call_stmt_keyword_args(self):
+        src = textwrap.dedent("""\
+        module test
+        contains
+          subroutine wrapper()
+            call foo(a=1, b=2)
+          end subroutine wrapper
+        end module test
+        """)
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        stmt = routine.content.first()
+        self.assertIsInstance(stmt, code_tree.CallStatement)
+        self.assertEqual(stmt.keywords, ["a", "b"])
+        self.assertEqual(render_program(Block([stmt])), "call foo(a=1, b=2)\n")
 
     def test_parse_call_stmt_in_function(self):
         src = textwrap.dedent("""\

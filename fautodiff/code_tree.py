@@ -635,6 +635,7 @@ class CallStatement(Node):
 
     name: str
     args: List[Operator] = field(default_factory=list)
+    keywords: Optional[List[Optional[str]]] = None
     intents: Optional[List[str]] = None
     result: Optional[OpVar] = None
     info: Optional[dict] = field(repr=False, default=None)
@@ -651,6 +652,10 @@ class CallStatement(Node):
                 self.args[i] = OpInt(arg)
             elif not isinstance(arg, Operator):
                 raise ValueError(f"arg must be Operator: {type(arg)}")
+        if self.keywords is None:
+            self.keywords = [None] * len(self.args)
+        if len(self.keywords) != len(self.args):
+            raise ValueError("keywords length must match args length")
         if self.intents is not None:
             if not isinstance(self.intents, list):
                 raise ValueError(f"intents must be a list: {type(self.intents)}")
@@ -678,7 +683,13 @@ class CallStatement(Node):
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        args = ", ".join([str(a) for a in self.args])
+        arg_strs = []
+        for key, arg in zip(self.keywords, self.args):
+            if key is None:
+                arg_strs.append(str(arg))
+            else:
+                arg_strs.append(f"{key}={arg}")
+        args = ", ".join(arg_strs)
         ad_comment = ""
         if self.ad_info is not None:
             ad_comment = f" ! {self.ad_info}"

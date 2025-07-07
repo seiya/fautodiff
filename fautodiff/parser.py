@@ -77,6 +77,9 @@ def _stmt_name(stmt):
 def _stmt2op(stmt, decls):
     """Return Operator from statement."""
 
+    if isinstance(stmt, Fortran2003.Actual_Arg_Spec):
+        return _stmt2op(stmt.items[1], decls)
+
     if isinstance(stmt, Fortran2003.Int_Literal_Constant):
         return OpInt(val=int(stmt.items[0]), kind=stmt.items[1])
 
@@ -408,12 +411,20 @@ def _parse_routine(content, src_name):
         if isinstance(stmt, Fortran2003.Call_Stmt):
             name = stmt.items[0].tofortran()
             args = []
+            keywords = []
             if stmt.items[1] is not None:
                 for arg in stmt.items[1].items:
                     if isinstance(arg, str):
                         continue
-                    args.append(_stmt2op(arg, decls))
-            return CallStatement(name, args, info=info)
+                    key = None
+                    val = arg
+                    if isinstance(arg, Fortran2003.Actual_Arg_Spec):
+                        if arg.items[0] is not None:
+                            key = str(arg.items[0])
+                        val = arg.items[1]
+                    args.append(_stmt2op(val, decls))
+                    keywords.append(key)
+            return CallStatement(name, args, keywords=keywords, info=info)
         if isinstance(stmt, Fortran2003.If_Construct):
             cond_blocks = []
             cond = _stmt2op(stmt.content[0].items[0], decls)
