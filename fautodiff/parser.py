@@ -351,10 +351,12 @@ def _parse_from_reader(reader, src_name):
     ast = factory(reader)
     output = []
     warnings = []
+    module_map = {}
     for module in walk(ast, Fortran2003.Module):
         name = _stmt_name(module.content[0])
         mod_node = Module(name)
         output.append(mod_node)
+        module_map[name] = mod_node
 
         default_access = "public"
         access_map = {}
@@ -424,7 +426,7 @@ def _parse_from_reader(reader, src_name):
                     if isinstance(c, Fortran2003.Comment):
                         continue
                     if isinstance(c, (Fortran2003.Function_Subprogram, Fortran2003.Subroutine_Subprogram)):
-                        mod_node.routines.append(_parse_routine(c, src_name))
+                        mod_node.routines.append(_parse_routine(c, src_name, mod_node, module_map))
                     else:
                         print(type(c), c)
                         print(c.items)
@@ -456,7 +458,7 @@ def find_subroutines(modules):
     return names
 
 
-def _parse_routine(content, src_name):
+def _parse_routine(content, src_name, module=None, module_map=None):
     """Return node tree correspoinding to the input AST"""
 
     def _parse_stmt(stmt, decls) -> Node:
@@ -627,5 +629,32 @@ def _parse_routine(content, src_name):
         if isinstance(item, Fortran2003.End_Function_Stmt):
             continue
         raise RuntimeError(f"Unsupported statement: {type(item)} {item.items}")
+
+    # merge declarations from module and used modules
+    mod_decls = Block([])
+    Node._id_counter -= 1
+    if module is not None:
+        for child in module.body.iter_children():
+            if isinstance(child, Use):
+                mod_decls.append(child)
+                if module_map:
+                    used = module_map.get(child.name)
+                    if used and used.decls is not None:
+                        for d in used.decls:
+                            if child.only is None or (d.name in child.only):
+                                mod_decls.append(d)
+        if module.decls is not None:
+            mod_decls.extend(list(module.decls.iter_children()))
+
+    for child in routine.decls.iter_children():
+        if isinstance(child, Use) and module_map:
+            used = module_map.get(child.name)
+            if used and used.decls is not None:
+                for d in used.decls:
+                    if child.only is None or (d.name in child.only):
+                        mod_decls.append(d)
+
+    mod_decls.extend(list(routine.decls.iter_children()))
+    routine.mod_decls = mod_decls
 
     return routine

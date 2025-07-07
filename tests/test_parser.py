@@ -143,6 +143,17 @@ class TestParser(unittest.TestCase):
         self.assertIsNotNone(decl)
         self.assertEqual(decl.kind, "RP")
 
+    def test_routine_mod_decls(self):
+        src = Path(__file__).resolve().parents[1] / "examples" / "real_kind.f90"
+        module = parser.parse_file(str(src))[0]
+        routine = next(r for r in module.routines if r.name == "scale_rp")
+        self.assertTrue(routine.is_declared("RP"))
+        decl = routine.mod_decls.find_by_name("RP")
+        self.assertIsNotNone(decl)
+        var = routine.get_var("RP")
+        self.assertIsNotNone(var)
+        self.assertTrue(var.is_constant)
+
     def test_module_level_decls(self):
         src = textwrap.dedent(
             """
