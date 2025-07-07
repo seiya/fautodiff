@@ -101,6 +101,10 @@ class TestFortranADCode(unittest.TestCase):
     def test_parameter_var(self):
         self._run_test('parameter_var', ['compute_area'])
 
+    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
+    def test_module_vars(self):
+        self._run_test('module_vars', ['inc_and_use'])
+
 
 
 if __name__ == '__main__':
