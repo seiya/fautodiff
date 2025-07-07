@@ -4,16 +4,24 @@ module cross_mod_a_ad
 
 contains
 
-  subroutine incval_fwd_ad(a, a_ad)
+  subroutine incval_fwd_ad(a, a_ad, inc, inc_ad)
     real, intent(inout) :: a
     real, intent(inout) :: a_ad
+    real, intent(in)  :: inc
+    real, intent(in)  :: inc_ad
+
+    a_ad = a_ad + inc_ad ! a = a + inc
 
     return
   end subroutine incval_fwd_ad
 
-  subroutine incval_rev_ad(a, a_ad)
+  subroutine incval_rev_ad(a, a_ad, inc, inc_ad)
     real, intent(inout) :: a
     real, intent(inout) :: a_ad
+    real, intent(in)  :: inc
+    real, intent(out) :: inc_ad
+
+    inc_ad = a_ad ! a = a + inc
 
     return
   end subroutine incval_rev_ad

@@ -78,7 +78,7 @@ class TestFortranADCode(unittest.TestCase):
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_cross_mod_call_inc(self):
-        self._run_test('cross_mod', ['call_inc', 'incval'], deps=['cross_mod_a', 'cross_mod_b'])
+        self._run_test('cross_mod', ['call_inc', 'incval', 'call_inc_kw'], deps=['cross_mod_a', 'cross_mod_b'])
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_call_example(self):
