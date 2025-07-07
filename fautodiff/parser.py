@@ -220,6 +220,132 @@ def parse_src(src):
     reader = FortranStringReader(src, ignore_comments=False)
     return _parse_from_reader(reader, "<string>")
 
+
+def _parse_decl_stmt(stmt, constant_args=None, *, allow_intent=True, allow_access=False):
+    """Parse a single ``Type_Declaration_Stmt`` and return declarations."""
+
+    if not isinstance(
+        stmt,
+        (
+            Fortran2003.Type_Declaration_Stmt,
+            Fortran2008.type_declaration_stmt_r501.Type_Declaration_Stmt,
+        ),
+    ):
+        raise RuntimeError(f"Unsupported statement: {type(stmt)} {stmt}")
+
+    base_type = stmt.items[0].string
+    kind = None
+    base_lower = base_type.lower()
+    if base_lower.startswith("real"):
+        base_type = "real"
+        type_spec = stmt.items[0]
+        if getattr(type_spec, "items", None) is not None and len(type_spec.items) > 1:
+            selector = type_spec.items[1]
+            if isinstance(selector, Fortran2003.Kind_Selector):
+                kind_item = selector.items[1]
+                kind = kind_item.tofortran()
+
+    text = stmt.tofortran().lower()
+    if "intent(inout)" in text:
+        intent = "inout"
+    elif "intent(out)" in text:
+        intent = "out"
+    elif "intent(in)" in text:
+        intent = "in"
+    else:
+        intent = None
+
+    if intent is not None and not allow_intent:
+        raise RuntimeError("Module variables must not specify INTENT")
+
+    dim_attr = None
+    parameter = False
+    access = None
+    attrs = stmt.items[1]
+    if attrs is not None:
+        for attr in attrs.items:
+            name = getattr(attr, "string", str(getattr(attr, "items", [None])[0])).lower()
+            if name.startswith("dimension"):
+                dim_attr = tuple(v.tofortran() for v in attr.items[1].items)
+                break
+            if name == "parameter":
+                parameter = True
+            if allow_access and name in ("public", "private"):
+                access = name
+
+    decls = []
+    for entity in stmt.items[2].items:
+        name = entity.items[0].tofortran()
+        arrspec = entity.items[1]
+        dims = None
+        if arrspec is not None:
+            dims = tuple(v.tofortran() for v in arrspec.items)
+        elif dim_attr is not None:
+            dims = dim_attr
+        init = None
+        if len(entity.items) > 3 and entity.items[3] is not None:
+            init = entity.items[3].items[1].tofortran()
+
+        constant = False
+        if constant_args and name in constant_args:
+            constant = True
+
+        decls.append(
+            Declaration(
+                name,
+                base_type,
+                kind,
+                dims,
+                intent,
+                parameter,
+                constant,
+                init=init,
+                access=access,
+            )
+        )
+
+    return decls
+
+
+def _parse_decls(spec, constant_args=None, *, allow_intent=True, allow_access=False):
+    """Return declarations parsed from a specification part."""
+
+    decls = Block([])
+    if spec is None:
+        return decls
+
+    for item in spec.content:
+        if isinstance(item, Fortran2003.Implicit_Part):
+            for cnt in item.content:
+                if isinstance(cnt, Fortran2003.Comment):
+                    if cnt.items[0] != "":
+                        decls.append(Statement(cnt.items[0]))
+                    continue
+                if isinstance(cnt, Fortran2003.Implicit_Stmt):
+                    decls.append(Statement(cnt.string))
+            continue
+        if isinstance(item, Fortran2003.Use_Stmt):
+            only = None
+            if item.items[4] is not None:
+                only = [s.string for s in item.items[4].items]
+            decls.append(Use(item.items[2].string, only=only))
+            continue
+        if isinstance(
+            item,
+            (
+                Fortran2003.Type_Declaration_Stmt,
+                Fortran2008.type_declaration_stmt_r501.Type_Declaration_Stmt,
+            ),
+        ):
+            for decl in _parse_decl_stmt(
+                item, constant_args, allow_intent=allow_intent, allow_access=allow_access
+            ):
+                decls.append(decl)
+            continue
+        raise RuntimeError(f"Unsupported statement: {type(item)} {item}")
+
+    return decls
+
 def _parse_from_reader(reader, src_name):
     factory = ParserFactory().create(std="f2008")
     ast = factory(reader)
@@ -229,6 +355,11 @@ def _parse_from_reader(reader, src_name):
         name = _stmt_name(module.content[0])
         mod_node = Module(name)
         output.append(mod_node)
+
+        default_access = "public"
+        access_map = {}
+        decl_map = {}
+
         for part in module.content:
             if isinstance(part, Fortran2003.Module_Stmt):
                 continue
@@ -255,15 +386,36 @@ def _parse_from_reader(reader, src_name):
                         mod_node.body.append(Use(c.items[2].string, only=only))
                         continue
                     if isinstance(c, Fortran2003.Access_Stmt):
+                        access_spec = c.items[0].lower()
                         if c.items[1] is None:
+                            default_access = access_spec
                             mod_node.body.append(Statement(c.string))
+                        else:
+                            for n in c.items[1].items:
+                                name_n = n.string
+                                if name_n in decl_map:
+                                    decl_map[name_n].access = access_spec
+                                else:
+                                    access_map[name_n] = access_spec
                         continue
-                    if isinstance(c, Fortran2008.type_declaration_stmt_r501.Type_Declaration_Stmt):
-                        #mod_node.body.append(Statement(c.string))
+                    if isinstance(
+                        c,
+                        Fortran2008.type_declaration_stmt_r501.Type_Declaration_Stmt,
+                    ):
+                        if mod_node.decls is None:
+                            mod_node.decls = Block([])
+                        for decl in _parse_decl_stmt(c, allow_intent=False, allow_access=True):
+                            if decl.access is None:
+                                if decl.name in access_map:
+                                    decl.access = access_map.pop(decl.name)
+                                else:
+                                    decl.access = default_access
+                            decl_map[decl.name] = decl
+                            mod_node.decls.append(decl)
                         continue
                     print(type(c), c)
                     print(c.items)
-                    raise RuntimeError("Unsupported statement: {type(c)} {c.string}")
+                    raise RuntimeError(f"Unsupported statement: {type(c)} {c.string}")
                 continue
             if isinstance(part, Fortran2003.Module_Subprogram_Part):
                 for c in part.content:
@@ -306,93 +458,6 @@ def find_subroutines(modules):
 
 def _parse_routine(content, src_name):
     """Return node tree correspoinding to the input AST"""
-    def _parse_decls(spec, directives):
-        """Return mapping of variable names to ``(type, intent)``."""
-        decls = Block([])
-        if spec is None:
-            return decls
-        for decl in spec.content:
-            if isinstance(decl, Fortran2003.Implicit_Part):
-                for cnt in decl.content:
-                    if isinstance(cnt, Fortran2003.Comment):
-                        if cnt.items[0] != "":
-                            decls.append(Statement(cnt.items[0]))
-                        continue
-                    if isinstance(cnt, Fortran2003.Implicit_Stmt):
-                        decls.append(Statement(cnt.string))
-                continue
-            if isinstance(decl, Fortran2003.Use_Stmt):
-                only = None
-                if decl.items[4] is not None:
-                    only = [s.string for s in decl.items[4].items]
-                decls.append(Use(decl.items[2].string, only=only))
-                continue
-            if not isinstance(decl, Fortran2003.Type_Declaration_Stmt):
-                raise RuntimeError(f"Unsupported statement: {type(decl)} {decl}")
-                continue
-            base_type = decl.items[0].string
-            kind = None
-            base_lower = base_type.lower()
-            if base_lower.startswith("real"):
-                # ``base_type`` may include a kind specification. Strip it so
-                # that ``typename`` is just ``real`` and store the kind value
-                # separately.
-                base_type = "real"
-                type_spec = decl.items[0]
-                if getattr(type_spec, "items", None) is not None and len(type_spec.items) > 1:
-                    selector = type_spec.items[1]
-                    if isinstance(selector, Fortran2003.Kind_Selector):
-                        kind_item = selector.items[1]
-                        kind = kind_item.tofortran()
-            text = decl.tofortran().lower()
-            if "intent(inout)" in text:
-                intent = "inout"
-            elif "intent(out)" in text:
-                intent = "out"
-            elif "intent(in)" in text:
-                intent = "in"
-            else:
-                intent = None
-
-            dim_attr = None
-            parameter = False
-            attrs = decl.items[1]
-            if attrs is not None:
-                for attr in attrs.items:
-                    name = getattr(attr, "string", str(getattr(attr, "items", [None])[0])).lower()
-                    if name.startswith("dimension"):
-                        dims = tuple(v.tofortran() for v in attr.items[1].items)
-                        break
-                    if name == "parameter":
-                        parameter = True
-
-            for entity in decl.items[2].items:
-                name = entity.items[0].tofortran()
-                arrspec = entity.items[1]
-                dims = None
-                if arrspec is not None:
-                    dims = tuple(v.tofortran() for v in arrspec.items)
-                elif dim_attr is not None:
-                    dims = dim_attr
-                init = None
-                if len(entity.items) > 3 and entity.items[3] is not None:
-                    init = entity.items[3].items[1].tofortran()
-                constant = False
-                if "CONSTANT_ARGS" in directives and name in directives["CONSTANT_ARGS"]:
-                    constant = True
-                decls.append(
-                    Declaration(
-                        name,
-                        base_type,
-                        kind,
-                        dims,
-                        intent,
-                        parameter,
-                        constant,
-                        init=init,
-                    )
-                )
-        return decls
 
     def _parse_stmt(stmt, decls) -> Node:
         if isinstance(stmt, Fortran2003.Comment):
@@ -547,7 +612,8 @@ def _parse_routine(content, src_name):
             routine.directives = directives
             continue
         if isinstance(item, Fortran2003.Specification_Part):
-            routine.decls = _parse_decls(item, routine.directives)
+            const_args = routine.directives.get("CONSTANT_ARGS") if routine.directives else None
+            routine.decls = _parse_decls(item, const_args, allow_intent=True, allow_access=False)
             continue
         if isinstance(item, Fortran2003.Execution_Part):
             decls = routine.decls

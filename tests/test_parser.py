@@ -143,6 +143,72 @@ class TestParser(unittest.TestCase):
         self.assertIsNotNone(decl)
         self.assertEqual(decl.kind, "RP")
 
+    def test_module_level_decls(self):
+        src = textwrap.dedent(
+            """
+            module test
+              integer, parameter :: RP = kind(1.0d0)
+            contains
+              subroutine foo(x)
+                real(kind=RP) :: x
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        decl = module.decls.find_by_name("RP")
+        self.assertIsNotNone(decl)
+        self.assertTrue(decl.parameter)
+        self.assertEqual(decl.typename, "integer")
+        self.assertEqual(decl.access, "public")
+
+    def test_module_decl_with_intent_error(self):
+        src = textwrap.dedent(
+            """
+            module test
+              real, intent(in) :: x
+            contains
+              subroutine foo()
+              end subroutine foo
+            end module test
+            """
+        )
+        with self.assertRaises(RuntimeError):
+            parser.parse_src(src)
+
+    def test_module_default_private(self):
+        src = textwrap.dedent(
+            """
+            module test
+              private
+              integer :: x
+            contains
+              subroutine foo()
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        decl = module.decls.find_by_name("x")
+        self.assertEqual(decl.access, "private")
+
+    def test_module_public_override(self):
+        src = textwrap.dedent(
+            """
+            module test
+              private
+              integer :: x
+              public :: x
+            contains
+              subroutine foo()
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        decl = module.decls.find_by_name("x")
+        self.assertEqual(decl.access, "public")
+
     def test_parse_double_precision(self):
         src = textwrap.dedent("""\
         module test
