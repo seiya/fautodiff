@@ -105,6 +105,8 @@ def _write_fadmod(mod_name: str, routines, routine_map: dict, directory: Path) -
     for r in routines:
         info = routine_map.get(r.name)
         if info is not None:
+            if info.get("name_fwd_ad") is None and info.get("name_rev_ad") is None:
+                continue
             info = dict(info)
             info["module"] = mod_name
             data[r.name] = info
@@ -177,13 +179,19 @@ def _prepare_fwd_ad_header(routine_org):
     subroutine.ad_init = Block([])
     subroutine.ad_content = Block([])
 
-    return {"subroutine": subroutine,
-            "grad_args": grad_args,
-            "in_grad_args": in_grad_args,
-            "out_grad_args": out_grad_args,
-            "has_grad_input": has_grad_input,
-            "arg_info": arg_info,
-            }
+    no_ad = bool(routine_org.directives.get("NO_AD")) or len(out_grad_args) == 0
+    if no_ad:
+        arg_info["name_fwd_ad"] = None
+
+    return {
+        "subroutine": subroutine,
+        "grad_args": grad_args,
+        "in_grad_args": in_grad_args,
+        "out_grad_args": out_grad_args,
+        "has_grad_input": has_grad_input,
+        "arg_info": arg_info,
+        "no_ad": no_ad,
+    }
 
 
 def _prepare_rev_ad_header(routine_org):
@@ -264,13 +272,19 @@ def _prepare_rev_ad_header(routine_org):
     subroutine.ad_init = Block([])
     subroutine.ad_content = Block([])
 
-    return {"subroutine": subroutine,
-            "grad_args": grad_args,
-            "in_grad_args": in_grad_args,
-            "out_grad_args": out_grad_args,
-            "has_grad_input": has_grad_input,
-            "arg_info": arg_info,
-            }
+    no_ad = bool(routine_org.directives.get("NO_AD")) or len(out_grad_args) == 0
+    if no_ad:
+        arg_info["name_rev_ad"] = None
+
+    return {
+        "subroutine": subroutine,
+        "grad_args": grad_args,
+        "in_grad_args": in_grad_args,
+        "out_grad_args": out_grad_args,
+        "has_grad_input": has_grad_input,
+        "arg_info": arg_info,
+        "no_ad": no_ad,
+    }
 
 
 def _collect_called_ad_modules(blocks, routine_map, reverse):
@@ -295,6 +309,9 @@ def _collect_called_ad_modules(blocks, routine_map, reverse):
 
 
 def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings):
+    if routine_info.get("no_ad"):
+        return None, set()
+
     subroutine = routine_info["subroutine"]
     grad_args = routine_info["grad_args"]
     in_grad_args = routine_info["in_grad_args"]
@@ -460,6 +477,9 @@ def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings
 
 
 def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings):
+    if routine_info.get("no_ad"):
+        return None, False, set()
+
     subroutine = routine_info["subroutine"]
     grad_args = routine_info["grad_args"]
     in_grad_args = routine_info["in_grad_args"]
@@ -686,8 +706,6 @@ def generate_ad(
         routine_info_fwd = {}
         routine_info_rev = {}
         for r in mod_org.routines:
-            if "NO_AD" in r.directives:
-                continue
             if mode in ("forward", "both"):
                 routine_info = _prepare_fwd_ad_header(r)
                 routine_info_fwd[r.name] = routine_info
@@ -711,19 +729,19 @@ def generate_ad(
         ad_modules_used = set()
 
         for routine in mod_org.routines:
-            if "NO_AD" in routine.directives:
-                continue
             if mode in ("forward", "both"):
                 sub, mods_called = _generate_fwd_ad_subroutine(
                     routine, routine_map, routine_info_fwd[routine.name], warnings
                 )
-                routines.append(sub)
+                if sub is not None:
+                    routines.append(sub)
                 ad_modules_used.update(mods_called)
             if mode in ("reverse", "both"):
                 sub, used, mods_called = _generate_rev_ad_subroutine(
                     routine, routine_map, routine_info_rev[routine.name], warnings
                 )
-                routines.append(sub)
+                if sub is not None:
+                    routines.append(sub)
                 ad_modules_used.update(mods_called)
                 if used:
                     pushpop_used = True
