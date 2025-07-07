@@ -83,8 +83,9 @@ class TestGenerator(unittest.TestCase):
             fadmod.unlink()
         generator.generate_ad("examples/directives.f90", warn=False)
         data = json.loads(fadmod.read_text())
-        self.assertIn("skip_me", data)
-        self.assertTrue(data["skip_me"].get("skip"))
+        routines = data.get("routines", {})
+        self.assertIn("skip_me", routines)
+        self.assertTrue(routines["skip_me"].get("skip"))
 
     def test_skip_call_skips_derivatives(self):
         code_tree.Node.reset()
@@ -117,14 +118,15 @@ class TestGenerator(unittest.TestCase):
             src_path.write_text(src)
             generated = generator.generate_ad(str(src_path), warn=False, fadmod_dir=tmp)
             fadmod = json.loads((Path(tmp) / "test.fadmod").read_text())
+            routines = fadmod.get("routines", {})
 
         self.assertNotIn("foo_fwd_ad", generated)
         self.assertNotIn("foo_rev_ad", generated)
         self.assertIn("bar_fwd_ad", generated)
         self.assertIn("bar_rev_ad", generated)
         self.assertIn("call foo(x, y)", generated)
-        self.assertIn("foo", fadmod)
-        self.assertTrue(fadmod["foo"].get("skip"))
+        self.assertIn("foo", routines)
+        self.assertTrue(routines["foo"].get("skip"))
 
 
 def _make_example_test(src: Path):
