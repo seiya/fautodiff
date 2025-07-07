@@ -48,10 +48,10 @@ Generate the AD code for ``examples/simple_math.f90``:
 
 ```bash
 # print to standard output
-python -m fautodiff.generator examples/simple_math.f90
+bin/fautodiff examples/simple_math.f90
 
 # or write to a file
-python -m fautodiff.generator examples/simple_math.f90 examples/simple_math_ad.f90
+bin/fautodiff examples/simple_math.f90 -o examples/simple_math_ad.f90
 ```
 Additional examples illustrating Fortran intrinsic routines are available in ``examples/intrinsic_func.f90``.
 
@@ -59,7 +59,7 @@ By default the generator prints warnings when it encounters code it cannot
 differentiate.  Use ``--no-warn`` to silence these messages:
 
 ```bash
-python -m fautodiff.generator --no-warn examples/simple_math.f90
+bin/fautodiff --no-warn examples/simple_math.f90
 ```
 
 Each module's routine signatures are also written to a `<module>.fadmod` file
@@ -74,22 +74,22 @@ generates both sets of routines.
 
 ```bash
 # write ``cross_mod_a.fadmod`` under ``examples``
-python -m fautodiff.generator -M examples examples/cross_mod_a.f90
+bin/fautodiff -M examples examples/cross_mod_a.f90
 
 # load that file when differentiating another module
-python -m fautodiff.generator -I examples examples/cross_mod_b.f90
+bin/fautodiff -I examples examples/cross_mod_b.f90
 ```
 
 Generate forward mode only:
 
 ```bash
-python -m fautodiff.generator --mode forward examples/simple_math.f90
+bin/fautodiff --mode forward examples/simple_math.f90
 ```
 
 Generate reverse mode only:
 
 ```bash
-python -m fautodiff.generator --mode reverse examples/simple_math.f90
+bin/fautodiff --mode reverse examples/simple_math.f90
 ```
 
 ## Optimization Directives
