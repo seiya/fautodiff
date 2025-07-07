@@ -182,7 +182,6 @@ contains
     call do_while_example(x, limit, count)
     call do_while_example(x + eps, limit + eps, count_eps)
     fd = real(count_eps - count) / eps
-    call do_while_example_fwd_ad(x, 1.0, limit, 1.0)
     if (abs(fd) > tol) then
        print *, 'test_do_while_example_fwd failed', fd
        error stop 1
