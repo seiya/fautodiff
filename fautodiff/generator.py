@@ -104,12 +104,13 @@ def _write_fadmod(mod_name: str, routines, routine_map: dict, directory: Path) -
     data = {}
     for r in routines:
         info = routine_map.get(r.name)
-        if info is not None:
-            if info.get("name_fwd_ad") is None and info.get("name_rev_ad") is None:
-                continue
-            info = dict(info)
-            info["module"] = mod_name
-            data[r.name] = info
+        if info is None:
+            continue
+        info = dict(info)
+        info["module"] = mod_name
+        if info.get("name_fwd_ad") is None and info.get("name_rev_ad") is None:
+            info["no_ad"] = True
+        data[r.name] = info
 
     if not data:
         return
