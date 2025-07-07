@@ -20,6 +20,7 @@ from .operators import (
     OpReal,
     OpVar,
     OpChr,
+    OpLogic,
     OpAdd,
     OpSub,
     OpMul,
@@ -141,6 +142,9 @@ def _stmt2op(stmt, decls):
         name = stmt.items[0]
         return OpChr(name=name)
 
+    if isinstance(stmt, Fortran2003.Logical_Literal_Constant):
+        return OpLogic(name=stmt.string)
+
     if isinstance(stmt, Fortran2003.Mult_Operand):
         if stmt.items[1] == "**":
             args = [_stmt2op(stmt.items[0], decls), _stmt2op(stmt.items[2], decls)]
@@ -242,12 +246,17 @@ def _parse_from_reader(reader, src_name):
                             continue
                         continue
                     if isinstance(c, Fortran2003.Use_Stmt):
-                        mod_node.body.append(Use(c.items[2].string))
+                        #mod_node.body.append(Use(c.items[2].string))
+                        mod_node.body.append(Use(c.string))
+                        continue
+                    if isinstance(c, Fortran2003.Access_Stmt):
+                        mod_node.body.append(Statement(c.items[0]))
                         continue
                     if isinstance(c, Fortran2008.type_declaration_stmt_r501.Type_Declaration_Stmt):
                         #mod_node.body.append(Statement(c.string))
                         continue
                     print(type(c), c)
+                    print(c.items)
                     raise RuntimeError("Unsupported statement: {type(c)} {c.string}")
                 continue
             if isinstance(part, Fortran2003.Module_Subprogram_Part):
@@ -260,6 +269,7 @@ def _parse_from_reader(reader, src_name):
                         mod_node.routines.append(_parse_routine(c, src_name))
                     else:
                         print(type(c), c)
+                        print(c.items)
                         raise RuntimeError("Unsupported  statement: {type(c)} {c.string}")
             else:
                 print(type(part), part)
@@ -304,6 +314,9 @@ def _parse_routine(content, src_name):
                         continue
                     if isinstance(cnt, Fortran2003.Implicit_Stmt):
                         decls.append(Statement(cnt.string))
+                continue
+            if isinstance(decl, Fortran2003.Use_Stmt):
+                decls.append(Use(decl.string))
                 continue
             if not isinstance(decl, Fortran2003.Type_Declaration_Stmt):
                 raise RuntimeError(f"Unsupported statement: {type(decl)} {decl}")
