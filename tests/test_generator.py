@@ -89,13 +89,17 @@ class TestGenerator(unittest.TestCase):
             module test
             contains
             !$FAD NO_AD
-              subroutine foo(x)
-                real, intent(inout) :: x
-                x = x + 1.0
+              subroutine foo(x, y)
+                real, intent(in) :: x
+                real, intent(out) :: y
+                y = x + 1.0
               end subroutine foo
-              subroutine bar(x)
-                real, intent(inout) :: x
-                call foo(x)
+              subroutine bar(x, z)
+                real, intent(in) :: x
+                real, intent(out) :: z
+                real :: y
+                call foo(x, y)
+                z = y * x
               end subroutine bar
             end module test
             """
@@ -104,10 +108,16 @@ class TestGenerator(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             src_path = Path(tmp) / "test.f90"
             src_path.write_text(src)
-            generated = generator.generate_ad(str(src_path), warn=False)
+            generated = generator.generate_ad(str(src_path), warn=False, fadmod_dir=tmp)
+            fadmod = json.loads((Path(tmp) / "test.fadmod").read_text())
 
         self.assertNotIn("foo_fwd_ad", generated)
         self.assertNotIn("foo_rev_ad", generated)
+        self.assertIn("bar_fwd_ad", generated)
+        self.assertIn("bar_rev_ad", generated)
+        self.assertIn("call foo(x, y)", generated)
+        self.assertIn("foo", fadmod)
+        self.assertTrue(fadmod["foo"].get("no_ad"))
 
 
 def _make_example_test(src: Path):

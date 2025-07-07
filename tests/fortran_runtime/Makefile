@@ -74,10 +74,11 @@ run_store_vars: $(OUTDIR)/run_store_vars.o $(OUTDIR)/store_vars.o $(OUTDIR)/stor
 	$(FC) $^ -o $@
 
 run_directives: $(OUTDIR)/run_directives.o $(OUTDIR)/directives.o $(OUTDIR)/directives_ad.o
-       $(FC) $^ -o $@
+	$(FC) $^ -o $@
 
 run_parameter_var: $(OUTDIR)/run_parameter_var.o $(OUTDIR)/parameter_var.o $(OUTDIR)/parameter_var_ad.o
 	$(FC) $^ -o $@
+
 
 clean:
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.mod
