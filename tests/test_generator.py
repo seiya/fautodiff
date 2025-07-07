@@ -1,12 +1,11 @@
-import sys
-from pathlib import Path
-import unittest
 import json
+import sys
+import unittest
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff import generator
-from fautodiff import code_tree
+from fautodiff import code_tree, generator
 
 
 class TestGenerator(unittest.TestCase):
@@ -17,7 +16,9 @@ class TestGenerator(unittest.TestCase):
         generated = generator.generate_ad("examples/store_vars.f90", warn=False)
         lines = generated.splitlines()
         self.assertIn("use fautodiff_data_storage", lines[2])
-        idx_use = next(i for i, l in enumerate(lines) if "use fautodiff_data_storage" in l)
+        idx_use = next(
+            i for i, l in enumerate(lines) if "use fautodiff_data_storage" in l
+        )
         idx_imp = next(i for i, l in enumerate(lines) if "implicit none" in l)
         self.assertLess(idx_use, idx_imp)
 
@@ -50,11 +51,10 @@ class TestGenerator(unittest.TestCase):
         expected = Path("examples/keyword_args_ad.f90").read_text()
         self.assertEqual(generated, expected)
 
-
     def test_constant_args_directive(self):
         code_tree.Node.reset()
-        from tempfile import TemporaryDirectory
         import textwrap
+        from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as tmp:
             src = Path(tmp) / "const.f90"
@@ -76,6 +76,30 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad(str(src), warn=False)
             self.assertNotIn("a_ad", generated)
 
+    def test_module_variable_constant(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            src = Path(tmp) / "modvar.f90"
+            src.write_text(
+                textwrap.dedent(
+                    """
+                    module test
+                      real :: c
+                    contains
+                      subroutine foo(x)
+                        real, intent(inout) :: x
+                        c = c + x
+                      end subroutine foo
+                    end module test
+                    """
+                )
+            )
+            generated = generator.generate_ad(str(src), warn=False)
+            self.assertNotIn("c_ad", generated)
+
     def test_fadmod_includes_skip(self):
         code_tree.Node.reset()
         fadmod = Path("directives.fadmod")
@@ -89,8 +113,8 @@ class TestGenerator(unittest.TestCase):
 
     def test_skip_call_skips_derivatives(self):
         code_tree.Node.reset()
-        from tempfile import TemporaryDirectory
         import textwrap
+        from tempfile import TemporaryDirectory
 
         src = textwrap.dedent(
             """
@@ -147,5 +171,5 @@ for _src in sorted(examples_dir.glob("*.f90")):
     setattr(TestGenerator, test_name, _make_example_test(_src))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

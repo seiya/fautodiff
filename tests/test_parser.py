@@ -1,11 +1,11 @@
 import sys
-from pathlib import Path
-import unittest
 import textwrap
+import unittest
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff import parser, code_tree, operators, generator
+from fautodiff import code_tree, generator, operators, parser
 from fautodiff.code_tree import Block, render_program
 
 
@@ -30,7 +30,8 @@ class TestParser(unittest.TestCase):
         self.assertIn("multiply_numbers", routine_names)
 
     def test_parse_call_stmt(self):
-        src = textwrap.dedent("""\
+        src = textwrap.dedent(
+            """\
         module test
         contains
           subroutine wrapper(x)
@@ -38,7 +39,8 @@ class TestParser(unittest.TestCase):
             call foo(x)
           end subroutine wrapper
         end module test
-        """)
+        """
+        )
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
         stmt = routine.content.first()
@@ -46,14 +48,16 @@ class TestParser(unittest.TestCase):
         self.assertEqual(stmt.name, "foo")
 
     def test_parse_call_stmt_keyword_args(self):
-        src = textwrap.dedent("""\
+        src = textwrap.dedent(
+            """\
         module test
         contains
           subroutine wrapper()
             call foo(a=1, b=2)
           end subroutine wrapper
         end module test
-        """)
+        """
+        )
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
         stmt = routine.content.first()
@@ -62,7 +66,8 @@ class TestParser(unittest.TestCase):
         self.assertEqual(render_program(Block([stmt])), "call foo(a=1, b=2)\n")
 
     def test_parse_call_stmt_in_function(self):
-        src = textwrap.dedent("""\
+        src = textwrap.dedent(
+            """\
         module test
         contains
           function wrapper(x) result(y)
@@ -71,7 +76,8 @@ class TestParser(unittest.TestCase):
             y = x
           end function wrapper
         end module test
-        """)
+        """
+        )
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
         stmt = routine.content.first()
@@ -79,7 +85,8 @@ class TestParser(unittest.TestCase):
         self.assertEqual(stmt.name, "foo")
 
     def test_parse_function_call_assignment(self):
-        src = textwrap.dedent("""\
+        src = textwrap.dedent(
+            """\
         module test
         contains
           subroutine wrapper(x, y)
@@ -87,7 +94,8 @@ class TestParser(unittest.TestCase):
             y = foo(x)
           end subroutine wrapper
         end module test
-        """)
+        """
+        )
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
         stmt = routine.content.first()
@@ -96,7 +104,8 @@ class TestParser(unittest.TestCase):
         self.assertEqual(stmt.rhs.name, "foo")
 
     def test_parse_function_call_assignment_in_function(self):
-        src = textwrap.dedent("""\
+        src = textwrap.dedent(
+            """\
         module test
         contains
           function wrapper(x) result(y)
@@ -104,7 +113,8 @@ class TestParser(unittest.TestCase):
             y = foo(x)
           end function wrapper
         end module test
-        """)
+        """
+        )
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
         stmt = routine.content.first()
@@ -113,14 +123,16 @@ class TestParser(unittest.TestCase):
         self.assertEqual(stmt.rhs.name, "foo")
 
     def test_parse_real_kind_8(self):
-        src = textwrap.dedent("""\
+        src = textwrap.dedent(
+            """\
         module test
         contains
           subroutine foo(x)
             real(kind=8) :: x
           end subroutine foo
         end module test
-        """)
+        """
+        )
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
         decl = routine.decls.find_by_name("x")
@@ -128,7 +140,8 @@ class TestParser(unittest.TestCase):
         self.assertEqual(decl.kind, "8")
 
     def test_parse_real_kind_rp(self):
-        src = textwrap.dedent("""\
+        src = textwrap.dedent(
+            """\
         module test
         integer, parameter :: RP = kind(1.0d0)
         contains
@@ -136,7 +149,8 @@ class TestParser(unittest.TestCase):
             real(kind=RP) :: x
           end subroutine foo
         end module test
-        """)
+        """
+        )
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
         decl = routine.decls.find_by_name("x")
@@ -172,6 +186,26 @@ class TestParser(unittest.TestCase):
         self.assertTrue(decl.parameter)
         self.assertEqual(decl.typename, "integer")
         self.assertEqual(decl.access, "public")
+
+    def test_module_vars_marked_constant(self):
+        src = textwrap.dedent(
+            """
+            module test
+              real :: c
+            contains
+              subroutine foo(x)
+                real, intent(in) :: x
+                c = c + x
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        decl = module.decls.find_by_name("c")
+        self.assertIsNotNone(decl)
+        self.assertTrue(decl.constant)
+        var = module.routines[0].get_var("c")
+        self.assertFalse(var.ad_target)
 
     def test_module_decl_with_intent_error(self):
         src = textwrap.dedent(
@@ -221,14 +255,16 @@ class TestParser(unittest.TestCase):
         self.assertEqual(decl.access, "public")
 
     def test_parse_double_precision(self):
-        src = textwrap.dedent("""\
+        src = textwrap.dedent(
+            """\
         module test
         contains
           subroutine foo(x)
             double precision :: x
           end subroutine foo
         end module test
-        """)
+        """
+        )
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
         decl = routine.decls.find_by_name("x")
@@ -334,7 +370,6 @@ class TestParser(unittest.TestCase):
         decl = routine.mod_decls.find_by_name("K")
         self.assertIsNotNone(decl)
         self.assertTrue(decl.parameter)
-
 
 
 if __name__ == "__main__":

@@ -6,45 +6,41 @@ AD_SUFFIX = "_ad"
 FWD_SUFFIX = "_fwd_ad"
 REV_SUFFIX = "_rev_ad"
 
-from pathlib import Path
-import sys
 import json
+import sys
+from pathlib import Path
 
+# Ensure other modules use the same AD suffix
+from . import code_tree as code_tree
+from .code_tree import (
+    Assignment,
+    Block,
+    CallStatement,
+    ClearAssignment,
+    Declaration,
+    DoLoop,
+    Function,
+    IfBlock,
+    Module,
+    PushPop,
+    SaveAssignment,
+    SelectBlock,
+    Statement,
+    Subroutine,
+    Use,
+    render_program,
+)
 from .operators import (
     OpReal,
     OpVar,
 )
 
-from .code_tree import (
-    Module,
-    Subroutine,
-    Function,
-    Block,
-    IfBlock,
-    SelectBlock,
-    DoLoop,
-    Declaration,
-    Assignment,
-    ClearAssignment,
-    SaveAssignment,
-    PushPop,
-    Use,
-    Statement,
-    CallStatement,
-    render_program,
-)
-
-# Ensure other modules use the same AD suffix
-from . import code_tree as code_tree
 code_tree.AD_SUFFIX = AD_SUFFIX
 code_tree.FWD_SUFFIX = FWD_SUFFIX
 code_tree.REV_SUFFIX = REV_SUFFIX
 
-from .var_list import (
-    VarList
-)
-
 from . import parser
+from .var_list import VarList
 
 
 def _warn(warnings, info, code, reason):
@@ -54,7 +50,6 @@ def _warn(warnings, info, code, reason):
         line = info.get("line", "?")
         msg = f"{filename}:{line}: {code} - {reason}"
         warnings.append(msg)
-
 
 
 def _contains_pushpop(node) -> bool:
@@ -145,8 +140,16 @@ def _prepare_fwd_ad_header(routine_org):
     out_grad_args = []
     has_grad_input = False
 
-    arg_info = {"args": [], "intents": [], "dims" : [], "type": [], "kind": [],
-                "name_fwd_ad": None, "args_fwd_ad": [], "intents_fwd_ad": []}
+    arg_info = {
+        "args": [],
+        "intents": [],
+        "dims": [],
+        "type": [],
+        "kind": [],
+        "name_fwd_ad": None,
+        "args_fwd_ad": [],
+        "intents_fwd_ad": [],
+    }
 
     for arg in routine_org.arg_vars():
         name = arg.name
@@ -159,7 +162,10 @@ def _prepare_fwd_ad_header(routine_org):
         arg_info["type"].append(typ)
         arg_info["dims"].append(dims)
         arg_info["kind"].append(kind)
-        if arg.ad_target:
+        if arg.is_constant:
+            if intent in ("in", "inout"):
+                args.append(arg)
+        elif arg.ad_target:
             if intent in ("in", "inout"):
                 args.append(arg)
             ad_name = f"{name}{AD_SUFFIX}"
@@ -223,8 +229,16 @@ def _prepare_rev_ad_header(routine_org):
     out_grad_args = []
     has_grad_input = False
 
-    arg_info = {"args": [], "intents": [], "dims" : [], "type": [], "kind": [],
-                "name_rev_ad": None, "args_rev_ad": [], "intents_rev_ad": []}
+    arg_info = {
+        "args": [],
+        "intents": [],
+        "dims": [],
+        "type": [],
+        "kind": [],
+        "name_rev_ad": None,
+        "args_rev_ad": [],
+        "intents_rev_ad": [],
+    }
 
     for arg in routine_org.arg_vars():
         name = arg.name
@@ -238,7 +252,7 @@ def _prepare_rev_ad_header(routine_org):
         arg_info["dims"].append(dims)
         arg_info["kind"].append(kind)
         if intent == "out":
-            if arg.ad_target:
+            if arg.ad_target and not arg.is_constant:
                 ad_name = f"{name}{AD_SUFFIX}"
                 var = OpVar(
                     ad_name,
@@ -255,7 +269,7 @@ def _prepare_rev_ad_header(routine_org):
                 has_grad_input = True
         else:
             args.append(arg)
-            if arg.ad_target:
+            if arg.ad_target and not arg.is_constant:
                 ad_name = f"{name}{AD_SUFFIX}"
                 grad_intent = {
                     "in": "out",
@@ -353,7 +367,8 @@ def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings
         saved_vars,
         reverse=False,
         assigned_advars=VarList(in_grad_args),
-        routine_map=routine_map, warnings=warnings
+        routine_map=routine_map,
+        warnings=warnings,
     )[0]
 
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
@@ -384,7 +399,9 @@ def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings
 
         ad_code = ad_code.prune_for(VarList([OpVar(var.name) for var in grad_args]))
 
-        vars = ad_code.required_vars(VarList([OpVar(var.name) for var in out_grad_args]), without_savevar=True)
+        vars = ad_code.required_vars(
+            VarList([OpVar(var.name) for var in out_grad_args]), without_savevar=True
+        )
         for name in vars.names():
             if not name.endswith(AD_SUFFIX):
                 continue
@@ -392,16 +409,18 @@ def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings
                 # AD variables which is not in grads_args (= temporary variables in this subroutine)
                 if subroutine.is_declared(name):
                     var = subroutine.get_var(name)
-            else: # var in grad_args
+            else:  # var in grad_args
                 if any(v for v in in_grad_args if v.name == name):
                     continue
                 var = next(var for var in out_grad_args if var.name == name)
-            if var is not None: # uninitialized AD variables
+            if var is not None:  # uninitialized AD variables
                 if var.dims is not None and len(var.dims) > 0:
                     index = (None,) * len(var.dims)
                 else:
                     index = None
-                subroutine.ad_init.append(Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind)))
+                subroutine.ad_init.append(
+                    Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind))
+                )
 
         ad_block.extend(ad_code)
 
@@ -485,7 +504,12 @@ def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings
 
     required_vnames = [str(var) for var in subroutine.required_vars()]
     if len(required_vnames) > 0:
-        _warn(warnings, {}, f"{required_vnames} in {subroutine.name}", "Required variables are remained")
+        _warn(
+            warnings,
+            {},
+            f"{required_vnames} in {subroutine.name}",
+            "Required variables are remained",
+        )
 
     called_mods = _collect_called_ad_modules(
         [subroutine.content, subroutine.ad_init, subroutine.ad_content],
@@ -518,14 +542,14 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
     # populate CallStatement intents from routine map
     _set_call_intents(routine_org.content, routine_map)
 
-    #print("subroutine: ", subroutine.name) # for debug
+    # print("subroutine: ", subroutine.name) # for debug
 
     saved_vars = []
     ad_code = routine_org.content.generate_ad(
         saved_vars, reverse=True, routine_map=routine_map, warnings=warnings
     )[0]
 
-    #print(render_program(ad_code)) # for debug
+    # print(render_program(ad_code)) # for debug
 
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
 
@@ -539,7 +563,7 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
                         found = True
                         break
                 if found:
-                    continue # already declared
+                    continue  # already declared
                 v_org = routine_org.get_var(name.removesuffix(AD_SUFFIX))
                 base_decl = routine_org.decls.find_by_name(name.removesuffix(AD_SUFFIX))
                 if v_org is not None and not subroutine.is_declared(name):
@@ -562,7 +586,9 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
         ad_code = ad_code.prune_for(VarList([OpVar(var.name) for var in grad_args]))
 
         # check uninitialized AD variables
-        vars = ad_code.required_vars(VarList([OpVar(var.name) for var in out_grad_args]), without_savevar=True)
+        vars = ad_code.required_vars(
+            VarList([OpVar(var.name) for var in out_grad_args]), without_savevar=True
+        )
         for name in vars.names():
             if not name.endswith(AD_SUFFIX):
                 continue
@@ -570,29 +596,36 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
                 # AD variables which is not in grads_args (= temporary variables in this subroutine)
                 if subroutine.is_declared(name):
                     var = subroutine.get_var(name)
-            else: # var in grad_args
+            else:  # var in grad_args
                 if any(v for v in in_grad_args if v.name == name):
                     continue
                 var = next(var for var in out_grad_args if var.name == name)
-            if var is not None: # uninitialized AD variables
+            if var is not None:  # uninitialized AD variables
                 if var.dims is not None and len(var.dims) > 0:
                     index = (None,) * len(var.dims)
                 else:
                     index = None
-                subroutine.ad_init.append(Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind)))
+                subroutine.ad_init.append(
+                    Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind))
+                )
 
         # now ad_code is completed
         ad_block.extend(ad_code)
 
-    #print(render_program(routine_org.content)) # debug
+    # print(render_program(routine_org.content)) # debug
     fw_block = routine_org.content.prune_for(ad_block.required_vars())
-    #print(render_program(fw_block)) # debug
+    # print(render_program(fw_block)) # debug
 
     flag = True
     while flag:
         last = fw_block.last()
         first = ad_block.first()
-        if isinstance(last, SaveAssignment) and isinstance(first, SaveAssignment) and last.var==first.var and last.load != first.load:
+        if (
+            isinstance(last, SaveAssignment)
+            and isinstance(first, SaveAssignment)
+            and last.var == first.var
+            and last.load != first.load
+        ):
             fw_block.remove_child(last)
             ad_block.remove_child(first)
         else:
@@ -681,7 +714,12 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
 
     required_vnames = [str(var) for var in subroutine.required_vars()]
     if len(required_vnames) > 0:
-        _warn(warnings, {}, f"{required_vnames} in {subroutine.name}", "Required variables are remained")
+        _warn(
+            warnings,
+            {},
+            f"{required_vnames} in {subroutine.name}",
+            "Required variables are remained",
+        )
 
     uses_pushpop = _contains_pushpop(subroutine)
 

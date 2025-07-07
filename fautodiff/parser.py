@@ -4,55 +4,52 @@ This module centralizes all direct interaction with :mod:`fparser` so that the
 rest of the package does not rely on the underlying parser implementation.
 """
 
-from packaging.version import Version, parse
-import re
 import json
+import re
 from pathlib import Path
 
 import fparser
 from fparser.common.readfortran import FortranFileReader, FortranStringReader
+from fparser.two import Fortran2003, Fortran2008
 from fparser.two.parser import ParserFactory
-from fparser.two import Fortran2003
-from fparser.two import Fortran2008
 from fparser.two.utils import walk
-
-from .operators import (
-    Operator,
-    OpInt,
-    OpReal,
-    OpVar,
-    OpChr,
-    OpLogic,
-    OpAdd,
-    OpSub,
-    OpMul,
-    OpDiv,
-    OpPow,
-    OpNeg,
-    OpFunc,
-    OpFuncUser,
-    OpLog,
-    OpRange,
-    INTRINSIC_FUNCTIONS,
-)
+from packaging.version import Version, parse
 
 from .code_tree import (
-    Node,
-    Module,
-    Subroutine,
-    Function,
-    Block,
-    Declaration,
     Assignment,
-    IfBlock,
+    Block,
+    CallStatement,
+    Declaration,
     DoLoop,
     DoWhile,
+    Function,
+    IfBlock,
+    Module,
+    Node,
     SelectBlock,
     Statement,
+    Subroutine,
     Use,
-    CallStatement,
 )
-
+from .operators import (
+    INTRINSIC_FUNCTIONS,
+    OpAdd,
+    OpChr,
+    OpDiv,
+    Operator,
+    OpFunc,
+    OpFuncUser,
+    OpInt,
+    OpLog,
+    OpLogic,
+    OpMul,
+    OpNeg,
+    OpPow,
+    OpRange,
+    OpReal,
+    OpSub,
+    OpVar,
+)
 
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
 
@@ -76,6 +73,7 @@ def _stmt_name(stmt):
         return parts[1].split("(")[0]
     raise AttributeError("Could not determine statement name")
 
+
 def _stmt2op(stmt, decls):
     """Return Operator from statement."""
 
@@ -93,13 +91,13 @@ def _stmt2op(stmt, decls):
             expo = m.group(3)
             kind = m.group(4)
             if kind is None and expo is not None:
-                if expo[0].lower() == 'd':
+                if expo[0].lower() == "d":
                     kind = "8"
             if expo is not None:
                 expo = int(expo[1:])
             ret = OpReal(val=val, kind=kind, expo=expo)
-            if sign is not None and sign[0] == '-':
-                ret = - ret
+            if sign is not None and sign[0] == "-":
+                ret = -ret
             return ret
         else:
             raise ValueError("Failed to convert real number: #{stmt}")
@@ -109,13 +107,22 @@ def _stmt2op(stmt, decls):
         decl = decls.find_by_name(name)
         if decl is not None:
             kind = decl.kind
-            if kind is None and decl.is_real() and decl.typename.lower().startswith("double"):
+            if (
+                kind is None
+                and decl.is_real()
+                and decl.typename.lower().startswith("double")
+            ):
                 kind = "8"
         else:
             raise ValueError(f"Not found in the declaration section: {name}")
-            #is_real = True
-            #kind = None
-        return OpVar(name=name, typename=decl.typename, kind=kind, is_constant=decl.parameter or getattr(decl, "constant", False))
+            # is_real = True
+            # kind = None
+        return OpVar(
+            name=name,
+            typename=decl.typename,
+            kind=kind,
+            is_constant=decl.parameter or getattr(decl, "constant", False),
+        )
 
     if isinstance(stmt, Fortran2003.Part_Ref):
         name = stmt.items[0].tofortran()
@@ -132,7 +139,13 @@ def _stmt2op(stmt, decls):
                 return OpFunc(name_l, args)
             return OpFuncUser(name_l, args)
         else:
-            return OpVar(name=name, index=index, typename=decl.typename, kind=decl.kind, is_constant=decl.parameter or getattr(decl, "constant", False))
+            return OpVar(
+                name=name,
+                index=index,
+                typename=decl.typename,
+                kind=decl.kind,
+                is_constant=decl.parameter or getattr(decl, "constant", False),
+            )
 
     if isinstance(stmt, Fortran2003.Subscript_Triplet):
         args = tuple((x and _stmt2op(x, decls)) for x in stmt.items)
@@ -140,7 +153,11 @@ def _stmt2op(stmt, decls):
 
     if isinstance(stmt, Fortran2003.Intrinsic_Function_Reference):
         name = stmt.items[0].tofortran().lower()
-        args = [_stmt2op(arg, decls) for arg in getattr(stmt.items[1], "items", []) if not isinstance(arg, str)]
+        args = [
+            _stmt2op(arg, decls)
+            for arg in getattr(stmt.items[1], "items", [])
+            if not isinstance(arg, str)
+        ]
         return OpFunc(name, args)
 
     if isinstance(stmt, Fortran2003.Char_Literal_Constant):
@@ -217,6 +234,7 @@ def parse_file(path, *, search_dirs=None):
     reader = FortranFileReader(path, ignore_comments=False)
     return _parse_from_reader(reader, path, search_dirs=search_dirs)
 
+
 def parse_src(src, *, search_dirs=None):
     """Parse ``src`` and return a list of :class:`Module` nodes."""
     reader = FortranStringReader(src, ignore_comments=False)
@@ -238,7 +256,9 @@ def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
     return {}
 
 
-def _parse_decl_stmt(stmt, constant_args=None, *, allow_intent=True, allow_access=False):
+def _parse_decl_stmt(
+    stmt, constant_args=None, *, allow_intent=True, allow_access=False
+):
     """Parse a single ``Type_Declaration_Stmt`` and return declarations."""
 
     if not isinstance(
@@ -281,7 +301,9 @@ def _parse_decl_stmt(stmt, constant_args=None, *, allow_intent=True, allow_acces
     attrs = stmt.items[1]
     if attrs is not None:
         for attr in attrs.items:
-            name = getattr(attr, "string", str(getattr(attr, "items", [None])[0])).lower()
+            name = getattr(
+                attr, "string", str(getattr(attr, "items", [None])[0])
+            ).lower()
             if name.startswith("dimension"):
                 dim_attr = tuple(v.tofortran() for v in attr.items[1].items)
                 break
@@ -355,13 +377,17 @@ def _parse_decls(spec, constant_args=None, *, allow_intent=True, allow_access=Fa
             ),
         ):
             for decl in _parse_decl_stmt(
-                item, constant_args, allow_intent=allow_intent, allow_access=allow_access
+                item,
+                constant_args,
+                allow_intent=allow_intent,
+                allow_access=allow_access,
             ):
                 decls.append(decl)
             continue
         raise RuntimeError(f"Unsupported statement: {type(item)} {item}")
 
     return decls
+
 
 def _parse_from_reader(reader, src_name, *, search_dirs=None):
     factory = ParserFactory().create(std="f2008")
@@ -423,12 +449,15 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None):
                     ):
                         if mod_node.decls is None:
                             mod_node.decls = Block([])
-                        for decl in _parse_decl_stmt(c, allow_intent=False, allow_access=True):
+                        for decl in _parse_decl_stmt(
+                            c, allow_intent=False, allow_access=True
+                        ):
                             if decl.access is None:
                                 if decl.name in access_map:
                                     decl.access = access_map.pop(decl.name)
                                 else:
                                     decl.access = default_access
+                            decl.constant = True
                             decl_map[decl.name] = decl
                             mod_node.decls.append(decl)
                         continue
@@ -442,14 +471,24 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None):
                         continue
                     if isinstance(c, Fortran2003.Comment):
                         continue
-                    if isinstance(c, (Fortran2003.Function_Subprogram, Fortran2003.Subroutine_Subprogram)):
+                    if isinstance(
+                        c,
+                        (
+                            Fortran2003.Function_Subprogram,
+                            Fortran2003.Subroutine_Subprogram,
+                        ),
+                    ):
                         mod_node.routines.append(
-                            _parse_routine(c, src_name, mod_node, module_map, search_dirs)
+                            _parse_routine(
+                                c, src_name, mod_node, module_map, search_dirs
+                            )
                         )
                     else:
                         print(type(c), c)
                         print(c.items)
-                        raise RuntimeError("Unsupported  statement: {type(c)} {c.string}")
+                        raise RuntimeError(
+                            "Unsupported  statement: {type(c)} {c.string}"
+                        )
             else:
                 print(type(part), part)
                 raise RuntimeError("Unsupported statement: {type(part)} {part.string}")
@@ -519,7 +558,14 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
             seg = []
             while i < len(stmt.content):
                 itm = stmt.content[i]
-                if isinstance(itm, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
+                if isinstance(
+                    itm,
+                    (
+                        Fortran2003.Else_If_Stmt,
+                        Fortran2003.Else_Stmt,
+                        Fortran2003.End_If_Stmt,
+                    ),
+                ):
                     break
                 seg.append(itm)
                 i += 1
@@ -533,7 +579,14 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
                     seg = []
                     while i < len(stmt.content):
                         j = stmt.content[i]
-                        if isinstance(j, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt)):
+                        if isinstance(
+                            j,
+                            (
+                                Fortran2003.Else_If_Stmt,
+                                Fortran2003.Else_Stmt,
+                                Fortran2003.End_If_Stmt,
+                            ),
+                        ):
                             break
                         seg.append(j)
                         i += 1
@@ -563,28 +616,35 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
                 stmt_cond = stmt.content[i]
                 i += 1
                 seg = []
-                while i < len(stmt.content) - 1 and not isinstance(stmt.content[i], Fortran2003.Case_Stmt):
+                while i < len(stmt.content) - 1 and not isinstance(
+                    stmt.content[i], Fortran2003.Case_Stmt
+                ):
                     seg.append(stmt.content[i])
                     i += 1
                 blk = _block(seg, decls)
                 if stmt_cond.tofortran() == "CASE DEFAULT":
                     conds = None
                 else:
-                    conds = tuple(_stmt2op(cond, decls) for cond in stmt_cond.items[0].items[0].items)
+                    conds = tuple(
+                        _stmt2op(cond, decls)
+                        for cond in stmt_cond.items[0].items[0].items
+                    )
                 cond_blocks.append((conds, blk))
             return SelectBlock(cond_blocks, expr)
         if isinstance(stmt, Fortran2008.Block_Nonlabel_Do_Construct):
             idx = 0
-            while idx < len(stmt.content) and isinstance(stmt.content[idx], Fortran2003.Comment):
+            while idx < len(stmt.content) and isinstance(
+                stmt.content[idx], Fortran2003.Comment
+            ):
                 idx += 1
             # skip Nonlabel_Do_Stmt
             idx += 1
             body = _block(stmt.content[idx:-1], decls)
-            if stmt.content[idx-1].tofortran().startswith("DO WHILE"):
-                cond = _stmt2op(stmt.content[idx-1].items[1].items[0].items[0], decls)
+            if stmt.content[idx - 1].tofortran().startswith("DO WHILE"):
+                cond = _stmt2op(stmt.content[idx - 1].items[1].items[0].items[0], decls)
                 return DoWhile(body, cond)
             else:
-                itm = stmt.content[idx-1].items[1].items[1]
+                itm = stmt.content[idx - 1].items[1].items[1]
                 index = _stmt2op(itm[0], decls)
                 start_val = _stmt2op(itm[1][0], decls)
                 end_val = _stmt2op(itm[1][1], decls)
@@ -633,8 +693,12 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
             routine.directives = directives
             continue
         if isinstance(item, Fortran2003.Specification_Part):
-            const_args = routine.directives.get("CONSTANT_ARGS") if routine.directives else None
-            routine.decls = _parse_decls(item, const_args, allow_intent=True, allow_access=False)
+            const_args = (
+                routine.directives.get("CONSTANT_ARGS") if routine.directives else None
+            )
+            routine.decls = _parse_decls(
+                item, const_args, allow_intent=True, allow_access=False
+            )
 
             # build mod declarations for use in execution parsing
             mod_decls = Block([])
@@ -657,7 +721,11 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
                                             name,
                                             info["typename"],
                                             info.get("kind"),
-                                            tuple(info["dims"]) if info.get("dims") is not None else None,
+                                            (
+                                                tuple(info["dims"])
+                                                if info.get("dims") is not None
+                                                else None
+                                            ),
                                             None,
                                             info.get("parameter", False),
                                             info.get("constant", False),
@@ -683,7 +751,11 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
                                         name,
                                         info["typename"],
                                         info.get("kind"),
-                                        tuple(info["dims"]) if info.get("dims") is not None else None,
+                                        (
+                                            tuple(info["dims"])
+                                            if info.get("dims") is not None
+                                            else None
+                                        ),
                                         None,
                                         info.get("parameter", False),
                                         info.get("constant", False),
@@ -696,7 +768,9 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
             routine.mod_decls = mod_decls
             continue
         if isinstance(item, Fortran2003.Execution_Part):
-            decls = routine.mod_decls if routine.mod_decls is not None else routine.decls
+            decls = (
+                routine.mod_decls if routine.mod_decls is not None else routine.decls
+            )
             for stmt in item.content:
                 node = _parse_stmt(stmt, decls)
                 if node is not None:
@@ -730,7 +804,11 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
                                         name,
                                         info["typename"],
                                         info.get("kind"),
-                                        tuple(info["dims"]) if info.get("dims") is not None else None,
+                                        (
+                                            tuple(info["dims"])
+                                            if info.get("dims") is not None
+                                            else None
+                                        ),
                                         None,
                                         info.get("parameter", False),
                                         info.get("constant", False),
@@ -757,7 +835,11 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
                                     name,
                                     info["typename"],
                                     info.get("kind"),
-                                    tuple(info["dims"]) if info.get("dims") is not None else None,
+                                    (
+                                        tuple(info["dims"])
+                                        if info.get("dims") is not None
+                                        else None
+                                    ),
                                     None,
                                     info.get("parameter", False),
                                     info.get("constant", False),
