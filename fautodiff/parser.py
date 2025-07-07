@@ -255,7 +255,8 @@ def _parse_from_reader(reader, src_name):
                         mod_node.body.append(Use(c.items[2].string, only=only))
                         continue
                     if isinstance(c, Fortran2003.Access_Stmt):
-                        mod_node.body.append(Statement(c.string))
+                        if c.items[1] is None:
+                            mod_node.body.append(Statement(c.string))
                         continue
                     if isinstance(c, Fortran2008.type_declaration_stmt_r501.Type_Declaration_Stmt):
                         #mod_node.body.append(Statement(c.string))
