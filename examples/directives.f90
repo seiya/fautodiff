@@ -15,12 +15,21 @@ contains
   end subroutine add_const
 
 !$FAD NO_AD
-  subroutine skip_me(x, y)
-    real, intent(inout) :: x, y
+  subroutine skip_me(x)
+    real, intent(in) :: x
 
-    y = x + y
-
+    ! routine is intentionally empty but must be parsed
   end subroutine skip_me
+
+  subroutine worker(x, z)
+    real, intent(in) :: x
+    real, intent(out) :: z
+    real :: y
+
+    y = x + 1.0
+    call skip_me(y)
+    z = y
+  end subroutine worker
 
 end module directives
 

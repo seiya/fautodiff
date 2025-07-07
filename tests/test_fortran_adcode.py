@@ -95,11 +95,12 @@ class TestFortranADCode(unittest.TestCase):
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_directives(self):
-        self._run_test('directives', ['add_const'])
+        self._run_test('directives', ['add_const', 'worker'])
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_parameter_var(self):
         self._run_test('parameter_var', ['compute_area'])
+
 
 
 if __name__ == '__main__':
