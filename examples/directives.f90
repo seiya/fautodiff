@@ -14,7 +14,7 @@ contains
     return
   end subroutine add_const
 
-!$FAD NO_AD
+!$FAD SKIP
   subroutine skip_me(x)
     real, intent(in) :: x
 

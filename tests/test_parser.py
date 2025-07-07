@@ -179,12 +179,12 @@ class TestParser(unittest.TestCase):
         var = routine.get_var("z")
         self.assertTrue(var.is_constant)
 
-    def test_parse_directive_no_ad(self):
+    def test_parse_directive_skip(self):
         src = textwrap.dedent(
             """
             module test
             contains
-            !$FAD NO_AD
+            !$FAD SKIP
               subroutine foo(x)
                 real :: x
                 x = x + 1.0
@@ -194,7 +194,7 @@ class TestParser(unittest.TestCase):
         )
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
-        self.assertIn("NO_AD", routine.directives)
+        self.assertIn("SKIP", routine.directives)
 
 
 
