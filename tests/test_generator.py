@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 import unittest
+import json
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -67,6 +68,16 @@ class TestGenerator(unittest.TestCase):
             )
             generated = generator.generate_ad(str(src), warn=False)
             self.assertNotIn("a_ad", generated)
+
+    def test_fadmod_includes_no_ad(self):
+        code_tree.Node.reset()
+        fadmod = Path("directives.fadmod")
+        if fadmod.exists():
+            fadmod.unlink()
+        generator.generate_ad("examples/directives.f90", warn=False)
+        data = json.loads(fadmod.read_text())
+        self.assertIn("skip_me", data)
+        self.assertTrue(data["skip_me"].get("no_ad"))
 
 
 def _make_example_test(src: Path):
