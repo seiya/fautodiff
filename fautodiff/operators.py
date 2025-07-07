@@ -505,6 +505,9 @@ class OpLeaf(Operator):
     kind: Optional[str] = None
     PRIORITY: ClassVar[int] = 0
 
+    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
+        return []
+
     def find_userfunc(self) -> List[OpFuncUser]:
         return []
 
@@ -567,8 +570,10 @@ class OpChr(OpLeaf):
 
     name: str = field(default="")
 
-    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
-        return []
+@dataclass
+class OpLogic(OpLeaf):
+
+    name: str = field(default="")
 
 @dataclass
 class OpReal(OpNum):
