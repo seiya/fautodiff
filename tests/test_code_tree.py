@@ -578,7 +578,7 @@ class TestCallStatement(unittest.TestCase):
         self.assertEqual({str(v) for v in node.iter_assign_vars()}, {"b"})
 
     def test_keyword_render(self):
-        node = CallStatement("foo", [OpInt(1), OpInt(2)], keywords=["a", "b"]) 
+        node = CallStatement("foo", [OpInt(1), OpInt(2)], arg_keys=["a", "b"])
         self.assertEqual(render_program(Block([node])), "call foo(a=1, b=2)\n")
 
 

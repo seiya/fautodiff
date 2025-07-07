@@ -635,7 +635,7 @@ class CallStatement(Node):
 
     name: str
     args: List[Operator] = field(default_factory=list)
-    keywords: Optional[List[Optional[str]]] = None
+    arg_keys: Optional[List[Optional[str]]] = None
     intents: Optional[List[str]] = None
     result: Optional[OpVar] = None
     info: Optional[dict] = field(repr=False, default=None)
@@ -652,10 +652,10 @@ class CallStatement(Node):
                 self.args[i] = OpInt(arg)
             elif not isinstance(arg, Operator):
                 raise ValueError(f"arg must be Operator: {type(arg)}")
-        if self.keywords is None:
-            self.keywords = [None] * len(self.args)
-        if len(self.keywords) != len(self.args):
-            raise ValueError("keywords length must match args length")
+        if self.arg_keys is None:
+            self.arg_keys = [None] * len(self.args)
+        if len(self.arg_keys) != len(self.args):
+            raise ValueError("arg_keys length must match args length")
         if self.intents is not None:
             if not isinstance(self.intents, list):
                 raise ValueError(f"intents must be a list: {type(self.intents)}")
@@ -684,7 +684,7 @@ class CallStatement(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         arg_strs = []
-        for key, arg in zip(self.keywords, self.args):
+        for key, arg in zip(self.arg_keys, self.args):
             if key is None:
                 arg_strs.append(str(arg))
             else:
@@ -749,12 +749,37 @@ class CallStatement(Node):
             else:
                 args_new.append(arg)
         tmp_vars = []
-        args = list(self.args)
-        args_new = []
-        for i, arg in enumerate(args):
-            _push_arg(i, arg)
+        call_args = list(self.args)
+        arg_keys = list(self.arg_keys)
+        param_names = list(arg_info["args"])
         if self.result is not None:
-            _push_arg(len(args), self.result)
+            param_names_no_res = param_names[:-1]
+        else:
+            param_names_no_res = param_names
+
+        ordered = [None] * len(param_names_no_res)
+        used = [False] * len(param_names_no_res)
+        pos = 0
+        for arg, key in zip(call_args, arg_keys):
+            if key is None:
+                while pos < len(param_names_no_res) and used[pos]:
+                    pos += 1
+                if pos < len(param_names_no_res):
+                    ordered[pos] = arg
+                    used[pos] = True
+                    pos += 1
+            else:
+                if key in param_names_no_res:
+                    idx = param_names_no_res.index(key)
+                    ordered[idx] = arg
+                    used[idx] = True
+        args = []
+        args_new = []
+        for i, arg in enumerate(ordered):
+            _push_arg(i, arg)
+            args.append(arg)
+        if self.result is not None:
+            _push_arg(len(param_names_no_res), self.result)
             args.append(self.result)
         ad_args = []
         if reverse:
