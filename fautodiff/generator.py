@@ -77,32 +77,36 @@ def _set_call_intents(node, routine_map):
         _set_call_intents(child, routine_map)
 
 
-def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> dict:
-    """Load routine maps from ``mod_names`` using ``search_dirs``."""
-    result = {}
+def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, dict]:
+    """Load routine and variable maps from ``mod_names`` using ``search_dirs``."""
+
+    routines = {}
+    variables = {}
     for mod in mod_names:
         for d in search_dirs:
             path = Path(d) / f"{mod}.fadmod"
             if path.exists():
                 try:
                     data = json.loads(path.read_text())
-                    result.update(data)
+                    vars_data = data.pop("variables", {})
+                    if "routines" in data:
+                        routines.update(data.get("routines", {}))
+                    else:
+                        routines.update(data)
+                    if vars_data:
+                        variables[mod] = vars_data
                 except Exception:
                     pass
                 break
-    return result
+    return routines, variables
 
 
-def _write_fadmod(mod_name: str, routines, routine_map: dict, directory: Path) -> None:
-    """Write ``routine_map`` info for ``mod_name`` to ``<mod_name>.fadmod``.
+def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
+    """Write routine and variable info for ``mod`` to ``<mod.name>.fadmod``."""
 
-    The stored information now includes the defining module name so that
-    other files can ``use`` the appropriate ``*_ad`` module when calling
-    generated AD routines.
-    """
-
-    data = {}
-    for r in routines:
+    mod_name = mod.name
+    routines_data = {}
+    for r in mod.routines:
         info = routine_map.get(r.name)
         if info is None:
             continue
@@ -110,12 +114,27 @@ def _write_fadmod(mod_name: str, routines, routine_map: dict, directory: Path) -
         info["module"] = mod_name
         if info.get("name_fwd_ad") is None and info.get("name_rev_ad") is None:
             info["skip"] = True
-        data[r.name] = info
+        routines_data[r.name] = info
 
-    if not data:
+    variables_data = {}
+    if mod.decls is not None:
+        for d in mod.decls.iter_children():
+            if isinstance(d, Declaration):
+                variables_data[d.name] = {
+                    "typename": d.typename,
+                    "kind": d.kind,
+                    "dims": list(d.dims) if d.dims is not None else None,
+                    "parameter": d.parameter,
+                    "constant": d.constant,
+                    "init": d.init,
+                    "access": d.access,
+                }
+
+    if not routines_data and not variables_data:
         return
 
     path = directory / f"{mod_name}.fadmod"
+    data = {"routines": routines_data, "variables": variables_data}
     path.write_text(json.dumps(data, indent=2))
 
 
@@ -691,7 +710,7 @@ def generate_ad(
     ``fadmod_dir`` selects where ``<module>.fadmod`` files are written (defaults
     to the current working directory).
     """
-    modules_org = parser.parse_file(in_file)
+    modules_org = parser.parse_file(in_file, search_dirs=search_dirs)
     modules = []
     warnings = []
 
@@ -721,7 +740,7 @@ def generate_ad(
 
         if search_dirs:
             used_mods = mod_org.find_use_modules()
-            loaded = _load_fadmods(used_mods, search_dirs)
+            loaded, _ = _load_fadmods(used_mods, search_dirs)
             routine_map.update(loaded)
 
         name = mod_org.name
@@ -777,8 +796,7 @@ def generate_ad(
     if write_fadmod:
         for mod_org in modules_org:
             _write_fadmod(
-                mod_org.name,
-                mod_org.routines,
+                mod_org,
                 routine_map,
                 fadmod_dir,
             )

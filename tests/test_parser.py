@@ -5,7 +5,7 @@ import textwrap
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff import parser, code_tree, operators
+from fautodiff import parser, code_tree, operators, generator
 from fautodiff.code_tree import Block, render_program
 
 
@@ -289,6 +289,51 @@ class TestParser(unittest.TestCase):
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
         self.assertIn("SKIP", routine.directives)
+
+    def test_mod_decls_from_fadmod(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        moda_src = textwrap.dedent(
+            """
+            module moda
+              implicit none
+              integer, parameter :: K = 3
+            contains
+              subroutine dummy()
+              end subroutine dummy
+            end module moda
+            """
+        )
+
+        modb_src = textwrap.dedent(
+            """
+            module modb
+              use moda
+              implicit none
+            contains
+              subroutine foo(x)
+                integer, intent(out) :: x
+                x = K
+              end subroutine foo
+            end module modb
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            moda = Path(tmp) / "moda.f90"
+            moda.write_text(moda_src)
+            generator.generate_ad(str(moda), warn=False, fadmod_dir=tmp)
+            modb = Path(tmp) / "modb.f90"
+            modb.write_text(modb_src)
+
+            modules = parser.parse_file(str(modb), search_dirs=[tmp])
+            routine = modules[0].routines[0]
+
+        self.assertTrue(routine.is_declared("K"))
+        decl = routine.mod_decls.find_by_name("K")
+        self.assertIsNotNone(decl)
+        self.assertTrue(decl.parameter)
 
 
 

@@ -6,6 +6,8 @@ rest of the package does not rely on the underlying parser implementation.
 
 from packaging.version import Version, parse
 import re
+import json
+from pathlib import Path
 
 import fparser
 from fparser.common.readfortran import FortranFileReader, FortranStringReader
@@ -210,15 +212,30 @@ __all__ = [
 ]
 
 
-def parse_file(path):
+def parse_file(path, *, search_dirs=None):
     """Parse ``path`` and return a list of :class:`Module` nodes."""
     reader = FortranFileReader(path, ignore_comments=False)
-    return _parse_from_reader(reader, path)
+    return _parse_from_reader(reader, path, search_dirs=search_dirs)
 
-def parse_src(src):
+def parse_src(src, *, search_dirs=None):
     """Parse ``src`` and return a list of :class:`Module` nodes."""
     reader = FortranStringReader(src, ignore_comments=False)
-    return _parse_from_reader(reader, "<string>")
+    return _parse_from_reader(reader, "<string>", search_dirs=search_dirs)
+
+
+def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
+    """Return variable declaration info from ``mod_name`` fadmod file."""
+
+    for d in search_dirs:
+        path = Path(d) / f"{mod_name}.fadmod"
+        if path.exists():
+            try:
+                data = json.loads(path.read_text())
+                return data.get("variables", {})
+            except Exception:
+                pass
+            break
+    return {}
 
 
 def _parse_decl_stmt(stmt, constant_args=None, *, allow_intent=True, allow_access=False):
@@ -346,7 +363,7 @@ def _parse_decls(spec, constant_args=None, *, allow_intent=True, allow_access=Fa
 
     return decls
 
-def _parse_from_reader(reader, src_name):
+def _parse_from_reader(reader, src_name, *, search_dirs=None):
     factory = ParserFactory().create(std="f2008")
     ast = factory(reader)
     output = []
@@ -426,7 +443,9 @@ def _parse_from_reader(reader, src_name):
                     if isinstance(c, Fortran2003.Comment):
                         continue
                     if isinstance(c, (Fortran2003.Function_Subprogram, Fortran2003.Subroutine_Subprogram)):
-                        mod_node.routines.append(_parse_routine(c, src_name, mod_node, module_map))
+                        mod_node.routines.append(
+                            _parse_routine(c, src_name, mod_node, module_map, search_dirs)
+                        )
                     else:
                         print(type(c), c)
                         print(c.items)
@@ -458,7 +477,7 @@ def find_subroutines(modules):
     return names
 
 
-def _parse_routine(content, src_name, module=None, module_map=None):
+def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=None):
     """Return node tree correspoinding to the input AST"""
 
     def _parse_stmt(stmt, decls) -> Node:
@@ -616,9 +635,68 @@ def _parse_routine(content, src_name, module=None, module_map=None):
         if isinstance(item, Fortran2003.Specification_Part):
             const_args = routine.directives.get("CONSTANT_ARGS") if routine.directives else None
             routine.decls = _parse_decls(item, const_args, allow_intent=True, allow_access=False)
+
+            # build mod declarations for use in execution parsing
+            mod_decls = Block([])
+            Node._id_counter -= 1
+            if module is not None:
+                for child in module.body.iter_children():
+                    if isinstance(child, Use):
+                        mod_decls.append(child)
+                        used = module_map.get(child.name) if module_map else None
+                        if used and used.decls is not None:
+                            for d in used.decls:
+                                if child.only is None or (d.name in child.only):
+                                    mod_decls.append(d)
+                        elif search_dirs:
+                            vars_map = _load_fadmod_decls(child.name, search_dirs)
+                            for name, info in vars_map.items():
+                                if child.only is None or name in child.only:
+                                    mod_decls.append(
+                                        Declaration(
+                                            name,
+                                            info["typename"],
+                                            info.get("kind"),
+                                            tuple(info["dims"]) if info.get("dims") is not None else None,
+                                            None,
+                                            info.get("parameter", False),
+                                            info.get("constant", False),
+                                            init=info.get("init"),
+                                            access=info.get("access"),
+                                        )
+                                    )
+            if module is not None and module.decls is not None:
+                mod_decls.extend(list(module.decls.iter_children()))
+            for child in routine.decls.iter_children():
+                if isinstance(child, Use):
+                    used = module_map.get(child.name) if module_map else None
+                    if used and used.decls is not None:
+                        for d in used.decls:
+                            if child.only is None or (d.name in child.only):
+                                mod_decls.append(d)
+                    elif search_dirs:
+                        vars_map = _load_fadmod_decls(child.name, search_dirs)
+                        for name, info in vars_map.items():
+                            if child.only is None or name in child.only:
+                                mod_decls.append(
+                                    Declaration(
+                                        name,
+                                        info["typename"],
+                                        info.get("kind"),
+                                        tuple(info["dims"]) if info.get("dims") is not None else None,
+                                        None,
+                                        info.get("parameter", False),
+                                        info.get("constant", False),
+                                        init=info.get("init"),
+                                        access=info.get("access"),
+                                    )
+                                )
+
+            mod_decls.extend(list(routine.decls.iter_children()))
+            routine.mod_decls = mod_decls
             continue
         if isinstance(item, Fortran2003.Execution_Part):
-            decls = routine.decls
+            decls = routine.mod_decls if routine.mod_decls is not None else routine.decls
             for stmt in item.content:
                 node = _parse_stmt(stmt, decls)
                 if node is not None:
@@ -630,31 +708,65 @@ def _parse_routine(content, src_name, module=None, module_map=None):
             continue
         raise RuntimeError(f"Unsupported statement: {type(item)} {item.items}")
 
-    # merge declarations from module and used modules
-    mod_decls = Block([])
-    Node._id_counter -= 1
-    if module is not None:
-        for child in module.body.iter_children():
-            if isinstance(child, Use):
-                mod_decls.append(child)
-                if module_map:
-                    used = module_map.get(child.name)
+    if routine.mod_decls is None:
+        # merge declarations from module and used modules
+        mod_decls = Block([])
+        Node._id_counter -= 1
+        if module is not None:
+            for child in module.body.iter_children():
+                if isinstance(child, Use):
+                    mod_decls.append(child)
+                    used = module_map.get(child.name) if module_map else None
                     if used and used.decls is not None:
                         for d in used.decls:
                             if child.only is None or (d.name in child.only):
                                 mod_decls.append(d)
-        if module.decls is not None:
-            mod_decls.extend(list(module.decls.iter_children()))
+                    elif search_dirs:
+                        vars_map = _load_fadmod_decls(child.name, search_dirs)
+                        for name, info in vars_map.items():
+                            if child.only is None or name in child.only:
+                                mod_decls.append(
+                                    Declaration(
+                                        name,
+                                        info["typename"],
+                                        info.get("kind"),
+                                        tuple(info["dims"]) if info.get("dims") is not None else None,
+                                        None,
+                                        info.get("parameter", False),
+                                        info.get("constant", False),
+                                        init=info.get("init"),
+                                        access=info.get("access"),
+                                    )
+                                )
+            if module.decls is not None:
+                mod_decls.extend(list(module.decls.iter_children()))
 
-    for child in routine.decls.iter_children():
-        if isinstance(child, Use) and module_map:
-            used = module_map.get(child.name)
-            if used and used.decls is not None:
-                for d in used.decls:
-                    if child.only is None or (d.name in child.only):
-                        mod_decls.append(d)
+        for child in routine.decls.iter_children():
+            if isinstance(child, Use):
+                used = module_map.get(child.name) if module_map else None
+                if used and used.decls is not None:
+                    for d in used.decls:
+                        if child.only is None or (d.name in child.only):
+                            mod_decls.append(d)
+                elif search_dirs:
+                    vars_map = _load_fadmod_decls(child.name, search_dirs)
+                    for name, info in vars_map.items():
+                        if child.only is None or name in child.only:
+                            mod_decls.append(
+                                Declaration(
+                                    name,
+                                    info["typename"],
+                                    info.get("kind"),
+                                    tuple(info["dims"]) if info.get("dims") is not None else None,
+                                    None,
+                                    info.get("parameter", False),
+                                    info.get("constant", False),
+                                    init=info.get("init"),
+                                    access=info.get("access"),
+                                )
+                            )
 
-    mod_decls.extend(list(routine.decls.iter_children()))
-    routine.mod_decls = mod_decls
+        mod_decls.extend(list(routine.decls.iter_children()))
+        routine.mod_decls = mod_decls
 
     return routine
