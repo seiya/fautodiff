@@ -719,7 +719,7 @@ class CallStatement(Node):
         arg_info = routine_map[name]
 
         name_key = "name_rev_ad" if reverse else "name_fwd_ad"
-        if arg_info.get("no_ad") or arg_info.get(name_key) is None:
+        if arg_info.get("skip") or arg_info.get(name_key) is None:
             return [self]
 
         def _push_arg(i, arg):

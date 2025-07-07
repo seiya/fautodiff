@@ -69,7 +69,7 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad(str(src), warn=False)
             self.assertNotIn("a_ad", generated)
 
-    def test_fadmod_includes_no_ad(self):
+    def test_fadmod_includes_skip(self):
         code_tree.Node.reset()
         fadmod = Path("directives.fadmod")
         if fadmod.exists():
@@ -77,9 +77,9 @@ class TestGenerator(unittest.TestCase):
         generator.generate_ad("examples/directives.f90", warn=False)
         data = json.loads(fadmod.read_text())
         self.assertIn("skip_me", data)
-        self.assertTrue(data["skip_me"].get("no_ad"))
+        self.assertTrue(data["skip_me"].get("skip"))
 
-    def test_no_ad_call_skips_derivatives(self):
+    def test_skip_call_skips_derivatives(self):
         code_tree.Node.reset()
         from tempfile import TemporaryDirectory
         import textwrap
@@ -88,7 +88,7 @@ class TestGenerator(unittest.TestCase):
             """
             module test
             contains
-            !$FAD NO_AD
+            !$FAD SKIP
               subroutine foo(x, y)
                 real, intent(in) :: x
                 real, intent(out) :: y
@@ -117,7 +117,7 @@ class TestGenerator(unittest.TestCase):
         self.assertIn("bar_rev_ad", generated)
         self.assertIn("call foo(x, y)", generated)
         self.assertIn("foo", fadmod)
-        self.assertTrue(fadmod["foo"].get("no_ad"))
+        self.assertTrue(fadmod["foo"].get("skip"))
 
 
 def _make_example_test(src: Path):

@@ -109,7 +109,7 @@ def _write_fadmod(mod_name: str, routines, routine_map: dict, directory: Path) -
         info = dict(info)
         info["module"] = mod_name
         if info.get("name_fwd_ad") is None and info.get("name_rev_ad") is None:
-            info["no_ad"] = True
+            info["skip"] = True
         data[r.name] = info
 
     if not data:
@@ -180,8 +180,8 @@ def _prepare_fwd_ad_header(routine_org):
     subroutine.ad_init = Block([])
     subroutine.ad_content = Block([])
 
-    no_ad = bool(routine_org.directives.get("NO_AD")) or len(out_grad_args) == 0
-    if no_ad:
+    skip = bool(routine_org.directives.get("SKIP")) or len(out_grad_args) == 0
+    if skip:
         arg_info["name_fwd_ad"] = None
 
     return {
@@ -191,7 +191,7 @@ def _prepare_fwd_ad_header(routine_org):
         "out_grad_args": out_grad_args,
         "has_grad_input": has_grad_input,
         "arg_info": arg_info,
-        "no_ad": no_ad,
+        "skip": skip,
     }
 
 
@@ -273,8 +273,8 @@ def _prepare_rev_ad_header(routine_org):
     subroutine.ad_init = Block([])
     subroutine.ad_content = Block([])
 
-    no_ad = bool(routine_org.directives.get("NO_AD")) or len(out_grad_args) == 0
-    if no_ad:
+    skip = bool(routine_org.directives.get("SKIP")) or len(out_grad_args) == 0
+    if skip:
         arg_info["name_rev_ad"] = None
 
     return {
@@ -284,7 +284,7 @@ def _prepare_rev_ad_header(routine_org):
         "out_grad_args": out_grad_args,
         "has_grad_input": has_grad_input,
         "arg_info": arg_info,
-        "no_ad": no_ad,
+        "skip": skip,
     }
 
 
@@ -310,7 +310,7 @@ def _collect_called_ad_modules(blocks, routine_map, reverse):
 
 
 def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings):
-    if routine_info.get("no_ad"):
+    if routine_info.get("skip"):
         return None, set()
 
     subroutine = routine_info["subroutine"]
@@ -478,7 +478,7 @@ def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings
 
 
 def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings):
-    if routine_info.get("no_ad"):
+    if routine_info.get("skip"):
         return None, False, set()
 
     subroutine = routine_info["subroutine"]
