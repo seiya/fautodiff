@@ -125,6 +125,46 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad(str(src), warn=False)
             self.assertIn("c_ad", generated)
 
+    def test_module_vars_example_no_diff(self):
+        code_tree.Node.reset()
+        generated = generator.generate_ad("examples/module_vars.f90", warn=False)
+        self.assertNotIn("c_ad", generated)
+
+    def test_module_vars_example_fadmod(self):
+        code_tree.Node.reset()
+        fadmod = Path("module_vars.fadmod")
+        if fadmod.exists():
+            fadmod.unlink()
+        generator.generate_ad("examples/module_vars.f90", warn=False)
+        data = json.loads(fadmod.read_text())
+        variables = data.get("variables", {})
+        self.assertIn("c", variables)
+
+    def test_module_vars_directive(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            src = Path(tmp) / "modvar.f90"
+            src.write_text(
+                textwrap.dedent(
+                    """
+                    module test
+                      real :: c
+                      !$FAD DIFF_MODULE_VARS: c
+                    contains
+                      subroutine foo(x)
+                        real, intent(inout) :: x
+                        c = c + x
+                      end subroutine foo
+                    end module test
+                    """
+                )
+            )
+            generated = generator.generate_ad(str(src), warn=False)
+            self.assertIn("c_ad", generated)
+
     def test_fadmod_includes_skip(self):
         code_tree.Node.reset()
         fadmod = Path("directives.fadmod")

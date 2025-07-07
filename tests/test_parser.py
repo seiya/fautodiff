@@ -207,6 +207,16 @@ class TestParser(unittest.TestCase):
         var = module.routines[0].get_var("c")
         self.assertFalse(var.ad_target)
 
+    def test_parse_example_module_vars(self):
+        base = Path(__file__).resolve().parents[1]
+        src = base / "examples" / "module_vars.f90"
+        modules = parser.parse_file(str(src))
+        self.assertEqual(len(modules), 1)
+        mod = modules[0]
+        decl = mod.decls.find_by_name("c")
+        self.assertIsNotNone(decl)
+        self.assertEqual(mod.routines[0].name, "inc_and_use")
+
     def test_module_decl_with_intent_error(self):
         src = textwrap.dedent(
             """

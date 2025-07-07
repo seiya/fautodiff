@@ -9,7 +9,7 @@ vpath %.f90 .
 
 PROGRAMS = run_simple_math run_arrays run_call_example run_control_flow run_cross_mod \
            run_data_storage run_intrinsic_func run_real_kind run_save_vars run_store_vars \
-           run_directives run_parameter_var
+           run_directives run_parameter_var run_module_vars
 
 all: $(PROGRAMS)
 
@@ -37,6 +37,7 @@ $(OUTDIR)/run_store_vars.o: $(OUTDIR)/store_vars.o $(OUTDIR)/store_vars_ad.o \
   $(OUTDIR)/data_storage.o
 $(OUTDIR)/run_directives.o: $(OUTDIR)/directives.o $(OUTDIR)/directives_ad.o
 $(OUTDIR)/run_parameter_var.o: $(OUTDIR)/parameter_var.o $(OUTDIR)/parameter_var_ad.o
+$(OUTDIR)/run_module_vars.o: $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o
 
 # Additional module dependencies
 $(OUTDIR)/store_vars_ad.o: $(OUTDIR)/store_vars.mod $(OUTDIR)/data_storage.o
@@ -77,6 +78,9 @@ run_directives: $(OUTDIR)/run_directives.o $(OUTDIR)/directives.o $(OUTDIR)/dire
 	$(FC) $^ -o $@
 
 run_parameter_var: $(OUTDIR)/run_parameter_var.o $(OUTDIR)/parameter_var.o $(OUTDIR)/parameter_var_ad.o
+	$(FC) $^ -o $@
+
+run_module_vars: $(OUTDIR)/run_module_vars.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o
 	$(FC) $^ -o $@
 
 
