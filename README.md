@@ -123,6 +123,21 @@ subroutine skip_me(x)
 end subroutine skip_me
 ```
 
+Use ``DIFF_MODULE_VARS`` to differentiate selected module variables which are
+normally treated as constants. Place the directive before ``contains``:
+
+```fortran
+module test
+  real :: c
+  !$FAD DIFF_MODULE_VARS: c
+contains
+  subroutine foo(x)
+    real, intent(inout) :: x
+    c = c + x
+  end subroutine foo
+end module test
+```
+
 Run the included tests with:
 
 ```bash

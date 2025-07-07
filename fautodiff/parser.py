@@ -404,6 +404,7 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None):
         default_access = "public"
         access_map = {}
         decl_map = {}
+        module_directives = {}
 
         for part in module.content:
             if isinstance(part, Fortran2003.Module_Stmt):
@@ -414,9 +415,35 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None):
                 continue
             if isinstance(part, Fortran2003.Specification_Part):
                 for c in part.content:
+                    if isinstance(c, Fortran2003.Comment):
+                        text = c.items[0].strip()
+                        if text.startswith("!$FAD"):
+                            body = text[5:].strip()
+                            if ":" in body:
+                                key, rest = body.split(":", 1)
+                                key = key.strip().upper()
+                                values = [a.strip() for a in rest.split(",") if a.strip()]
+                                module_directives[key] = values
+                            else:
+                                module_directives[body.strip().upper()] = True
+                            continue
+                        if c.items[0] != "":
+                            mod_node.body.append(Statement(c.items[0]))
+                        continue
                     if isinstance(c, Fortran2003.Implicit_Part):
                         for cnt in c.content:
                             if isinstance(cnt, Fortran2003.Comment):
+                                text = cnt.items[0].strip()
+                                if text.startswith("!$FAD"):
+                                    body = text[5:].strip()
+                                    if ":" in body:
+                                        key, rest = body.split(":", 1)
+                                        key = key.strip().upper()
+                                        values = [a.strip() for a in rest.split(",") if a.strip()]
+                                        module_directives[key] = values
+                                    else:
+                                        module_directives[body.strip().upper()] = True
+                                    continue
                                 if cnt.items[0] != "":
                                     mod_node.body.append(Statement(cnt.items[0]))
                                 continue
@@ -464,6 +491,10 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None):
                     print(type(c), c)
                     print(c.items)
                     raise RuntimeError(f"Unsupported statement: {type(c)} {c.string}")
+                if "DIFF_MODULE_VARS" in module_directives:
+                    for n in module_directives["DIFF_MODULE_VARS"]:
+                        if n in decl_map:
+                            decl_map[n].constant = False
                 continue
             if isinstance(part, Fortran2003.Module_Subprogram_Part):
                 for c in part.content:
@@ -492,6 +523,7 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None):
             else:
                 print(type(part), part)
                 raise RuntimeError("Unsupported statement: {type(part)} {part.string}")
+        mod_node.directives = module_directives
     return output
 
 
@@ -766,6 +798,16 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
 
             mod_decls.extend(list(routine.decls.iter_children()))
             routine.mod_decls = mod_decls
+            diff_mod_vars = []
+            if module is not None and "DIFF_MODULE_VARS" in module.directives:
+                diff_mod_vars.extend(module.directives["DIFF_MODULE_VARS"])
+            if routine.directives:
+                diff_mod_vars.extend(routine.directives.get("DIFF_MODULE_VARS", []))
+            if diff_mod_vars:
+                for name in diff_mod_vars:
+                    decl = routine.mod_decls.find_by_name(name)
+                    if decl is not None:
+                        decl.constant = False
             continue
         if isinstance(item, Fortran2003.Execution_Part):
             decls = (
@@ -850,5 +892,16 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
 
         mod_decls.extend(list(routine.decls.iter_children()))
         routine.mod_decls = mod_decls
+
+    diff_mod_vars = []
+    if module is not None and "DIFF_MODULE_VARS" in module.directives:
+        diff_mod_vars.extend(module.directives["DIFF_MODULE_VARS"])
+    if routine.directives:
+        diff_mod_vars.extend(routine.directives.get("DIFF_MODULE_VARS", []))
+    if diff_mod_vars:
+        for name in diff_mod_vars:
+            decl = routine.mod_decls.find_by_name(name)
+            if decl is not None:
+                decl.constant = False
 
     return routine

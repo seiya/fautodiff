@@ -100,6 +100,31 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad(str(src), warn=False)
             self.assertNotIn("c_ad", generated)
 
+    def test_diff_module_var_directive(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            src = Path(tmp) / "modvar.f90"
+            src.write_text(
+                textwrap.dedent(
+                    """
+                    module test
+                      real :: c
+                      !$FAD DIFF_MODULE_VARS: c
+                    contains
+                      subroutine foo(x)
+                        real, intent(inout) :: x
+                        c = c + x
+                      end subroutine foo
+                    end module test
+                    """
+                )
+            )
+            generated = generator.generate_ad(str(src), warn=False)
+            self.assertIn("c_ad", generated)
+
     def test_fadmod_includes_skip(self):
         code_tree.Node.reset()
         fadmod = Path("directives.fadmod")
