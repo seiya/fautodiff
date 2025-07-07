@@ -326,6 +326,29 @@ class TestParser(unittest.TestCase):
         routine = module.routines[0]
         self.assertIn("SKIP", routine.directives)
 
+    def test_parse_directive_diff_module_vars(self):
+        src = textwrap.dedent(
+            """
+            module test
+              real :: c
+              !$FAD DIFF_MODULE_VARS: c
+            contains
+              subroutine foo(x)
+                real, intent(inout) :: x
+                c = c + x
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        self.assertIn("DIFF_MODULE_VARS", module.directives)
+        self.assertEqual(module.directives["DIFF_MODULE_VARS"], ["c"])
+        decl = routine.mod_decls.find_by_name("c")
+        self.assertFalse(decl.constant)
+        var = routine.get_var("c")
+        self.assertTrue(var.ad_target)
+
     def test_mod_decls_from_fadmod(self):
         code_tree.Node.reset()
         from tempfile import TemporaryDirectory

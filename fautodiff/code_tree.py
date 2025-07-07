@@ -858,6 +858,7 @@ class Module(Node):
     body: Block = field(default_factory=Block)
     decls: Optional[Block] = None
     routines: Block = field(default_factory=Block)
+    directives: dict = field(default_factory=dict)
 
     def iter_children(self):
         yield self.body
