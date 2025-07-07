@@ -1,4 +1,14 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+"""Entry point for the ``fautodiff`` command line tool."""
+
+import os
+import sys
+
+# Ensure the package can be imported when running from the source tree
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from fautodiff.cli import main
 
 if __name__ == "__main__":
