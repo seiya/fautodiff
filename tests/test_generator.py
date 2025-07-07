@@ -44,6 +44,13 @@ class TestGenerator(unittest.TestCase):
         expected = Path("examples/cross_mod_b_ad.f90").read_text()
         self.assertEqual(generated, expected)
 
+    def test_keyword_arg_call(self):
+        code_tree.Node.reset()
+        generated = generator.generate_ad("examples/keyword_args.f90", warn=False)
+        expected = Path("examples/keyword_args_ad.f90").read_text()
+        self.assertEqual(generated, expected)
+
+
     def test_constant_args_directive(self):
         code_tree.Node.reset()
         from tempfile import TemporaryDirectory

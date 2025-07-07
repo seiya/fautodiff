@@ -3,10 +3,11 @@ module cross_mod_a
 
 contains
 
-  subroutine incval(a)
+  subroutine incval(a, inc)
     real, intent(inout) :: a
+    real, intent(in) :: inc
 
-    a = a + 1.0
+    a = a + inc
 
     return
   end subroutine incval
