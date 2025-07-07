@@ -79,6 +79,36 @@ class TestGenerator(unittest.TestCase):
         self.assertIn("skip_me", data)
         self.assertTrue(data["skip_me"].get("no_ad"))
 
+    def test_no_ad_call_skips_derivatives(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+        import textwrap
+
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+            !$FAD NO_AD
+              subroutine foo(x)
+                real, intent(inout) :: x
+                x = x + 1.0
+              end subroutine foo
+              subroutine bar(x)
+                real, intent(inout) :: x
+                call foo(x)
+              end subroutine bar
+            end module test
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "test.f90"
+            src_path.write_text(src)
+            generated = generator.generate_ad(str(src_path), warn=False)
+
+        self.assertNotIn("foo_fwd_ad", generated)
+        self.assertNotIn("foo_rev_ad", generated)
+
 
 def _make_example_test(src: Path):
     def test(self):
