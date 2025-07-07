@@ -902,6 +902,7 @@ class Routine(Node):
     decls: Block = field(default_factory=Block)
     content: Block = field(default_factory=Block)
     directives: dict = field(default_factory=dict)
+    mod_decls: Optional[Block] = None
     ad_init: Optional[Block] = None
     ad_content: Optional[Block] = None
     kind: ClassVar[str] = "subroutine"
@@ -948,6 +949,8 @@ class Routine(Node):
 
     def get_var(self, name: str) -> Optional[OpVar]:
         decl = self.decls.find_by_name(name)
+        if decl is None and self.mod_decls is not None:
+            decl = self.mod_decls.find_by_name(name)
         if decl is None:
             return None
         intent = decl.intent
@@ -972,7 +975,11 @@ class Routine(Node):
         return vars
 
     def is_declared(self, name: str) -> bool:
-        return self.decls.find_by_name(name) is not None
+        if self.decls.find_by_name(name) is not None:
+            return True
+        if self.mod_decls is not None and self.mod_decls.find_by_name(name) is not None:
+            return True
+        return False
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         for block in reversed(self._all_blocks()):
