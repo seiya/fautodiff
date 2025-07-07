@@ -619,7 +619,7 @@ class Use(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         if self.only is not None:
-            only = f" only: {', '.join(self.only)}"
+            only = f", only: {', '.join(self.only)}"
         else:
             only = ""
         lines = [f"{space}use {self.name}{only}\n"]
