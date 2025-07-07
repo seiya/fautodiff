@@ -411,7 +411,7 @@ def _parse_routine(content, src_name):
         if isinstance(stmt, Fortran2003.Call_Stmt):
             name = stmt.items[0].tofortran()
             args = []
-            keywords = []
+            arg_keys = []
             if stmt.items[1] is not None:
                 for arg in stmt.items[1].items:
                     if isinstance(arg, str):
@@ -423,8 +423,8 @@ def _parse_routine(content, src_name):
                             key = str(arg.items[0])
                         val = arg.items[1]
                     args.append(_stmt2op(val, decls))
-                    keywords.append(key)
-            return CallStatement(name, args, keywords=keywords, info=info)
+                    arg_keys.append(key)
+            return CallStatement(name, args, arg_keys=arg_keys, info=info)
         if isinstance(stmt, Fortran2003.If_Construct):
             cond_blocks = []
             cond = _stmt2op(stmt.content[0].items[0], decls)

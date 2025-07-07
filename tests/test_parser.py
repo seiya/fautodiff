@@ -58,7 +58,7 @@ class TestParser(unittest.TestCase):
         routine = module.routines[0]
         stmt = routine.content.first()
         self.assertIsInstance(stmt, code_tree.CallStatement)
-        self.assertEqual(stmt.keywords, ["a", "b"])
+        self.assertEqual(stmt.arg_keys, ["a", "b"])
         self.assertEqual(render_program(Block([stmt])), "call foo(a=1, b=2)\n")
 
     def test_parse_call_stmt_in_function(self):
