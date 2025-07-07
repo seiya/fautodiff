@@ -1,4 +1,4 @@
-module directive_const_arg
+module directives
   implicit none
 
 contains
@@ -14,5 +14,13 @@ contains
     return
   end subroutine add_const
 
-end module directive_const_arg
+!$FAD NO_AD
+  subroutine skip_me(x, y)
+    real, intent(inout) :: x, y
+
+    y = x + y
+
+  end subroutine skip_me
+
+end module directives
 

@@ -1,5 +1,5 @@
-module directive_const_arg_ad
-  use directive_const_arg
+module directives_ad
+  use directives
   implicit none
 
 contains
@@ -27,4 +27,4 @@ contains
     return
   end subroutine add_const_rev_ad
 
-end module directive_const_arg_ad
+end module directives_ad

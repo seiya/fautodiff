@@ -686,6 +686,8 @@ def generate_ad(
         routine_info_fwd = {}
         routine_info_rev = {}
         for r in mod_org.routines:
+            if "NO_AD" in r.directives:
+                continue
             if mode in ("forward", "both"):
                 routine_info = _prepare_fwd_ad_header(r)
                 routine_info_fwd[r.name] = routine_info
@@ -709,6 +711,8 @@ def generate_ad(
         ad_modules_used = set()
 
         for routine in mod_org.routines:
+            if "NO_AD" in routine.directives:
+                continue
             if mode in ("forward", "both"):
                 sub, mods_called = _generate_fwd_ad_subroutine(
                     routine, routine_map, routine_info_fwd[routine.name], warnings
