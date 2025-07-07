@@ -856,10 +856,13 @@ class Module(Node):
     """Representation of a Fortran module."""
     name: str
     body: Block = field(default_factory=Block)
+    decls: Optional[Block] = None
     routines: Block = field(default_factory=Block)
 
     def iter_children(self):
         yield self.body
+        if self.decls is not None:
+            yield self.decls
         for routine in self.routines:
             yield routine
 
@@ -870,6 +873,8 @@ class Module(Node):
         space = "  " * indent
         lines = [f"{space}module {self.name}\n"]
         lines.extend(self.body.render(indent+1))
+        if self.decls is not None:
+            lines.extend(self.decls.render(indent+1))
         lines.append("\n")
         lines.append(f"{space}contains\n")
         lines.append("\n")
@@ -1345,6 +1350,7 @@ class Declaration(Node):
     parameter: bool = False
     constant: bool = False
     init: Optional[str] = None
+    access: Optional[str] = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -1367,6 +1373,8 @@ class Declaration(Node):
             line += f"({self.kind})"
         if self.parameter:
             line += ", parameter"
+        if self.access is not None:
+            line += f", {self.access}"
         if self.intent is not None:
             pad = "  " if self.intent == "in" else " "
             line += f", intent({self.intent})" + pad + f":: {self.name}"
