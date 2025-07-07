@@ -116,15 +116,6 @@ contains
     return
   end subroutine do_example_rev_ad
 
-  subroutine do_while_example_fwd_ad(x, x_ad, limit, limit_ad)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
-    real, intent(in)  :: limit
-    real, intent(in)  :: limit_ad
-
-    return
-  end subroutine do_while_example_fwd_ad
-
   subroutine do_while_example_rev_ad(x, x_ad, limit, limit_ad)
     real, intent(in)  :: x
     real, intent(out) :: x_ad
