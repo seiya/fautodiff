@@ -154,6 +154,7 @@ def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
                     "constant": d.constant,
                     "init": d.init,
                     "access": d.access,
+                    "allocatable": d.allocatable,
                 }
 
     if not routines_data and not variables_data:
@@ -208,6 +209,7 @@ def _prepare_fwd_ad_header(routine_org):
                 intent=arg.intent,
                 ad_target=True,
                 is_constant=arg.is_constant,
+                allocatable=arg.allocatable,
             )
             args.append(var)
             grad_args.append(var)
@@ -228,7 +230,14 @@ def _prepare_fwd_ad_header(routine_org):
     arg_info["name_fwd_ad"] = ad_name
     for var in args:
         subroutine.decls.append(
-            Declaration(var.name, var.typename, var.kind, var.dims, var.intent)
+            Declaration(
+                var.name,
+                var.typename,
+                var.kind,
+                var.dims,
+                var.intent,
+                allocatable=var.allocatable,
+            )
         )
         arg_info["args_fwd_ad"].append(var.name)
         arg_info["intents_fwd_ad"].append(var.intent)
@@ -293,6 +302,7 @@ def _prepare_rev_ad_header(routine_org):
                     intent="inout",
                     ad_target=True,
                     is_constant=arg.is_constant,
+                    allocatable=arg.allocatable,
                 )
                 args.append(var)
                 grad_args.append(var)
@@ -314,6 +324,7 @@ def _prepare_rev_ad_header(routine_org):
                     intent=grad_intent,
                     ad_target=True,
                     is_constant=arg.is_constant,
+                    allocatable=arg.allocatable,
                 )
                 args.append(var)
                 grad_args.append(var)
@@ -329,7 +340,14 @@ def _prepare_rev_ad_header(routine_org):
     arg_info["name_rev_ad"] = ad_name
     for var in args:
         subroutine.decls.append(
-            Declaration(var.name, var.typename, var.kind, var.dims, var.intent)
+            Declaration(
+                var.name,
+                var.typename,
+                var.kind,
+                var.dims,
+                var.intent,
+                allocatable=var.allocatable,
+            )
         )
         arg_info["args_rev_ad"].append(var.name)
         arg_info["intents_rev_ad"].append(var.intent)
@@ -429,6 +447,7 @@ def _generate_ad_subroutine(
                             None,
                             base_decl.parameter if base_decl else False,
                             init=base_decl.init if base_decl else None,
+                            allocatable=base_decl.allocatable if base_decl else False,
                         )
                     )
 
@@ -503,6 +522,7 @@ def _generate_ad_subroutine(
                         None,
                         base_decl.parameter,
                         init=base_decl.init,
+                        allocatable=base_decl.allocatable,
                     )
             if decl is not None:
                 if decl.intent is not None and decl.intent == "out":
@@ -557,6 +577,7 @@ def _generate_ad_subroutine(
                 None,
                 base_decl.parameter if base_decl else False,
                 init=base_decl.init if base_decl else None,
+                allocatable=base_decl.allocatable if base_decl else False,
             )
         )
 

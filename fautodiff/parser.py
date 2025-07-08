@@ -126,6 +126,7 @@ def _stmt2op(stmt, decls:Block):
             typename=decl.typename,
             kind=kind,
             is_constant=decl.parameter or getattr(decl, "constant", False),
+            allocatable=getattr(decl, "allocatable", False),
         )
 
     if isinstance(stmt, Fortran2003.Part_Ref):
@@ -149,6 +150,7 @@ def _stmt2op(stmt, decls:Block):
                 typename=decl.typename,
                 kind=decl.kind,
                 is_constant=decl.parameter or getattr(decl, "constant", False),
+                allocatable=getattr(decl, "allocatable", False),
             )
 
     if isinstance(stmt, Fortran2003.Subscript_Triplet):
@@ -302,6 +304,7 @@ def _parse_decl_stmt(
     dim_attr = None
     parameter = False
     access = None
+    allocatable = False
     attrs = stmt.items[1]
     if attrs is not None:
         for attr in attrs.items:
@@ -313,6 +316,8 @@ def _parse_decl_stmt(
                 break
             if name == "parameter":
                 parameter = True
+            if name == "allocatable":
+                allocatable = True
             if allow_access and name in ("public", "private"):
                 access = name
 
@@ -344,6 +349,7 @@ def _parse_decl_stmt(
                 constant,
                 init=init,
                 access=access,
+                allocatable=allocatable,
             )
         )
 
@@ -855,6 +861,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                                         info.get("constant", False),
                                         init=info.get("init"),
                                         access=info.get("access"),
+                                        allocatable=info.get("allocatable", False),
                                     )
                                 )
 
@@ -918,6 +925,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                                         info.get("constant", False),
                                         init=info.get("init"),
                                         access=info.get("access"),
+                                        allocatable=info.get("allocatable", False),
                                     )
                                 )
             if module.decls is not None:
@@ -949,6 +957,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                                     info.get("constant", False),
                                     init=info.get("init"),
                                     access=info.get("access"),
+                                    allocatable=info.get("allocatable", False),
                                 )
                             )
 
