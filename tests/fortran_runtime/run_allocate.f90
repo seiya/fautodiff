@@ -38,6 +38,7 @@ program run_allocate
 contains
 
   subroutine test_allocate_and_sum
+    real, parameter :: tol = 3.0e-4
     integer, parameter :: n = 5
     real :: x, res
     real :: x_ad, res_ad

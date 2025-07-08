@@ -555,7 +555,7 @@ def find_subroutines(modules: List[Module]) -> List[str]:
 def _parse_routine(content, src_name: str, module: Optional[Module]=None, module_map: Optional[dict]=None, search_dirs: Optional[List[str]]=None):
     """Return node tree correspoinding to the input AST"""
 
-    def _parse_stmt(stmt, decls: Block) -> Optional[Node]:
+    def _parse_stmt(stmt, decls: Block, allocated: List[OpVar]) -> Optional[Node]:
         if isinstance(stmt, Fortran2003.Comment):
             return None
         line_no = None
@@ -626,6 +626,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                         if dims:
                             var = var.change_index(AryIndex(dims))
                     vars.append(var)
+            allocated.extend(vars)
             return Allocate(vars)
         if isinstance(stmt, Fortran2003.Deallocate_Stmt):
             obj_list = None
@@ -638,7 +639,13 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                 for obj in obj_list.items:
                     if isinstance(obj, str):
                         continue
-                    vars.append(_stmt2op(obj, decls))
+                    v = _stmt2op(obj, decls)
+                    var = next((v2 for v2 in allocated if v2.name == v.name), None)
+                    if var is None:
+                        raise ValueError(
+                            f"Variable {v.name} is not allocated in this scope."
+                        )
+                    vars.append(var)
             return Deallocate(vars)
         if isinstance(stmt, Fortran2003.If_Construct):
             cond_blocks = []
@@ -661,7 +668,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                     break
                 seg.append(itm)
                 i += 1
-            body = _block(seg, decls)
+            body = _block(seg, decls, allocated)
             cond_blocks.append((cond, body))
             while i < len(stmt.content):
                 itm = stmt.content[i]
@@ -682,7 +689,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                             break
                         seg.append(j)
                         i += 1
-                    blk = _block(seg, decls)
+                    blk = _block(seg, decls, allocated)
                     cond_blocks.append((cond2, blk))
                 elif isinstance(itm, Fortran2003.Else_Stmt):
                     i += 1
@@ -693,7 +700,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                             break
                         seg.append(j)
                         i += 1
-                    cond_blocks.append((None, _block(seg, decls)))
+                    cond_blocks.append((None, _block(seg, decls, allocated)))
                 elif isinstance(itm, Fortran2003.End_If_Stmt):
                     i += 1
                 else:
@@ -701,7 +708,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
             return IfBlock(cond_blocks)
         if isinstance(stmt, Fortran2008.if_stmt_r837.If_Stmt):
             cond = _stmt2op(stmt.items[0], decls)
-            body = _block([stmt.items[1]], decls)
+            body = _block([stmt.items[1]], decls, allocated)
             if body is None:
                 return None
             return IfBlock([(cond, body)])
@@ -719,7 +726,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                 ):
                     seg.append(stmt.content[i])
                     i += 1
-                blk = _block(seg, decls)
+                blk = _block(seg, decls, allocated)
                 if stmt_cond.tofortran() == "CASE DEFAULT":
                     conds = None
                 else:
@@ -737,7 +744,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                 idx += 1
             # skip Nonlabel_Do_Stmt
             idx += 1
-            body = _block(stmt.content[idx:-1], decls)
+            body = _block(stmt.content[idx:-1], decls, allocated)
             if stmt.content[idx - 1].tofortran().startswith("DO WHILE"):
                 cond = _stmt2op(stmt.content[idx - 1].items[1].items[0].items[0], decls)
                 return DoWhile(body, cond)
@@ -758,10 +765,10 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
         print(stmt.items)
         raise ValueError(f"stmt is not supported: {stmt}")
 
-    def _block(body_list, decls):
+    def _block(body_list, decls: Block, allocated: List[OpVar]) -> Block:
         blk = Block([])
         for st in body_list:
-            node = _parse_stmt(st, decls)
+            node = _parse_stmt(st, decls, allocated)
             if node is not None:
                 blk.append(node)
         return blk
@@ -882,8 +889,9 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
             decls = (
                 routine.mod_decls if routine.mod_decls is not None else routine.decls
             )
+            allocated: List[OpVar] = []
             for stmt in item.content:
-                node = _parse_stmt(stmt, decls)
+                node = _parse_stmt(stmt, decls, allocated)
                 if node is not None:
                     routine.content.append(node)
             continue
