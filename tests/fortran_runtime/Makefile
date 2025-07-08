@@ -8,8 +8,8 @@ vpath %.f90 ../../fortran_modules
 vpath %.f90 .
 
 PROGRAMS = run_simple_math run_arrays run_call_example run_control_flow run_cross_mod \
-           run_data_storage run_intrinsic_func run_real_kind run_save_vars run_store_vars \
-           run_directives run_parameter_var run_module_vars
+	   run_data_storage run_intrinsic_func run_real_kind run_save_vars run_store_vars \
+	   run_directives run_parameter_var run_module_vars run_allocate
 
 all: $(PROGRAMS)
 
@@ -38,11 +38,13 @@ $(OUTDIR)/run_store_vars.o: $(OUTDIR)/store_vars.o $(OUTDIR)/store_vars_ad.o \
 $(OUTDIR)/run_directives.o: $(OUTDIR)/directives.o $(OUTDIR)/directives_ad.o
 $(OUTDIR)/run_parameter_var.o: $(OUTDIR)/parameter_var.o $(OUTDIR)/parameter_var_ad.o
 $(OUTDIR)/run_module_vars.o: $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o
+$(OUTDIR)/run_allocate.o: $(OUTDIR)/allocate.o $(OUTDIR)/allocate_ad.o
 
 # Additional module dependencies
 $(OUTDIR)/store_vars_ad.o: $(OUTDIR)/store_vars.mod $(OUTDIR)/data_storage.o
 $(OUTDIR)/cross_mod_b.o: $(OUTDIR)/cross_mod_a.mod
 $(OUTDIR)/cross_mod_b_ad.o: $(OUTDIR)/cross_mod_b.mod $(OUTDIR)/cross_mod_a_ad.mod
+$(OUTDIR)/allocate_ad.o: $(OUTDIR)/allocate_example.mod
 
 run_simple_math: $(OUTDIR)/run_simple_math.o $(OUTDIR)/simple_math.o $(OUTDIR)/simple_math_ad.o
 	$(FC) $^ -o $@
@@ -81,6 +83,9 @@ run_parameter_var: $(OUTDIR)/run_parameter_var.o $(OUTDIR)/parameter_var.o $(OUT
 	$(FC) $^ -o $@
 
 run_module_vars: $(OUTDIR)/run_module_vars.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o
+	$(FC) $^ -o $@
+
+run_allocate: $(OUTDIR)/run_allocate.o $(OUTDIR)/allocate.o $(OUTDIR)/allocate_ad.o
 	$(FC) $^ -o $@
 
 
