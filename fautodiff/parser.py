@@ -76,7 +76,7 @@ def _stmt_name(stmt):
     raise AttributeError("Could not determine statement name")
 
 
-def _stmt2op(stmt, decls):
+def _stmt2op(stmt, decls:Block):
     """Return Operator from statement."""
 
     if isinstance(stmt, Fortran2003.Actual_Arg_Spec):
@@ -260,7 +260,7 @@ def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
 
 def _parse_decl_stmt(
     stmt, constant_args=None, *, allow_intent=True, allow_access=False
-):
+) -> List[Declaration]:
     """Parse a single ``Type_Declaration_Stmt`` and return declarations."""
 
     if not isinstance(
@@ -348,7 +348,7 @@ def _parse_decl_stmt(
     return decls
 
 
-def _parse_decls(spec, constant_args=None, *, allow_intent=True, allow_access=False):
+def _parse_decls(spec, constant_args=None, *, allow_intent=True, allow_access=False) -> Block:
     """Return declarations parsed from a specification part."""
 
     decls = Block([])
@@ -391,7 +391,7 @@ def _parse_decls(spec, constant_args=None, *, allow_intent=True, allow_access=Fa
     return decls
 
 
-def _parse_from_reader(reader, src_name, *, search_dirs=None):
+def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
     factory = ParserFactory().create(std="f2008")
     ast = factory(reader)
     output = []
@@ -529,14 +529,8 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None):
     return output
 
 
-def find_subroutines(modules):
+def find_subroutines(modules: List[Module]) -> List[str]:
     """Return the names of routines contained in ``modules``.
-
-    Parameters
-    ----------
-    modules : Iterable[Module]
-        Modules as returned by :func:`parse_file`.
-
     Returns
     -------
     List[str]
@@ -550,10 +544,10 @@ def find_subroutines(modules):
     return names
 
 
-def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=None):
+def _parse_routine(content, src_name: str, module: Optional[Module]=None, module_map: Optional[dict]=None, search_dirs: Optional[List[str]]=None):
     """Return node tree correspoinding to the input AST"""
 
-    def _parse_stmt(stmt, decls) -> Optional[Node]:
+    def _parse_stmt(stmt, decls: Block) -> Optional[Node]:
         if isinstance(stmt, Fortran2003.Comment):
             return None
         line_no = None
@@ -568,6 +562,8 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
             lhs = _stmt2op(stmt.items[0], decls)
             rhs = _stmt2op(stmt.items[2], decls)
             return Assignment(lhs, rhs, False, info)
+        if isinstance(stmt, Fortran2003.Write_Stmt):
+            return None
         if isinstance(stmt, Fortran2003.Call_Stmt):
             name = stmt.items[0].tofortran()
             args = []
@@ -644,6 +640,12 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
                 else:
                     i += 1
             return IfBlock(cond_blocks)
+        if isinstance(stmt, Fortran2008.if_stmt_r837.If_Stmt):
+            cond = _stmt2op(stmt.items[0], decls)
+            body = _block([stmt.items[1]], decls)
+            if body is None:
+                return None
+            return IfBlock([(cond, body)])
         if isinstance(stmt, Fortran2003.Case_Construct):
             expr = _stmt2op(stmt.content[0].items[0], decls)
             cond_blocks = []
@@ -693,6 +695,8 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return Statement("return")
 
+        print(type(stmt))
+        print(stmt.items)
         raise ValueError(f"stmt is not supported: {stmt}")
 
     def _block(body_list, decls):
