@@ -17,6 +17,7 @@ $(OUTDIR)/%_ad.o: $(OUTDIR)/%.mod
 # Cross-module dependencies
 $(OUTDIR)/cross_mod_b.o: $(OUTDIR)/cross_mod_a.mod
 $(OUTDIR)/cross_mod_b_ad.o: $(OUTDIR)/cross_mod_b.mod $(OUTDIR)/cross_mod_a_ad.mod
+$(OUTDIR)/allocate_ad.o: $(OUTDIR)/allocate_example.mod
 
 clean:
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.mod
