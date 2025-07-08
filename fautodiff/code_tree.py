@@ -1968,7 +1968,7 @@ class DoLoop(DoAbst):
 class DoWhile(DoAbst):
     """A ``do while`` loop."""
 
-    cond: OpVar
+    cond: Operator
 
     def __post_init__(self):
         self.do_index_list = ["__never_match__"]
