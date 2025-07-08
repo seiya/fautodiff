@@ -138,6 +138,11 @@ contains
 end module test
 ```
 
+Module variables or names brought in with ``use`` remain constants unless
+``DIFF_MODULE_VARS`` (or other directives) requests their differentiation.  If
+no corresponding ``_ad`` variable exists, any ``allocate`` or ``deallocate``
+statements for such variables are omitted from the generated code.
+
 Run the included tests with:
 
 ```bash
