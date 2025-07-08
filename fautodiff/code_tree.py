@@ -489,7 +489,7 @@ class Block(Node):
                     children.append(res)
         return [Block(children)]
 
-    def find_by_name(self, name: str) -> None:
+    def find_by_name(self, name: str) -> Optional[Declaration]:
         for child in self.iter_children():
             if isinstance(child, Declaration) and child.name == name:
                 return child
