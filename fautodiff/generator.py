@@ -429,6 +429,8 @@ def _generate_ad_subroutine(
         warnings=warnings,
     )[0]
 
+    #print(render_program(ad_code)) # for debugging
+
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
         for var in ad_code.assigned_vars(without_savevar=True):
             name = var.name
