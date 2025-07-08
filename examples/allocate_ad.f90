@@ -2,6 +2,8 @@ module allocate_example_ad
   use allocate_example
   implicit none
 
+  real, allocatable :: mod_arr_diff_ad(:)
+
 contains
 
   subroutine allocate_and_sum_fwd_ad(n, x, x_ad, res_ad)
@@ -59,5 +61,102 @@ contains
 
     return
   end subroutine allocate_and_sum_rev_ad
+
+  subroutine module_vars_init_fwd_ad(n, x, x_ad)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(inout) :: x_ad
+    integer :: i
+
+    allocate(mod_arr(n))
+    allocate(mod_arr_diff(n))
+    allocate(mod_arr_diff_ad(n))
+    do i = 1, n
+      mod_arr(i) = i * x
+      mod_arr_diff_ad(i) = x_ad * i ! mod_arr_diff(i) = i * x
+      mod_arr_diff(i) = i * x
+    end do
+
+    return
+  end subroutine module_vars_init_fwd_ad 
+
+  subroutine module_vars_init_rev_ad(n, x_ad)
+    integer, intent(in)  :: n
+    real, intent(out) :: x_ad
+    integer :: i
+
+    allocate(mod_arr(n))
+    allocate(mod_arr_diff(n))
+    allocate(mod_arr_diff_ad(n))
+
+    x_ad = 0.0
+    mod_arr_diff_ad = 0.0
+
+    do i = n, 1, - 1
+      x_ad = mod_arr_diff_ad(i) * i + x_ad ! mod_arr_diff(i) = i * x
+    end do
+
+    return
+  end subroutine module_vars_init_rev_ad
+
+  
+  subroutine module_vars_main_fwd_ad(n, x, x_ad)
+    integer, intent(in)  :: n
+    real, intent(out) :: x
+    real, intent(inout)  :: x_ad
+    integer :: i
+
+    x_ad = 0.0
+    do i = 1, n
+      x_ad = x_ad + mod_arr_diff_ad(i) * mod_arr(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
+    end do
+
+    return
+  end subroutine module_vars_main_fwd_ad
+
+  subroutine module_vars_main_rev_ad(n, x_ad)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x_ad
+    integer :: i
+
+    do i = 1, n
+      mod_arr_diff_ad(i) = x_ad * mod_arr(i) + mod_arr_diff_ad(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
+    end do
+
+    return
+  end subroutine module_vars_main_rev_ad
+
+  subroutine module_vars_finalize_fwd_ad(n, x_ad)
+    integer, intent(in)  :: n
+    real, intent(out) :: x_ad
+    integer :: i
+
+    x_ad = 0.0 ! x = 0.0
+    do i = 1, n
+      x_ad = x_ad + mod_arr_diff_ad(i) * mod_arr(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
+    end do
+    deallocate(mod_arr_diff_ad)
+    deallocate(mod_arr)
+    deallocate(mod_arr_diff)
+
+    return
+  end subroutine module_vars_finalize_fwd_ad
+
+  subroutine module_vars_finalize_rev_ad(n, x_ad)
+    integer, intent(in)  :: n
+    real, intent(inout) :: x_ad
+    integer :: i
+
+    do i = n, 1, - 1
+      mod_arr_diff_ad(i) = x_ad * mod_arr(i) + mod_arr_diff_ad(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
+    end do
+    x_ad = 0.0 ! x = 0.0
+
+    deallocate(mod_arr_diff_ad)
+    deallocate(mod_arr)
+    deallocate(mod_arr_diff)
+
+    return
+  end subroutine module_vars_finalize_rev_ad
 
 end module allocate_example_ad
