@@ -1454,6 +1454,7 @@ class Declaration(Node):
     constant: bool = False
     init: Optional[str] = None
     access: Optional[str] = None
+    allocatable: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -1462,7 +1463,13 @@ class Declaration(Node):
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         if self.intent in ("in", "inout"):
-            yield OpVar(name=self.name, typename=self.typename, kind=self.kind, is_constant=self.parameter or self.constant)
+            yield OpVar(
+                name=self.name,
+                typename=self.typename,
+                kind=self.kind,
+                is_constant=self.parameter or self.constant,
+                allocatable=self.allocatable,
+            )
         else:
             return iter(())
 
@@ -1478,6 +1485,8 @@ class Declaration(Node):
             line += ", parameter"
         if self.access is not None:
             line += f", {self.access}"
+        if self.allocatable:
+            line += ", allocatable"
         if self.intent is not None:
             pad = "  " if self.intent == "in" else " "
             line += f", intent({self.intent})" + pad + f":: {self.name}"
@@ -1509,7 +1518,15 @@ class Declaration(Node):
         if self.intent in ("in", "inout"):
             if self.name.endswith(AD_SUFFIX):
                 vars = vars.copy()
-                vars.push(OpVar(self.name, typename=self.typename, kind=self.kind, is_constant=self.parameter or self.constant))
+                vars.push(
+                    OpVar(
+                        self.name,
+                        typename=self.typename,
+                        kind=self.kind,
+                        is_constant=self.parameter or self.constant,
+                        allocatable=self.allocatable,
+                    )
+                )
         return vars
 
 
