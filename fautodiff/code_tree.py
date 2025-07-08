@@ -614,7 +614,7 @@ class Statement(Node):
 class Use(Node):
     """Representation of a Fortran use statement."""
     name: str
-    only: List[str] = field(default=None)
+    only: Optional[List[str]] = field(default=None)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent

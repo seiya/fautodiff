@@ -19,8 +19,8 @@ from .operators import (
 class VarList:
     """List of variable."""
 
-    vars: dict[str, List] = field(init=False, default=None)
-    exclude: dict[str, List] = field(init=False, default=None)
+    vars: Optional[dict[str, List]] = field(init=False, default=None)
+    exclude: Optional[dict[str, List]] = field(init=False, default=None)
 
     def __init__(self, vars: Optional[List[OpVar]] = None):
         super().__init__()
@@ -88,7 +88,7 @@ class VarList:
     def __getitem__(self, key: str):
         return self.vars[key]
 
-    def __iter__(self) -> iter:
+    def __iter__(self) -> Iterator[OpVar]:
         for name in self.names():
             for index in self.vars[name]:
                 yield OpVar(name, index=index)
@@ -101,7 +101,7 @@ class VarList:
         return names
 
     @staticmethod
-    def _get_int(op) -> bool:
+    def _get_int(op) -> Optional[int]:
         if isinstance(op, OpInt):
             return op.val
         if isinstance(op, OpNeg) and isinstance(op.args[0], OpInt):
@@ -135,7 +135,7 @@ class VarList:
             if replaced:
                 return OpVar(
                     var.name,
-                    index=index_new,
+                    index=AryIndex(index_new),
                     kind=var.kind,
                     typename=var.typename,
                     ad_target=var.ad_target,
@@ -279,7 +279,7 @@ class VarList:
             self.vars[name][pos] = index
 
             dim1 = index[i]
-            dim2 = var.index[i]
+            dim2 = var.index[i] if var.index is not None else None
 
             if AryIndex.dim_is_entire(dim1):
                 self.add_exclude(var)
@@ -572,4 +572,3 @@ class VarList:
                 index_new.append(index)
             self.vars[name] = index_new
             self._reorganize(name)
-
