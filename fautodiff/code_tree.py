@@ -1383,16 +1383,26 @@ class Allocate(Node):
     ) -> List[Node]:
         routine = self.get_routine()
         ad_vars: List[OpVar] = []
+        org_vars: List[OpVar] = []
         if routine is not None:
             for var in self.vars:
                 ad_name = f"{var.name}{AD_SUFFIX}"
-                if var.ad_target and routine.is_declared(ad_name):
+                has_ad = routine.is_declared(ad_name)
+                if has_ad:
                     ad_vars.append(var.add_suffix(AD_SUFFIX))
+                if routine.decls.find_by_name(var.name) is not None or has_ad:
+                    org_vars.append(var)
+        else:
+            org_vars = list(self.vars)
 
         nodes: List[Node] = []
         if ad_vars:
             nodes.append(Allocate(ad_vars))
-        nodes.append(self)
+        if org_vars:
+            if org_vars == self.vars:
+                nodes.append(self)
+            else:
+                nodes.append(Allocate(org_vars))
         return nodes
 
 
@@ -1429,16 +1439,26 @@ class Deallocate(Node):
     ) -> List[Node]:
         routine = self.get_routine()
         ad_vars: List[OpVar] = []
+        org_vars: List[OpVar] = []
         if routine is not None:
             for var in self.vars:
                 ad_name = f"{var.name}{AD_SUFFIX}"
-                if var.ad_target and routine.is_declared(ad_name):
+                has_ad = routine.is_declared(ad_name)
+                if has_ad:
                     ad_vars.append(var.add_suffix(AD_SUFFIX))
+                if routine.decls.find_by_name(var.name) is not None or has_ad:
+                    org_vars.append(var)
+        else:
+            org_vars = list(self.vars)
 
         nodes: List[Node] = []
         if ad_vars:
             nodes.append(Deallocate(ad_vars))
-        nodes.append(self)
+        if org_vars:
+            if org_vars == self.vars:
+                nodes.append(self)
+            else:
+                nodes.append(Deallocate(org_vars))
         return nodes
 
 @dataclass
