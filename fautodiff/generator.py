@@ -439,6 +439,8 @@ def _generate_ad_subroutine(
                     continue
                 v_org = routine_org.get_var(name.removesuffix(AD_SUFFIX))
                 base_decl = routine_org.decls.find_by_name(name.removesuffix(AD_SUFFIX))
+                if base_decl is None and routine_org.mod_decls is not None:
+                    base_decl = routine_org.mod_decls.find_by_name(name.removesuffix(AD_SUFFIX))
                 if v_org is not None and not subroutine.is_declared(name):
                     subroutine.decls.append(
                         Declaration(
@@ -515,6 +517,8 @@ def _generate_ad_subroutine(
             if decl is None and var.endswith(AD_SUFFIX):
                 base = var.removesuffix(AD_SUFFIX)
                 base_decl = routine_org.decls.find_by_name(base)
+                if base_decl is None and routine_org.mod_decls is not None:
+                    base_decl = routine_org.mod_decls.find_by_name(base)
                 if base_decl is not None:
                     decl = Declaration(
                         var,
@@ -538,6 +542,8 @@ def _generate_ad_subroutine(
             try:
                 v_org = routine_org.get_var(var.reference.name)
                 base_decl = routine_org.decls.find_by_name(var.reference.name)
+                if base_decl is None and routine_org.mod_decls is not None:
+                    base_decl = routine_org.mod_decls.find_by_name(var.reference.name)
             except ValueError:
                 ad_block.extend(ad_code)
                 print("".join(subroutine.render()))

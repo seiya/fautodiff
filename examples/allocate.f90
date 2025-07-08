@@ -1,5 +1,8 @@
 module allocate_example
   implicit none
+  real, allocatable :: mod_arr(:)
+  real, allocatable :: mod_arr_diff(:)
+  !$FAD DIFF_MODULE_VARS: mod_arr_diff
 contains
 
   subroutine allocate_and_sum(n, x, res)
