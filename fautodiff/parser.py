@@ -78,7 +78,7 @@ def _stmt_name(stmt):
     raise AttributeError("Could not determine statement name")
 
 
-def _stmt2op(stmt, decls:Block):
+def _stmt2op(stmt, decls:Block) -> Operator:
     """Return Operator from statement."""
 
     if isinstance(stmt, Fortran2003.Actual_Arg_Spec):
