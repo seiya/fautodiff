@@ -31,6 +31,8 @@ from .code_tree import (
     Statement,
     Subroutine,
     Use,
+    Allocate,
+    Deallocate,
 )
 from .operators import (
     INTRINSIC_FUNCTIONS,
@@ -581,6 +583,57 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                     args.append(_stmt2op(val, decls))
                     arg_keys.append(key)
             return CallStatement(name, args, arg_keys=arg_keys, info=info)
+        if isinstance(stmt, Fortran2003.Allocate_Stmt):
+            alloc_list = None
+            for itm in stmt.items:
+                if isinstance(itm, Fortran2003.Allocation_List):
+                    alloc_list = itm
+                    break
+            vars = []
+            if alloc_list is not None:
+                for alloc in alloc_list.items:
+                    var = _stmt2op(alloc.items[0], decls)
+                    shape = alloc.items[1]
+                    if shape is not None:
+                        dims = []
+                        if isinstance(shape, Fortran2003.Allocate_Shape_Spec_List):
+                            for spec in shape.items:
+                                lb = spec.items[0]
+                                ub = spec.items[1]
+                                if lb is None and ub is None:
+                                    dims.append(None)
+                                elif lb is None:
+                                    dims.append(_stmt2op(ub, decls))
+                                else:
+                                    dims.append(
+                                        OpRange([
+                                            _stmt2op(lb, decls),
+                                            _stmt2op(ub, decls),
+                                            None,
+                                        ])
+                                    )
+                        elif isinstance(shape, Fortran2003.Section_Subscript_List):
+                            for spec in shape.items:
+                                if isinstance(spec, str):
+                                    continue
+                                dims.append(_stmt2op(spec, decls))
+                        if dims:
+                            var = var.change_index(AryIndex(dims))
+                    vars.append(var)
+            return Allocate(vars)
+        if isinstance(stmt, Fortran2003.Deallocate_Stmt):
+            obj_list = None
+            for itm in stmt.items:
+                if isinstance(itm, Fortran2003.Allocate_Object_List):
+                    obj_list = itm
+                    break
+            vars = []
+            if obj_list is not None:
+                for obj in obj_list.items:
+                    if isinstance(obj, str):
+                        continue
+                    vars.append(_stmt2op(obj, decls))
+            return Deallocate(vars)
         if isinstance(stmt, Fortran2003.If_Construct):
             cond_blocks = []
             if isinstance(stmt.content[0], Fortran2003.Comment):

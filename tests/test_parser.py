@@ -404,6 +404,28 @@ class TestParser(unittest.TestCase):
         self.assertIsNotNone(decl)
         self.assertTrue(decl.parameter)
 
+    def test_parse_allocate_deallocate(self):
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+              subroutine foo(n)
+                integer, intent(in) :: n
+                integer, allocatable :: a(:)
+                allocate(a(n))
+                deallocate(a)
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        stmts = list(routine.content.iter_children())
+        self.assertIsInstance(stmts[0], code_tree.Allocate)
+        self.assertEqual(stmts[0].vars[0].name, "a")
+        self.assertEqual(str(stmts[0].vars[0].index), "n")
+        self.assertIsInstance(stmts[1], code_tree.Deallocate)
+        self.assertEqual(stmts[1].vars[0].name, "a")
 
 if __name__ == "__main__":
     unittest.main()
