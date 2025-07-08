@@ -1346,6 +1346,101 @@ class PushPop(SaveAssignment):
     def to_load(self) -> "PushPop":
         return PushPop(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
 
+
+@dataclass
+class Allocate(Node):
+    """An ``allocate`` statement."""
+
+    vars: List[OpVar] = field(default_factory=list)
+
+    def __post_init__(self):
+        super().__post_init__()
+        for v in self.vars:
+            if not isinstance(v, OpVar):
+                raise ValueError(f"vars must be OpVar: {type(v)}")
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        for var in self.vars:
+            if var.index is not None:
+                for v in var.index.collect_vars():
+                    yield v
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        return iter(())
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        names = ", ".join(str(v) for v in self.vars)
+        return [f"{space}allocate({names})\n"]
+
+    def generate_ad(
+        self,
+        saved_vars: List[SaveAssignment],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        routine = self.get_routine()
+        ad_vars: List[OpVar] = []
+        if routine is not None:
+            for var in self.vars:
+                ad_name = f"{var.name}{AD_SUFFIX}"
+                if var.ad_target and routine.is_declared(ad_name):
+                    ad_vars.append(var.add_suffix(AD_SUFFIX))
+
+        nodes: List[Node] = []
+        if ad_vars:
+            nodes.append(Allocate(ad_vars))
+        nodes.append(self)
+        return nodes
+
+
+@dataclass
+class Deallocate(Node):
+    """A ``deallocate`` statement."""
+
+    vars: List[OpVar] = field(default_factory=list)
+
+    def __post_init__(self):
+        super().__post_init__()
+        for v in self.vars:
+            if not isinstance(v, OpVar):
+                raise ValueError(f"vars must be OpVar: {type(v)}")
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        return iter(())
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        return iter(())
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        names = ", ".join(v.name for v in self.vars)
+        return [f"{space}deallocate({names})\n"]
+
+    def generate_ad(
+        self,
+        saved_vars: List[SaveAssignment],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        routine = self.get_routine()
+        ad_vars: List[OpVar] = []
+        if routine is not None:
+            for var in self.vars:
+                ad_name = f"{var.name}{AD_SUFFIX}"
+                if var.ad_target and routine.is_declared(ad_name):
+                    ad_vars.append(var.add_suffix(AD_SUFFIX))
+
+        nodes: List[Node] = []
+        if ad_vars:
+            nodes.append(Deallocate(ad_vars))
+        nodes.append(self)
+        return nodes
+
 @dataclass
 class Declaration(Node):
     """A variable declaration."""
