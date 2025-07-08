@@ -70,7 +70,35 @@ def _set_call_intents(node, routine_map):
     if isinstance(node, CallStatement):
         arg_info = routine_map.get(node.name)
         if arg_info is not None and "intents" in arg_info:
-            node.intents = list(arg_info["intents"])
+            intents = list(arg_info["intents"])
+            params = list(arg_info["args"])
+            if node.result is not None:
+                params_no_res = params[:-1]
+            else:
+                params_no_res = params
+            used = [False] * len(params_no_res)
+            pos = 0
+            reordered = []
+            for key in node.arg_keys:
+                if key is None:
+                    while pos < len(params_no_res) and used[pos]:
+                        pos += 1
+                    if pos < len(params_no_res):
+                        idx = pos
+                        used[idx] = True
+                        pos += 1
+                    else:
+                        idx = None
+                else:
+                    idx = params_no_res.index(key)
+                    used[idx] = True
+                if idx is not None:
+                    reordered.append(intents[idx])
+                else:
+                    reordered.append(None)
+            if node.result is not None:
+                reordered.append(intents[-1])
+            node.intents = reordered
     for child in getattr(node, "iter_children", lambda: [])():
         _set_call_intents(child, routine_map)
 

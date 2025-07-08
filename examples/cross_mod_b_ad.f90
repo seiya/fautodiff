@@ -50,13 +50,9 @@ contains
     real, intent(inout) :: b_ad
     real :: inc_ad
     real :: inc
-    real :: b_save_80_ad
 
     inc = 1.0
-    b_save_80_ad = b
-    call incval(inc=inc, a=b)
 
-    b = b_save_80_ad
     call incval_rev_ad(b, b_ad, inc, inc_ad) ! call incval(inc=inc, a=b)
 
     return
