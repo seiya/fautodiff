@@ -15,7 +15,7 @@ _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 class AryIndex:
     """Class to represent index of fortran array"""
 
-    dims: List["Operator"] = field(default_factory=list)
+    dims: Optional[List[Optional["Operator"]]] = field(default_factory=list)
 
     def __post_init__(self):
         if not (isinstance(self.dims, list) or isinstance(self.dims, tuple)):
@@ -27,28 +27,31 @@ class AryIndex:
                 self.dims[i] = OpInt(dim)
                 continue
             if dim is None:
-                self.dims[i] = None
                 continue
             if not isinstance(dim, Operator):
                 raise ValueError("dim must be either None, int, or Operator")
 
     def list(self) -> List[str]:
-        return [(":" if dim is None else str(dim)) for dim in self.dims]
+        return [(":" if dim is None else str(dim)) for dim in self.dims] if self.dims is not None else []
 
     def copy(self) -> AryIndex:
-        return AryIndex(list(self.dims))
+        return AryIndex(list(self.dims) if self.dims is not None else None)
 
     def __len__(self) -> int:
-        return len(self.dims)
+        return len(self.dims) if self.dims is not None else 0
 
-    def __getitem__(self, index: int) -> "Operator":
-        return self.dims[index]
+    def __getitem__(self, index: int) -> Optional["Operator"]:
+        return self.dims[index] if self.dims is not None and index < len(self.dims) else None
 
     def __setitem__(self, index: int, var: Operator) -> None:
+        if self.dims is None:
+            self.dims = []
+        if index >= len(self.dims):
+            self.dims.extend([None] * (index - len(self.dims) + 1))
         self.dims[index] = var
 
-    def __iter__(self) -> iter:
-        return iter(self.dims)
+    def __iter__(self) -> Iterator[Optional["Operator"]]:
+        return iter(self.dims) if self.dims is not None else iter([])
 
     def __str__(self) -> str:
         return",".join(self.list())
@@ -56,8 +59,10 @@ class AryIndex:
     def __eq__(self, other) -> bool:
         if other is not None and not isinstance(other, AryIndex):
             return NotImplemented
-        if other is None:
+        if other is None or other.dims is None:
             return not self.is_partial_access()
+        if self.dims is None:
+            return not other.is_partial_access()
         if len(self.dims) != len(other.dims):
             raise ValueError("Different number of dimensions")
         for i, dim1 in enumerate(self.dims):
@@ -177,7 +182,7 @@ class AryIndex:
         if other is not None and not isinstance(other, AryIndex):
             raise NotImplemented
         if other is None:
-            return all([dim is None or isinstance(dim, OpRange) for dim in self.dims])
+            return self.dims is None or all([dim is None or isinstance(dim, OpRange) for dim in self.dims])
         return AryIndex._check_cover(self, other)
 
     def collect_vars(self) -> List[OpVar]:
@@ -193,9 +198,11 @@ class AryIndex:
         return vars
 
     def is_partial_access(self) -> bool:
-        return any([(dim is not None and not isinstance(dim, OpRange)) for dim in self.dims])
+        return self.dims is not None and any([(dim is not None and not isinstance(dim, OpRange)) for dim in self.dims])
 
     def is_depended_on(self, var:OpVar) -> bool:
+        if self.dims is None:
+            return False
         for dim in self.dims:
             if dim is None:
                 continue
@@ -208,7 +215,7 @@ class AryIndex:
 class Operator:
     """Abstract fortran oprations."""
 
-    args: Optional[List[Operator]] = None
+    args: Optional[List[Optional[Operator]]] = None
     PRIORITY: ClassVar[int] = -999
 
     def __post_init__(self):
@@ -220,12 +227,14 @@ class Operator:
         else:
             return f"{arg}"
 
-    def deep_clone(self) -> "Node":
+    def deep_clone(self) -> "Operator":
         clone = copy.deepcopy(self)
         return clone
 
     def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         vars = []
+        if self.args is None:
+            return vars
         for arg in self.args:
             for var in arg.collect_vars(without_index):
                 if var not in vars:
@@ -234,6 +243,8 @@ class Operator:
 
     def find_userfunc(self) -> List[OpFuncUser]:
         funcs = []
+        if self.args is None:
+            return funcs
         for arg in self.args:
             funcs.extend(arg.find_userfunc())
         return funcs
@@ -241,6 +252,8 @@ class Operator:
     def replace_with(self, src: Operator, dest: Operator) -> Operator:
         if self is src:
             return dest
+        if self.args is None:
+            return self
         args_new = []
         for arg in self.args:
             if arg is src:
@@ -252,7 +265,7 @@ class Operator:
         self.args = args_new
         return self
 
-    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+    def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         """Return the derivative operation with respetive to ```var```."""
         raise NotImplementedError(f"derivative in {type(self)}")
 
@@ -361,7 +374,7 @@ class Operator:
 
     def __mul__(self, other):
         if isinstance(other, int):
-            return other * OpInt(other)
+            return self * OpInt(other)
         if isinstance(other, Operator):
             if isinstance(self, OpInt) and self.val == 1:
                 return other
@@ -420,7 +433,7 @@ class Operator:
 
     def __truediv__(self, other):
         if isinstance(other, int):
-            return other / OpInt(other)
+            return self / OpInt(other)
         if isinstance(other, Operator):
             if isinstance(other, OpInt) and other.val == 1:
                 return self
@@ -520,7 +533,7 @@ class OpNum(OpLeaf):
     def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         return []
 
-    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+    def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         return OpInt(0, target=target)
 
 @dataclass
@@ -529,14 +542,14 @@ class OpInt(OpNum):
     val: int = field(default=-999)
     target: Optional[OpVar] = None
 
-    def __init__(self, val: int, kind: str = None, target: OpVar = None):
+    def __init__(self, val: int, kind: Optional[str] = None, target: Optional[OpVar] = None):
         super().__init__(args=[], kind=kind)
         if val < 0:
             raise ValueError(f"val must be >= 0: {val}")
         self.val = val
         self.target = target
 
-    def __new__(cls, val: int, kind: str = None, target: OpVar = None):
+    def __new__(cls, val: int, kind: Optional[str] = None, target: Optional[OpVar] = None):
         if val < 0:
             instance = super().__new__(cls)
             instance.__init__(- val, kind, target)
@@ -610,7 +623,7 @@ class OpVar(OpLeaf):
     ad_target: Optional[bool] = field(default=None, repr=False)
     is_constant: Optional[bool] = field(default=None, repr=False)
     reference: Optional["OpVar"] = field(repr=False, default=None)
-    reduced_dims: List[int] = field(init=False, repr=False, default=None)
+    reduced_dims: Optional[List[int]] = field(init=False, repr=False, default=None)
 
     def __init__(
         self,
@@ -672,13 +685,13 @@ class OpVar(OpLeaf):
             is_constant=self.is_constant,
         )
 
-    def add_suffix(self, suffix: str = None) -> str:
+    def add_suffix(self, suffix: Optional[str] = None) -> "OpVar":
         if suffix is None:
             return self
         name = f"{self.name}{suffix}"
         index = self.index
         if index is not None:
-            index = AryIndex(list(index.dims))
+            index = AryIndex(list(index.dims) if index.dims is not None else None)
         return OpVar(
             name,
             index=index,
@@ -699,7 +712,7 @@ class OpVar(OpLeaf):
                     vars.append(v)
         return vars
 
-    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+    def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         if var == self:
             return OpInt(1, target=target)
         return OpInt(0, target=target)
@@ -738,7 +751,7 @@ class OpUnary(Operator):
 
     def __post_init__(self):
         super().__post_init__()
-        if len(self.args) != 1:
+        if self.args is None or len(self.args) != 1:
             raise ValueError("length of args must 1")
 
     def __str__(self) -> str:
@@ -751,7 +764,7 @@ class OpNeg(OpUnary):
     OP: ClassVar[str] = "-"
     PRIORITY: ClassVar[int] = 4
 
-    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+    def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         return - self.args[0].derivative(var, target, info, warnings)
 
 @dataclass
@@ -761,7 +774,7 @@ class OpBinary(Operator):
 
     def __post_init__(self):
         super().__post_init__()
-        if len(self.args) != 2:
+        if self.args is None or len(self.args) != 2:
             raise ValueError("length of args must 2")
 
     def __str__(self) -> str:
@@ -776,7 +789,7 @@ class OpAdd(OpBinary):
     OP: ClassVar[str] = "+"
     PRIORITY: ClassVar[int] = 5
 
-    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+    def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         return self.args[0].derivative(var, target, info, warnings) + self.args[1].derivative(var, target, info, warnings)
 
 @dataclass
@@ -785,7 +798,7 @@ class OpSub(OpBinary):
     OP: ClassVar[str] = "-"
     PRIORITY: ClassVar[int] = 5
 
-    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+    def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         return self.args[0].derivative(var, target, info, warnings) - self.args[1].derivative(var, target, info, warnings)
 
 @dataclass
@@ -794,7 +807,7 @@ class OpMul(OpBinary):
     OP: ClassVar[str] = "*"
     PRIORITY: ClassVar[int] = 4
 
-    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+    def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         arg0 = self.args[0]
         arg1 = self.args[1]
         arg0_dev = arg0.derivative(var, target, info, warnings)
@@ -807,7 +820,7 @@ class OpDiv(OpBinary):
     OP: ClassVar[str] = "/"
     PRIORITY: ClassVar[int] = 4
 
-    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+    def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         arg0 = self.args[0]
         arg1 = self.args[1]
         arg0_dev = arg0.derivative(var, target, info, warnings)
@@ -837,7 +850,7 @@ class OpPow(OpBinary):
         else:
             return f"{a0}**{a1}"
 
-    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+    def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         base = self.args[0]
         expo = self.args[1]
         dbase = base.derivative(var, target, info, warnings)
@@ -906,6 +919,8 @@ class OpFunc(Operator):
         super().__init__(args=args)
         if not name:
             raise ValueError("name should not be empty")
+        if self.args is None:
+            self.args = []
         self.name = name
 
     def __str__(self) -> str:
@@ -915,14 +930,19 @@ class OpFunc(Operator):
         args = ", ".join(args)
         return f"{self.name}({args})"
 
-    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+    def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
 
         if self.name in NONDIFF_INTRINSICS:
             return OpInt(0, target=target)
+        
+        kind = target.kind if target is not None else None
 
         def _pi(target):
             return OpFunc("sqrt", args=[OpFunc("acos", args=[-OpReal(1.0, kind=target.kind)])])
 
+        if len(self.args) == 0:
+            raise ValueError(f"Function ({self.name}) is not supported")
+        
         # One argument intrinsics map
         arg0 = self.args[0]
         dvar0 = arg0.derivative(var, target, info, warnings)
@@ -936,7 +956,7 @@ class OpFunc(Operator):
         if self.name == "log":
             return dvar0 / arg0
         if self.name == "log10":
-            return dvar0 / ( arg0 * OpFunc("log", args=[OpReal("10.0", kind=target.kind)]) )
+            return dvar0 / ( arg0 * OpFunc("log", args=[OpReal("10.0", kind=kind)]) )
         if self.name == "sin":
             return dvar0 * OpFunc("cos", args=[arg0])
         if self.name == "cos":
@@ -944,11 +964,11 @@ class OpFunc(Operator):
         if self.name == "tan":
             return dvar0 / OpFunc("cos", args=[arg0])**2
         if self.name == "asin":
-            return dvar0 / OpFunc("sqrt", args=[OpReal(1.0, kind=target.kind) - arg0**2])
+            return dvar0 / OpFunc("sqrt", args=[OpReal(1.0, kind=kind) - arg0**2])
         if self.name == "acos":
-            return - dvar0 / OpFunc("sqrt", args=[OpReal(1.0, kind=target.kind) - arg0**2])
+            return - dvar0 / OpFunc("sqrt", args=[OpReal(1.0, kind=kind) - arg0**2])
         if self.name == "atan":
-            return dvar0 / (OpReal(1.0, kind=target.kind) + arg0**2)
+            return dvar0 / (OpReal(1.0, kind=kind) + arg0**2)
         if self.name == "sinh":
             return dvar0 * OpFunc("cosh", args=[arg0])
         if self.name == "cosh":
@@ -956,12 +976,12 @@ class OpFunc(Operator):
         if self.name == "tanh":
             return dvar0 / OpFunc("cosh", args=[arg0])**2
         if self.name == "asinh":
-            return dvar0 / OpFunc("sqrt", args=[arg0**2 + OpReal(1.0, kind=target.kind)])
+            return dvar0 / OpFunc("sqrt", args=[arg0**2 + OpReal(1.0, kind=kind)])
         if self.name == "acosh":
-            one = OpReal(1.0, kind=target.kind)
+            one = OpReal(1.0, kind=kind)
             return dvar0 / (OpFunc("sqrt", args=[arg0 - one]) * OpFunc("sqrt", args=[arg0 + one]))
         if self.name == "atanh":
-            return dvar0 / (OpReal(1.0, kind=target.kind) - arg0**2)
+            return dvar0 / (OpReal(1.0, kind=kind) - arg0**2)
         if self.name == "erf":
             return dvar0 * OpInt(2, target=target) / _pi(target) * OpFunc("exp", args=[-arg0**2])
         if self.name == "erfc":
@@ -981,17 +1001,17 @@ class OpFunc(Operator):
         if self.name == "mod":
             return dvar0 - dvar1 * OpFunc("real", args=[OpFunc("int", args=[arg0 / arg1]), OpFunc("kind", args=[arg0])])
         if self.name == "min":
-            one = OpReal("1.0", kind=target.kind)
-            zero = OpReal("0.0", kind=target.kind)
+            one = OpReal("1.0", kind=kind)
+            zero = OpReal("0.0", kind=kind)
             cond = arg0 >= arg1
             return dvar0 * OpFunc("merge", args=[one, zero, cond]) + dvar1 * OpFunc("merge", args=[zero, one, cond])
         if self.name == "max":
-            one = OpReal("1.0", kind=target.kind)
-            zero = OpReal("0.0", kind=target.kind)
+            one = OpReal("1.0", kind=kind)
+            zero = OpReal("0.0", kind=kind)
             cond = arg0 <= arg1
             return dvar0 * OpFunc("merge", args=[one, zero, cond]) + dvar1 * OpFunc("merge", args=[zero, one, cond])
         if self.name == "sign":
-            one = OpReal("1.0", kind=target.kind)
+            one = OpReal("1.0", kind=kind)
             return dvar0 * OpFunc("sign", args=[one, arg0]) * OpFunc("sign", args=[one, arg1])
         if self.name == "atan2":
             return (dvar0 * arg1 - dvar1 * arg0) / (arg0**2 + arg1**2)
@@ -1019,9 +1039,9 @@ class OpFunc(Operator):
 
 @dataclass
 class OpFuncUser(Operator):
-
+    """A user-defined function in the form of `name(args)`, where `args` is a list of Operators."""
     name: str = field(default="")
-    intents: List[name] = field(default=None)
+    intents: Optional[List[str]] = field(default=None)
     PRIORITY: ClassVar[int] = 1
 
     def __init__(self, name: str, args:List[Operator]):
@@ -1029,6 +1049,8 @@ class OpFuncUser(Operator):
         if not name:
             raise ValueError("name should not be empty")
         self.name = name
+        if self.args is None:
+            self.args = []
 
     def __str__(self) -> str:
         args = []
@@ -1044,7 +1066,7 @@ class OpFuncUser(Operator):
         funcs.append(self)
         return funcs
 
-    def derivative(self, var: OpVar, target: OpVar = None, info: dict = None, warnings: List[str] = None) -> Operator:
+    def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         raise NotImplementedError
 
 @dataclass
@@ -1059,7 +1081,8 @@ class OpRange(Operator):
             if isinstance(val, int):
                 self.args[i] = OpInt(val)
 
-    def collect_vars(self, without_index: bool = False) -> List[OpLeaf]:
+    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
+        """Collect variables from the range operator."""
         vars = []
         if not without_index:
             for arg in self.args:

@@ -14,6 +14,7 @@ from fparser.two import Fortran2003, Fortran2008
 from fparser.two.parser import ParserFactory
 from fparser.two.utils import walk
 from packaging.version import Version, parse
+from typing import List, Optional
 
 from .code_tree import (
     Assignment,
@@ -33,6 +34,7 @@ from .code_tree import (
 )
 from .operators import (
     INTRINSIC_FUNCTIONS,
+    AryIndex,
     OpAdd,
     OpChr,
     OpDiv,
@@ -126,7 +128,7 @@ def _stmt2op(stmt, decls):
 
     if isinstance(stmt, Fortran2003.Part_Ref):
         name = stmt.items[0].tofortran()
-        index = tuple(_stmt2op(x, decls) for x in stmt.items[1].items)
+        index = AryIndex([_stmt2op(x, decls) for x in stmt.items[1].items])
         decl = decls.find_by_name(name)
         if decl is None:  # must be function
             name_l = name.lower()
@@ -148,7 +150,7 @@ def _stmt2op(stmt, decls):
             )
 
     if isinstance(stmt, Fortran2003.Subscript_Triplet):
-        args = tuple((x and _stmt2op(x, decls)) for x in stmt.items)
+        args = [(x and _stmt2op(x, decls)) for x in stmt.items]
         return OpRange(args)
 
     if isinstance(stmt, Fortran2003.Intrinsic_Function_Reference):
@@ -551,7 +553,7 @@ def find_subroutines(modules):
 def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=None):
     """Return node tree correspoinding to the input AST"""
 
-    def _parse_stmt(stmt, decls) -> Node:
+    def _parse_stmt(stmt, decls) -> Optional[Node]:
         if isinstance(stmt, Fortran2003.Comment):
             return None
         line_no = None
@@ -585,6 +587,9 @@ def _parse_routine(content, src_name, module=None, module_map=None, search_dirs=
             return CallStatement(name, args, arg_keys=arg_keys, info=info)
         if isinstance(stmt, Fortran2003.If_Construct):
             cond_blocks = []
+            if isinstance(stmt.content[0], Fortran2003.Comment):
+                # skip comment
+                stmt.content.pop(0)
             cond = _stmt2op(stmt.content[0].items[0], decls)
             i = 1
             seg = []

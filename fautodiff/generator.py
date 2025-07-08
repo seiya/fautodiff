@@ -9,6 +9,7 @@ REV_SUFFIX = "_rev_ad"
 import json
 import sys
 from pathlib import Path
+from typing import Optional, List
 
 # Ensure other modules use the same AD suffix
 from . import code_tree as code_tree
@@ -19,6 +20,7 @@ from .code_tree import (
     ClearAssignment,
     Declaration,
     DoLoop,
+    Routine,
     Function,
     IfBlock,
     Module,
@@ -31,6 +33,7 @@ from .code_tree import (
     render_program,
 )
 from .operators import (
+    AryIndex,
     OpReal,
     OpVar,
 )
@@ -342,7 +345,7 @@ def _collect_called_ad_modules(blocks, routine_map, reverse):
     return modules
 
 
-def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings):
+def _generate_fwd_ad_subroutine(routine_org: Routine, routine_map: dict, routine_info: dict, warnings: List[str]) -> tuple[Optional[Subroutine], set]:
     if routine_info.get("skip"):
         return None, set()
 
@@ -405,6 +408,7 @@ def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings
         for name in vars.names():
             if not name.endswith(AD_SUFFIX):
                 continue
+            var = None
             if not any(v for v in grad_args if v.name == name):
                 # AD variables which is not in grads_args (= temporary variables in this subroutine)
                 if subroutine.is_declared(name):
@@ -415,7 +419,7 @@ def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings
                 var = next(var for var in out_grad_args if var.name == name)
             if var is not None:  # uninitialized AD variables
                 if var.dims is not None and len(var.dims) > 0:
-                    index = (None,) * len(var.dims)
+                    index = AryIndex([None] * len(var.dims))
                 else:
                     index = None
                 subroutine.ad_init.append(
@@ -461,7 +465,7 @@ def _generate_fwd_ad_subroutine(routine_org, routine_map, routine_info, warnings
                 print("".join(subroutine.render()))
                 raise
         if var.dims is not None:
-            dims = v_org.dims
+            dims = var.dims
         elif v_org is not None:
             if var.reduced_dims is not None:
                 dims = []
@@ -592,6 +596,7 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
         for name in vars.names():
             if not name.endswith(AD_SUFFIX):
                 continue
+            var = None
             if not any(v for v in grad_args if v.name == name):
                 # AD variables which is not in grads_args (= temporary variables in this subroutine)
                 if subroutine.is_declared(name):
@@ -602,7 +607,7 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
                 var = next(var for var in out_grad_args if var.name == name)
             if var is not None:  # uninitialized AD variables
                 if var.dims is not None and len(var.dims) > 0:
-                    index = (None,) * len(var.dims)
+                    index = AryIndex((None,) * len(var.dims))
                 else:
                     index = None
                 subroutine.ad_init.append(
@@ -671,7 +676,7 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
                 print("".join(subroutine.render()))
                 raise
         if var.dims is not None:
-            dims = v_org.dims
+            dims = var.dims
         elif v_org is not None:
             if var.reduced_dims is not None:
                 dims = []
