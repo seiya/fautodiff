@@ -373,186 +373,16 @@ def _collect_called_ad_modules(blocks, routine_map, reverse):
     return modules
 
 
-def _generate_fwd_ad_subroutine(routine_org: Routine, routine_map: dict, routine_info: dict, warnings: List[str]) -> tuple[Optional[Subroutine], set]:
-    if routine_info.get("skip"):
-        return None, set()
+def _generate_ad_subroutine(
+    routine_org: Routine,
+    routine_map: dict,
+    routine_info: dict,
+    warnings: List[str],
+    *,
+    reverse: bool,
+) -> tuple[Optional[Subroutine], bool, set]:
+    """Generate forward or reverse AD subroutine."""
 
-    subroutine = routine_info["subroutine"]
-    grad_args = routine_info["grad_args"]
-    in_grad_args = routine_info["in_grad_args"]
-    out_grad_args = routine_info["out_grad_args"]
-    has_grad_input = routine_info["has_grad_input"]
-    ad_block = subroutine.ad_content
-
-    if not has_grad_input:
-        for arg in out_grad_args:
-            lhs = OpVar(arg.name, kind=arg.kind)
-            ad_block.append(Assignment(lhs, OpReal("0.0", kind=arg.kind)))
-        subroutine.ad_content = ad_block
-        return subroutine, set()
-
-    _set_call_intents(routine_org.content, routine_map)
-
-    saved_vars = []
-    ad_code = routine_org.content.generate_ad(
-        saved_vars,
-        reverse=False,
-        assigned_advars=VarList(in_grad_args),
-        routine_map=routine_map,
-        warnings=warnings,
-    )[0]
-
-    if (ad_code is not None) and (not ad_code.is_effectively_empty()):
-        for var in ad_code.assigned_vars(without_savevar=True):
-            name = var.name
-            if name.endswith(AD_SUFFIX):
-                found = False
-                for arg in grad_args:
-                    if arg.name == name:
-                        found = True
-                        break
-                if found:
-                    continue
-                v_org = routine_org.get_var(name.removesuffix(AD_SUFFIX))
-                base_decl = routine_org.decls.find_by_name(name.removesuffix(AD_SUFFIX))
-                if v_org is not None and not subroutine.is_declared(name):
-                    subroutine.decls.append(
-                        Declaration(
-                            name,
-                            v_org.typename,
-                            v_org.kind,
-                            v_org.dims,
-                            None,
-                            base_decl.parameter if base_decl else False,
-                            init=base_decl.init if base_decl else None,
-                        )
-                    )
-
-        ad_code = ad_code.prune_for(VarList([OpVar(var.name) for var in grad_args]))
-
-        vars = ad_code.required_vars(
-            VarList([OpVar(var.name) for var in out_grad_args]), without_savevar=True
-        )
-        for name in vars.names():
-            if not name.endswith(AD_SUFFIX):
-                continue
-            var = None
-            if not any(v for v in grad_args if v.name == name):
-                # AD variables which is not in grads_args (= temporary variables in this subroutine)
-                if subroutine.is_declared(name):
-                    var = subroutine.get_var(name)
-            else:  # var in grad_args
-                if any(v for v in in_grad_args if v.name == name):
-                    continue
-                var = next(var for var in out_grad_args if var.name == name)
-            if var is not None:  # uninitialized AD variables
-                if var.dims is not None and len(var.dims) > 0:
-                    index = AryIndex([None] * len(var.dims))
-                else:
-                    index = None
-                subroutine.ad_init.append(
-                    Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind))
-                )
-
-        ad_block.extend(ad_code)
-
-    vars = []
-    for var in subroutine.collect_vars():
-        if var.name not in vars:
-            vars.append(var.name)
-    for var in vars:
-        if subroutine.decls.find_by_name(var) is None:
-            decl = routine_org.decls.find_by_name(var)
-            if decl is None and var.endswith(AD_SUFFIX):
-                base = var.removesuffix(AD_SUFFIX)
-                base_decl = routine_org.decls.find_by_name(base)
-                if base_decl is not None:
-                    decl = Declaration(
-                        var,
-                        base_decl.typename,
-                        base_decl.kind,
-                        base_decl.dims,
-                        None,
-                        base_decl.parameter,
-                        init=base_decl.init,
-                    )
-            if decl is not None:
-                if decl.intent is not None and decl.intent == "out":
-                    decl.intent = None
-                subroutine.decls.append(decl)
-
-    for var in reversed(saved_vars):
-        v_org = None
-        base_decl = None
-        if var.reference is not None:
-            try:
-                v_org = routine_org.get_var(var.reference.name)
-                base_decl = routine_org.decls.find_by_name(var.reference.name)
-            except ValueError as e:
-                ad_block.extend(ad_code)
-                print("".join(subroutine.render()))
-                raise
-        if var.dims is not None:
-            dims = var.dims
-        elif v_org is not None:
-            if var.reduced_dims is not None:
-                dims = []
-                for i, idx in enumerate(v_org.dims):
-                    if not i in var.reduced_dims:
-                        dims.append(idx)
-                if len(dims) == 0:
-                    dims = None
-                else:
-                    dims = tuple(dims)
-            else:
-                dims = v_org.dims
-        else:
-            dims = None
-        if v_org:
-            typename = v_org.typename
-        elif var.typename is not None:
-            typename = var.typename
-        elif var.ad_target:
-            typename = "real"
-        else:
-            raise RuntimeError("typename cannot be identified")
-        if v_org:
-            kind = v_org.kind
-        else:
-            kind = var.kind
-        subroutine.decls.append(
-            Declaration(
-                var.name,
-                typename,
-                kind,
-                dims,
-                None,
-                base_decl.parameter if base_decl else False,
-                init=base_decl.init if base_decl else None,
-            )
-        )
-
-    subroutine = subroutine.prune_for(VarList([OpVar(var.name) for var in grad_args]))
-
-    required_vnames = [str(var) for var in subroutine.required_vars()]
-    if len(required_vnames) > 0:
-        _warn(
-            warnings,
-            {},
-            f"{required_vnames} in {subroutine.name}",
-            "Required variables are remained",
-        )
-
-    called_mods = _collect_called_ad_modules(
-        [subroutine.content, subroutine.ad_init, subroutine.ad_content],
-        routine_map,
-        reverse=False,
-    )
-
-    return subroutine, called_mods
-
-
-def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings):
     if routine_info.get("skip"):
         return None, False, set()
 
@@ -563,7 +393,6 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
     has_grad_input = routine_info["has_grad_input"]
     ad_block = subroutine.ad_content
 
-    # If no derivative inputs exist, all output gradients remain zero
     if not has_grad_input:
         for arg in out_grad_args:
             lhs = OpVar(arg.name, kind=arg.kind)
@@ -571,31 +400,23 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
         subroutine.ad_content = ad_block
         return subroutine, False, set()
 
-    # populate CallStatement intents from routine map
     _set_call_intents(routine_org.content, routine_map)
 
-    # print("subroutine: ", subroutine.name) # for debug
-
-    saved_vars = []
+    saved_vars: List[SaveAssignment] = []
     ad_code = routine_org.content.generate_ad(
-        saved_vars, reverse=True, routine_map=routine_map, warnings=warnings
+        saved_vars,
+        reverse=reverse,
+        assigned_advars=VarList(in_grad_args) if not reverse else None,
+        routine_map=routine_map,
+        warnings=warnings,
     )[0]
 
-    # print(render_program(ad_code)) # for debug
-
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
-
-        # check undeclared reference for AD variables
         for var in ad_code.assigned_vars(without_savevar=True):
             name = var.name
-            if name.endswith(AD_SUFFIX):  # only for AD variables
-                found = False
-                for arg in grad_args:
-                    if arg.name == name:
-                        found = True
-                        break
-                if found:
-                    continue  # already declared
+            if name.endswith(AD_SUFFIX):
+                if any(arg.name == name for arg in grad_args):
+                    continue
                 v_org = routine_org.get_var(name.removesuffix(AD_SUFFIX))
                 base_decl = routine_org.decls.find_by_name(name.removesuffix(AD_SUFFIX))
                 if v_org is not None and not subroutine.is_declared(name):
@@ -611,29 +432,27 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
                         )
                     )
 
-        # check initialization for AD variables
-        ad_code.check_initial(VarList(in_grad_args))
+        if reverse:
+            ad_code.check_initial(VarList(in_grad_args))
 
-        # optimize the AD code
         ad_code = ad_code.prune_for(VarList([OpVar(var.name) for var in grad_args]))
 
-        # check uninitialized AD variables
         vars = ad_code.required_vars(
             VarList([OpVar(var.name) for var in out_grad_args]), without_savevar=True
         )
         for name in vars.names():
             if not name.endswith(AD_SUFFIX):
                 continue
-            var = None
             if not any(v for v in grad_args if v.name == name):
-                # AD variables which is not in grads_args (= temporary variables in this subroutine)
                 if subroutine.is_declared(name):
                     var = subroutine.get_var(name)
-            else:  # var in grad_args
+                else:
+                    var = None
+            else:
                 if any(v for v in in_grad_args if v.name == name):
                     continue
-                var = next(var for var in out_grad_args if var.name == name)
-            if var is not None:  # uninitialized AD variables
+                var = next(v for v in out_grad_args if v.name == name)
+            if var is not None:
                 if var.dims is not None and len(var.dims) > 0:
                     index = AryIndex((None,) * len(var.dims))
                 else:
@@ -642,32 +461,30 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
                     Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind))
                 )
 
-        # now ad_code is completed
         ad_block.extend(ad_code)
 
-    # print(render_program(routine_org.content)) # debug
-    fw_block = routine_org.content.prune_for(ad_block.required_vars())
-    # print(render_program(fw_block)) # debug
+    if reverse:
+        fw_block = routine_org.content.prune_for(ad_block.required_vars())
 
-    flag = True
-    while flag:
-        last = fw_block.last()
-        first = ad_block.first()
-        if (
-            isinstance(last, SaveAssignment)
-            and isinstance(first, SaveAssignment)
-            and last.var == first.var
-            and last.load != first.load
-        ):
-            fw_block.remove_child(last)
-            ad_block.remove_child(first)
-        else:
-            flag = False
+        flag = True
+        while flag:
+            last = fw_block.last()
+            first = ad_block.first()
+            if (
+                isinstance(last, SaveAssignment)
+                and isinstance(first, SaveAssignment)
+                and last.var == first.var
+                and last.load != first.load
+            ):
+                fw_block.remove_child(last)
+                ad_block.remove_child(first)
+            else:
+                flag = False
 
-    if not fw_block.is_effectively_empty():
-        subroutine.content.extend(fw_block)
+        if not fw_block.is_effectively_empty():
+            subroutine.content.extend(fw_block)
 
-    vars = []
+    vars: List[str] = []
     for var in subroutine.collect_vars():
         if var.name not in vars:
             vars.append(var.name)
@@ -699,7 +516,7 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
             try:
                 v_org = routine_org.get_var(var.reference.name)
                 base_decl = routine_org.decls.find_by_name(var.reference.name)
-            except ValueError as e:
+            except ValueError:
                 ad_block.extend(ad_code)
                 print("".join(subroutine.render()))
                 raise
@@ -709,7 +526,7 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
             if var.reduced_dims is not None:
                 dims = []
                 for i, idx in enumerate(v_org.dims):
-                    if not i in var.reduced_dims:
+                    if i not in var.reduced_dims:
                         dims.append(idx)
                 if len(dims) == 0:
                     dims = None
@@ -754,15 +571,16 @@ def _generate_rev_ad_subroutine(routine_org, routine_map, routine_info, warnings
             "Required variables are remained",
         )
 
-    uses_pushpop = _contains_pushpop(subroutine)
+    uses_pushpop = _contains_pushpop(subroutine) if reverse else False
 
     called_mods = _collect_called_ad_modules(
         [subroutine.content, subroutine.ad_init, subroutine.ad_content],
         routine_map,
-        reverse=True,
+        reverse=reverse,
     )
 
     return subroutine, uses_pushpop, called_mods
+
 
 
 def generate_ad(
@@ -821,15 +639,23 @@ def generate_ad(
 
         for routine in mod_org.routines:
             if mode in ("forward", "both"):
-                sub, mods_called = _generate_fwd_ad_subroutine(
-                    routine, routine_map, routine_info_fwd[routine.name], warnings
+                sub, _, mods_called = _generate_ad_subroutine(
+                    routine,
+                    routine_map,
+                    routine_info_fwd[routine.name],
+                    warnings,
+                    reverse=False,
                 )
                 if sub is not None:
                     routines.append(sub)
                 ad_modules_used.update(mods_called)
             if mode in ("reverse", "both"):
-                sub, used, mods_called = _generate_rev_ad_subroutine(
-                    routine, routine_map, routine_info_rev[routine.name], warnings
+                sub, used, mods_called = _generate_ad_subroutine(
+                    routine,
+                    routine_map,
+                    routine_info_rev[routine.name],
+                    warnings,
+                    reverse=True,
                 )
                 if sub is not None:
                     routines.append(sub)
