@@ -1497,6 +1497,17 @@ class Declaration(Node):
 
     def is_effectively_empty(self) -> bool:
         return False
+    
+    def collect_vars(self):
+        return[OpVar(
+            name=self.name,
+            typename=self.typename,
+            kind=self.kind,
+            is_constant=self.parameter or self.constant,
+            allocatable=self.allocatable,
+            dims=self.dims,
+            intent=self.intent,
+        )]
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent

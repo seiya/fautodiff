@@ -1,4 +1,4 @@
-module allocate_example
+module allocate
   implicit none
 
   real, allocatable :: mod_arr(:)
@@ -49,6 +49,8 @@ contains
 
     x = 0.0
     do i = 1, n
+      mod_arr(i) = mod_arr(i) * 2.0 + i
+      mod_arr_diff(i) = mod_arr_diff(i) * (2.0 + i)
       x = x + mod_arr(i) * mod_arr_diff(i)
     end do
 
@@ -71,4 +73,4 @@ contains
     return
   end subroutine module_vars_finalize
 
-end module allocate_example
+end module allocate

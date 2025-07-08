@@ -392,6 +392,7 @@ def _collect_called_ad_modules(blocks, routine_map, reverse):
 
 
 def _generate_ad_subroutine(
+    mod_org: Module,
     routine_org: Routine,
     routine_map: dict,
     routine_info: dict,
@@ -411,7 +412,9 @@ def _generate_ad_subroutine(
     has_grad_input = routine_info["has_grad_input"]
     ad_block = subroutine.ad_content
 
-    if not has_grad_input:
+    has_mod_grad_input = True # ToDo: check if module has grad variables
+
+    if not has_grad_input and not has_mod_grad_input:
         for arg in out_grad_args:
             lhs = OpVar(arg.name, kind=arg.kind)
             ad_block.append(Assignment(lhs, OpReal("0.0", kind=arg.kind)))
@@ -429,6 +432,7 @@ def _generate_ad_subroutine(
         warnings=warnings,
     )[0]
 
+    #print(subroutine.name)
     #print(render_program(ad_code)) # for debugging
 
     if (ad_code is not None) and (not ad_code.is_effectively_empty()):
@@ -458,7 +462,11 @@ def _generate_ad_subroutine(
         if reverse:
             ad_code.check_initial(VarList(in_grad_args))
 
-        ad_code = ad_code.prune_for(VarList([OpVar(var.name) for var in grad_args]))
+        target_vars = [OpVar(var.name) for var in grad_args]
+        for var in mod_org.decls.collect_vars():
+            target_vars.append(var)
+        targets = VarList(target_vars)
+        ad_code = ad_code.prune_for(targets)
 
         vars = ad_code.required_vars(
             VarList([OpVar(var.name) for var in out_grad_args]), without_savevar=True
@@ -669,6 +677,7 @@ def generate_ad(
         for routine in mod_org.routines:
             if mode in ("forward", "both"):
                 sub, _, mods_called = _generate_ad_subroutine(
+                    mod_org,
                     routine,
                     routine_map,
                     routine_info_fwd[routine.name],
@@ -680,6 +689,7 @@ def generate_ad(
                 ad_modules_used.update(mods_called)
             if mode in ("reverse", "both"):
                 sub, used, mods_called = _generate_ad_subroutine(
+                    mod_org,
                     routine,
                     routine_map,
                     routine_info_rev[routine.name],
