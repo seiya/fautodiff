@@ -427,5 +427,42 @@ class TestParser(unittest.TestCase):
         self.assertIsInstance(stmts[1], code_tree.Deallocate)
         self.assertEqual(stmts[1].vars[0].name, "a")
 
+    def test_declared_in_attribute(self):
+        src = textwrap.dedent(
+            """
+            module moda
+              real :: a
+            contains
+              subroutine dummy()
+              end subroutine dummy
+            end module moda
+
+            module modb
+              use moda
+            contains
+              subroutine foo(x)
+                real, intent(in) :: x
+                a = a + x
+              end subroutine foo
+            end module modb
+            """
+        )
+        modules = parser.parse_src(src)
+        moda = modules[0]
+        modb = modules[1]
+        routine = modb.routines[0]
+
+        decl_x = routine.decls.find_by_name("x")
+        self.assertEqual(decl_x.declared_in, "routine")
+
+        decl_a_module = moda.decls.find_by_name("a")
+        self.assertEqual(decl_a_module.declared_in, "module")
+
+        decl_a_use = routine.mod_decls.find_by_name("a")
+        self.assertEqual(decl_a_use.declared_in, "use")
+
+        var_a = routine.get_var("a")
+        self.assertEqual(var_a.declared_in, "use")
+
 if __name__ == "__main__":
     unittest.main()

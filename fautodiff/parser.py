@@ -262,8 +262,29 @@ def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
     return {}
 
 
+def _clone_decl(decl: Declaration, declared_in: str) -> Declaration:
+    return Declaration(
+        decl.name,
+        decl.typename,
+        decl.kind,
+        decl.dims,
+        decl.intent,
+        decl.parameter,
+        decl.constant,
+        init=decl.init,
+        access=decl.access,
+        allocatable=decl.allocatable,
+        declared_in=declared_in,
+    )
+
+
 def _parse_decl_stmt(
-    stmt, constant_args=None, *, allow_intent=True, allow_access=False
+    stmt,
+    constant_args=None,
+    *,
+    allow_intent=True,
+    allow_access=False,
+    declared_in="routine",
 ) -> List[Declaration]:
     """Parse a single ``Type_Declaration_Stmt`` and return declarations."""
 
@@ -350,13 +371,21 @@ def _parse_decl_stmt(
                 init=init,
                 access=access,
                 allocatable=allocatable,
+                declared_in=declared_in,
             )
         )
 
     return decls
 
 
-def _parse_decls(spec, constant_args=None, *, allow_intent=True, allow_access=False) -> Block:
+def _parse_decls(
+    spec,
+    constant_args=None,
+    *,
+    allow_intent=True,
+    allow_access=False,
+    declared_in="routine",
+) -> Block:
     """Return declarations parsed from a specification part."""
 
     decls = Block([])
@@ -391,6 +420,7 @@ def _parse_decls(spec, constant_args=None, *, allow_intent=True, allow_access=Fa
                 constant_args,
                 allow_intent=allow_intent,
                 allow_access=allow_access,
+                declared_in=declared_in,
             ):
                 decls.append(decl)
             continue
@@ -488,7 +518,10 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
                         if mod_node.decls is None:
                             mod_node.decls = Block([])
                         for decl in _parse_decl_stmt(
-                            c, allow_intent=False, allow_access=True
+                            c,
+                            allow_intent=False,
+                            allow_access=True,
+                            declared_in="module",
                         ):
                             if decl.access is None:
                                 if decl.name in access_map:
@@ -805,7 +838,11 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                 routine.directives.get("CONSTANT_ARGS") if routine.directives else None
             )
             routine.decls = _parse_decls(
-                item, const_args, allow_intent=True, allow_access=False
+                item,
+                const_args,
+                allow_intent=True,
+                allow_access=False,
+                declared_in="routine",
             )
 
             # build mod declarations for use in execution parsing
@@ -819,7 +856,9 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                         if used and used.decls is not None:
                             for d in used.decls:
                                 if child.only is None or (d.name in child.only):
-                                    mod_decls.append(d)
+                                    mod_decls.append(
+                                        _clone_decl(d, declared_in="use")
+                                    )
                         elif search_dirs:
                             vars_map = _load_fadmod_decls(child.name, search_dirs)
                             for name, info in vars_map.items():
@@ -839,6 +878,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                                             info.get("constant", False),
                                             init=info.get("init"),
                                             access=info.get("access"),
+                                            declared_in="use",
                                         )
                                     )
             if module is not None and module.decls is not None:
@@ -849,7 +889,9 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                     if used and used.decls is not None:
                         for d in used.decls:
                             if child.only is None or (d.name in child.only):
-                                mod_decls.append(d)
+                                mod_decls.append(
+                                    _clone_decl(d, declared_in="use")
+                                )
                     elif search_dirs:
                         vars_map = _load_fadmod_decls(child.name, search_dirs)
                         for name, info in vars_map.items():
@@ -870,6 +912,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                                         init=info.get("init"),
                                         access=info.get("access"),
                                         allocatable=info.get("allocatable", False),
+                                        declared_in="use",
                                     )
                                 )
 
@@ -913,7 +956,9 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                     if used and used.decls is not None:
                         for d in used.decls:
                             if child.only is None or (d.name in child.only):
-                                mod_decls.append(d)
+                                mod_decls.append(
+                                    _clone_decl(d, declared_in="use")
+                                )
                     elif search_dirs:
                         vars_map = _load_fadmod_decls(child.name, search_dirs)
                         for name, info in vars_map.items():
@@ -934,6 +979,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                                         init=info.get("init"),
                                         access=info.get("access"),
                                         allocatable=info.get("allocatable", False),
+                                        declared_in="use",
                                     )
                                 )
             if module.decls is not None:
@@ -945,7 +991,9 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                 if used and used.decls is not None:
                     for d in used.decls:
                         if child.only is None or (d.name in child.only):
-                            mod_decls.append(d)
+                            mod_decls.append(
+                                _clone_decl(d, declared_in="use")
+                            )
                 elif search_dirs:
                     vars_map = _load_fadmod_decls(child.name, search_dirs)
                     for name, info in vars_map.items():
@@ -966,6 +1014,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                                     init=info.get("init"),
                                     access=info.get("access"),
                                     allocatable=info.get("allocatable", False),
+                                    declared_in="use",
                                 )
                             )
 
