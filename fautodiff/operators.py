@@ -219,6 +219,8 @@ class Operator:
     PRIORITY: ClassVar[int] = -999
 
     def __post_init__(self):
+        if self.args is not None and not isinstance(self.args, list):
+            raise ValueError(f"args must be a list: {type(self.args)}")
         return None
 
     def _paren(self, arg: Operator, eq: bool = False) -> str:
@@ -738,13 +740,19 @@ class OpVar(OpLeaf):
         return self.index.list()
 
     def index_str(self) -> str:
-        return ",".join(self.index_list())
+        index_list = self.index_list()
+        if self.index is not None and self.reduced_dims is not None:
+            for i in reversed(self.reduced_dims) or []:
+                if i < len(index_list):
+                    del index_list[i]
+        return ",".join(index_list)
 
     def __str__(self) -> str:
-        if self.index is None or len(self.index) == 0:
+        index_str = self.index_str()
+        if not index_str:
             return self.name
         else:
-            return f"{self.name}({self.index_str()})"
+            return f"{self.name}({index_str})"
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, type(self)):
@@ -1061,6 +1069,10 @@ class OpFuncUser(Operator):
         self.name = name
         if self.args is None:
             self.args = []
+        else:
+            for i, arg in enumerate(self.args):
+                if not isinstance(arg, Operator):
+                    raise TypeError(f"args[{i}] must be an Operator: {type(arg)}")
 
     def __str__(self) -> str:
         args = []

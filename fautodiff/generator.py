@@ -120,7 +120,18 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, d
                     else:
                         routines.update(data)
                     if vars_data:
-                        variables[mod] = vars_data
+                        vars = []
+                        for name, info in vars_data.items():
+                            vars.append(
+                                OpVar(
+                                    name = name,
+                                    typename = info.get("typename"),
+                                    kind = info.get("kind", None),
+                                    dims = info.get("dims", None),
+                                    is_constant = info.get("constant", False),
+                                    allocatable = info.get("allocatable", False),
+                                ))
+                        variables[mod] = vars
                 except Exception:
                     pass
                 break
@@ -165,7 +176,7 @@ def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
     path.write_text(json.dumps(data, indent=2))
 
 
-def _prepare_fwd_ad_header(routine_org):
+def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
     args = []
     grad_args = []
     in_grad_args = []
@@ -246,7 +257,7 @@ def _prepare_fwd_ad_header(routine_org):
     subroutine.ad_init = Block([])
     subroutine.ad_content = Block([])
 
-    skip = bool(routine_org.directives.get("SKIP")) or len(out_grad_args) == 0
+    skip = bool(routine_org.directives.get("SKIP")) or (len(out_grad_args) == 0 and not has_mod_grad_var)
     if skip:
         arg_info["name_fwd_ad"] = None
 
@@ -261,7 +272,7 @@ def _prepare_fwd_ad_header(routine_org):
     }
 
 
-def _prepare_rev_ad_header(routine_org):
+def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
     """Prepare AD subroutine header and returns argument info."""
 
     args = []
@@ -357,7 +368,7 @@ def _prepare_rev_ad_header(routine_org):
     subroutine.ad_init = Block([])
     subroutine.ad_content = Block([])
 
-    skip = bool(routine_org.directives.get("SKIP")) or len(out_grad_args) == 0
+    skip = bool(routine_org.directives.get("SKIP")) or (len(out_grad_args) == 0 and not has_mod_grad_var)
     if skip:
         arg_info["name_rev_ad"] = None
 
@@ -397,6 +408,7 @@ def _generate_ad_subroutine(
     mod_org: Module,
     routine_org: Routine,
     routine_map: dict,
+    mod_vars: List[OpVar],
     routine_info: dict,
     warnings: List[str],
     *,
@@ -414,8 +426,11 @@ def _generate_ad_subroutine(
     has_grad_input = routine_info["has_grad_input"]
     ad_block = subroutine.ad_content
 
-    has_mod_grad_input = True # ToDo: check if module has grad variables
-
+    has_mod_grad_input = False
+    for var in mod_vars:
+        if var.ad_target:
+            has_mod_grad_input = True
+            break
     if not has_grad_input and not has_mod_grad_input:
         for arg in out_grad_args:
             lhs = OpVar(arg.name, kind=arg.kind)
@@ -431,6 +446,7 @@ def _generate_ad_subroutine(
         reverse=reverse,
         assigned_advars=VarList(in_grad_args) if not reverse else None,
         routine_map=routine_map,
+        mod_vars=mod_vars,
         warnings=warnings,
     )[0]
 
@@ -466,9 +482,11 @@ def _generate_ad_subroutine(
             ad_code.check_initial(VarList(in_grad_args))
 
         target_vars = [OpVar(var.name) for var in grad_args]
-        for var in mod_org.decls.collect_vars():
-            target_vars.append(var)
+        if mod_org.decls is not None:
+            for var in mod_org.decls.collect_vars():
+                target_vars.append(var)
         targets = VarList(target_vars)
+        #print("Targets:", targets) # for debugging)
         ad_code = ad_code.prune_for(targets)
 
         vars = ad_code.required_vars(
@@ -647,6 +665,9 @@ def generate_ad(
 
     if search_dirs is None:
         search_dirs = []
+    cwd = "."
+    if not cwd in search_dirs:
+        search_dirs.append(cwd)
     if fadmod_dir is None:
         fadmod_dir = Path.cwd()
     else:
@@ -654,82 +675,84 @@ def generate_ad(
 
     routine_map = {}
     for mod_org in modules_org:
+        name = mod_org.name
+        mod = Module(f"{name}{AD_SUFFIX}")
+        mod.uses.append(Use(name))
+
+        for child in mod_org.body.iter_children():
+            if not isinstance(child, Use):
+                mod.body.append(child)
+
+        mod_vars = mod_org.decls.collect_vars() if mod_org.decls is not None else []
+        has_mod_grad_var = False
+        for var in mod_vars:
+            if var.ad_target:
+                has_mod_grad_var = True
+                break
+
         routine_info_fwd = {}
         routine_info_rev = {}
         for r in mod_org.routines:
             if mode in ("forward", "both"):
-                routine_info = _prepare_fwd_ad_header(r)
+                routine_info = _prepare_fwd_ad_header(r, has_mod_grad_var)
                 routine_info_fwd[r.name] = routine_info
                 routine_map[r.name] = routine_info["arg_info"]
             if mode in ("reverse", "both"):
-                routine_info = _prepare_rev_ad_header(r)
+                routine_info = _prepare_rev_ad_header(r, has_mod_grad_var)
                 routine_info_rev[r.name] = routine_info
                 if r.name in routine_map:
                     routine_map[r.name].update(routine_info["arg_info"])
                 else:
                     routine_map[r.name] = routine_info["arg_info"]
 
-        if search_dirs:
-            used_mods = mod_org.find_use_modules()
-            loaded, _ = _load_fadmods(used_mods, search_dirs)
-            routine_map.update(loaded)
+        used_mods = mod_org.find_use_modules()
+        loaded, vars_info = _load_fadmods(used_mods, search_dirs)
+        routine_map.update(loaded)
+        for name, vars in vars_info.items():
+            mod_vars.extend(vars)
 
-        name = mod_org.name
-        pushpop_used = False
-        routines = []
+        # Generate AD subroutines
         ad_modules_used = set()
-
+        pushpop_used = False
         for routine in mod_org.routines:
             if mode in ("forward", "both"):
                 sub, _, mods_called = _generate_ad_subroutine(
                     mod_org,
                     routine,
                     routine_map,
+                    mod_vars,
                     routine_info_fwd[routine.name],
                     warnings,
                     reverse=False,
                 )
                 if sub is not None:
-                    routines.append(sub)
+                    mod.routines.append(sub)
                 ad_modules_used.update(mods_called)
             if mode in ("reverse", "both"):
                 sub, used, mods_called = _generate_ad_subroutine(
                     mod_org,
                     routine,
                     routine_map,
+                    mod_vars,
                     routine_info_rev[routine.name],
                     warnings,
                     reverse=True,
                 )
                 if sub is not None:
-                    routines.append(sub)
+                    mod.routines.append(sub)
                 ad_modules_used.update(mods_called)
                 if used:
                     pushpop_used = True
-        mod = Module(f"{name}{AD_SUFFIX}")
-        mod.body.append(Use(name))
+
+        for m in sorted(ad_modules_used):
+            if m != name:
+                mod.uses.append(Use(m))
+                mod.uses.append(Use(f"{m}{AD_SUFFIX}"))
         if pushpop_used:
-            mod.body.append(Use("fautodiff_data_storage"))
-        inserted = False
-        for child in mod_org.body.iter_children():
-            if (
-                not inserted
-                and not isinstance(child, Use)
-                and isinstance(child, Statement)
-                and child.body.lower().startswith("implicit none")
-            ):
-                for m in sorted(ad_modules_used):
-                    if m != name:
-                        mod.body.append(Use(f"{m}{AD_SUFFIX}"))
-                inserted = True
-            mod.body.append(child)
-        if not inserted:
-            for m in sorted(ad_modules_used):
-                if m != name:
-                    mod.body.append(Use(f"{m}{AD_SUFFIX}"))
-        for sub in routines:
-            mod.routines.append(sub)
+            mod.uses.append(Use("fautodiff_data_storage"))
+
         modules.append(render_program(mod))
+
 
     code = "\n".join(modules)
     if out_file:

@@ -1,4 +1,4 @@
-module allocate
+module allocate_vars
   implicit none
 
   real, allocatable :: mod_arr(:)
@@ -73,4 +73,4 @@ contains
     return
   end subroutine module_vars_finalize
 
-end module allocate
+end module allocate_vars

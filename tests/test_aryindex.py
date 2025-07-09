@@ -31,6 +31,9 @@ class TestAryIndex(unittest.TestCase):
         self.assertTrue(full >= idx)
         self.assertFalse(full <= idx)
 
+    def test_comparisons_with_int(self):
+        self.assertFalse(AryIndex([OpInt(1)]) >= AryIndex([OpVar('i')]))
+
     def test_comparisons_with_int_range(self):
         i = OpVar('i')
         idx1 = AryIndex([3, i])

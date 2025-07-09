@@ -1,5 +1,5 @@
-module allocate_ad
-  use allocate
+module allocate_vars_ad
+  use allocate_vars
   implicit none
 
   real, allocatable :: mod_arr_diff_ad(:)
@@ -187,4 +187,4 @@ contains
     return
   end subroutine module_vars_finalize_rev_ad
 
-end module allocate_ad
+end module allocate_vars_ad

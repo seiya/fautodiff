@@ -776,11 +776,10 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                 stmt.content[idx], Fortran2003.Comment
             ):
                 idx += 1
-            # skip Nonlabel_Do_Stmt
             idx += 1
             body = _block(stmt.content[idx:-1], decls)
-            if stmt.content[idx - 1].tofortran().startswith("DO WHILE"):
-                cond = _stmt2op(stmt.content[idx - 1].items[1].items[0].items[0], decls)
+            if stmt.content[idx-1].items[1].items[0] is not None:
+                cond = _stmt2op(stmt.content[idx - 1].items[1].items[0], decls)
                 return DoWhile(body, cond)
             else:
                 itm = stmt.content[idx - 1].items[1].items[1]
