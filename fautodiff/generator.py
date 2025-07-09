@@ -237,6 +237,7 @@ def _prepare_fwd_ad_header(routine_org):
                 var.dims,
                 var.intent,
                 allocatable=var.allocatable,
+                declared_in="routine",
             )
         )
         arg_info["args_fwd_ad"].append(var.name)
@@ -347,6 +348,7 @@ def _prepare_rev_ad_header(routine_org):
                 var.dims,
                 var.intent,
                 allocatable=var.allocatable,
+                declared_in="routine",
             )
         )
         arg_info["args_rev_ad"].append(var.name)
@@ -456,6 +458,7 @@ def _generate_ad_subroutine(
                             base_decl.parameter if base_decl else False,
                             init=base_decl.init if base_decl else None,
                             allocatable=base_decl.allocatable if base_decl else False,
+                            declared_in="routine",
                         )
                     )
 
@@ -537,6 +540,7 @@ def _generate_ad_subroutine(
                         base_decl.parameter,
                         init=base_decl.init,
                         allocatable=base_decl.allocatable,
+                        declared_in="routine",
                     )
             if decl is not None:
                 if decl.intent is not None and decl.intent == "out":
@@ -594,6 +598,7 @@ def _generate_ad_subroutine(
                 base_decl.parameter if base_decl else False,
                 init=base_decl.init if base_decl else None,
                 allocatable=base_decl.allocatable if base_decl else False,
+                declared_in="routine",
             )
         )
 

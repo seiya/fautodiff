@@ -177,6 +177,14 @@ class Node:
             node = node.parent
         return None
 
+    def get_module(self) -> Optional["Module"]:
+        node: Optional[Node] = self
+        while node is not None:
+            if isinstance(node, Module):
+                return node
+            node = node.parent
+        return None
+
     def find_by_id(self, node_id: int) -> Optional["Node"]:
         """Return the node with ``node_id`` from this subtree or ``None``."""
         if self.__id == node_id:
@@ -971,6 +979,7 @@ class Routine(Node):
             intent=intent,
             ad_target=None,
             is_constant=decl.parameter or getattr(decl, "constant", False),
+            declared_in=decl.declared_in,
         )
 
     def arg_vars(self) -> List[OpVar]:
@@ -1477,6 +1486,7 @@ class Declaration(Node):
     init: Optional[str] = None
     access: Optional[str] = None
     allocatable: bool = False
+    declared_in: Optional[str] = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -1491,6 +1501,7 @@ class Declaration(Node):
                 kind=self.kind,
                 is_constant=self.parameter or self.constant,
                 allocatable=self.allocatable,
+                declared_in=self.declared_in,
             )
         else:
             return iter(())
@@ -1507,6 +1518,7 @@ class Declaration(Node):
             allocatable=self.allocatable,
             dims=self.dims,
             intent=self.intent,
+            declared_in=self.declared_in,
         )]
 
     def render(self, indent: int = 0) -> List[str]:
@@ -1558,6 +1570,7 @@ class Declaration(Node):
                         kind=self.kind,
                         is_constant=self.parameter or self.constant,
                         allocatable=self.allocatable,
+                        declared_in=self.declared_in,
                     )
                 )
         return vars
