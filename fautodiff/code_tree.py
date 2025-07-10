@@ -23,6 +23,7 @@ from .operators import (
     OpFunc,
     OpFuncUser,
     OpNot,
+    OpLogic,
 )
 
 from .var_list import (
@@ -1370,6 +1371,43 @@ class PushPop(SaveAssignment):
 
 
 @dataclass
+class PushPopL(PushPop):
+
+    def __init__(self, flag: str):
+        Node.__init__(self)
+        self.flag = flag
+
+    def __post_init__(self):
+        Node.__post_init__(self)
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        if self.load:
+            raise RuntimeError
+        else:
+            return [f"{space}call fautodiff_data_storage_push({self.flag})\n"]
+        
+    def iter_assign_vars(self, without_savevar=False):
+        return iter(())
+
+    def iter_ref_vars(self):
+        return iter(())
+
+    def iter_children(self):
+        return iter(()) 
+
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        if vars is None:
+            return VarList([])
+        return vars
+    
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None):
+        return self
+    
+    def to_load(self):
+        raise NotImplementedError
+
+@dataclass
 class Allocate(Node):
     """An ``allocate`` statement."""
 
@@ -2116,7 +2154,14 @@ class DoWhile(DoAbst):
             for node in body.iter_children():
                 new_body.append(node)
             body = Block(new_body)
-        block = DoWhile(body, self.cond)
+            save_false = PushPopL(".false.")
+            self.parent.insert_before(self.get_id(), save_false)
+            save_true = PushPopL(".true.")
+            self._body.insert_begin(save_true)
+            cond = OpFuncUser("fautodiff_data_storage_get", [])
+        else:
+            cond = self.cond
+        block = DoWhile(body, cond)
 
         if reverse:
             common_vars = self._body.required_vars() & self._body.assigned_vars()
@@ -2125,7 +2170,7 @@ class DoWhile(DoAbst):
                 if cvar.name.endswith(AD_SUFFIX):
                     continue
                 load = self._save_vars(cvar, saved_vars)
-                blocks.insert(0, load)
+                #blocks.insert(0, load)
                 blocks.append(load)
         else:
             blocks = [block]
@@ -2153,8 +2198,8 @@ class DoWhile(DoAbst):
         new_body = self._body.prune_for(targets, mod_vars)
         targets = targets.copy()
         targets.merge(new_body.required_vars(targets))
-        for var in self.cond.collect_vars():
-            targets.push(var)
+        #for var in self.cond.collect_vars():
+        #    targets.push(var)
         new_body = self._body.prune_for(targets, mod_vars)
         if new_body.is_effectively_empty():
             return Block([])
