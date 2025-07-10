@@ -38,27 +38,30 @@ program run_module_vars
 contains
 
   subroutine test_inc_and_use
+   real, parameter :: tol = 2e-4
     real :: x, y
     real :: x_ad, y_ad
     real :: y_eps, fd, eps
     real :: inner1, inner2
 
     eps = 1.0e-3
-    c = 1.0
+    a = 3.0
     x = 2.0
     call inc_and_use(x, y)
-    c = 1.0
+    a = 3.0
     call inc_and_use(x + eps, y_eps)
     fd = (y_eps - y) / eps
-    c = 1.0
+    a = 3.0
     x_ad = 1.0
     call inc_and_use_fwd_ad(x, x_ad, y_ad)
     if (abs((y_ad - fd) / fd) > tol) then
        print *, 'test_inc_and_use_fwd failed', y_ad, fd
        error stop 1
     end if
+    print *, y_ad, a_ad
 
-    inner1 = y_ad**2
+    inner1 = y_ad**2 + a_ad**2
+    a = 3.0
     call inc_and_use_rev_ad(x, x_ad, y_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then

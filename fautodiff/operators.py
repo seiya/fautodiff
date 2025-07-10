@@ -784,6 +784,18 @@ class OpNeg(OpUnary):
 
     def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         return - self.args[0].derivative(var, target, info, warnings)
+     
+@dataclass
+class OpAnd(OpUnary):
+
+    OP: ClassVar[str] = ".and."
+    PRIORITY: ClassVar[int] = 7
+
+@dataclass
+class OpNot(OpUnary):
+
+    OP: ClassVar[str] = ".not."
+    PRIORITY: ClassVar[int] = 7
 
 @dataclass
 class OpBinary(Operator):
@@ -925,6 +937,7 @@ NONDIFF_INTRINSICS = {
     'achar',
     'int',
     'nint',
+    'allocated',
 }
 
 @dataclass

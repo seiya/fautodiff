@@ -21,7 +21,8 @@ from .operators import (
     OpNeg,
     OpRange,
     OpFunc,
-    OpFuncUser
+    OpFuncUser,
+    OpNot,
 )
 
 from .var_list import (
@@ -120,7 +121,7 @@ class Node:
 
     def generate_ad(
         self,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
@@ -130,7 +131,7 @@ class Node:
         """Return AD converted nodes."""
         return []
 
-    def _save_vars(self, var: OpVar, saved_vars: List[SaveAssignment]) -> SaveAssignment:
+    def _save_vars(self, var: OpVar, saved_vars: List[OpVar]) -> SaveAssignment:
         id = self.get_id()
         save = SaveAssignment(var, id)
         self.parent.insert_before(id, save)
@@ -288,7 +289,7 @@ class Node:
     # optimization helpers
     # ------------------------------------------------------------------
 
-    def prune_for(self, targets: VarList) -> Optional["Node"]:
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> Optional["Node"]:
         """Return a copy of this node with only code needed for ``targets``."""
         for var in self.assigned_vars():
             if var in targets:
@@ -319,7 +320,7 @@ class Node:
         lhs: OpVar,
         rhs: Operator,
         assigned_advars: VarList,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         routine_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -393,7 +394,7 @@ class Node:
         self,
         lhs: OpVar,
         rhs: Operator,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         routine_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -482,7 +483,7 @@ class Block(Node):
 
     def generate_ad(
         self,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
@@ -570,10 +571,10 @@ class Block(Node):
                 children_new.append(child)
         return Block(children_new)
 
-    def prune_for(self, targets: VarList) -> "Block":
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> "Block":
         new_children: List[Node] = []
         for child in reversed(self.__children):
-            pruned = child.prune_for(targets)
+            pruned = child.prune_for(targets, mod_vars)
             if pruned is not None and not pruned.is_effectively_empty():
                 new_children.insert(0, pruned)
                 targets = pruned.required_vars(targets)
@@ -723,7 +724,7 @@ class CallStatement(Node):
 
     def generate_ad(
         self,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
@@ -882,6 +883,7 @@ class Module(Node):
         lines.extend(self.uses.render(indent+1))
         lines.extend(self.body.render(indent+1))
         if self.decls is not None:
+            lines.append("\n")
             lines.extend(self.decls.render(indent+1))
         lines.append("\n")
         lines.append(f"{space}contains\n")
@@ -928,7 +930,7 @@ class Routine(Node):
 
     def generate_ad(
         self,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
@@ -1002,16 +1004,16 @@ class Routine(Node):
         self.decls.expand(decls)
         return self
 
-    def prune_for(self, targets: VarList) -> "Routine":
-        ad_content = self.ad_content.prune_for(targets)
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> "Routine":
+        ad_content = self.ad_content.prune_for(targets, mod_vars)
         targets = ad_content.required_vars(targets)
-        ad_init = self.ad_init.prune_for(targets)
+        ad_init = self.ad_init.prune_for(targets, mod_vars)
         targets = ad_init.required_vars(targets)
-        content = self.content.prune_for(targets)
+        content = self.content.prune_for(targets, mod_vars)
         all_vars = content.collect_vars()
         _extend_unique(all_vars, ad_init.collect_vars())
         _extend_unique(all_vars, ad_content.collect_vars())
-        decls = self.decls.prune_for(VarList(all_vars))
+        decls = self.decls.prune_for(VarList(all_vars), mod_vars)
         return type(self)(name = self.name,
                           args = self.args,
                           result = self.result,
@@ -1074,7 +1076,7 @@ class Assignment(Node):
 
     def generate_ad(
         self,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
@@ -1082,7 +1084,7 @@ class Assignment(Node):
         warnings: Optional[list[str]] = None,
     ) -> List[Assignment]:
         if reverse:
-            assigns = [self._save_vars(self.lhs, saved_vars)]
+            assigns: List[Node] = [self._save_vars(self.lhs, saved_vars)]
             assigns.extend(
                 self._generate_ad_reverse(
                     self.lhs,
@@ -1173,7 +1175,7 @@ class ClearAssignment(Node):
 
     def generate_ad(
         self,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
@@ -1303,7 +1305,7 @@ class SaveAssignment(Node):
                 vars.push(self.lhs)
         return vars
 
-    def prune_for(self, targets: VarList) -> Optional[SaveAssignment]:
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> Optional[SaveAssignment]:
         found = False
         for var in self.iter_assign_vars():
             if var in targets:
@@ -1395,45 +1397,63 @@ class Allocate(Node):
 
     def generate_ad(
         self,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
-    ) -> List[Optional[Node]]:
+    ) -> List[Node]:
         nodes: List[Node] = []
-        def _add_if(node: Node, var: OpVar, is_mod_var: bool) -> Node:
-            if is_mod_var:
-                cond = OpFuncUser("allocated", args=[var.change_index(None)])
-                return IfBlock([(cond, Block([node]))])
-            return node
         mod_var_names = [var.name for var in mod_vars] if mod_vars is not None else []
         for var in self.vars:
             is_mod_var = var.name in mod_var_names
             ad_var = var.add_suffix(AD_SUFFIX)
             if reverse:
-                if ad_var.ad_target:
-                    nodes.append(_add_if(Deallocate([ad_var]), ad_var, is_mod_var))
-                nodes.append(_add_if(Deallocate([var]), var, is_mod_var))
+                if var.ad_target:
+                    nodes.append(Allocate._add_if(Deallocate([ad_var], ad_code=True), ad_var, is_mod_var))
+                if not is_mod_var:
+                    nodes.append(Deallocate([var], ad_code=True))
             else:
-                if ad_var.ad_target:
-                    nodes.append(_add_if(Allocate([var]), var, is_mod_var))
-                nodes.append(_add_if(Allocate([ad_var]), ad_var, is_mod_var))
+                if not is_mod_var:
+                    nodes.append(Allocate([var]))
+                if var.ad_target:
+                    nodes.append(Allocate._add_if(Allocate([ad_var]), ad_var, is_mod_var))
         return nodes
 
     def is_effectively_empty(self) -> bool:
         return not self.vars
 
-    def prune_for(self, targets: VarList) -> Allocate:
-        return self
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> Optional[Allocate]:
+        if mod_vars is None or not mod_vars:
+            return self
+        mod_var_names = [var.name for var in mod_vars]
+        vars = []
+        for var in self.vars:
+            if not var.name in mod_var_names:
+                vars.append(var)
+        if vars:
+            return Allocate(vars)
+        return None
     
+    @classmethod
+    def _add_if(cls, node: Node, var: OpVar, is_mod_var: bool) -> Node:
+        if is_mod_var:
+            cond = OpFunc("allocated", args=[var.change_index(None)])
+            body = Block([node])
+            if isinstance(node, Allocate):
+                cond = OpNot([cond])
+                if var.name.endswith(AD_SUFFIX):
+                    body.append(ClearAssignment(var.change_index(None)))
+            return IfBlock([(cond, body)])
+        return node
 
 @dataclass
 class Deallocate(Node):
     """A ``deallocate`` statement."""
 
     vars: List[OpVar] = field(default_factory=list)
+    ad_code: bool = field(default=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -1454,7 +1474,7 @@ class Deallocate(Node):
 
     def generate_ad(
         self,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
@@ -1462,34 +1482,39 @@ class Deallocate(Node):
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         nodes: List[Node] = []
-        def _add_if(node: Node, var: OpVar, is_mod_var: bool) -> Node:
-            if is_mod_var:
-                cond = OpFuncUser("allocated", args=[var.change_index(None)])
-                return IfBlock([(cond, Block([node]))])
-            return node
         mod_var_names = [var.name for var in mod_vars] if mod_vars is not None else []
         for var in self.vars:
             is_mod_var = var.name in mod_var_names
             ad_var = var.add_suffix(AD_SUFFIX)
-            if ad_var.ad_target:
-                if reverse:
-                    nodes.append(_add_if(Allocate([ad_var]), ad_var, is_mod_var))
-                else:
-                    nodes.append(_add_if(Deallocate([ad_var]), ad_var, is_mod_var))
-            nodes.append(_add_if(Deallocate([var]), var, is_mod_var))
+            if reverse:
+                #if not is_mod_var:
+                #    nodes.append(Allocate([var]))
+                if var.ad_target:
+                    nodes.append(Allocate._add_if(Allocate([ad_var]), ad_var, is_mod_var))
+            else:
+                if var.ad_target:
+                    nodes.append(Allocate._add_if(Deallocate([ad_var], ad_code=True), ad_var, is_mod_var))
+                if not is_mod_var:
+                    nodes.append(Deallocate([var], ad_code=True))
         return nodes
 
     def is_effectively_empty(self) -> bool:
         return not self.vars
 
-    def prune_for(self, targets: VarList) -> Optional["Deallocate"]:
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> Optional["Deallocate"]:
+        if not self.ad_code:
+            return None
+        if mod_vars is None or not mod_vars:
+            return self
+        mod_var_names = [var.name for var in mod_vars]
         vars = []
         for var in self.vars:
-            if var.name not in targets.names():
+            if not var.name in mod_var_names:
                 vars.append(var)
         if vars:
-            return Deallocate(vars)
+            return Deallocate(vars, ad_code=True)
         return None
+        
 
 @dataclass
 class Declaration(Node):
@@ -1502,7 +1527,7 @@ class Declaration(Node):
     intent: Optional[str] = None
     parameter: bool = False
     constant: bool = False
-    init: Optional[str] = None
+    init_val: Optional[str] = None
     access: Optional[str] = None
     allocatable: bool = False
     declared_in: Optional[str] = None
@@ -1559,8 +1584,8 @@ class Declaration(Node):
         if self.dims is not None:
             dims = ",".join(self.dims)
             line += f"({dims})"
-        if self.parameter and self.init is not None:
-            line += f" = {self.init}"
+        if self.init_val is not None:
+            line += f" = {self.init_val}"
         line += "\n"
         return [line]
 
@@ -1594,7 +1619,7 @@ class Declaration(Node):
                 )
         return vars
 
-    def prune_for(self, targets: VarList) -> Optional["Declaration"]:
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> Optional["Declaration"]:
         target_names = targets.names()
         if self.intent is not None or self.name in target_names:
             return self.deep_clone()
@@ -1634,7 +1659,7 @@ class BranchBlock(Node):
 
     def generate_ad(
         self,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
@@ -1691,10 +1716,10 @@ class BranchBlock(Node):
                     vars_list.push(v)
         return vars_list
 
-    def prune_for(self, targets: VarList) -> Node:
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> Node:
         new_condblocks = []
         for cond, block in self.cond_blocks:
-            new_block = block.prune_for(targets)
+            new_block = block.prune_for(targets, mod_vars)
             if not new_block.is_effectively_empty():
                 new_condblocks.append((cond, new_block))
         if len(new_condblocks) == 0:
@@ -1794,7 +1819,7 @@ class DoLoop(DoAbst):
         for var in self.range.collect_vars():
             yield var
 
-    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[str]:
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         yield self.index
 
     def build_do_index_list(self, index_list: List[str]):
@@ -1812,7 +1837,7 @@ class DoLoop(DoAbst):
                         index_map[var.name] = (i, len(var.index))
         return index_map
 
-    def find_index(self, var: OpVar, name: str) -> Union[int, None]:
+    def find_index(self, var: OpVar, name: str) -> Optional[int]:
         if var.index is None:
             return None
         for i, idx in enumerate(var.index):
@@ -1866,7 +1891,7 @@ class DoLoop(DoAbst):
 
     def generate_ad(
         self,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
@@ -1906,7 +1931,7 @@ class DoLoop(DoAbst):
         if reverse:
             range = range.reverse()
         block = DoLoop(body, index, range)
-        #block = block.prune_for(VarList(block.collect_vars()))
+        #block = block.prune_for(VarList(block.collect_vars()), mod_vars)
 
         if reverse:
             #common_vars = block.required_vars() & block.assigned_vars(without_savevar=True)
@@ -1981,10 +2006,10 @@ class DoLoop(DoAbst):
         vars.update_index_upward(self._build_index_map(), range=self.range)
         return vars
 
-    def prune_for(self, targets: VarList) -> Node:
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> Node:
         targets = targets.copy()
         #targets.update_index_downward(self._build_index_map(), self.index)
-        new_body = self._body.prune_for(targets)
+        new_body = self._body.prune_for(targets, mod_vars)
 
         for var in new_body.required_vars(targets):
             if var.name == self.index.name:
@@ -1995,7 +2020,7 @@ class DoLoop(DoAbst):
             if var.index is not None and set(self.do_index_list) <= set(var.index_list()):
                 continue
             targets.push(var)
-        new_body = self._body.prune_for(targets)
+        new_body = self._body.prune_for(targets, mod_vars)
 
         def _reducedim_from_tmpvar(node: Node) -> None:
             for child in node.iter_children():
@@ -2061,7 +2086,7 @@ class DoWhile(DoAbst):
     
     def generate_ad(
         self,
-        saved_vars: List[SaveAssignment],
+        saved_vars: List[OpVar],
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
@@ -2124,13 +2149,13 @@ class DoWhile(DoAbst):
         vars = self._body.unrefered_advars(vars)
         return vars
 
-    def prune_for(self, targets: VarList) -> Node:
-        new_body = self._body.prune_for(targets)
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> Node:
+        new_body = self._body.prune_for(targets, mod_vars)
         targets = targets.copy()
         targets.merge(new_body.required_vars(targets))
         for var in self.cond.collect_vars():
             targets.push(var)
-        new_body = self._body.prune_for(targets)
+        new_body = self._body.prune_for(targets, mod_vars)
         if new_body.is_effectively_empty():
             return Block([])
         return DoWhile(new_body, self.cond)

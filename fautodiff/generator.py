@@ -163,7 +163,7 @@ def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
                     "dims": list(d.dims) if d.dims is not None else None,
                     "parameter": d.parameter,
                     "constant": d.constant,
-                    "init": d.init,
+                    "init_val": d.init_val,
                     "access": d.access,
                     "allocatable": d.allocatable,
                 }
@@ -427,10 +427,11 @@ def _generate_ad_subroutine(
     ad_block = subroutine.ad_content
 
     has_mod_grad_input = False
+    mod_ad_vars = []
     for var in mod_vars:
         if var.ad_target:
+            mod_ad_vars.append(var.add_suffix(AD_SUFFIX))
             has_mod_grad_input = True
-            break
     if not has_grad_input and not has_mod_grad_input:
         for arg in out_grad_args:
             lhs = OpVar(arg.name, kind=arg.kind)
@@ -440,11 +441,15 @@ def _generate_ad_subroutine(
 
     _set_call_intents(routine_org.content, routine_map)
 
-    saved_vars: List[SaveAssignment] = []
+    saved_vars: List[OpVar] = []
+    if reverse:
+        assigned_advars = None
+    else:
+        assigned_advars = VarList(in_grad_args + mod_ad_vars)
     ad_code = routine_org.content.generate_ad(
         saved_vars,
         reverse=reverse,
-        assigned_advars=VarList(in_grad_args) if not reverse else None,
+        assigned_advars=assigned_advars,
         routine_map=routine_map,
         mod_vars=mod_vars,
         warnings=warnings,
@@ -459,10 +464,10 @@ def _generate_ad_subroutine(
             if name.endswith(AD_SUFFIX):
                 if any(arg.name == name for arg in grad_args):
                     continue
+                if any(v.name == name for v in mod_ad_vars):
+                    continue
                 v_org = routine_org.get_var(name.removesuffix(AD_SUFFIX))
                 base_decl = routine_org.decls.find_by_name(name.removesuffix(AD_SUFFIX))
-                if base_decl is None and routine_org.mod_decls is not None:
-                    base_decl = routine_org.mod_decls.find_by_name(name.removesuffix(AD_SUFFIX))
                 if v_org is not None and not subroutine.is_declared(name):
                     subroutine.decls.append(
                         Declaration(
@@ -472,28 +477,30 @@ def _generate_ad_subroutine(
                             v_org.dims,
                             None,
                             base_decl.parameter if base_decl else False,
-                            init=base_decl.init if base_decl else None,
+                            init_val=base_decl.init_val if base_decl else None,
                             allocatable=base_decl.allocatable if base_decl else False,
                             declared_in="routine",
                         )
                     )
 
         if reverse:
-            ad_code.check_initial(VarList(in_grad_args))
+            targets = VarList(in_grad_args + mod_ad_vars)
+            ad_code.check_initial(targets)
 
-        target_vars = [OpVar(var.name) for var in grad_args]
-        if mod_org.decls is not None:
-            for var in mod_org.decls.collect_vars():
-                target_vars.append(var)
-        targets = VarList(target_vars)
-        #print("Targets:", targets) # for debugging)
-        ad_code = ad_code.prune_for(targets)
+        targets = VarList(grad_args + mod_ad_vars)
+        #print("Targets:", targets) # for debugging
+        ad_code = ad_code.prune_for(targets, mod_vars)
+        #print(render_program(ad_code)) # for debugging
 
+    if (ad_code is not None) and (not ad_code.is_effectively_empty()):
         vars = ad_code.required_vars(
-            VarList([OpVar(var.name) for var in out_grad_args]), without_savevar=True
+            VarList([OpVar(var.name) for var in out_grad_args]),
+            without_savevar=True
         )
         for name in vars.names():
             if not name.endswith(AD_SUFFIX):
+                continue
+            if any(v for v in mod_ad_vars if v.name == name):
                 continue
             if not any(v for v in grad_args if v.name == name):
                 if subroutine.is_declared(name):
@@ -516,7 +523,9 @@ def _generate_ad_subroutine(
         ad_block.extend(ad_code)
 
     if reverse:
-        fw_block = routine_org.content.prune_for(ad_block.required_vars())
+        targets = ad_block.required_vars()
+        #print("Targets:", targets)
+        fw_block = routine_org.content.prune_for(targets, mod_vars)
 
         flag = True
         while flag:
@@ -536,21 +545,21 @@ def _generate_ad_subroutine(
         if not fw_block.is_effectively_empty():
             subroutine.content.extend(fw_block)
 
-    vars: List[str] = []
+    var_names = []
     for var in subroutine.collect_vars():
-        if var.name not in vars:
-            vars.append(var.name)
-    for var in vars:
-        if subroutine.decls.find_by_name(var) is None:
-            decl = routine_org.decls.find_by_name(var)
-            if decl is None and var.endswith(AD_SUFFIX):
-                base = var.removesuffix(AD_SUFFIX)
+        if var.name not in var_names:
+            var_names.append(var.name)
+    for name in var_names:
+        if subroutine.decls.find_by_name(name) is None:
+            decl = routine_org.decls.find_by_name(name)
+            if decl is None and name.endswith(AD_SUFFIX):
+                if any(v.name == name for v in mod_vars):
+                    continue
+                base = name.removesuffix(AD_SUFFIX)
                 base_decl = routine_org.decls.find_by_name(base)
-                if base_decl is None and routine_org.mod_decls is not None:
-                    base_decl = routine_org.mod_decls.find_by_name(base)
                 if base_decl is not None:
                     decl = Declaration(
-                        var,
+                        name,
                         base_decl.typename,
                         base_decl.kind,
                         base_decl.dims,
@@ -570,10 +579,11 @@ def _generate_ad_subroutine(
         base_decl = None
         if var.reference is not None:
             try:
-                v_org = routine_org.get_var(var.reference.name)
-                base_decl = routine_org.decls.find_by_name(var.reference.name)
+                ref_name = var.reference.name
+                v_org = routine_org.get_var(ref_name)
+                base_decl = routine_org.decls.find_by_name(ref_name)
                 if base_decl is None and routine_org.mod_decls is not None:
-                    base_decl = routine_org.mod_decls.find_by_name(var.reference.name)
+                    base_decl = routine_org.mod_decls.find_by_name(ref_name)
             except ValueError:
                 ad_block.extend(ad_code)
                 print("".join(subroutine.render()))
@@ -581,19 +591,18 @@ def _generate_ad_subroutine(
         if var.dims is not None:
             dims = var.dims
         elif v_org is not None:
-            if var.reduced_dims is not None:
-                dims = []
-                for i, idx in enumerate(v_org.dims):
-                    if i not in var.reduced_dims:
-                        dims.append(idx)
-                if len(dims) == 0:
-                    dims = None
-                else:
-                    dims = tuple(dims)
-            else:
-                dims = v_org.dims
+            dims = v_org.dims
         else:
             dims = None
+        if dims is not None and var.reduced_dims is not None:
+            dims_new = []
+            for i, idx in enumerate(dims):
+                if i not in var.reduced_dims:
+                    dims_new.append(idx)
+            if len(dims_new) == 0:
+                dims = None
+            else:
+                dims = tuple(dims_new)
         if v_org:
             typename = v_org.typename
         elif var.typename is not None:
@@ -614,15 +623,16 @@ def _generate_ad_subroutine(
                 dims,
                 None,
                 base_decl.parameter if base_decl else False,
-                init=base_decl.init if base_decl else None,
+                init_val=base_decl.init_val if base_decl else None,
                 allocatable=base_decl.allocatable if base_decl else False,
                 declared_in="routine",
             )
         )
 
-    subroutine = subroutine.prune_for(VarList([OpVar(var.name) for var in grad_args]))
+    subroutine = subroutine.prune_for(VarList(grad_args + mod_ad_vars), mod_vars)
 
-    required_vnames = [str(var) for var in subroutine.required_vars()]
+    mod_var_names = [var.name for var in mod_vars + mod_ad_vars]
+    required_vnames = [str(var) for var in subroutine.required_vars() if var.name not in mod_var_names]
     if len(required_vnames) > 0:
         _warn(
             warnings,
@@ -688,7 +698,20 @@ def generate_ad(
         for var in mod_vars:
             if var.ad_target:
                 has_mod_grad_var = True
-                break
+                if mod.decls is None:
+                    mod.decls = Block([])
+                decl = mod_org.decls.find_by_name(var.name)
+                init_val = str(OpReal("0.0", kind=decl.kind)) if not decl.allocatable else None
+                mod.decls.append(Declaration(f"{var.name}{AD_SUFFIX}",
+                                             typename = decl.typename,
+                                             kind = decl.kind,
+                                             dims = decl.dims,
+                                             init_val = init_val,
+                                             #access = decl.access,
+                                             allocatable = decl.allocatable,
+                                             declared_in = "module",
+                                             )
+                                )
 
         routine_info_fwd = {}
         routine_info_rev = {}

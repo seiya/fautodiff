@@ -351,9 +351,9 @@ def _parse_decl_stmt(
             dims = tuple(v.tofortran() for v in arrspec.items)
         elif dim_attr is not None:
             dims = dim_attr
-        init = None
+        init_val = None
         if len(entity.items) > 3 and entity.items[3] is not None:
-            init = entity.items[3].items[1].tofortran()
+            init_val = entity.items[3].items[1].string
 
         constant = False
         if constant_args and name in constant_args:
@@ -368,7 +368,7 @@ def _parse_decl_stmt(
                 intent,
                 parameter,
                 constant,
-                init=init,
+                init_val=init_val,
                 access=access,
                 allocatable=allocatable,
                 declared_in=declared_in,

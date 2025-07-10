@@ -35,7 +35,7 @@ contains
     allocate(mod_arr_diff(n))
     
     do i = 1, n
-      mod_arr(i) = i * x
+      mod_arr(i) = i * 2.0
       mod_arr_diff(i) = i * x
     end do
 
@@ -49,7 +49,6 @@ contains
 
     x = 0.0
     do i = 1, n
-      mod_arr(i) = mod_arr(i) * 2.0 + i
       mod_arr_diff(i) = mod_arr_diff(i) * (2.0 + i)
       x = x + mod_arr(i) * mod_arr_diff(i)
     end do

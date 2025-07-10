@@ -65,64 +65,47 @@ contains
   subroutine module_vars_init_fwd_ad(n, x, x_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
-    real, intent(inout) :: x_ad
+    real, intent(in)  :: x_ad
     integer :: i
 
-    if (.not. allocated(mod_arr)) then
-      allocate(mod_arr(n))
-    end if
-    if (.not. allocated(mod_arr_diff)) then
-      allocate(mod_arr_diff(n))
-    end if
-    if (.not. allocated(mod_arr_diff_ad) ) then
-      allocate(mod_arr_diff_ad(n))
-    end if
-    do i = 1, n
-      mod_arr(i) = i * x
-      mod_arr_diff_ad(i) = x_ad * i ! mod_arr_diff(i) = i * x
-      mod_arr_diff(i) = i * x
-    end do
-
-    return
-  end subroutine module_vars_init_fwd_ad 
-
-  subroutine module_vars_init_rev_ad(n, x_ad)
-    integer, intent(in)  :: n
-    real, intent(out) :: x_ad
-    integer :: i
-
-    if (.not. allocated(mod_arr)) then
-      allocate(mod_arr(n))
-    end if
-    if (.not. allocated(mod_arr_diff)) then
-      allocate(mod_arr_diff(n))
-    end if
     if (.not. allocated(mod_arr_diff_ad)) then
       allocate(mod_arr_diff_ad(n))
     end if
+    do i = 1, n
+      mod_arr_diff_ad(i) = x_ad * i ! mod_arr_diff(i) = i * x
+    end do
+
+    return
+  end subroutine module_vars_init_fwd_ad
+
+  subroutine module_vars_init_rev_ad(n, x, x_ad)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(out) :: x_ad
+    integer :: i
+
     x_ad = 0.0
-    mod_arr_diff_ad = 0.0
 
     do i = n, 1, - 1
       x_ad = mod_arr_diff_ad(i) * i + x_ad ! mod_arr_diff(i) = i * x
+      mod_arr_diff_ad(i) = 0.0 ! mod_arr_diff(i) = i * x
     end do
+    if (allocated(mod_arr_diff_ad)) then
+      deallocate(mod_arr_diff_ad)
+    end if
 
     return
   end subroutine module_vars_init_rev_ad
 
-  subroutine module_vars_main_fwd_ad(n, x, x_ad)
+  subroutine module_vars_main_fwd_ad(n, x_ad)
     integer, intent(in)  :: n
-    real, intent(out) :: x
-    real, intent(inout)  :: x_ad
+    real, intent(out) :: x_ad
     integer :: i
 
-    x_ad = 0.0
+    x_ad = 0.0 ! x = 0.0
     do i = 1, n
-      mod_arr(i) = mod_arr(i) * 2.0 + i
       mod_arr_diff_ad(i) = mod_arr_diff_ad(i) * (2.0 + i) ! mod_arr_diff(i) = mod_arr_diff(i) * (2.0 + i)
-      mod_arr_diff(i) = mod_arr_diff(i) * (2.0 + i)
       x_ad = x_ad + mod_arr_diff_ad(i) * mod_arr(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
-      x = x + mod_arr(i) * mod_arr_diff(i)
     end do
 
     return
@@ -130,17 +113,14 @@ contains
 
   subroutine module_vars_main_rev_ad(n, x_ad)
     integer, intent(in)  :: n
-    real, intent(in)  :: x_ad
+    real, intent(inout) :: x_ad
     integer :: i
-    real :: mod_arr_diff_save_1(n)
 
-    mod_arr_diff_save_1(1:n) = mod_arr_diff(1:n)
     do i = n, 1, - 1
-      mod_arr(i) = mod_arr(i) * 2.0 + i
       mod_arr_diff_ad(i) = x_ad * mod_arr(i) + mod_arr_diff_ad(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
       mod_arr_diff_ad(i) = mod_arr_diff_ad(i) * (2.0 + i) ! mod_arr_diff(i) = mod_arr_diff(i) * (2.0 + i)
     end do
-    mod_arr_diff(1:n) = mod_arr_diff_save_1(1:n)
+    x_ad = 0.0 ! x = 0.0
 
     return
   end subroutine module_vars_main_rev_ad
@@ -157,12 +137,6 @@ contains
     if (allocated(mod_arr_diff_ad)) then
       deallocate(mod_arr_diff_ad)
     end if
-    if (allocated(mod_arr)) then
-      deallocate(mod_arr)
-    end if
-    if (allocated(mod_arr_diff)) then
-      deallocate(mod_arr_diff)
-    end if
 
     return
   end subroutine module_vars_finalize_fwd_ad
@@ -172,17 +146,13 @@ contains
     real, intent(inout) :: x_ad
     integer :: i
 
+    if (.not. allocated(mod_arr_diff_ad)) then
+      allocate(mod_arr_diff_ad(n))
+    end if
+    do i = n, 1, - 1
+      mod_arr_diff_ad(i) = x_ad * mod_arr(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
+    end do
     x_ad = 0.0 ! x = 0.0
-
-    if (allocated(mod_arr_diff_ad)) then
-      deallocate(mod_arr_diff_ad)
-    end if
-    if (allocated(mod_arr)) then
-      deallocate(mod_arr)
-    end if
-    if (allocated(mod_arr_diff)) then
-      deallocate(mod_arr_diff)
-    end if
 
     return
   end subroutine module_vars_finalize_rev_ad
