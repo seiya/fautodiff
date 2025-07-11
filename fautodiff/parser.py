@@ -280,7 +280,7 @@ def _clone_decl(decl: Declaration, declared_in: str) -> Declaration:
 
 def _parse_decl_stmt(
     stmt,
-    constant_args=None,
+    constant_vars=None,
     *,
     allow_intent=True,
     allow_access=False,
@@ -356,7 +356,7 @@ def _parse_decl_stmt(
             init_val = entity.items[3].items[1].string
 
         constant = False
-        if constant_args and name in constant_args:
+        if constant_vars and name in constant_vars:
             constant = True
 
         decls.append(
@@ -380,7 +380,7 @@ def _parse_decl_stmt(
 
 def _parse_decls(
     spec,
-    constant_args=None,
+    constant_vars=None,
     *,
     allow_intent=True,
     allow_access=False,
@@ -417,7 +417,7 @@ def _parse_decls(
         ):
             for decl in _parse_decl_stmt(
                 item,
-                constant_args,
+                constant_vars,
                 allow_intent=allow_intent,
                 allow_access=allow_access,
                 declared_in=declared_in,
@@ -528,17 +528,17 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
                                     decl.access = access_map.pop(decl.name)
                                 else:
                                     decl.access = default_access
-                            decl.constant = True
+                            decl.constant = False
                             decl_map[decl.name] = decl
                             mod_node.decls.append(decl)
                         continue
                     print(type(c), c)
                     print(c.items)
                     raise RuntimeError(f"Unsupported statement: {type(c)} {c.string}")
-                if "DIFF_MODULE_VARS" in module_directives:
-                    for n in module_directives["DIFF_MODULE_VARS"]:
+                if "CONSTANT_VARS" in module_directives:
+                    for n in module_directives["CONSTANT_VARS"]:
                         if n in decl_map:
-                            decl_map[n].constant = False
+                            decl_map[n].constant = True
                 continue
             if isinstance(part, Fortran2003.Module_Subprogram_Part):
                 for c in part.content:
@@ -833,12 +833,12 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
             routine.directives = directives
             continue
         if isinstance(item, Fortran2003.Specification_Part):
-            const_args = (
-                routine.directives.get("CONSTANT_ARGS") if routine.directives else None
+            const_vars = (
+                routine.directives.get("CONSTANT_VARS") if routine.directives else None
             )
             routine.decls = _parse_decls(
                 item,
-                const_args,
+                const_vars,
                 allow_intent=True,
                 allow_access=False,
                 declared_in="routine",
@@ -917,16 +917,16 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
 
             mod_decls.extend(list(routine.decls.iter_children()))
             routine.mod_decls = mod_decls
-            diff_mod_vars = []
-            if module is not None and "DIFF_MODULE_VARS" in module.directives:
-                diff_mod_vars.extend(module.directives["DIFF_MODULE_VARS"])
+            const_vars = []
+            if module is not None and "CONSTANT_VARS" in module.directives:
+                const_vars.extend(module.directives["CONSTANT_VARS"])
             if routine.directives:
-                diff_mod_vars.extend(routine.directives.get("DIFF_MODULE_VARS", []))
-            if diff_mod_vars:
-                for name in diff_mod_vars:
+                const_vars.extend(routine.directives.get("CONSTANT_VARS", []))
+            if const_vars:
+                for name in const_vars:
                     decl = routine.mod_decls.find_by_name(name)
                     if decl is not None:
-                        decl.constant = False
+                        decl.constant = True
             continue
         if isinstance(item, Fortran2003.Execution_Part):
             decls = (
@@ -1020,15 +1020,15 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
         mod_decls.extend(list(routine.decls.iter_children()))
         routine.mod_decls = mod_decls
 
-    diff_mod_vars = []
-    if module is not None and "DIFF_MODULE_VARS" in module.directives:
-        diff_mod_vars.extend(module.directives["DIFF_MODULE_VARS"])
+    const_vars = []
+    if module is not None and "CONSTANT_VARS" in module.directives:
+        const_vars.extend(module.directives["CONSTANT_VARS"])
     if routine.directives:
-        diff_mod_vars.extend(routine.directives.get("DIFF_MODULE_VARS", []))
-    if diff_mod_vars:
-        for name in diff_mod_vars:
+        const_vars.extend(routine.directives.get("CONSTANT_VARS", []))
+    if const_vars:
+        for name in const_vars:
             decl = routine.mod_decls.find_by_name(name)
             if decl is not None:
-                decl.constant = False
+                decl.constant = True
 
     return routine

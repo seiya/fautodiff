@@ -3,7 +3,7 @@ module directives
 
 contains
 
-!$FAD CONSTANT_ARGS: z
+!$FAD CONSTANT_VARS: z
   subroutine add_const(x, y, z)
     real, intent(in) :: x
     real, intent(out) :: y

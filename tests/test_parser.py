@@ -187,7 +187,7 @@ class TestParser(unittest.TestCase):
         self.assertEqual(decl.typename, "integer")
         self.assertEqual(decl.access, "public")
 
-    def test_module_vars_marked_constant(self):
+    def test_module_vars_default_diff(self):
         src = textwrap.dedent(
             """
             module test
@@ -203,9 +203,9 @@ class TestParser(unittest.TestCase):
         module = parser.parse_src(src)[0]
         decl = module.decls.find_by_name("c")
         self.assertIsNotNone(decl)
-        self.assertTrue(decl.constant)
+        self.assertFalse(decl.constant)
         var = module.routines[0].get_var("c")
-        self.assertFalse(var.ad_target)
+        self.assertTrue(var.ad_target)
 
     def test_parse_example_module_vars(self):
         base = Path(__file__).resolve().parents[1]
@@ -282,12 +282,12 @@ class TestParser(unittest.TestCase):
         self.assertEqual(decl.typename.lower(), "double precision")
         self.assertIsNone(decl.kind)
 
-    def test_parse_directives_constant_args(self):
+    def test_parse_directives_constant_vars(self):
         src = textwrap.dedent(
             """
             module test
             contains
-            !$FAD CONSTANT_ARGS: x, y
+            !$FAD CONSTANT_VARS: x, y
               subroutine foo(x, y, z)
                 real, intent(in) :: x, y
                 real, intent(out) :: z
@@ -298,8 +298,8 @@ class TestParser(unittest.TestCase):
         )
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
-        self.assertIn("CONSTANT_ARGS", routine.directives)
-        self.assertEqual(routine.directives["CONSTANT_ARGS"], ["x", "y"])
+        self.assertIn("CONSTANT_VARS", routine.directives)
+        self.assertEqual(routine.directives["CONSTANT_VARS"], ["x", "y"])
         decl_x = routine.decls.find_by_name("x")
         decl_y = routine.decls.find_by_name("y")
         self.assertTrue(decl_x.constant)
@@ -307,13 +307,13 @@ class TestParser(unittest.TestCase):
         var = routine.get_var("x")
         self.assertTrue(var.is_constant)
 
-    def test_parse_file_directive_constant_args(self):
+    def test_parse_file_directive_constant_vars(self):
         base = Path(__file__).resolve().parents[1]
         src = base / "examples" / "directives.f90"
         modules = parser.parse_file(str(src))
         routine = modules[0].routines[0]
-        self.assertIn("CONSTANT_ARGS", routine.directives)
-        self.assertEqual(routine.directives["CONSTANT_ARGS"], ["z"])
+        self.assertIn("CONSTANT_VARS", routine.directives)
+        self.assertEqual(routine.directives["CONSTANT_VARS"], ["z"])
         decl = routine.decls.find_by_name("z")
         self.assertTrue(decl.constant)
         var = routine.get_var("z")
@@ -336,12 +336,12 @@ class TestParser(unittest.TestCase):
         routine = module.routines[0]
         self.assertIn("SKIP", routine.directives)
 
-    def test_parse_directive_diff_module_vars(self):
+    def test_parse_directive_constant_module_vars(self):
         src = textwrap.dedent(
             """
             module test
               real :: c
-              !$FAD DIFF_MODULE_VARS: c
+              !$FAD CONSTANT_VARS: c
             contains
               subroutine foo(x)
                 real, intent(inout) :: x
@@ -352,12 +352,12 @@ class TestParser(unittest.TestCase):
         )
         module = parser.parse_src(src)[0]
         routine = module.routines[0]
-        self.assertIn("DIFF_MODULE_VARS", module.directives)
-        self.assertEqual(module.directives["DIFF_MODULE_VARS"], ["c"])
+        self.assertIn("CONSTANT_VARS", module.directives)
+        self.assertEqual(module.directives["CONSTANT_VARS"], ["c"])
         decl = routine.mod_decls.find_by_name("c")
-        self.assertFalse(decl.constant)
+        self.assertTrue(decl.constant)
         var = routine.get_var("c")
-        self.assertTrue(var.ad_target)
+        self.assertFalse(var.ad_target)
 
     def test_mod_decls_from_fadmod(self):
         code_tree.Node.reset()

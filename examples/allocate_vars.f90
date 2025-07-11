@@ -3,7 +3,7 @@ module allocate_vars
 
   real, allocatable :: mod_arr(:)
   real, allocatable :: mod_arr_diff(:)
-  !$FAD DIFF_MODULE_VARS: mod_arr_diff
+  !$FAD CONSTANT_VARS: mod_arr
 contains
 
   subroutine allocate_and_sum(n, x, res)
