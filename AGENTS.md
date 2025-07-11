@@ -27,7 +27,7 @@ This file provides guidelines for contributors about the repository and develop 
   AD output against the expected Fortran code.
 - When adding modules or subroutines under ``examples/``, also create a driver and
   test subroutine in ``tests/fortran_runtime`` to verify the generated AD code via
-  finite differences. Update the ``Makefile`` and ``tests/test_forward_adcode.py``
+  finite differences. Update the ``Makefile`` and ``tests/test_fortran_adcode.py``
   to build and run the new checks.
 
 ## 6. Generator Usage
