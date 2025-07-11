@@ -45,6 +45,17 @@ class TestGenerator(unittest.TestCase):
         expected = Path("examples/cross_mod_b_ad.f90").read_text()
         self.assertEqual(generated, expected)
 
+    def test_call_module_vars(self):
+        code_tree.Node.reset()
+        generator.generate_ad("examples/module_vars.f90", warn=False)
+        generated = generator.generate_ad(
+            "examples/call_module_vars.f90",
+            warn=False,
+            search_dirs=["."],
+        )
+        expected = Path("examples/call_module_vars_ad.f90").read_text()
+        self.assertEqual(generated, expected)
+
     def test_keyword_arg_call(self):
         code_tree.Node.reset()
         generated = generator.generate_ad("examples/keyword_args.f90", warn=False)
@@ -230,7 +241,7 @@ def _make_example_test(src: Path):
 
 examples_dir = Path("examples")
 for _src in sorted(examples_dir.glob("*.f90")):
-    if _src.name.endswith("_ad.f90") or _src.stem in {"cross_mod_a", "cross_mod_b"}:
+    if _src.name.endswith("_ad.f90") or _src.stem in {"cross_mod_a", "cross_mod_b", "call_module_vars"}:
         continue
     test_name = f"test_{_src.stem}"
     setattr(TestGenerator, test_name, _make_example_test(_src))

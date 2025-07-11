@@ -106,6 +106,10 @@ class TestFortranADCode(unittest.TestCase):
         self._run_test('module_vars', ['inc_and_use'])
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
+    def test_call_module_vars(self):
+        self._run_test('call_module_vars', ['call_inc_and_use'], deps=['module_vars', 'call_module_vars'])
+
+    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_allocate(self):
         self._run_test('allocate_vars', ['allocate_and_sum', 'module_vars'])
 
