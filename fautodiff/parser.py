@@ -104,7 +104,7 @@ def _stmt2op(stmt, decls:Block) -> Operator:
                 ret = -ret
             return ret
         else:
-            raise ValueError("Failed to convert real number: #{stmt}")
+            raise ValueError(f"Failed to convert real number: {stmt}")
 
     if isinstance(stmt, Fortran2003.Name):
         name = stmt.tofortran()
@@ -178,7 +178,7 @@ def _stmt2op(stmt, decls:Block) -> Operator:
             args = [_stmt2op(stmt.items[0], decls), _stmt2op(stmt.items[2], decls)]
             return OpPow(args)
         else:
-            raise ValueError("Unsupported Mult_operand type: f{stmt}")
+            raise ValueError(f"Unsupported Mult_operand type: {stmt}")
 
     if isinstance(stmt, Fortran2003.Level_2_Unary_Expr):
         op = stmt.items[0]
@@ -186,7 +186,7 @@ def _stmt2op(stmt, decls:Block) -> Operator:
         if op == "-":
             return OpNeg(args)
         else:
-            raise ValueError("Unsupported Level_2_Unary_Expr type: f{stmt}")
+            raise ValueError(f"Unsupported Level_2_Unary_Expr type: {stmt}")
 
     if isinstance(stmt, Fortran2003.Level_2_Expr):
         op = stmt.items[1]
@@ -196,7 +196,7 @@ def _stmt2op(stmt, decls:Block) -> Operator:
         elif op == "-":
             return OpSub(args)
         else:
-            raise ValueError("Unsupported Level_2_Expr type: f{stmt}")
+            raise ValueError(f"Unsupported Level_2_Expr type: {stmt}")
 
     if isinstance(stmt, Fortran2003.Add_Operand):
         op = stmt.items[1]
@@ -206,7 +206,7 @@ def _stmt2op(stmt, decls:Block) -> Operator:
         elif op == "/":
             return OpDiv(args)
         else:
-            raise ValueError("Unsupported Add_Operand type: f{stmt}")
+            raise ValueError(f"Unsupported Add_Operand type: {stmt}")
 
     if isinstance(stmt, Fortran2003.Parenthesis):
         return _stmt2op(stmt.items[1], decls)
