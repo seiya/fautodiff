@@ -581,7 +581,7 @@ def _generate_ad_subroutine(
                         base_decl.dims,
                         None,
                         base_decl.parameter,
-                        init=base_decl.init,
+                        init_val=base_decl.init_val,
                         allocatable=base_decl.allocatable,
                         declared_in="routine",
                     )
