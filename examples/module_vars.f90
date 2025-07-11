@@ -2,7 +2,7 @@ module module_vars
   implicit none
   real :: c = 2.0
   real :: a
-  !$FAD DIFF_MODULE_VARS: a
+  !$FAD CONSTANT_VARS: c
 contains
   subroutine inc_and_use(x, y)
     real, intent(in) :: x

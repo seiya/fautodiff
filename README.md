@@ -92,56 +92,8 @@ Generate reverse mode only:
 bin/fautodiff --mode reverse examples/simple_math.f90
 ```
 
-## Optimization Directives
-
-Comment directives may be placed immediately before a subroutine or function
-definition to influence how the AD code is generated. They are optional
-comments processed by ``fautodiff`` and do not change the original Fortran
-semantics.
-
-Use ``CONSTANT_ARGS`` to mark arguments that should be treated as constants
-during differentiation. Specify the argument names after a colon:
-
-```fortran
-!$FAD CONSTANT_ARGS: arg1, arg2
-subroutine foo(arg1, arg2, arg3)
-  ! ...
-end subroutine foo
-```
-
-Arguments listed in ``CONSTANT_ARGS`` do not receive corresponding ``_ad``
-variables in the generated routine. See ``examples/directives.f90``
-for a full example that also demonstrates skipping a routine with ``SKIP``.
-
-Use ``SKIP`` to indicate that a routine should be parsed but skipped when
-generating AD code:
-
-```fortran
-!$FAD SKIP
-subroutine skip_me(x)
-  ! ...
-end subroutine skip_me
-```
-
-Use ``DIFF_MODULE_VARS`` to differentiate selected module variables which are
-normally treated as constants. Place the directive before ``contains``:
-
-```fortran
-module test
-  real :: c
-  !$FAD DIFF_MODULE_VARS: c
-contains
-  subroutine foo(x)
-    real, intent(inout) :: x
-    c = c + x
-  end subroutine foo
-end module test
-```
-
-Module variables or names brought in with ``use`` remain constants unless
-``DIFF_MODULE_VARS`` (or other directives) requests their differentiation.  If
-no corresponding ``_ad`` variable exists, any ``allocate`` or ``deallocate``
-statements for such variables are omitted from the generated code.
+See ``doc/directives.md`` for a description of optional directives that can
+control how AD code is generated.
 
 Run the included tests with:
 

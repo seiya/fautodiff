@@ -51,7 +51,7 @@ class TestGenerator(unittest.TestCase):
         expected = Path("examples/keyword_args_ad.f90").read_text()
         self.assertEqual(generated, expected)
 
-    def test_constant_args_directive(self):
+    def test_constant_vars_directive(self):
         code_tree.Node.reset()
         import textwrap
         from tempfile import TemporaryDirectory
@@ -63,7 +63,7 @@ class TestGenerator(unittest.TestCase):
                     """
                     module test
                     contains
-                    !$FAD CONSTANT_ARGS: a
+                    !$FAD CONSTANT_VARS: a
                       subroutine foo(a, b)
                         real, intent(in) :: a
                         real, intent(inout) :: b
@@ -76,7 +76,7 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad(str(src), warn=False)
             self.assertNotIn("a_ad", generated)
 
-    def test_module_variable_constant(self):
+    def test_module_variable_diff_by_default(self):
         code_tree.Node.reset()
         import textwrap
         from tempfile import TemporaryDirectory
@@ -88,31 +88,6 @@ class TestGenerator(unittest.TestCase):
                     """
                     module test
                       real :: c
-                    contains
-                      subroutine foo(x)
-                        real, intent(inout) :: x
-                        c = c + x
-                      end subroutine foo
-                    end module test
-                    """
-                )
-            )
-            generated = generator.generate_ad(str(src), warn=False)
-            self.assertNotIn("c_ad", generated)
-
-    def test_diff_module_var_directive(self):
-        code_tree.Node.reset()
-        import textwrap
-        from tempfile import TemporaryDirectory
-
-        with TemporaryDirectory() as tmp:
-            src = Path(tmp) / "modvar.f90"
-            src.write_text(
-                textwrap.dedent(
-                    """
-                    module test
-                      real :: c
-                      !$FAD DIFF_MODULE_VARS: c
                     contains
                       subroutine foo(x)
                         real, intent(inout) :: x
@@ -124,6 +99,31 @@ class TestGenerator(unittest.TestCase):
             )
             generated = generator.generate_ad(str(src), warn=False)
             self.assertIn("c_ad", generated)
+
+    def test_constant_module_var_directive(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            src = Path(tmp) / "modvar.f90"
+            src.write_text(
+                textwrap.dedent(
+                    """
+                    module test
+                      real :: c
+                      !$FAD CONSTANT_VARS: c
+                    contains
+                      subroutine foo(x)
+                        real, intent(inout) :: x
+                        c = c + x
+                      end subroutine foo
+                    end module test
+                    """
+                )
+            )
+            generated = generator.generate_ad(str(src), warn=False)
+            self.assertNotIn("c_ad", generated)
 
     def test_module_vars_example_no_diff(self):
         code_tree.Node.reset()
@@ -152,7 +152,7 @@ class TestGenerator(unittest.TestCase):
                     """
                     module test
                       real :: c
-                      !$FAD DIFF_MODULE_VARS: c
+                      !$FAD CONSTANT_VARS: c
                     contains
                       subroutine foo(x)
                         real, intent(inout) :: x
@@ -163,7 +163,7 @@ class TestGenerator(unittest.TestCase):
                 )
             )
             generated = generator.generate_ad(str(src), warn=False)
-            self.assertIn("c_ad", generated)
+            self.assertNotIn("c_ad", generated)
 
     def test_fadmod_includes_skip(self):
         code_tree.Node.reset()
