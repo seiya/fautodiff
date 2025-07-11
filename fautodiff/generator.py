@@ -824,6 +824,7 @@ def generate_ad(
                 if used:
                     pushpop_used = True
 
+        name = mod.name
         for m in sorted(ad_modules_used):
             if m != name:
                 mod.uses.append(Use(m))
