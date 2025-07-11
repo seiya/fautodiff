@@ -63,6 +63,10 @@ class Node:
     # basic node API
     # ------------------------------------------------------------------
 
+    def copy(self) -> "Node":
+        """Return a shallow copy of this node."""
+        raise NotImplementedError
+
     def render(self, indent: int = 0) -> List[str]:
         """Return the formatted Fortran code lines for this node."""
         raise NotImplementedError
@@ -136,8 +140,9 @@ class Node:
         id = self.get_id()
         save = SaveAssignment(var, id)
         self.parent.insert_before(id, save)
+        load = save.to_load()
         saved_vars.append(save.tmpvar)
-        return save.to_load()
+        return load
 
     def deep_clone(self) -> "Node":
         """Return a deep clone of this node tree with new ids."""
@@ -285,6 +290,11 @@ class Node:
         self.do_index_list = index_list
         for child in self.iter_children():
             child.build_do_index_list(index_list)
+
+    def build_parent(self) -> None:
+        for child in self.iter_children():
+            child.set_parent(self)
+            child.build_parent()
 
     # ------------------------------------------------------------------
     # optimization helpers
@@ -476,6 +486,19 @@ class Block(Node):
 
     __children: List[Node] = field(default_factory=list)
 
+    def _set_parent(self, child: Node) -> None:
+        if child.parent is not None:
+            child = child.copy()
+        child.set_parent(self)
+
+    def __post_init__(self):
+        super().__post_init__()
+        for child in self.__children:
+            self._set_parent(child)
+
+    def copy(self) -> "Block":
+        return Block(self.__children)
+
     def iter_children(self) -> Iterator[Node]:
         return iter(self.__children)
 
@@ -525,25 +548,26 @@ class Block(Node):
 
     def append(self, node: Node) -> None:
         """Append ``node`` to this block."""
-        node.set_parent(self)
+        self._set_parent(node)
         node.build_do_index_list(self.do_index_list)
         self.__children.append(node)
 
     def extend(self, nodes: Iterable[Node]) -> None:
         """Extend this block with ``nodes``."""
         for node in nodes:
-            node.build_do_index_list(self.do_index_list)
-        self.__children.extend(nodes)
+            self.append(node)
 
     def insert_before(self, id: int, node:Node) -> Node:
         for i, child in enumerate(self.__children):
             if child.get_id() == id:
                 node.build_do_index_list(self.do_index_list)
+                self._set_parent(node)
                 return self.__children.insert(i, node)
         raise ValueError("id is not found")
 
     def insert_begin(self, node:Node) -> Node:
         node.build_do_index_list(self.do_index_list)
+        self._set_parent(node)
         return self.__children.insert(0, node)
 
     def __iter__(self):
@@ -583,11 +607,29 @@ class Block(Node):
         if len(children) >= 2:
             new_children = []
             for child in children:
-                if len(new_children) > 0 and isinstance(child, SaveAssignment) and not child.pushpop:
+                if len(new_children) > 0:
                     last = new_children[-1]
-                    if isinstance(last, SaveAssignment) and not last.pushpop and last.id == child.id and last.load != child.load:
+                    if (isinstance(child, SaveAssignment) and not child.pushpop and
+                        isinstance(last,  SaveAssignment) and not last.pushpop and
+                        last.var.name == child.var.name and last.id == child.id and last.load != child.load):
                         new_children.remove(last)
                         continue
+                    if isinstance(child, DoLoop) and isinstance(last, DoLoop):
+                        item1 = child._body[0]
+                        item2 = last._body[-1]
+                        while (isinstance(item1, SaveAssignment) and not item1.pushpop and
+                               isinstance(item2, SaveAssignment) and not item2.pushpop and
+                               item1.var.name == item2.var.name and item1.id == item2.id and item1.load != item2.load):
+                                child._body.remove_child(item1)
+                                last._body.remove_child(item2)
+                                if child._body.is_effectively_empty() or last._body.is_effectively_empty():
+                                    break
+                                item1 = child._body[0]
+                                item2 = last._body[-1]
+                        if last.is_effectively_empty():
+                            new_children.remove(last)
+                        if child.is_effectively_empty():
+                            continue
                 new_children.append(child)
             children = new_children
         return Block(children)
@@ -605,6 +647,9 @@ class Statement(Node):
     """Representation of a Fortran statement."""
     body: str
 
+    def copy(self) -> "Statement":
+        return Statement(self.body)
+
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         lines = [f"{space}{self.body}\n"]
@@ -619,6 +664,9 @@ class Use(Node):
     """Representation of a Fortran use statement."""
     name: str
     only: Optional[List[str]] = field(default=None)
+
+    def copy(self) -> "Use":
+        return Use(self.name, self.only)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -668,6 +716,9 @@ class CallStatement(Node):
             for intent in self.intents:
                 if intent not in ("in", "out", "inout"):
                     raise ValueError(f"invalid intent: {intent}")
+
+    def copy(self) -> "CallStatement":
+        return CallStatement(self.name, self.args, self.arg_keys, self.intents, self.result, self.info, self.ad_info)
 
     def _iter_vars(self, intents: List[str], kinds: Tuple[str, ...]) -> Iterator[OpVar]:
         for arg, intent in zip(self.args, intents):
@@ -750,7 +801,9 @@ class CallStatement(Node):
                 tmp = OpVar(name, typename="real")
                 tmp_vars.append((tmp, arg))
                 args_new.append(tmp)
-                saved_vars.append(OpVar(f"{tmp.name}{AD_SUFFIX}", typename="real", kind=arg_info["kind"][i], dims=arg_info["dims"][i]))
+                saved_vars.append(
+                    OpVar(f"{tmp.name}{AD_SUFFIX}", typename="real", kind=arg_info["kind"][i], dims=arg_info["dims"][i])
+                    )
             else:
                 args_new.append(arg)
         tmp_vars = []
@@ -1062,6 +1115,9 @@ class Assignment(Node):
             self._rhs_vars.append(var)
         self._ufuncs = self.rhs.find_userfunc()
 
+    def copy(self) -> "Assignment":
+        return Assignment(self.lhs, self.rhs, self.accumulate, self.info, self.ad_info)
+
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self._rhs_vars:
             yield var
@@ -1163,6 +1219,9 @@ class ClearAssignment(Node):
         if not isinstance(self.lhs, OpVar):
             raise ValueError(f"lhs must be OpVar: {type(self.lhs)}")
 
+    def copy(self) -> "ClearAssignment":
+        return ClearAssignment(self.lhs, self.info, self.ad_info)
+
     def iter_ref_vars(self) -> Iterator[OpVar]:
         if self.lhs.index is not None:
             for var in self.lhs.index.collect_vars():
@@ -1262,8 +1321,11 @@ class SaveAssignment(Node):
             self.lhs = self.tmpvar
             self.rhs = self.var
 
+    def copy(self) -> "SaveAssignment":
+        return SaveAssignment(self.var, self.id, self.tmpvar, self.load)
+
     def __deepcopy__(self, memo):
-        return self
+        return self.copy()
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         yield self.rhs
@@ -1347,7 +1409,7 @@ class SaveAssignment(Node):
                 self.tmpvar.index = AryIndex(index_new)
             else:
                 self.tmpvar.index = None
-            
+
         return self
 
     def to_load(self) -> "SaveAssignment":
@@ -1380,13 +1442,16 @@ class PushPopL(PushPop):
     def __post_init__(self):
         Node.__post_init__(self)
 
+    def copy(self) -> "PushPopL":
+        return PushPopL(self.flag)
+
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         if self.load:
             raise RuntimeError
         else:
             return [f"{space}call fautodiff_data_storage_push({self.flag})\n"]
-        
+
     def iter_assign_vars(self, without_savevar=False):
         return iter(())
 
@@ -1394,16 +1459,16 @@ class PushPopL(PushPop):
         return iter(())
 
     def iter_children(self):
-        return iter(()) 
+        return iter(())
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         if vars is None:
             return VarList([])
         return vars
-    
+
     def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None):
         return self
-    
+
     def to_load(self):
         raise NotImplementedError
 
@@ -1418,6 +1483,9 @@ class Allocate(Node):
         for v in self.vars:
             if not isinstance(v, OpVar):
                 raise ValueError(f"vars must be OpVar: {type(v)}")
+
+    def copy(self) -> "Allocate":
+        return Allocate(self.vars)
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.vars:
@@ -1473,7 +1541,7 @@ class Allocate(Node):
         if vars:
             return Allocate(vars)
         return None
-    
+
     @classmethod
     def _add_if(cls, node: Node, var: OpVar, is_mod_var: bool) -> Node:
         if is_mod_var:
@@ -1498,6 +1566,9 @@ class Deallocate(Node):
         for v in self.vars:
             if not isinstance(v, OpVar):
                 raise ValueError(f"vars must be OpVar: {type(v)}")
+
+    def copy(self) -> "Deallocate":
+        return Deallocate(self.vars, self.ad_code)
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         return iter(())
@@ -1552,7 +1623,7 @@ class Deallocate(Node):
         if vars:
             return Deallocate(vars, ad_code=True)
         return None
-        
+
 
 @dataclass
 class Declaration(Node):
@@ -1575,6 +1646,9 @@ class Declaration(Node):
         if self.dims is not None and not isinstance(self.dims, tuple):
             raise ValueError(f"dims must be tuple of str: {type(dims)}")
 
+    def copy(self) -> "Declaration":
+        return Declaration(self.name, self.typename, self.kind, self.dims, self.intent, self.parameter, self.constant, self.init_val, self.access, self.allocatable, self.declared_in)
+
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         if self.intent in ("in", "inout"):
             yield OpVar(
@@ -1590,7 +1664,7 @@ class Declaration(Node):
 
     def is_effectively_empty(self) -> bool:
         return False
-    
+
     def collect_vars(self):
         return[OpVar(
             name=self.name,
@@ -1690,6 +1764,7 @@ class BranchBlock(Node):
                             raise ValueError(f"cond must be a Operator: {type(con)}")
             if not isinstance(block, Block):
                 raise ValueError(f"block must be a Block: {type(block)}")
+            block.set_parent(self)
 
     def iter_children(self) -> Iterator[Node]:
         for _, block in self.cond_blocks:
@@ -1780,6 +1855,9 @@ class BranchBlock(Node):
 class IfBlock(BranchBlock):
     """An ``if`` block with optional ``else if`` branches and ``else``."""
 
+    def copy(self) -> "IfBlock":
+        return IfBlock(self.cond_blocks)
+
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for cond, _ in self.cond_blocks:
             if cond is not None:
@@ -1809,6 +1887,9 @@ class SelectBlock(BranchBlock):
 
     expr: Operator = field(default=None)
 
+    def copy(self) -> "SelectBlock":
+        return SelectBlock(self.cond_blocks, self.expr)
+
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.expr.collect_vars():
             yield var
@@ -1837,8 +1918,13 @@ class DoAbst(Node):
 
     _body: Block
 
+    def __post_init__(self):
+        super().__post_init__()
+        self._body.set_parent(self)
+
     def iter_children(self) -> Iterator[Node]:
         yield self._body
+
 
 @dataclass
 class DoLoop(DoAbst):
@@ -1852,6 +1938,9 @@ class DoLoop(DoAbst):
         self.build_do_index_list([])
         if not isinstance(self.range, OpRange):
             raise ValueError(f"range must be OpRange: f{type(self.range)}")
+
+    def copy(self) -> "DoLoop":
+        return DoLoop(self._body, self.index, self.range)
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.range.collect_vars():
@@ -1906,7 +1995,7 @@ class DoLoop(DoAbst):
                 var_names.append(name)
         return var_names
 
-    def private_vars(self) -> List[str]:
+    def conflict_vars(self) -> List[str]:
         required_vars = self._body.required_vars()
         assigned_vars = self._body.assigned_vars()
         common_var_names = sorted(set(required_vars.names()) & set(assigned_vars.names()))
@@ -1945,24 +2034,37 @@ class DoLoop(DoAbst):
         if reverse:
             body_org = self._body.deep_clone()
             new_body = []
-            recurrent_vars = self.recurrent_vars()
-            private_vars = self.private_vars()
             pushed = []
+            loads = []
+            required_vars = body_org.required_vars()
+            assigned_vars = body_org.assigned_vars()
+            common_vars = required_vars & assigned_vars
+            for cvar in common_vars:
+                if cvar == self.index:
+                    continue
+                save = SaveAssignment(cvar, self._body.get_id())
+                self._body.insert_begin(save)
+                load = save.to_load()
+                saved_vars.append(save.tmpvar)
+                new_body.append(load)
+                loads.insert(0, load)
+            recurrent_vars = self.recurrent_vars()
+            conflict_vars = self.conflict_vars()
             for node in self._body.iter_children():
                 for var in node.assigned_vars():
                     if var.name in recurrent_vars:
                         if not var in pushed:
-                            if var.name in private_vars:
+                            if var.name in conflict_vars:
                                 save = PushPop(var, node.get_id())
-                            else:
-                                save = SaveAssignment(var, node.get_id())
-                            self._body.insert_begin(save)
-                            new_body.append(save.to_load())
+                                self._body.insert_begin(save)
+                                load = save.to_load()
+                                new_body.append(load)
                             pushed.append(var)
             for node in body_org.iter_children():
                 new_body.append(node)
             for node in body.iter_children():
                 new_body.append(node)
+            new_body.extend(loads)
             body = Block(new_body)
         index = self.index
         range = self.range
@@ -1970,20 +2072,14 @@ class DoLoop(DoAbst):
             range = range.reverse()
         block = DoLoop(body, index, range)
         #block = block.prune_for(VarList(block.collect_vars()), mod_vars)
-
+        blocks: List[Node] = [block]
         if reverse:
-            #common_vars = block.required_vars() & block.assigned_vars(without_savevar=True)
-            common_vars = self._body.required_vars() & self._body.assigned_vars()
-            common_vars.update_index_upward(self._build_index_map(), range=self.range)
-            blocks = [block]
-            for cvar in common_vars:
-                if cvar == self.index or cvar.name.endswith(AD_SUFFIX):
-                    continue
-                load = self._save_vars(cvar, saved_vars)
-                blocks.insert(0, load)
-                blocks.append(load)
-        else:
-            blocks = [block]
+            assigned_var_names = assigned_vars.names()
+            for var in self.range.collect_vars():
+                if var.name in assigned_var_names:
+                    load = self._save_vars(var, saved_vars)
+                    blocks.append(load)
+
         return blocks
 
     def render(self, indent: int = 0) -> List[str]:
@@ -2060,27 +2156,27 @@ class DoLoop(DoAbst):
             targets.push(var)
         new_body = self._body.prune_for(targets, mod_vars)
 
-        def _reducedim_from_tmpvar(node: Node) -> None:
-            for child in node.iter_children():
-                if isinstance(child, SaveAssignment):
-                    if child.tmpvar.index is None:
-                        continue
-                    name = child.tmpvar.name
-                    if (not any(name == var.name for var in targets)) and child.tmpvar == child.lhs:
-                        if set(self.do_index_list) <= set(child.tmpvar.index_list()):
-                            index_new = []
-                            child.tmpvar.reduced_dims = []
-                            for i, idx in enumerate(child.tmpvar.index):
-                                if isinstance(idx, OpVar) and idx.name in self.do_index_list:
-                                    child.tmpvar.reduced_dims.append(i)
-                                else:
-                                    index_new.append(idx)
-                            child.tmpvar.index = AryIndex(index_new)
-                    continue
-                if isinstance(child, DoLoop):
-                    continue
-                _reducedim_from_tmpvar(child)
-        _reducedim_from_tmpvar(new_body)
+        # def _reducedim_from_tmpvar(node: Node) -> None:
+        #     for child in node.iter_children():
+        #         if isinstance(child, SaveAssignment):
+        #             if child.tmpvar.index is None:
+        #                 continue
+        #             name = child.tmpvar.name
+        #             if (not any(name == var.name for var in targets)) and child.tmpvar == child.lhs:
+        #                 if set(self.do_index_list) <= set(child.tmpvar.index_list()):
+        #                     index_new = []
+        #                     child.tmpvar.reduced_dims = []
+        #                     for i, idx in enumerate(child.tmpvar.index):
+        #                         if isinstance(idx, OpVar) and idx.name in self.do_index_list:
+        #                             child.tmpvar.reduced_dims.append(i)
+        #                         else:
+        #                             index_new.append(idx)
+        #                     child.tmpvar.index = AryIndex(index_new)
+        #             continue
+        #         if isinstance(child, DoLoop):
+        #             continue
+        #         _reducedim_from_tmpvar(child)
+        # _reducedim_from_tmpvar(new_body)
 
         if new_body.is_effectively_empty():
             return Block([])
@@ -2110,6 +2206,9 @@ class DoWhile(DoAbst):
         super().__post_init__()
         self.do_index_list = ["__never_match__"]
 
+    def copy(self) -> "DoWhile":
+        return DoWhile(self._body, self.cond)
+
     def iter_ref_vars(self) -> Iterator[OpVar]:
         yield from self.cond.collect_vars()
 
@@ -2121,7 +2220,7 @@ class DoWhile(DoAbst):
         required_vars = self._body.required_vars()
         assigned_vars = self._body.assigned_vars()
         return sorted(set(required_vars.names()) & set(assigned_vars.names()))
-    
+
     def generate_ad(
         self,
         saved_vars: List[OpVar],

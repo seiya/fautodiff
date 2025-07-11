@@ -1,6 +1,5 @@
 module save_vars_ad
   use save_vars
-  use fautodiff_data_storage
   implicit none
 
 contains
@@ -35,22 +34,22 @@ contains
     real, intent(inout) :: z_ad
     real :: work_ad
     real :: work
-    real :: work_save_15_ad
-    real :: work_save_17_ad
+    real :: work_save_19_ad
+    real :: work_save_21_ad
 
     work = x + 1.0
-    work_save_15_ad = work
+    work_save_19_ad = work
     work = work**2
-    work_save_17_ad = work
+    work_save_21_ad = work
     work = x**2
 
     work_ad = z_ad * x ! z = work * x + z
     x_ad = z_ad * work ! z = work * x + z
-    work = work_save_17_ad
+    work = work_save_21_ad
     x_ad = work_ad * 2.0 * x + x_ad ! work = x**2
     work_ad = z_ad * x ! z = work * x + z
     x_ad = z_ad * work + x_ad ! z = work * x + z
-    work = work_save_15_ad
+    work = work_save_19_ad
     work_ad = work_ad * 2.0 * work ! work = work**2
     work_ad = z_ad + work_ad ! z = work + y
     y_ad = z_ad ! z = work + y
@@ -100,35 +99,35 @@ contains
     real, intent(inout) :: z_ad
     real :: work_ad
     real :: work
+    real :: work_save_47_ad
     real :: work_save_39_ad
-    real :: work_save_31_ad
-    real :: work_save_40_ad
+    real :: work_save_48_ad
 
     work = x + 1.0
-    work_save_39_ad = work
+    work_save_47_ad = work
     if (work > 0.0) then
       work = work**2
     else if (work < 0.0) then
       work = x
       work = work * x
     end if
-    work_save_40_ad = work
+    work_save_48_ad = work
     work = work * x
 
     y_ad = 0.0
 
     work_ad = z_ad * x ! z = work * x + z
     x_ad = z_ad * work ! z = work * x + z
-    work = work_save_40_ad
+    work = work_save_48_ad
     x_ad = work_ad * work + x_ad ! work = work * x
     work_ad = work_ad * x ! work = work * x
-    work = work_save_39_ad
+    work = work_save_47_ad
     if (work > 0.0) then
-      work_save_31_ad = work
+      work_save_39_ad = work
       work = work**2
       work_ad = z_ad * x + work_ad ! z = work * x + z
       x_ad = z_ad * work + x_ad ! z = work * x + z
-      work = work_save_31_ad
+      work = work_save_39_ad
       work_ad = work_ad * 2.0 * work ! work = work**2
     else if (work < 0.0) then
       work = x
@@ -144,7 +143,7 @@ contains
       x_ad = z_ad * work + x_ad ! z = work * x
       z_ad = 0.0 ! z = work * x
     end if
-    work = work_save_39_ad
+    work = work_save_47_ad
     work_ad = z_ad * y + work_ad ! z = work * y
     y_ad = z_ad * work + y_ad ! z = work * y
     z_ad = 0.0 ! z = work * y
@@ -207,36 +206,36 @@ contains
     integer :: j
     real :: z(n,m)
     real :: scalar
-    real :: ary_save_60_ad
-    real :: z_save_62_ad
-    real :: scalar_save_64_ad
+    real :: ary_save_77_ad
+    real :: z_save_79_ad
+    real :: scalar_save_81_ad
 
     ary(:,:) = x(:,:)
 
     do j = m, 1, - 1
       do i = n, 1, - 1
         z(i,j) = ary(i,j) * y(i,j)
-        ary_save_60_ad = ary(i,j)
+        ary_save_77_ad = ary(i,j)
         ary(i,j) = x(i,j) * ary(i,j) + z(i,j)
         scalar = ary(i,j) * z(i,j)
-        z_save_62_ad = z(i,j)
+        z_save_79_ad = z(i,j)
         z(i,j) = x(i,j) + scalar
         z(i,j) = y(i,j) * scalar + z(i,j)
-        scalar_save_64_ad = scalar
+        scalar_save_81_ad = scalar
         scalar = z(i,j) * y(i,j)
         scalar_ad = z_ad(i,j) * z(i,j) ! z(i,j) = z(i,j) * scalar
         z_ad(i,j) = z_ad(i,j) * scalar ! z(i,j) = z(i,j) * scalar
-        scalar = scalar_save_64_ad
+        scalar = scalar_save_81_ad
         z_ad(i,j) = scalar_ad * y(i,j) + z_ad(i,j) ! scalar = z(i,j) * y(i,j)
         y_ad(i,j) = scalar_ad * z(i,j) ! scalar = z(i,j) * y(i,j)
         y_ad(i,j) = z_ad(i,j) * scalar + y_ad(i,j) ! z(i,j) = y(i,j) * scalar + z(i,j)
         scalar_ad = z_ad(i,j) * y(i,j) ! z(i,j) = y(i,j) * scalar + z(i,j)
-        z(i,j) = z_save_62_ad
+        z(i,j) = z_save_79_ad
         x_ad(i,j) = z_ad(i,j) ! z(i,j) = x(i,j) + scalar
         scalar_ad = z_ad(i,j) + scalar_ad ! z(i,j) = x(i,j) + scalar
         ary_ad(i,j) = scalar_ad * z(i,j) ! scalar = ary(i,j) * z(i,j)
         z_ad(i,j) = scalar_ad * ary(i,j) ! scalar = ary(i,j) * z(i,j)
-        ary(i,j) = ary_save_60_ad
+        ary(i,j) = ary_save_77_ad
         x_ad(i,j) = ary_ad(i,j) * ary(i,j) + x_ad(i,j) ! ary(i,j) = x(i,j) * ary(i,j) + z(i,j)
         z_ad(i,j) = ary_ad(i,j) + z_ad(i,j) ! ary(i,j) = x(i,j) * ary(i,j) + z(i,j)
         ary_ad(i,j) = ary_ad(i,j) * x(i,j) ! ary(i,j) = x(i,j) * ary(i,j) + z(i,j)
@@ -302,17 +301,17 @@ contains
     integer :: j
     real :: ary(n,m)
     real :: z(n,m)
-    real :: ary_save_91_ad(n,m)
-    real :: z_save_94_ad
-    real :: ary_save_95_ad
+    real :: ary_save_111_ad(n,m)
+    real :: z_save_119_ad
+    real :: ary_save_120_ad
 
     do j = 1, m
       do i = 1, n
         ary(i,j) = x(i,j) + 1.0
       end do
     end do
-    ary_save_91_ad(1:n,1:m) = ary(1:n,1:m)
     do j = 1, m
+      ary_save_111_ad(1:n,j) = ary(1:n,j)
       do i = 1, n
         z(i,j) = ary(i,j) * x(i,j)
         ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
@@ -321,20 +320,20 @@ contains
 
     do j = m, 1, - 1
       do i = n, 1, - 1
-        z_save_94_ad = z(i,j)
-        ary_save_95_ad = ary(i,j)
+        z_save_119_ad = z(i,j)
+        ary_save_120_ad = ary(i,j)
         ary_ad(i,j) = z_ad(i,j) ! z(i,j) = z(i,j) + ary(i,j)
-        ary(i,j) = ary_save_95_ad
+        ary(i,j) = ary_save_120_ad
         y_ad(i,j) = ary_ad(i,j) * ary(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
         ary_ad(i,j) = ary_ad(i,j) * y(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
-        z(i,j) = z_save_94_ad
+        z(i,j) = z_save_119_ad
         x_ad(i,j) = z_ad(i,j) * z(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
         ary_ad(i,j) = z_ad(i,j) + ary_ad(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
         z_ad(i,j) = z_ad(i,j) * x(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
       end do
     end do
-    ary(1:n,1:m) = ary_save_91_ad(1:n,1:m)
     do j = m, 1, - 1
+      ary(1:n,j) = ary_save_111_ad(1:n,j)
       do i = n, 1, - 1
         z(i,j) = ary(i,j) * x(i,j)
         z_ad(i,j) = ary_ad(i,j) * y(i,j) + z_ad(i,j) ! ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
@@ -425,7 +424,7 @@ contains
     real :: work1(2,n,m)
     real :: z(n,m)
     integer :: k
-    real :: work1_save_133_ad(2)
+    real :: work1_save_166_ad(2)
 
     do j = 1, m
       do i = 1, n
@@ -446,8 +445,8 @@ contains
     do j = m, 1, - 1
       do i = n, 1, - 1
         z(i,j) = work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
-        work1_save_133_ad(1:2) = work1(1:2,i,j)
         do k = 1, 2
+          work1_save_166_ad(k) = work1(k,i,j)
           work3(k) = work1(k,i,j)
           work1(k,i,j) = x(i,j) * work3(k)
         end do
@@ -458,15 +457,15 @@ contains
         work1_ad(2,i,j) = z_ad(i,j) * x(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         x_ad(i,j) = z_ad(i,j) * work1(2,i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         z_ad(i,j) = z_ad(i,j) * (work3(1) + work3(2)) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
-        work1(1:2,i,j) = work1_save_133_ad(1:2)
         do k = 2, 1, - 1
+          work1(k,i,j) = work1_save_166_ad(k)
           work3(k) = work1(k,i,j)
           x_ad(i,j) = work1_ad(k,i,j) * work3(k) + x_ad(i,j) ! work1(k,i,j) = x(i,j) * work3(k)
           work3_ad(k) = work1_ad(k,i,j) * x(i,j) + work3_ad(k) ! work1(k,i,j) = x(i,j) * work3(k)
           work1_ad(k,i,j) = work3_ad(k) ! work3(k) = work1(k,i,j)
           work3_ad(k) = 0.0 ! work3(k) = work1(k,i,j)
+          work1(k,i,j) = work1_save_166_ad(k)
         end do
-        work1(1:2,i,j) = work1_save_133_ad(1:2)
         work1_ad(1,i,j) = z_ad(i,j) * y(i,j) + work1_ad(1,i,j) ! z(i,j) = work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         y_ad(i,j) = z_ad(i,j) * work1(1,i,j) + y_ad(i,j) ! z(i,j) = work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         work1_ad(2,i,j) = z_ad(i,j) * x(i,j) + work1_ad(2,i,j) ! z(i,j) = work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
@@ -530,111 +529,29 @@ contains
     real, intent(inout) :: x(n)
     real, intent(inout) :: x_ad(n)
     integer :: i
-    real :: x_save_145_ad
-    real :: x_save_148_ad
-    real :: x_save_147_ad(n)
+    real :: x_save_184_ad
+    real :: x_save_185_ad(n)
 
-    x_save_145_ad = x(1)
+    x_save_184_ad = x(1)
     x(1) = x(1) * x(2) * 0.5
-    x_save_148_ad = x(2)
     do i = 2, n - 1
-      x_save_147_ad(i) = x(i)
+      x_save_185_ad(i) = x(i)
       x(i) = x(i) * (x(i + 1) - x(i - 1)) * 0.5
     end do
 
     x_ad(n - 1) = - x_ad(n) * x(n) * 0.5 + x_ad(n - 1) ! x(n) = - x(n) * x(n-1) * 0.5
     x_ad(n) = - x_ad(n) * x(n - 1) * 0.5 ! x(n) = - x(n) * x(n-1) * 0.5
     do i = n - 1, 2, - 1
-      x(i) = x_save_147_ad(i)
+      x(i) = x_save_185_ad(i)
       x_ad(i + 1) = x_ad(i) * x(i) * 0.5 + x_ad(i + 1) ! x(i) = x(i) * (x(i+1) - x(i-1)) * 0.5
       x_ad(i - 1) = - x_ad(i) * x(i) * 0.5 + x_ad(i - 1) ! x(i) = x(i) * (x(i+1) - x(i-1)) * 0.5
       x_ad(i) = x_ad(i) * (x(i + 1) - x(i - 1)) * 0.5 ! x(i) = x(i) * (x(i+1) - x(i-1)) * 0.5
     end do
-    x(2) = x_save_148_ad
-    x(1) = x_save_145_ad
+    x(1) = x_save_184_ad
     x_ad(2) = x_ad(1) * x(1) * 0.5 + x_ad(2) ! x(1) = x(1) * x(2) * 0.5
     x_ad(1) = x_ad(1) * x(2) * 0.5 ! x(1) = x(1) * x(2) * 0.5
 
     return
   end subroutine do_with_stencil_array_rev_ad
-
-  subroutine do_while_fwd_ad(x, x_ad, y_ad, z_ad)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
-    real, intent(out) :: y_ad
-    real, intent(out) :: z_ad
-    real :: a_ad
-    real :: y
-    real :: z
-    real :: a
-
-    y_ad = 0.0 ! y = 0.0
-    y = 0.0
-    z_ad = 0.0 ! z = 1.0
-    z = 1.0
-    a_ad = x_ad * y ! a = y * x
-    a = y * x
-    do while (y < 10.0)
-      a_ad = a_ad + x_ad ! a = a + x
-      a = a + x
-      y_ad = y_ad + a_ad ! y = y + a
-      y = y + a
-      a = a + 1.0
-      z_ad = z_ad * a + a_ad * z ! z = z * a
-      z = z * a
-    end do
-    y_ad = z_ad * y + y_ad * z ! y = z * y
-
-    return
-  end subroutine do_while_fwd_ad
-
-  subroutine do_while_rev_ad(x, x_ad, y_ad, z_ad)
-    real, intent(in)  :: x
-    real, intent(out) :: x_ad
-    real, intent(inout) :: y_ad
-    real, intent(inout) :: z_ad
-    real :: a_ad
-    real :: y
-    real :: z
-    real :: a
-    real :: y_save_167_ad
-
-    y = 0.0
-    z = 1.0
-    a = y * x
-    call fautodiff_data_storage_push(.false.)
-    y_save_167_ad = y
-    do while (y < 10.0)
-      call fautodiff_data_storage_push(.true.)
-      call fautodiff_data_storage_push(z)
-      call fautodiff_data_storage_push(a)
-      a = a + x
-      y = y + a
-      a = a + 1.0
-      z = z * a
-    end do
-
-    a_ad = 0.0
-    x_ad = 0.0
-
-    z_ad = y_ad * y + z_ad ! y = z * y
-    y_ad = y_ad * z ! y = z * y
-    do while (fautodiff_data_storage_get())
-      call fautodiff_data_storage_pop(a)
-      call fautodiff_data_storage_pop(z)
-      a = a + x
-      a = a + 1.0
-      a_ad = z_ad * z + a_ad ! z = z * a
-      z_ad = z_ad * a ! z = z * a
-      a_ad = y_ad + a_ad ! y = y + a
-      x_ad = a_ad + x_ad ! a = a + x
-    end do
-    y = y_save_167_ad
-    x_ad = a_ad * y + x_ad ! a = y * x
-    z_ad = 0.0 ! z = 1.0
-    y_ad = 0.0 ! y = 0.0
-
-    return
-  end subroutine do_while_rev_ad
 
 end module save_vars_ad

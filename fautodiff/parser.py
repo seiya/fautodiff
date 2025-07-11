@@ -271,7 +271,7 @@ def _clone_decl(decl: Declaration, declared_in: str) -> Declaration:
         decl.intent,
         decl.parameter,
         decl.constant,
-        init=decl.init,
+        init_val=decl.init_val,
         access=decl.access,
         allocatable=decl.allocatable,
         declared_in=declared_in,
@@ -875,7 +875,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                                             None,
                                             info.get("parameter", False),
                                             info.get("constant", False),
-                                            init=info.get("init"),
+                                            init_val=info.get("init_val"),
                                             access=info.get("access"),
                                             declared_in="use",
                                         )
