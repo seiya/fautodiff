@@ -105,6 +105,7 @@ Run the included tests with:
 ```bash
 python tests/test_generator.py
 python tests/test_fortran_runtime.py
+python tests/test_fortran_adcode.py
 ```
 
 ## Code tree structure
