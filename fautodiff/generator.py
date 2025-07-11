@@ -591,14 +591,14 @@ def _generate_ad_subroutine(
                 subroutine.decls.append(decl)
 
     subroutine.build_parent()
-    def _find_save_assign(node: Node, save_assignes: dict) -> None:
+    def _find_save_assign(node: Node, save_assigns: dict) -> None:
         if isinstance(node, SaveAssignment) and not node.pushpop:
             name = node.tmpvar.name
             if name not in save_assigns:
                 save_assigns[name] = []
             save_assigns[name].append(node)
         for child in node.iter_children():
-            _find_save_assign(child, save_assignes)
+            _find_save_assign(child, save_assigns)
     save_assigns = dict()
     _find_save_assign(subroutine, save_assigns)
     #print(render_program(subroutine))
