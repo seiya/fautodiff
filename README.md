@@ -95,7 +95,10 @@ bin/fautodiff --mode reverse examples/simple_math.f90
 ```
 
 See ``doc/directives.md`` for a description of optional directives that can
-control how AD code is generated.
+control how AD code is generated. Details on how module variable assignments are
+handled in reverse mode are in the
+[Module variables in reverse mode](doc/fortran_support.md#module-variables-in-reverse-mode)
+section.
 
 Run the included tests with:
 
