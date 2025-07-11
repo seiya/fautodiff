@@ -111,14 +111,19 @@ class VarList:
     def merge(self, other) -> None:
         if not isinstance(other, VarList):
             raise ValueError("Must be VarList: {type(other)}")
+        processed: set[str] = set()
         for var in other:
             self.push(var, not_reorganize=True)
+            processed.add(var.name)
         for name in other.exclude:
             if not name in self.exclude:
                 self.exclude[name] = []
             for index in other.exclude[name]:
                 self.exclude[name].append(index)
-        self._reorganize
+            processed.add(name)
+        for name in processed:
+            if name in self.vars:
+                self._reorganize(name)
 
     @staticmethod
     def _force_stride_one(var) -> OpVar:
