@@ -1,5 +1,7 @@
 module call_module_vars_ad
   use call_module_vars
+  use module_vars
+  use module_vars_ad
   implicit none
 
 contains
@@ -10,11 +12,13 @@ contains
     real, intent(out) :: y_ad
     real :: z_ad
     real :: z
+    real :: y
 
-    z_ad = a_ad ! z = a
-    z = a
+    z_ad = x_ad * 2.0 ! z = x * 2.0
+    z = x * 2.0
     call inc_and_use_fwd_ad(x, x_ad, y_ad) ! call inc_and_use(x, y)
-    y_ad = y_ad + z_ad * a + a_ad * z ! y = y + z * a
+    call inc_and_use(x, y)
+    y_ad = y_ad * z + z_ad * y ! y = y * z
 
     return
   end subroutine call_inc_and_use_fwd_ad
@@ -25,13 +29,15 @@ contains
     real, intent(inout) :: y_ad
     real :: z_ad
     real :: z
+    real :: y
 
-    z = a
+    z = x * 2.0
+    call inc_and_use(x, y)
 
-    z_ad = y_ad * a ! y = y + z * a
-    a_ad = y_ad * z + a_ad ! y = y + z * a
+    z_ad = y_ad * y ! y = y * z
+    y_ad = y_ad * z ! y = y * z
     call inc_and_use_rev_ad(x, x_ad, y_ad) ! call inc_and_use(x, y)
-    a_ad = z_ad + a_ad ! z = a
+    x_ad = z_ad * 2.0 ! z = x * 2.0
 
     return
   end subroutine call_inc_and_use_rev_ad
