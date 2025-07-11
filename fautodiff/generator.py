@@ -9,11 +9,12 @@ REV_SUFFIX = "_rev_ad"
 import json
 import sys
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 # Ensure other modules use the same AD suffix
 from . import code_tree as code_tree
 from .code_tree import (
+    Node,
     Assignment,
     Block,
     CallStatement,
@@ -531,16 +532,31 @@ def _generate_ad_subroutine(
         while flag:
             last = fw_block.last()
             first = ad_block.first()
-            if (
-                isinstance(last, SaveAssignment)
-                and isinstance(first, SaveAssignment)
-                and last.var == first.var
-                and last.load != first.load
-            ):
+            if (isinstance(last, SaveAssignment) and isinstance(first, SaveAssignment) and
+                last.var.name == first.var.name and last.id and first.id and last.load != first.load):
                 fw_block.remove_child(last)
                 ad_block.remove_child(first)
-            else:
+                continue
+            if isinstance(last, DoLoop) and isinstance(first, DoLoop):
+                item1 = first._body[0]
+                item2 = last._body[-1]
                 flag = False
+                while (isinstance(item1, SaveAssignment) and not item1.pushpop and
+                       isinstance(item2, SaveAssignment) and not item2.pushpop and
+                       item1.var.name == item2.var.name and item1.id and item2.id and item1.load != item2.load):
+                    first._body.remove_child(item1)
+                    last._body.remove_child(item2)
+                    flag = True
+                    if first._body.is_effectively_empty() or last._body.is_effectively_empty():
+                        break
+                    item1 = first._body[0]
+                    item2 = last._body[-1]
+                if last.is_effectively_empty():
+                    fw_block.remove_child(last)
+                if first.is_effectively_empty():
+                    ad_block.remove_child(first)
+                continue
+            flag = False
 
         if not fw_block.is_effectively_empty():
             subroutine.content.extend(fw_block)
@@ -574,7 +590,48 @@ def _generate_ad_subroutine(
                     decl.intent = None
                 subroutine.decls.append(decl)
 
+    subroutine.build_parent()
+    def _find_save_assign(node: Node, save_assignes: dict) -> None:
+        if isinstance(node, SaveAssignment) and not node.pushpop:
+            name = node.tmpvar.name
+            if name not in save_assigns:
+                save_assigns[name] = []
+            save_assigns[name].append(node)
+        for child in node.iter_children():
+            _find_save_assign(child, save_assignes)
+    save_assigns = dict()
+    _find_save_assign(subroutine, save_assigns)
+    #print(render_program(subroutine))
+
+    def _find_loop(parent: Node, index_list: List[str]):
+        while parent is not None and not(isinstance(parent, DoLoop) and parent.index.name in index_list):
+            parent = parent.parent
+        return parent
     for var in reversed(saved_vars):
+        if var.index is not None and var.name in save_assigns:
+            if len(save_assigns[var.name]) < 2:
+                raise RuntimeError(f"Unexpected: {var.name}")
+            index_list = var.index_list()
+            loops = []
+            for save in save_assigns[var.name]:
+                loops.append(_find_loop(save.parent, index_list))
+            common_index = []
+            while all(loop is not None for loop in loops):
+                if len({loop.get_id() for loop in loops}) == 1:
+                    common_index.append(loops[0].index.name)
+                loops_new = []
+                for loop in loops:
+                    loops_new.append(_find_loop(loop.parent, index_list))
+                loops = loops_new
+            index_new = []
+            var.reduced_dims = []
+            for i, idx in enumerate(var.index):
+                if isinstance(idx, OpVar) and idx.name in common_index:
+                    var.reduced_dims.append(i)
+                else:
+                    index_new.append(idx)
+            var.index = AryIndex(index_new)
+
         v_org = None
         base_decl = None
         if var.reference is not None:

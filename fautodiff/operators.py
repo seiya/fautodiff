@@ -585,10 +585,18 @@ class OpChr(OpLeaf):
 
     name: str = field(default="")
 
+    def __init__(self, name: str):
+        super().__init__(args=[])
+        self.name = name
+
 @dataclass
 class OpLogic(OpLeaf):
 
     name: str = field(default="")
+
+    def __init__(self, name: str):
+        super().__init__(args=[])
+        self.name = name
 
 @dataclass
 class OpReal(OpNum):

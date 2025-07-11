@@ -42,6 +42,7 @@ $(OUTDIR)/run_allocate_vars.o: $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars
 
 # Additional module dependencies
 $(OUTDIR)/store_vars_ad.o: $(OUTDIR)/store_vars.mod $(OUTDIR)/data_storage.o
+$(OUTDIR)/save_vars_ad.o: $(OUTDIR)/save_vars.mod $(OUTDIR)/data_storage.o
 $(OUTDIR)/cross_mod_b.o: $(OUTDIR)/cross_mod_a.mod
 $(OUTDIR)/cross_mod_b_ad.o: $(OUTDIR)/cross_mod_b.mod $(OUTDIR)/cross_mod_a_ad.mod
 $(OUTDIR)/allocate_vars_ad.o: $(OUTDIR)/allocate_vars.mod
@@ -70,7 +71,7 @@ run_intrinsic_func: $(OUTDIR)/run_intrinsic_func.o $(OUTDIR)/intrinsic_func.o $(
 run_real_kind: $(OUTDIR)/run_real_kind.o $(OUTDIR)/real_kind.o $(OUTDIR)/real_kind_ad.o
 	$(FC) $^ -o $@
 
-run_save_vars: $(OUTDIR)/run_save_vars.o $(OUTDIR)/save_vars.o $(OUTDIR)/save_vars_ad.o
+run_save_vars: $(OUTDIR)/run_save_vars.o $(OUTDIR)/save_vars.o $(OUTDIR)/save_vars_ad.o $(OUTDIR)/data_storage.o
 	$(FC) $^ -o $@
 
 run_store_vars: $(OUTDIR)/run_store_vars.o $(OUTDIR)/store_vars.o $(OUTDIR)/store_vars_ad.o $(OUTDIR)/data_storage.o
