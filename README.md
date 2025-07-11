@@ -4,6 +4,8 @@ Autodiff code generator for Fortran
 This repository includes utilities for parsing Fortran source code using
 [fparser2](https://fparser.readthedocs.io/en/latest/index.html) (specifically
 the ``fparser.two`` API).
+Documentation of the supported Fortran constructs can be found under
+``doc/fortran_support.md``.
 
 ## Installation
 
