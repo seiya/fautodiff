@@ -24,12 +24,12 @@ This document summarizes the Fortran constructs handled by the AD code generator
 
 ## Dynamic Allocation
 - `allocate` and `deallocate` statements generate corresponding operations for AD variables.
-- Module variables imported with `use` remain constants unless `DIFF_MODULE_VARS` is specified.
+- Module variables imported with `use` are differentiated by default. Use the `CONSTANT_VARS` directive to mark them as constants.
 - If no `_ad` variable exists for such module variables, any `allocate` or `deallocate` is omitted.
 
 ## Parameter and Module Variables
 - Parameter constants remain untouched.
-- Module variables can be differentiated with the `DIFF_MODULE_VARS` directive.
+- Module variables and variables imported with `use` are differentiated by default. Use `CONSTANT_VARS` to treat them as constants.
 
 ## Module variables in reverse mode
 
