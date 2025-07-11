@@ -19,39 +19,28 @@ class TestFortranADCode(unittest.TestCase):
         """Compile runtime driver using the Makefile."""
         makefile = Path(__file__).resolve().parent / 'fortran_runtime' / 'Makefile'
         env = os.environ.copy()
-        env['VPATH'] = str(tmp)
+        exe_dst = tmp / target
         subprocess.check_call(
             [
                 'make',
                 '-C', str(makefile.parent),
                 '-f', str(makefile),
                 f'OUTDIR={tmp}',
-                target,
+                exe_dst
             ],
             env=env,
         )
-        exe_src = makefile.parent / target
-        exe_dst = tmp / target
-        shutil.move(str(exe_src), exe_dst)
         return exe_dst
 
     def _run_test(self, name: str, sub_names: List[str], deps: Optional[List[str]] = None):
         base = Path(__file__).resolve().parents[1]
-        if deps is None:
-            deps = [name]
-        code_tree.Node.reset()
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
-            for dep in deps:
-                src = base / 'examples' / f'{dep}.f90'
-                ad_code = generator.generate_ad(str(src), warn=False, search_dirs=[str(tmp)], fadmod_dir=str(tmp))
-                ad_path = tmp / f'{name}_ad.f90'
-                ad_path.write_text(ad_code)
-            exe = self._build(tmp, f'run_{name}')
+            exe = self._build(tmp, f'run_{name}.out')
             for sub_name in sub_names:
                 # Allow runtime failures to keep coverage high
                 subprocess.run([str(exe), sub_name], check=True)
-        
+
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_simple_math(self):
