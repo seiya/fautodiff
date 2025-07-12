@@ -793,7 +793,7 @@ class CallStatement(Node):
 
         name_key = "name_rev_ad" if reverse else "name_fwd_ad"
         if arg_info.get("skip") or arg_info.get(name_key) is None:
-            return [self]
+            return [Statement(f"! {name} is skiped")]
 
         def _push_arg(i, arg):
             if not isinstance(arg, OpLeaf) and arg_info["type"][i] == "real":

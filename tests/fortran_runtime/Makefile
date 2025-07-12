@@ -3,10 +3,13 @@ OUTDIR ?= $(shell pwd)
 FC = gfortran
 FFLAGS = -O2 -ffree-line-length-none
 
+HELPER_DIR = ../../fortran_modules
 MOD_DIR = ../../examples
 MOD_SRCS = $(wildcard $(MOD_DIR)/*.f90)
 MOD_OBJS = $(addprefix $(OUTDIR)/,$(notdir $(MOD_SRCS:.f90=.o)))
 
+vpath %.f90 $(HELPER_DIR)
+vpath %.f90 $(MOD_DIR)
 vpath %.f90 .
 
 PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_control_flow.out run_cross_mod.out \
@@ -25,7 +28,7 @@ $(OUTDIR)/run_%.out: $(OUTDIR)/run_%.o
 $(OUTDIR)/run_%.o: run_%.f90
 	$(FC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
 
-$(OUTDIR)/%.o: $(MOD_DIR)/*.f90
+$(OUTDIR)/%.o: %.f90
 	$(MAKE) -C $(MOD_DIR) OUTDIR=$(OUTDIR) $@
 
 # AD modules depend on their original modules
@@ -65,9 +68,9 @@ $(OUTDIR)/run_save_vars.out: $(OUTDIR)/run_save_vars.o $(OUTDIR)/save_vars.o $(O
 $(OUTDIR)/run_store_vars.out: $(OUTDIR)/run_store_vars.o $(OUTDIR)/store_vars.o $(OUTDIR)/store_vars_ad.o $(OUTDIR)/data_storage.o
 $(OUTDIR)/run_directives.out: $(OUTDIR)/run_directives.o $(OUTDIR)/directives.o $(OUTDIR)/directives_ad.o
 $(OUTDIR)/run_parameter_var.out: $(OUTDIR)/run_parameter_var.o $(OUTDIR)/parameter_var.o $(OUTDIR)/parameter_var_ad.o
-$(OUTDIR)/run_module_vars.out: $(OUTDIR)/run_module_vars.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o
-$(OUTDIR)/run_call_module_vars.out: $(OUTDIR)/run_call_module_vars.o $(OUTDIR)/call_module_vars.o $(OUTDIR)/call_module_vars_ad.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o
-$(OUTDIR)/run_allocate_vars.out: $(OUTDIR)/run_allocate_vars.o $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o
+$(OUTDIR)/run_module_vars.out: $(OUTDIR)/run_module_vars.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o $(OUTDIR)/data_storage.o
+$(OUTDIR)/run_call_module_vars.out: $(OUTDIR)/run_call_module_vars.o $(OUTDIR)/call_module_vars.o $(OUTDIR)/call_module_vars_ad.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o $(OUTDIR)/data_storage.o
+$(OUTDIR)/run_allocate_vars.out: $(OUTDIR)/run_allocate_vars.o $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o $(OUTDIR)/data_storage.o
 
 
 clean:

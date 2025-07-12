@@ -66,6 +66,40 @@ def _contains_pushpop(node) -> bool:
     return False
 
 
+def _replace_fwd_rev_calls(node, routine_map):
+    """Rename calls in ``node`` to use *_fwd_rev_ad wrappers when available."""
+    if isinstance(node, CallStatement):
+        info = routine_map.get(node.name)
+        if info is not None and info.get("name_fwd_rev_ad"):
+            node.name = info["name_fwd_rev_ad"]
+    for child in getattr(node, "iter_children", lambda: [])():
+        _replace_fwd_rev_calls(child, routine_map)
+
+
+def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str]) -> Subroutine:
+    """Return a forward wrapper that saves module variables."""
+    sub = Subroutine(f"{routine_org.name}_fwd_rev_ad", list(routine_org.args))
+    for arg in routine_org.arg_vars():
+        sub.decls.append(
+            Declaration(
+                arg.name,
+                arg.typename,
+                arg.kind,
+                arg.dims,
+                arg.intent,
+                allocatable=arg.allocatable,
+                declared_in="routine",
+            )
+        )
+    for name in vars:
+        sub.content.append(PushPop(OpVar(name), sub.get_id()))
+    call = CallStatement(routine_org.name, [OpVar(a) for a in routine_org.args])
+    sub.content.append(call)
+    sub.ad_init = Block([])
+    sub.ad_content = Block([])
+    return sub
+
+
 def _set_call_intents(node, routine_map):
     """Populate ``CallStatement.intents`` using ``routine_map`` recursively."""
     if isinstance(node, CallStatement):
@@ -152,6 +186,10 @@ def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
         info["module"] = mod_name
         if info.get("name_fwd_ad") is None and info.get("name_rev_ad") is None:
             info["skip"] = True
+        if info.get("cross_mod_vars"):
+            info["cross_mod_vars"] = list(info["cross_mod_vars"])
+        if info.get("name_fwd_rev_ad"):
+            info["name_fwd_rev_ad"] = info["name_fwd_rev_ad"]
         routines_data[r.name] = info
 
     variables_data = {}
@@ -528,6 +566,25 @@ def _generate_ad_subroutine(
         #print("Targets:", targets)
         fw_block = routine_org.content.prune_for(targets, mod_vars)
 
+        assigned = routine_org.content.assigned_vars()
+        required = routine_org.content.required_vars()
+        common = assigned & required
+        mod_names = [v.name for v in mod_vars]
+        cross_vars = sorted({v.name for v in common if v.name in mod_names and not v.name.endswith(AD_SUFFIX)})
+        routine_info["cross_mod_vars"] = cross_vars
+        routine_info["arg_info"]["cross_mod_vars"] = cross_vars
+        if cross_vars:
+            name_fwd_rev = f"{routine_org.name}_fwd_rev_ad"
+            routine_info["arg_info"]["name_fwd_rev_ad"] = name_fwd_rev
+            routine_map[routine_org.name]["cross_mod_vars"] = cross_vars
+            routine_map[routine_org.name]["name_fwd_rev_ad"] = name_fwd_rev
+            pops = [PushPop(OpVar(n), subroutine.get_id()).to_load() for n in cross_vars]
+            for pop in reversed(pops):
+                subroutine.content.insert_begin(pop)
+            routine_info["fwd_rev_subroutine"] = _make_fwd_rev_wrapper(routine_org, cross_vars)
+
+        _replace_fwd_rev_calls(fw_block, routine_map)
+
         flag = True
         while flag:
             last = fw_block.last()
@@ -586,6 +643,7 @@ def _generate_ad_subroutine(
                         declared_in="routine",
                     )
             if decl is not None:
+                decl = decl.copy()
                 if decl.intent is not None and decl.intent == "out":
                     decl.intent = None
                 subroutine.decls.append(decl)
@@ -822,6 +880,10 @@ def generate_ad(
                     mod.routines.append(sub)
                 ad_modules_used.update(mods_called)
                 if used:
+                    pushpop_used = True
+                wrapper = routine_info_rev[routine.name].get("fwd_rev_subroutine")
+                if wrapper is not None:
+                    mod.routines.append(wrapper)
                     pushpop_used = True
 
         name = mod.name

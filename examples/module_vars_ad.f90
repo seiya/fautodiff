@@ -1,5 +1,6 @@
 module module_vars_ad
   use module_vars
+  use fautodiff_data_storage
   implicit none
 
   real :: a_ad = 0.0
@@ -28,6 +29,7 @@ contains
     real :: y
     real :: a_save_19_ad
 
+    call fautodiff_data_storage_pop(a)
     y = (c + x) * a
     a_save_19_ad = a
     a = a + x
@@ -42,5 +44,15 @@ contains
 
     return
   end subroutine inc_and_use_rev_ad
+
+  subroutine inc_and_use_fwd_rev_ad(x, y)
+    real, intent(in)  :: x
+    real, intent(out) :: y
+
+    call fautodiff_data_storage_push(a)
+    call inc_and_use(x, y)
+
+    return
+  end subroutine inc_and_use_fwd_rev_ad
 
 end module module_vars_ad

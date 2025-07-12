@@ -16,20 +16,19 @@ class TestFortranRuntime(unittest.TestCase):
         makefile = Path(__file__).resolve().parent / 'fortran_runtime' / 'Makefile'
         env = os.environ.copy()
         env['VPATH'] = str(tmp)
+        target_out = f"{target}.out"
         subprocess.check_call(
             [
                 'make',
                 '-C', str(makefile.parent),
                 '-f', str(makefile),
                 f'OUTDIR={tmp}',
-                target,
+                target_out,
             ],
             env=env,
         )
-        exe_src = makefile.parent / target
-        exe_dst = tmp / target
-        shutil.move(str(exe_src), exe_dst)
-        return exe_dst
+        exe = tmp / target_out
+        return exe
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_data_storage_push_pop(self):

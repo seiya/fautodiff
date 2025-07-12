@@ -19,7 +19,7 @@ module fautodiff_data_storage
      module procedure pop_scalar_l
      module procedure pop_ary_l
    end interface fautodiff_data_storage_pop
-   
+
    interface fautodiff_data_storage_get
      module procedure get_scalar_l
    end interface fautodiff_data_storage_get
@@ -152,6 +152,11 @@ contains
 
     i1 = len
 
+    if (len > data_size(page_r4)) then
+       print *, "Stored data is not enough: ", len, data_size(page_r4)
+       error stop 1
+    end if
+
     do while (len > 0)
 
        ptr => ary_r4(page_r4%page_num)%ptr
@@ -196,6 +201,11 @@ contains
 
     i1 = len
 
+    if (len > data_size(page_l)) then
+       print *, "Stored data is not enough: ", len, data_size(page_l)
+       error stop 1
+    end if
+
     do while (len > 0)
 
        ptr => ary_l(page_l%page_num)%ptr
@@ -239,5 +249,15 @@ contains
 
     return
   end function get_scalar_l
+
+  ! private helper
+  function data_size(page)
+     type(page_t), intent(in) :: page
+     integer(8) :: data_size
+
+     data_size = (page%page_num - 1) * PAGE_SIZE + page%pos - 1
+
+     return
+  end function data_size
 
 end module fautodiff_data_storage
