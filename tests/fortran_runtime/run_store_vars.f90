@@ -50,7 +50,7 @@ contains
     call do_with_recurrent_scalar(n, x + eps, z_eps)
     fd(:) = (z_eps(:) - z(:)) / eps
     x_ad(:) = 1.0
-    call do_with_recurrent_scalar_fwd_ad(n, x, x_ad, z_ad)
+    call do_with_recurrent_scalar_fwd_ad(n, x, x_ad, z, z_ad)
     if (maxval(abs((z_ad(:) - fd(:)) / fd(:))) > tol) then
        print *, 'test_do_with_recurrent_scalar_fwd failed'
        print *, maxval(abs((z_ad(:) - fd(:)) / fd(:)))

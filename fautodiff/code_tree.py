@@ -906,8 +906,34 @@ class CallStatement(Node):
             blocks.extend(loads)
         else:
             ad_nodes.append(ad_call)
+            need_orig = False
+            try:
+                ad_names = arg_info["args_fwd_ad"]
+                ad_intents = arg_info["intents_fwd_ad"]
+                for name, intent in zip(arg_info["args"], arg_info["intents"]):
+                    if intent in ("out", "inout"):
+                        if name in ad_names:
+                            idx = ad_names.index(name)
+                            if ad_intents[idx] not in ("out", "inout"):
+                                need_orig = True
+                                break
+                        else:
+                            need_orig = True
+                            break
+                if self.result is not None:
+                    res_name = arg_info["args"][-1]
+                    if res_name in ad_names:
+                        idx = ad_names.index(res_name)
+                        if ad_intents[idx] not in ("out", "inout"):
+                            need_orig = True
+                    else:
+                        need_orig = True
+            except Exception:
+                need_orig = True
+
             blocks = ad_nodes
-            blocks.append(self)
+            if need_orig:
+                blocks.append(self)
 
         return blocks
 

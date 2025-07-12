@@ -4,13 +4,15 @@ module parameter_var_ad
 
 contains
 
-  subroutine compute_area_fwd_ad(r, r_ad, area_ad)
+  subroutine compute_area_fwd_ad(r, r_ad, area, area_ad)
     real, intent(in)  :: r
     real, intent(in)  :: r_ad
+    real, intent(out) :: area
     real, intent(out) :: area_ad
     real, parameter :: pi = 3.14159
 
     area_ad = r_ad * (pi * r + pi * r) ! area = pi * r * r
+    area = pi * r * r
 
     return
   end subroutine compute_area_fwd_ad

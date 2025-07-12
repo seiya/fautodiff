@@ -82,7 +82,7 @@ contains
     fd = (z_eps - z) / eps
     x_ad = 1.0
     y_ad = 1.0
-    call simple_fwd_ad(x, x_ad, y, y_ad, z_ad)
+    call simple_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
     if (abs((z_ad - fd) / fd) > tol) then
        print *, 'test_simple_fwd failed', z_ad, fd
        error stop 1
@@ -117,7 +117,7 @@ contains
     fd = (z_eps - z) / eps
     x_ad = 1.0
     y_ad = 1.0
-    call if_example_fwd_ad(x, x_ad, y, y_ad, z_ad)
+    call if_example_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
     if (abs((z_ad - fd) / fd) > tol) then
        print *, 'test_if_example_fwd failed', z_ad, fd
        error stop 1
@@ -149,7 +149,7 @@ contains
     fd(:,:) = (z_eps(:,:) - z(:,:)) / eps
     x_ad = 1.0
     y_ad = 1.0
-    call do_with_array_private_fwd_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    call do_with_array_private_fwd_ad(n, m, x, x_ad, y, y_ad, z, z_ad)
     if (any(abs((z_ad(:,:) - fd(:,:)) / fd(:,:)) > tol)) then
        print *, 'test_array_private_fwd failed'
        print *, maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:)))
@@ -182,7 +182,7 @@ contains
     fd(:,:) = (z_eps(:,:) - z(:,:)) / eps
     x_ad = 1.0
     y_ad = 1.0
-    call do_with_array_fwd_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    call do_with_array_fwd_ad(n, m, x, x_ad, y, y_ad, z, z_ad)
     if (maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:))) > tol) then
        print *, 'test_array_fwd failed'
        print *, maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:)))
@@ -215,7 +215,7 @@ contains
     fd(:,:) = (z_eps(:,:) - z(:,:)) / eps
     x_ad = 1.0
     y_ad = 1.0
-    call do_with_local_array_fwd_ad(n, m, x, x_ad, y, y_ad, z_ad)
+    call do_with_local_array_fwd_ad(n, m, x, x_ad, y, y_ad, z, z_ad)
     if (maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:))) > tol) then
        print *, 'test_local_array_fwd failed'
        print *, maxval(abs((z_ad(:,:) - fd(:,:)) / fd(:,:)))

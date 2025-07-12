@@ -72,7 +72,7 @@ contains
     call casting_intrinsics(i, r + eps, d_eps, c, n)
     fd = (d_eps - d) / eps
     r_ad = 1.0
-    call casting_intrinsics_fwd_ad(i, r, r_ad, d_ad, c)
+    call casting_intrinsics_fwd_ad(i, r, r_ad, d, d_ad, c, n)
     if (abs((d_ad - fd) / fd) > tol) then
        print *, 'test_casting_fwd failed', d_ad, fd
        error stop 1
@@ -109,7 +109,7 @@ contains
     fd = (z_eps - z) / eps
     x_ad = 1.0
     y_ad = 1.0
-    call math_intrinsics_fwd_ad(x, x_ad, y, y_ad, z_ad)
+    call math_intrinsics_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
     if (abs((z_ad - fd) / fd) > tol) then
        print *, 'test_math_fwd failed', z_ad, fd
        error stop 1
@@ -144,7 +144,7 @@ contains
     call non_differentiable_intrinsics(str, arr, idx, lb, ub, 1.0, y)
     call non_differentiable_intrinsics(str, arr, idx, lb, ub, 1.0 + eps, y_eps)
     fd = (y_eps - y) / eps
-    call non_differentiable_intrinsics_fwd_ad(str, arr, arr_ad, 1.0, 1.0, y_ad)
+    call non_differentiable_intrinsics_fwd_ad(str, arr, arr_ad, idx, lb, ub, 1.0, 1.0, y, y_ad)
     if (abs(y_ad - fd) > tol) then
        print *, 'test_non_diff_fwd failed', y_ad, fd
        error stop 1
@@ -182,7 +182,7 @@ contains
     mat_in_eps = mat_in + eps
     call special_intrinsics(mat_in_eps, mat_out_eps)
     fd(:,:) = (mat_out_eps(:,:) - mat_out(:,:)) / eps
-    call special_intrinsics_fwd_ad(mat_in, mat_in_ad, mat_out_ad)
+    call special_intrinsics_fwd_ad(mat_in, mat_in_ad, mat_out, mat_out_ad)
     exp = transpose(mat_in_ad)
     exp = cshift(exp, -1, 2)
     if (any(abs(mat_out_ad - fd) > tol_fd)) then

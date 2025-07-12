@@ -54,7 +54,7 @@ contains
     fd = (y_eps - y) / eps
     a = 3.0
     x_ad = 1.0
-    call call_inc_and_use_fwd_ad(x, x_ad, y_ad)
+    call call_inc_and_use_fwd_ad(x, x_ad, y, y_ad)
     if (abs((y_ad - fd) / fd) > tol) then
        print *, 'test_call_inc_and_use_fwd failed', y_ad, fd
        error stop 1

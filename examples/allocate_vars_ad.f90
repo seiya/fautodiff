@@ -7,10 +7,11 @@ module allocate_vars_ad
 
 contains
 
-  subroutine allocate_and_sum_fwd_ad(n, x, x_ad, res_ad)
+  subroutine allocate_and_sum_fwd_ad(n, x, x_ad, res, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
+    real, intent(out) :: res
     real, intent(out) :: res_ad
     real, allocatable :: arr_ad(:)
     integer :: i
@@ -23,8 +24,10 @@ contains
       arr(i) = i * x
     end do
     res_ad = 0.0 ! res = 0.0
+    res = 0.0
     do i = 1, n
       res_ad = res_ad + arr_ad(i) * x + x_ad * arr(i) ! res = res + arr(i) * x
+      res = res + arr(i) * x
     end do
     deallocate(arr_ad)
     deallocate(arr)
@@ -109,15 +112,19 @@ contains
     return
   end subroutine module_vars_init_fwd_rev_ad
 
-  subroutine module_vars_main_fwd_ad(n, x_ad)
+  subroutine module_vars_main_fwd_ad(n, x, x_ad)
     integer, intent(in)  :: n
+    real, intent(out) :: x
     real, intent(out) :: x_ad
     integer :: i
 
     x_ad = 0.0 ! x = 0.0
+    x = 0.0
     do i = 1, n
       mod_arr_diff_ad(i) = mod_arr_diff_ad(i) * (2.0 + i) ! mod_arr_diff(i) = mod_arr_diff(i) * (2.0 + i)
+      mod_arr_diff(i) = mod_arr_diff(i) * (2.0 + i)
       x_ad = x_ad + mod_arr_diff_ad(i) * mod_arr(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
+      x = x + mod_arr(i) * mod_arr_diff(i)
     end do
 
     return
@@ -147,14 +154,17 @@ contains
     return
   end subroutine module_vars_main_fwd_rev_ad
 
-  subroutine module_vars_finalize_fwd_ad(n, x_ad)
+  subroutine module_vars_finalize_fwd_ad(n, x, x_ad)
     integer, intent(in)  :: n
+    real, intent(out) :: x
     real, intent(out) :: x_ad
     integer :: i
 
     x_ad = 0.0 ! x = 0.0
+    x = 0.0
     do i = 1, n
       x_ad = x_ad + mod_arr_diff_ad(i) * mod_arr(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
+      x = x + mod_arr(i) * mod_arr_diff(i)
     end do
     if (allocated(mod_arr_diff_ad)) then
       deallocate(mod_arr_diff_ad)

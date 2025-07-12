@@ -5,10 +5,11 @@ module store_vars_ad
 
 contains
 
-  subroutine do_with_recurrent_scalar_fwd_ad(n, x, x_ad, z_ad)
+  subroutine do_with_recurrent_scalar_fwd_ad(n, x, x_ad, z, z_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x(n)
     real, intent(in)  :: x_ad(n)
+    real, intent(out) :: z(n)
     real, intent(out) :: z_ad(n)
     real :: work_ad
     real :: work
@@ -20,6 +21,7 @@ contains
       work_ad = x_ad(i) * work + work_ad * x(i) ! work = x(i) * work
       work = x(i) * work
       z_ad(i) = work_ad ! z(i) = work
+      z(i) = work
     end do
 
     return
@@ -56,14 +58,14 @@ contains
     return
   end subroutine do_with_recurrent_scalar_rev_ad
 
-  subroutine do_while_fwd_ad(x, x_ad, y_ad, z_ad)
+  subroutine do_while_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
+    real, intent(out) :: y
     real, intent(out) :: y_ad
+    real, intent(out) :: z
     real, intent(out) :: z_ad
     real :: a_ad
-    real :: y
-    real :: z
     real :: a
 
     y_ad = 0.0 ! y = 0.0
@@ -82,6 +84,7 @@ contains
       z = z * a
     end do
     y_ad = z_ad * y + y_ad * z ! y = z * y
+    y = z * y
 
     return
   end subroutine do_while_fwd_ad

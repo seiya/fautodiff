@@ -82,7 +82,7 @@ contains
     fd(:) = (c_eps(:) - c(:)) / eps
     a_ad(:) = 1.0
     b_ad(:) = 1.0
-    call elementwise_add_fwd_ad(n, a, a_ad, b, b_ad, c_ad)
+    call elementwise_add_fwd_ad(n, a, a_ad, b, b_ad, c, c_ad)
     if (any(abs((c_ad(:) - fd(:)) / fd(:)) > tol)) then
        print *, 'test_elementwise_add_fwd failed', c_ad(1), fd
        error stop 1
@@ -152,7 +152,7 @@ contains
     a_ad(:,:) = 1.0
     b_ad(:,:) = 1.0
     c_ad = 1.0
-    call multidimension_fwd_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
+    call multidimension_fwd_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d, d_ad)
     if (any(abs((d_ad(:,:) - fd(:,:)) / fd(:,:)) > tol)) then
        print *, 'test_multidimension_fwd failed'
        print *, maxval(abs((d_ad(:,:) - fd(:,:)) / fd(:,:)))
@@ -222,7 +222,7 @@ contains
     call indirect(n, a + eps, b_eps, c_eps, idx)
     fd_b(:) = (b_eps(:) - b(:)) / eps
     fd_c(:) = (c_eps(:) - c(:)) / eps
-    call indirect_fwd_ad(n, a, a_ad, b_ad, c_ad, idx)
+    call indirect_fwd_ad(n, a, a_ad, b, b_ad, c, c_ad, idx)
     if (any(abs((b_ad(:) - fd_b(:)) / fd_b(:)) > tol) .or. &
         any(abs((c_ad(:) - fd_c(:)) / fd_c(:)) > tol)) then
        print *, 'test_indirect_fwd failed'
@@ -260,7 +260,7 @@ contains
     call stencil(n, a, b)
     call stencil(n, a + eps, b_eps)
     fd(:) = (b_eps(:) - b(:)) / eps
-    call stencil_fwd_ad(n, a, a_ad, b_ad)
+    call stencil_fwd_ad(n, a, a_ad, b, b_ad)
     if (any(abs((b_ad(:) - fd(:)) / fd(:)) > tol)) then
        print *, 'test_stencil_fwd failed'
        print *, maxval(abs((b_ad(:) - fd(:)) / fd(:)))
