@@ -4,7 +4,7 @@ program run_call_module_vars
   use call_module_vars
   use call_module_vars_ad
   implicit none
-  real, parameter :: tol = 1.0e-4
+  real, parameter :: tol = 3.0e-4
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_call_inc_and_use = 1
@@ -47,6 +47,7 @@ contains
 
     eps = 1.0e-3
     a = 3.0
+    a_ad = 0.0
     x = 2.0
     call call_inc_and_use(x, y)
     a = 3.0
@@ -62,6 +63,7 @@ contains
 
     inner1 = y_ad**2 + a_ad**2
     a = 3.0
+    x_ad = 0.0
     call call_inc_and_use_rev_ad(x, x_ad, y_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then

@@ -338,20 +338,25 @@ class Node:
     ) -> List["Node"]:
         rhs = rhs.deep_clone()
         assigns: List[Node] = []
-        for n, ufunc in enumerate(rhs.find_userfunc()):
+        funcs = rhs.find_userfunc()
+        for n, ufunc in enumerate(funcs):
             if routine_map is None:
                 raise RuntimeError("routine_map is necessary for CallStatement")
             arg_info = routine_map[ufunc.name]
-            name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
-            result = OpVar(name, typename=arg_info["type"][-1])
-            saved_vars.append(
-                OpVar(
-                    f"{name}{AD_SUFFIX}",
-                    typename=arg_info["type"][-1],
-                    kind=arg_info["kind"][-1],
-                    dims=arg_info["dims"][-1],
+            if rhs == ufunc and len(funcs) == 1:
+                result = lhs
+            else:
+                name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
+                result = OpVar(name, typename=arg_info["type"][-1])
+                saved_vars.append(result)
+                saved_vars.append(
+                    OpVar(
+                        f"{name}{AD_SUFFIX}",
+                        typename=arg_info["type"][-1],
+                        kind=arg_info["kind"][-1],
+                        dims=arg_info["dims"][-1],
+                    )
                 )
-            )
             intents = ufunc.intents
             if intents is None and ufunc.name in routine_map:
                 intents = routine_map[ufunc.name]["intents"]
@@ -362,11 +367,17 @@ class Node:
                 result=result,
                 info=self.info,
             )
-            assigns.extend(
-                callstmt.generate_ad(
-                    saved_vars, reverse=False, assigned_advars=assigned_advars, routine_map=routine_map, mod_vars=mod_vars, warnings=warnings
-                )
+            call_nodes = callstmt.generate_ad(
+                saved_vars,
+                reverse=False,
+                assigned_advars=assigned_advars,
+                routine_map=routine_map,
+                mod_vars=mod_vars,
+                warnings=warnings,
             )
+            assigns.extend(call_nodes)
+            if rhs == ufunc and len(funcs) == 1:
+                return assigns
             rhs = rhs.replace_with(ufunc, result)
 
         if lhs.ad_target:
@@ -412,20 +423,25 @@ class Node:
     ) -> List["Node"]:
         rhs = rhs.deep_clone()
         extras: List[Node] = []
-        for n, ufunc in enumerate(rhs.find_userfunc()):
+        funcs = rhs.find_userfunc()
+        for n, ufunc in enumerate(funcs):
             if routine_map is None:
                 raise RuntimeError("routine_map is necessary for CallStatement")
             arg_info = routine_map[ufunc.name]
-            name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
-            result = OpVar(name, typename=arg_info["type"][-1])
-            saved_vars.append(
-                OpVar(
-                    f"{name}{AD_SUFFIX}",
-                    typename=arg_info["type"][-1],
-                    kind=arg_info["kind"][-1],
-                    dims=arg_info["dims"][-1],
+            if rhs == ufunc and len(funcs) == 1:
+                result = lhs
+            else:
+                name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
+                result = OpVar(name, typename=arg_info["type"][-1])
+                saved_vars.append(result)
+                saved_vars.append(
+                    OpVar(
+                        f"{name}{AD_SUFFIX}",
+                        typename=arg_info["type"][-1],
+                        kind=arg_info["kind"][-1],
+                        dims=arg_info["dims"][-1],
+                    )
                 )
-            )
             callstmt = CallStatement(
                 name=ufunc.name,
                 args=ufunc.args,
@@ -433,11 +449,16 @@ class Node:
                 result=result,
                 info=self.info,
             )
-            extras.extend(
-                callstmt.generate_ad(
-                    saved_vars, reverse=True, routine_map=routine_map, mod_vars=mod_vars, warnings=warnings
-                )
+            call_nodes = callstmt.generate_ad(
+                saved_vars,
+                reverse=True,
+                routine_map=routine_map,
+                mod_vars=mod_vars,
+                warnings=warnings,
             )
+            extras.extend(call_nodes)
+            if rhs == ufunc and len(funcs) == 1:
+                return call_nodes
             rhs = rhs.replace_with(ufunc, result)
 
         assigns: List[Node] = []
@@ -801,9 +822,15 @@ class CallStatement(Node):
                 tmp = OpVar(name, typename="real")
                 tmp_vars.append((tmp, arg))
                 args_new.append(tmp)
+                saved_vars.append(tmp)
                 saved_vars.append(
-                    OpVar(f"{tmp.name}{AD_SUFFIX}", typename="real", kind=arg_info["kind"][i], dims=arg_info["dims"][i])
+                    OpVar(
+                        f"{tmp.name}{AD_SUFFIX}",
+                        typename="real",
+                        kind=arg_info["kind"][i],
+                        dims=arg_info["dims"][i],
                     )
+                )
             else:
                 args_new.append(arg)
         tmp_vars = []
@@ -855,10 +882,17 @@ class CallStatement(Node):
                 arg = ad_arg
             i = arg_info["args"].index(arg)
             var = args[i]
+            if not isinstance(var, OpLeaf):
+                var = args_new[i]
             if ad_arg.endswith(AD_SUFFIX):
-                if not isinstance(var, OpLeaf):
-                    var = args_new[i]
-                var = OpVar(f"{var.name}{AD_SUFFIX}", index=var.index, kind=var.kind, typename=var.typename, ad_target=var.ad_target, is_constant=var.is_constant)
+                var = OpVar(
+                    f"{var.name}{AD_SUFFIX}",
+                    index=var.index,
+                    kind=var.kind,
+                    typename=var.typename,
+                    ad_target=var.ad_target,
+                    is_constant=var.is_constant,
+                )
             ad_args.append(var)
         ad_call = CallStatement(name=arg_info[name_key], args=ad_args, intents=arg_info[intents_key], ad_info=self.info["code"])
         if not reverse:
@@ -936,6 +970,21 @@ class CallStatement(Node):
                 blocks.append(self)
 
         return blocks
+
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        if assigned_vars is None:
+            assigned_vars = VarList()
+        intents = self.intents or ["inout"] * len(self.args)
+        for arg, intent in zip(self.args, intents):
+            if intent in ("out", "inout"):
+                for var in arg.collect_vars():
+                    if var.name.endswith(AD_SUFFIX):
+                        assigned_vars = assigned_vars.copy()
+                        assigned_vars.push(var)
+        if self.result is not None and self.result.name.endswith(AD_SUFFIX):
+            assigned_vars = assigned_vars.copy()
+            assigned_vars.push(self.result)
+        return assigned_vars
 
 @dataclass
 class Module(Node):
@@ -1188,7 +1237,13 @@ class Assignment(Node):
                 mod_vars=mod_vars,
                 warnings=warnings,
             )
-            assigns.append(self)
+            if not (
+                len(assigns) == 1
+                and isinstance(assigns[0], CallStatement)
+                and isinstance(self.rhs, OpFuncUser)
+                and len(self._ufuncs) == 1
+            ):
+                assigns.append(self)
         return assigns
 
     def render(self, indent: int = 0) -> List[str]:
