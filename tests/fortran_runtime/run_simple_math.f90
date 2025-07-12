@@ -41,7 +41,7 @@ program run_simple_math
         deallocate(arg)
      end if
   end if
-           
+
   if (i_test == I_add_numbers .or. i_test == I_all) then
      call test_add_numbers
   end if

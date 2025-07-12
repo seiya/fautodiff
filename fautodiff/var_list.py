@@ -279,7 +279,7 @@ class VarList:
             i = AryIndex.get_diff_dim(index, var.index) # index and var.index is either OpInt or OpRange
             if i is None:
                 raise RuntimeError(f"Unexpected: {var} {self}")
- 
+
             index = index.copy()
             self.vars[name][pos] = index
 
