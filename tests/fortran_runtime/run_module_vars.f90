@@ -47,7 +47,7 @@ contains
     eps = 1.0e-3
     a = 3.0
     x = 2.0
-    call inc_and_use(x, y)
+    call inc_and_use_fwd_rev_ad(x, y)
     a = 3.0
     call inc_and_use(x + eps, y_eps)
     fd = (y_eps - y) / eps
@@ -58,7 +58,6 @@ contains
        print *, 'test_inc_and_use_fwd failed', y_ad, fd
        error stop 1
     end if
-    print *, y_ad, a_ad
 
     inner1 = y_ad**2 + a_ad**2
     a = 3.0

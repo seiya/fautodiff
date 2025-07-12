@@ -3,10 +3,13 @@ OUTDIR ?= $(shell pwd)
 FC = gfortran
 FFLAGS = -O2 -ffree-line-length-none
 
+HELPER_DIR = ../../fortran_modules
 MOD_DIR = ../../examples
 MOD_SRCS = $(wildcard $(MOD_DIR)/*.f90)
 MOD_OBJS = $(addprefix $(OUTDIR)/,$(notdir $(MOD_SRCS:.f90=.o)))
 
+vpath %.f90 $(HELPER_DIR)
+vpath %.f90 $(MOD_DIR)
 vpath %.f90 .
 
 PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_control_flow.out run_cross_mod.out \
@@ -25,7 +28,7 @@ $(OUTDIR)/run_%.out: $(OUTDIR)/run_%.o
 $(OUTDIR)/run_%.o: run_%.f90
 	$(FC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
 
-$(OUTDIR)/%.o: $(MOD_DIR)/*.f90
+$(OUTDIR)/%.o: %.f90
 	$(MAKE) -C $(MOD_DIR) OUTDIR=$(OUTDIR) $@
 
 # AD modules depend on their original modules
