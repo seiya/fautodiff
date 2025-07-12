@@ -473,7 +473,7 @@ def _generate_ad_subroutine(
         if var.ad_target:
             mod_ad_vars.append(var.add_suffix(AD_SUFFIX))
             has_mod_grad_input = True
-    if not has_grad_input and not has_mod_grad_input:
+    if reverse and not has_grad_input and not has_mod_grad_input:
         for arg in out_grad_args:
             lhs = OpVar(arg.name, kind=arg.kind)
             ad_block.append(Assignment(lhs, OpReal("0.0", kind=arg.kind)))
@@ -749,7 +749,7 @@ def _generate_ad_subroutine(
     if reverse:
         prune_targets = VarList(grad_args + mod_ad_vars)
     else:
-        prune_targets = VarList(grad_args + mod_ad_vars + out_args)
+        prune_targets = VarList(grad_args + mod_vars + mod_ad_vars + out_args)
     subroutine = subroutine.prune_for(prune_targets, mod_vars)
 
     mod_var_names = [var.name for var in mod_vars + mod_ad_vars]
