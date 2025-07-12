@@ -57,3 +57,13 @@ The old value is restored before accumulating derivatives for `a = a + x` and
 earlier statements.
 
 The generator internally builds a tree of nodes (`Block`, `Assignment`, `IfBlock`, and so on) defined in `fautodiff.code_tree` and renders it back to Fortran after inserting derivative updates.
+
+## Cross-subroutine module variables
+
+When a routine both reads and writes a module variable, its reverse-mode version
+needs the value from before the call.  The generator emits a wrapper
+`<name>_fwd_rev_ad` that pushes such variables to the `fautodiff_data_storage`
+stack before calling the original routine.  The corresponding `<name>_rev_ad`
+subroutine pops the values at entry so that derivative computations use the
+correct state.  Calls to this routine from other AD code automatically invoke
+the wrapper in the forward sweep.

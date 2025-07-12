@@ -791,9 +791,23 @@ class CallStatement(Node):
             raise RuntimeError(f"Not found in routime_map: {name}")
         arg_info = routine_map[name]
 
-        name_key = "name_rev_ad" if reverse else "name_fwd_ad"
-        if arg_info.get("skip") or arg_info.get(name_key) is None:
-            return [self]
+        if not reverse and assigned_advars is None:
+            name_key = "name_fwd_rev_ad"
+            if arg_info.get(name_key) is None:
+                return [self]
+            call = CallStatement(
+                name=arg_info[name_key],
+                args=self.args,
+                arg_keys=self.arg_keys,
+                intents=self.intents,
+                result=self.result,
+                info=self.info,
+            )
+            return [call]
+        else:
+            name_key = "name_rev_ad" if reverse else "name_fwd_ad"
+            if arg_info.get("skip") or arg_info.get(name_key) is None:
+                return [self]
 
         def _push_arg(i, arg):
             if not isinstance(arg, OpLeaf) and arg_info["type"][i] == "real":

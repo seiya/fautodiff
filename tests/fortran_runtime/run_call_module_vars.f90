@@ -46,13 +46,10 @@ contains
     real :: inner1, inner2
 
     eps = 1.0e-3
-    a = 3.0
     x = 2.0
     call call_inc_and_use(x, y)
-    a = 3.0
     call call_inc_and_use(x + eps, y_eps)
     fd = (y_eps - y) / eps
-    a = 3.0
     x_ad = 1.0
     call call_inc_and_use_fwd_ad(x, x_ad, y_ad)
     if (abs((y_ad - fd) / fd) > tol) then
@@ -61,7 +58,6 @@ contains
     end if
 
     inner1 = y_ad**2 + a_ad**2
-    a = 3.0
     call call_inc_and_use_rev_ad(x, x_ad, y_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
