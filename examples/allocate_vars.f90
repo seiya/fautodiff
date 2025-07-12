@@ -33,7 +33,7 @@ contains
 
     allocate(mod_arr(n))
     allocate(mod_arr_diff(n))
-    
+
     do i = 1, n
       mod_arr(i) = i * 2.0
       mod_arr_diff(i) = i * x

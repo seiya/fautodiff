@@ -792,7 +792,7 @@ class OpNeg(OpUnary):
 
     def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
         return - self.args[0].derivative(var, target, info, warnings)
-     
+
 @dataclass
 class OpAnd(OpUnary):
 
@@ -973,7 +973,7 @@ class OpFunc(Operator):
 
         if self.name in NONDIFF_INTRINSICS:
             return OpInt(0, target=target)
-        
+
         kind = target.kind if target is not None else None
 
         def _pi(target):
@@ -981,7 +981,7 @@ class OpFunc(Operator):
 
         if len(self.args) == 0:
             raise ValueError(f"Function ({self.name}) is not supported")
-        
+
         # One argument intrinsics map
         arg0 = self.args[0]
         dvar0 = arg0.derivative(var, target, info, warnings)
