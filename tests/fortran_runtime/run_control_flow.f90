@@ -70,7 +70,7 @@ contains
     fd = (z_eps - z) / eps
     x_ad = 1.0
     y_ad = 1.0
-    call if_example_fwd_ad(x, x_ad, y, y_ad, z_ad)
+    call if_example_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
     if (abs((z_ad - fd) / fd) > tol) then
        print *, 'test_if_example_fwd failed', z_ad, fd
        error stop 1
@@ -103,7 +103,7 @@ contains
     call do_example(n, x + eps, sum_eps)
     fd = (sum_eps - sum) / eps
     x_ad = 1.0
-    call do_example_fwd_ad(n, x, x_ad, sum_ad)
+    call do_example_fwd_ad(n, x, x_ad, sum, sum_ad)
     if (abs((sum_ad - fd) / fd) > tol) then
        print *, 'test_do_example_fwd failed', sum_ad, fd
        error stop 1
@@ -135,7 +135,7 @@ contains
     call select_example(i, x, z)
     call select_example(i, x + eps, z_eps)
     fd = (z_eps - z) / eps
-    call select_example_fwd_ad(i, x, 1.0, z_ad)
+    call select_example_fwd_ad(i, x, 1.0, z, z_ad)
     if (abs((z_ad - fd) / fd) > tol) then
        print *, 'test_select_example_fwd failed case1', z_ad, fd
        error stop 1
@@ -153,7 +153,7 @@ contains
     call select_example(i, x, z)
     call select_example(i, x + eps, z_eps)
     fd = (z_eps - z) / eps
-    call select_example_fwd_ad(i, x, 1.0, z_ad)
+    call select_example_fwd_ad(i, x, 1.0, z, z_ad)
     if (abs(z_ad - fd) > tol) then
        print *, 'test_select_example_fwd failed default', z_ad, fd
        error stop 1

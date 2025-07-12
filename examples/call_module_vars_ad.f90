@@ -6,19 +6,19 @@ module call_module_vars_ad
 
 contains
 
-  subroutine call_inc_and_use_fwd_ad(x, x_ad, y_ad)
+  subroutine call_inc_and_use_fwd_ad(x, x_ad, y, y_ad)
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
+    real, intent(out) :: y
     real, intent(out) :: y_ad
     real :: z_ad
     real :: z
-    real :: y
 
     z_ad = x_ad * 2.0 ! z = x * 2.0
     z = x * 2.0
-    call inc_and_use_fwd_ad(x, x_ad, y_ad) ! call inc_and_use(x, y)
-    call inc_and_use(x, y)
+    call inc_and_use_fwd_ad(x, x_ad, y, y_ad) ! call inc_and_use(x, y)
     y_ad = y_ad * z + z_ad * y ! y = y * z
+    y = y * z
 
     return
   end subroutine call_inc_and_use_fwd_ad

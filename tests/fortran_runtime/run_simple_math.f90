@@ -138,7 +138,7 @@ contains
     fd = (c_eps - c) / eps
     a_ad = 1.0
     b_ad = 1.0
-    call multiply_numbers_fwd_ad(a, a_ad, b, b_ad, c_ad)
+    call multiply_numbers_fwd_ad(a, a_ad, b, b_ad, c, c_ad)
     if (abs((c_ad - fd) / fd) > tol) then
        print *, 'test_multiply_numbers_fwd failed', c_ad, fd
        error stop 1
@@ -170,7 +170,7 @@ contains
     fd = (c_eps - c) / eps
     a_ad = 1.0
     b_ad = 1.0
-    call divide_numbers_fwd_ad(a, a_ad, b, b_ad, c_ad)
+    call divide_numbers_fwd_ad(a, a_ad, b, b_ad, c, c_ad)
     if (abs((c_ad - fd) / fd) > tol) then
        print *, 'test_divide_numbers_fwd failed', c_ad, fd
        error stop 1

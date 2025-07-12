@@ -57,7 +57,7 @@ contains
     call allocate_and_sum(n, x + eps, res_eps)
     fd = (res_eps - res) / eps
     x_ad = 1.0
-    call allocate_and_sum_fwd_ad(n, x, x_ad, res_ad)
+    call allocate_and_sum_fwd_ad(n, x, x_ad, res, res_ad)
     if (abs((res_ad - fd) / fd) > tol) then
        print *, 'test_allocate_and_sum_fwd failed', res_ad, fd
        error stop 1
@@ -95,8 +95,8 @@ contains
     x_ad = 1.0
     call module_vars_init(n, x)
     call module_vars_init_fwd_ad(n, x, x_ad)
-    call module_vars_main_fwd_ad(n, x_ad)
-    call module_vars_finalize_fwd_ad(n, x_ad)
+    call module_vars_main_fwd_ad(n, x, x_ad)
+    call module_vars_finalize_fwd_ad(n, x, x_ad)
     if (abs((x_ad - fd) / fd) > tol) then
        print *, 'test_module_vars_fwd failed', x_ad, fd
        error stop 1

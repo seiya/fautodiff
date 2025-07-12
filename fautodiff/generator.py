@@ -244,12 +244,11 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
         arg_info["type"].append(typ)
         arg_info["dims"].append(dims)
         arg_info["kind"].append(kind)
-        if arg.is_constant:
-            if intent in ("in", "inout"):
-                args.append(arg)
-        elif arg.ad_target:
-            if intent in ("in", "inout"):
-                args.append(arg)
+
+        # Always pass original argument to the forward AD routine
+        args.append(arg)
+
+        if arg.ad_target and not arg.is_constant:
             ad_name = f"{name}{AD_SUFFIX}"
             var = OpVar(
                 ad_name,
@@ -268,9 +267,6 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
                 in_grad_args.append(var)
             if intent in ("out", "inout"):
                 out_grad_args.append(var)
-        else:
-            if intent in ("in", "inout"):
-                args.append(arg)
 
     if routine_org.result is not None:
         arg_info["intents"] = arg_info["intents"][:-1]
@@ -463,6 +459,12 @@ def _generate_ad_subroutine(
     in_grad_args = routine_info["in_grad_args"]
     out_grad_args = routine_info["out_grad_args"]
     has_grad_input = routine_info["has_grad_input"]
+    # list of original intent(out) arguments
+    out_args = [
+        var
+        for var in routine_org.arg_vars()
+        if (var.intent or "inout") == "out"
+    ]
     ad_block = subroutine.ad_content
 
     has_mod_grad_input = False
@@ -526,7 +528,7 @@ def _generate_ad_subroutine(
             targets = VarList(in_grad_args + mod_ad_vars)
             ad_code.check_initial(targets)
 
-        targets = VarList(grad_args + mod_ad_vars)
+        targets = VarList(grad_args + mod_ad_vars + out_args)
         #print("Targets:", targets) # for debugging
         ad_code = ad_code.prune_for(targets, mod_vars)
         #print(render_program(ad_code)) # for debugging
@@ -744,7 +746,11 @@ def _generate_ad_subroutine(
             )
         )
 
-    subroutine = subroutine.prune_for(VarList(grad_args + mod_ad_vars), mod_vars)
+    if reverse:
+        prune_targets = VarList(grad_args + mod_ad_vars)
+    else:
+        prune_targets = VarList(grad_args + mod_ad_vars + out_args)
+    subroutine = subroutine.prune_for(prune_targets, mod_vars)
 
     mod_var_names = [var.name for var in mod_vars + mod_ad_vars]
     required_vnames = [str(var) for var in subroutine.required_vars() if var.name not in mod_var_names]

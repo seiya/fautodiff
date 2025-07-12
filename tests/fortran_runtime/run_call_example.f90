@@ -116,7 +116,7 @@ contains
     call call_fucntion(x_eps, y + eps)
     res_fd = (x_eps - x) / eps
     y_ad = 1.0
-    call call_fucntion_fwd_ad(x_ad, y, y_ad)
+    call call_fucntion_fwd_ad(x, x_ad, y, y_ad)
     if (abs((x_ad - res_fd) / res_fd) > tol) then
        print *, 'test_call_fucntion_fwd failed', x_ad, res_fd
        error stop 1

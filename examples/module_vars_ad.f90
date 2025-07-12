@@ -7,17 +7,18 @@ module module_vars_ad
 
 contains
 
-  subroutine inc_and_use_fwd_ad(x, x_ad, y_ad)
+  subroutine inc_and_use_fwd_ad(x, x_ad, y, y_ad)
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
+    real, intent(out) :: y
     real, intent(out) :: y_ad
-    real :: y
 
     y_ad = x_ad * a + a_ad * (c + x) ! y = (c + x) * a
     y = (c + x) * a
     a_ad = a_ad + x_ad ! a = a + x
     a = a + x
     y_ad = y_ad * a + a_ad * y ! y = y * a
+    y = y * a
 
     return
   end subroutine inc_and_use_fwd_ad

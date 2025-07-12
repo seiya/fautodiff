@@ -50,7 +50,7 @@ contains
     call compute_area(r + eps, area_eps)
     fd = (area_eps - area) / eps
     r_ad = 1.0
-    call compute_area_fwd_ad(r, r_ad, area_ad)
+    call compute_area_fwd_ad(r, r_ad, area, area_ad)
     if (abs((area_ad - fd) / fd) > tol) then
        print *, 'test_compute_area_fwd failed', area_ad, fd
        error stop 1

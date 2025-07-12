@@ -56,7 +56,7 @@ contains
     call add_const(x + eps, y_eps, z)
     fd = (y_eps - y) / eps
     x_ad = 1.0
-    call add_const_fwd_ad(x, x_ad, y_ad, z)
+    call add_const_fwd_ad(x, x_ad, y, y_ad, z)
     if (abs(y_ad - fd) > tol) then
        print *, 'test_add_const_fwd failed', y_ad, fd
        error stop 1
@@ -85,7 +85,7 @@ contains
     call worker(x + eps, z_eps)
     fd = (z_eps - z) / eps
     x_ad = 1.0
-    call worker_fwd_ad(x, x_ad, z_ad)
+    call worker_fwd_ad(x, x_ad, z, z_ad)
     if (abs((z_ad - fd) / fd) > tol) then
        print *, 'test_worker_fwd failed', z_ad, fd
        error stop 1
