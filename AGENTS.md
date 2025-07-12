@@ -42,11 +42,13 @@ This file provides guidelines for contributors about the repository and develop 
   ``implicit none``.
 - Each Fortran function or subroutine is converted to a ``subroutine`` with the
   original name followed by ``_ad``.
-- Arguments of the generated subroutine consist of the original arguments
-    followed by their corresponding adjoint variables (``arg`` and ``arg_ad``).
-    Result variables and ``intent(out)`` arguments are treated as gradients only
-    (``result_ad``). Integer arguments and results are treated as constants and do
-    not have ``_ad`` variables.
+  - Arguments of the generated subroutine consist of the original arguments
+      followed by their corresponding adjoint variables (``arg`` and ``arg_ad``).
+      Forward-mode routines also return the original ``intent(out)`` variables
+      together with their gradients (``result`` and ``result_ad``).  These
+      routines execute the original computations internally so callers do not
+      need to invoke the non-AD version. Integer arguments and results are
+      treated as constants and do not have ``_ad`` variables.
 - The body is processed in reverse order of assignment statements.  For each
   assignment ``lhs = expr`` the partial derivatives ``d<lhs>_d<var>`` are
   computed symbolically.  Gradients are accumulated using these partials to
