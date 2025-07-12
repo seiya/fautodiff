@@ -260,7 +260,7 @@ contains
     b_eps = bar(a + eps)
     fd = (b_eps - b) / eps
     a_ad = 1.0
-    call bar_fwd_ad(a, a_ad, b_ad)
+    call bar_fwd_ad(a, a_ad, b, b_ad)
     if (abs((b_ad - fd) / fd) > tol) then
        print *, 'test_bar_fwd failed', b_ad, fd
        error stop 1

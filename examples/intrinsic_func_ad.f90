@@ -139,7 +139,7 @@ contains
     real :: b
     real :: c
 
-    idx = index(str, OpChr(args=[], kind=None, name="'a'"))
+    idx = index(str, 'a')
     lb = lbound(arr, 1)
     ub = ubound(arr, 1)
     a_ad = 0.0 ! a = epsilon(x)

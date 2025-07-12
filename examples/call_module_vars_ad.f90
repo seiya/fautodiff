@@ -37,7 +37,7 @@ contains
     z_ad = y_ad * y ! y = y * z
     y_ad = y_ad * z ! y = y * z
     call inc_and_use_rev_ad(x, x_ad, y_ad) ! call inc_and_use(x, y)
-    x_ad = z_ad * 2.0 ! z = x * 2.0
+    x_ad = z_ad * 2.0 + x_ad ! z = x * 2.0
 
     return
   end subroutine call_inc_and_use_rev_ad

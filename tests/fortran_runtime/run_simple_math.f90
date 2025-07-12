@@ -76,7 +76,7 @@ contains
     fd = (c_eps - c) / eps
     a_ad = 1.0
     b_ad = 1.0
-    call add_numbers_fwd_ad(a, a_ad, b, b_ad, c_ad)
+    call add_numbers_fwd_ad(a, a_ad, b, b_ad, c, c_ad)
     if (abs((c_ad - fd) / fd) > tol) then
        print *, 'test_add_numbers_fwd failed', c_ad, fd
        error stop 1
@@ -107,7 +107,7 @@ contains
     fd = (c_eps - c) / eps
     a_ad = 1.0
     b_ad = 1.0
-    call subtract_numbers_fwd_ad(a, a_ad, b, b_ad, c_ad)
+    call subtract_numbers_fwd_ad(a, a_ad, b, b_ad, c, c_ad)
     if (abs((c_ad - fd) / fd) > tol) then
        print *, 'test_subtract_numbers_fwd failed', c_ad, fd
        error stop 1
@@ -202,7 +202,7 @@ contains
     fd = (c_eps - c) / eps
     a_ad = 1.0
     b_ad = 1.0
-    call power_numbers_fwd_ad(a, a_ad, b, b_ad, c_ad)
+    call power_numbers_fwd_ad(a, a_ad, b, b_ad, c, c_ad)
     if (abs((c_ad - fd) / fd) > tol) then
        print *, 'test_power_numbers_fwd failed', c_ad, fd
        error stop 1

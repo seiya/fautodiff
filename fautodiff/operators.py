@@ -589,6 +589,9 @@ class OpChr(OpLeaf):
         super().__init__(args=[])
         self.name = name
 
+    def __str__(self) -> str:
+        return self.name
+
 @dataclass
 class OpLogic(OpLeaf):
 

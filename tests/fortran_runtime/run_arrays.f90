@@ -188,7 +188,7 @@ contains
     fd = (res_eps - res) / eps
     a_ad(:) = 1.0
     b_ad(:) = 1.0
-    call dot_product_fwd_ad(n, a, a_ad, b, b_ad, res_ad)
+    call dot_product_fwd_ad(n, a, a_ad, b, b_ad, res, res_ad)
     if (abs((res_ad - fd) / fd) > tol) then
        print *, 'test_dot_product_fwd failed', res_ad, fd
        error stop 1
