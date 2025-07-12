@@ -94,6 +94,20 @@ Generate reverse mode only:
 bin/fautodiff --mode reverse examples/simple_math.f90
 ```
 
+### Calling forward-mode routines
+
+Forward-mode subroutines execute the original computations and return each
+``intent(out)`` variable along with its derivative. Arguments consist of the
+original inputs followed by their derivative counterparts.
+
+```fortran
+real :: x, x_ad, y, y_ad
+x = 2.0
+x_ad = 1.0
+call foo_fwd_ad(x, x_ad, y, y_ad)
+```
+
+
 See ``doc/directives.md`` for a description of optional directives that can
 control how AD code is generated. Details on how module variable assignments are
 handled in reverse mode are in the
