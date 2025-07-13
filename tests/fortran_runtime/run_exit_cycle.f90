@@ -38,14 +38,16 @@ program run_exit_cycle
 contains
 
   subroutine test_loop_exit_cycle
+    real, parameter :: tol = 7e-3
     integer :: n
     real :: x, res, res_eps
     real :: x_ad, res_ad
     real :: fd, eps
+    real :: inner1, inner2
 
     eps = 1.0e-3
     n = 6
-    x = 1.0
+    x = 1.1
     call loop_exit_cycle(n, x, res)
     call loop_exit_cycle(n, x + eps, res_eps)
     fd = (res_eps - res) / eps
@@ -56,7 +58,13 @@ contains
        error stop 1
     end if
 
-
+    inner1 = res_ad**2
+    call loop_exit_cycle_rev_ad(n, x, x_ad, res_ad)
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+      print *, 'test_loop_exit_cycle_rev failed', inner1, inner2
+      error stop 1
+    end if
 
     return
   end subroutine test_loop_exit_cycle
