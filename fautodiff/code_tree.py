@@ -24,6 +24,7 @@ from .operators import (
     OpFuncUser,
     OpNot,
     OpLogic,
+    OpLog,
 )
 
 from .var_list import (
@@ -678,6 +679,80 @@ class Statement(Node):
 
     def is_effectively_empty(self) -> bool:
         return False
+
+
+@dataclass
+class ExitStmt(Node):
+    """Representation of an ``exit`` statement."""
+
+    def copy(self) -> "ExitStmt":
+        return ExitStmt()
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        return [f"{space}exit\n"]
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        if reverse:
+            return []
+        return [self]
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        return iter(())
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        return iter(())
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> "ExitStmt":
+        return self
+
+
+@dataclass
+class CycleStmt(Node):
+    """Representation of a ``cycle`` statement."""
+
+    def copy(self) -> "CycleStmt":
+        return CycleStmt()
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        return [f"{space}cycle\n"]
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        if reverse:
+            return []
+        return [self]
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        return iter(())
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        return iter(())
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> "CycleStmt":
+        return self
 
 
 @dataclass
@@ -2076,6 +2151,22 @@ class DoLoop(DoAbst):
                 var_names.append(name)
         return var_names
 
+    def exit_value(self) -> Optional[int]:
+        """Return loop index value used in an ``exit`` statement if constant."""
+        for node in self._body.iter_children():
+            if isinstance(node, IfBlock) and len(node.cond_blocks) == 1:
+                cond, blk = node.cond_blocks[0]
+                if not blk.is_effectively_empty():
+                    child = blk.first()
+                    if isinstance(child, ExitStmt):
+                        if isinstance(cond, OpLog) and cond.op == '==':
+                            a, b = cond.args
+                            if isinstance(a, OpVar) and a == self.index and isinstance(b, OpInt):
+                                return b.val
+                            if isinstance(b, OpVar) and b == self.index and isinstance(a, OpInt):
+                                return a.val
+        return None
+
     def conflict_vars(self) -> List[str]:
         required_vars = self._body.required_vars()
         assigned_vars = self._body.assigned_vars()
@@ -2142,6 +2233,8 @@ class DoLoop(DoAbst):
                                 new_body.append(load)
                             pushed.append(var)
             for node in body_org.iter_children():
+                if isinstance(node, (ExitStmt, CycleStmt)):
+                    continue
                 new_body.append(node)
             for node in body.iter_children():
                 new_body.append(node)
@@ -2151,6 +2244,10 @@ class DoLoop(DoAbst):
         range = self.range
         if reverse:
             range = range.reverse()
+            exit_val = self.exit_value()
+            if exit_val is not None:
+                end = OpFuncUser('min', [self.range[1], OpInt(exit_val)])
+                range = OpRange([end, range[1], range[2]])
         block = DoLoop(body, index, range)
         #block = block.prune_for(VarList(block.collect_vars()), mod_vars)
         blocks: List[Node] = [block]

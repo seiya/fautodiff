@@ -29,6 +29,8 @@ from .code_tree import (
     Node,
     SelectBlock,
     Statement,
+    ExitStmt,
+    CycleStmt,
     Subroutine,
     Use,
     Allocate,
@@ -793,6 +795,10 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                 return DoLoop(body, index, OpRange([start_val, end_val, step]))
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return Statement("return")
+        if isinstance(stmt, Fortran2003.Exit_Stmt):
+            return ExitStmt()
+        if isinstance(stmt, Fortran2003.Cycle_Stmt):
+            return CycleStmt()
 
         print(type(stmt))
         print(stmt.items)
