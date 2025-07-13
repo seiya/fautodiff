@@ -213,22 +213,17 @@ contains
     real :: ary_ad(n,m)
     real :: scalar_ad
     real :: ary(n,m)
-    real :: z(n,m)
     integer :: i
     integer :: j
+    real :: z(n,m)
     real :: scalar
-    real :: ary_save_74_ad(n,m)
     real :: ary_save_77_ad
     real :: z_save_79_ad
     real :: scalar_save_81_ad
 
     ary(:,:) = x(:,:)
-    do j = 1, m
-      ary_save_74_ad(1:n,j) = ary(1:n,j)
-    end do
 
     do j = m, 1, - 1
-      ary(1:n,j) = ary_save_74_ad(1:n,j)
       do i = n, 1, - 1
         z(i,j) = ary(i,j) * y(i,j)
         ary_save_77_ad = ary(i,j)
@@ -321,10 +316,6 @@ contains
     real :: ary(n,m)
     real :: z(n,m)
     real :: ary_save_111_ad(n,m)
-    real :: z_save_117_ad(n,m)
-    real :: ary_save_117_ad(n,m)
-    real :: z_save_119_ad
-    real :: ary_save_120_ad
 
     do j = 1, m
       do i = 1, n
@@ -338,22 +329,12 @@ contains
         ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
       end do
     end do
-    do j = 1, m
-      z_save_117_ad(1:n,j) = z(1:n,j)
-      ary_save_117_ad(1:n,j) = ary(1:n,j)
-    end do
 
     do j = m, 1, - 1
-      ary(1:n,j) = ary_save_117_ad(1:n,j)
-      z(1:n,j) = z_save_117_ad(1:n,j)
       do i = n, 1, - 1
-        z_save_119_ad = z(i,j)
-        ary_save_120_ad = ary(i,j)
         ary_ad(i,j) = z_ad(i,j) ! z(i,j) = z(i,j) + ary(i,j)
-        ary(i,j) = ary_save_120_ad
         y_ad(i,j) = ary_ad(i,j) * ary(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
         ary_ad(i,j) = ary_ad(i,j) * y(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
-        z(i,j) = z_save_119_ad
         x_ad(i,j) = z_ad(i,j) * z(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
         ary_ad(i,j) = z_ad(i,j) + ary_ad(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
         z_ad(i,j) = z_ad(i,j) * x(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
@@ -452,7 +433,6 @@ contains
     real :: work1(2,n,m)
     real :: z(n,m)
     integer :: k
-    real :: work1_save_163_ad(2,n,m)
     real :: work1_save_166_ad(2)
 
     do j = 1, m
@@ -467,15 +447,11 @@ contains
         work1(2,i,j) = work2(2,i) * y(i,j)
       end do
     end do
-    do j = 1, m
-      work1_save_163_ad(1:2,1:n,j) = work1(1:2,1:n,j)
-    end do
 
     work2_ad(:,:) = 0.0
     work3_ad(:) = 0.0
 
     do j = m, 1, - 1
-      work1(1:2,1:n,j) = work1_save_163_ad(1:2,1:n,j)
       do i = n, 1, - 1
         z(i,j) = work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         do k = 1, 2

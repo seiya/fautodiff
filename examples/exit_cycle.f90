@@ -16,12 +16,12 @@ contains
       res = res * x
       if (i == 4) exit
       res = res * x
-      if (res > 2.0) then
+      if (res > 4.0) then
         res = res * x
         cycle
       end if
       res = res * x
-      if (res > 4.0) then
+      if (res > 2.0) then
         res = res * x
         exit
       end if

@@ -487,19 +487,23 @@ def _generate_ad_subroutine(
         assigned_advars = None
     else:
         assigned_advars = VarList(in_grad_args + mod_ad_vars)
-    ad_code = routine_org.content.generate_ad(
+    nodes = routine_org.content.generate_ad(
         saved_vars,
         reverse=reverse,
         assigned_advars=assigned_advars,
         routine_map=routine_map,
         mod_vars=mod_vars,
         warnings=warnings,
-    )[0]
+    )
+    ad_code = Block()
+    for node in nodes:
+        if not node.is_effectively_empty():
+            ad_code.append(node)
 
     #print(subroutine.name)
     #print(render_program(ad_code)) # for debugging
 
-    if (ad_code is not None) and (not ad_code.is_effectively_empty()):
+    if not ad_code.is_effectively_empty():
         for var in ad_code.assigned_vars(without_savevar=True):
             name = var.name
             if name.endswith(AD_SUFFIX):
@@ -528,8 +532,12 @@ def _generate_ad_subroutine(
             targets = VarList(in_grad_args + mod_ad_vars)
             ad_code.check_initial(targets)
 
-        targets = VarList(grad_args + mod_ad_vars + out_args)
+        if reverse:
+            targets = VarList(grad_args + mod_ad_vars)
+        else:
+            targets = VarList(grad_args + mod_ad_vars + out_args)
         #print("Targets:", targets) # for debugging
+        #print(subroutine.name)
         ad_code = ad_code.prune_for(targets, mod_vars)
         #print(render_program(ad_code)) # for debugging
 
@@ -561,12 +569,15 @@ def _generate_ad_subroutine(
                     Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind))
                 )
 
-        ad_block.extend(ad_code)
+    for node in ad_code:
+        if not node.is_effectively_empty():
+            ad_block.append(node)
 
     if reverse:
-        targets = ad_block.required_vars()
+        targets = ad_code.required_vars()
         #print("Targets:", targets)
-        fw_block = routine_org.content.prune_for(targets, mod_vars)
+        fw_block = Block(routine_org.content.set_exit_do_start(None))
+        fw_block = fw_block.prune_for(targets, mod_vars)
 
         assigned = routine_org.content.assigned_vars()
         required = routine_org.content.required_vars()
@@ -592,7 +603,7 @@ def _generate_ad_subroutine(
             last = fw_block.last()
             first = ad_block.first()
             if (isinstance(last, SaveAssignment) and isinstance(first, SaveAssignment) and
-                last.var.name == first.var.name and last.id and first.id and last.load != first.load):
+                last.var.name == first.var.name and last.id == first.id and last.load != first.load):
                 fw_block.remove_child(last)
                 ad_block.remove_child(first)
                 continue
@@ -602,7 +613,7 @@ def _generate_ad_subroutine(
                 flag = False
                 while (isinstance(item1, SaveAssignment) and not item1.pushpop and
                        isinstance(item2, SaveAssignment) and not item2.pushpop and
-                       item1.var.name == item2.var.name and item1.id and item2.id and item1.load != item2.load):
+                       item1.var.name == item2.var.name and item1.id == item2.id and item1.load != item2.load):
                     first._body.remove_child(item1)
                     last._body.remove_child(item2)
                     flag = True
@@ -633,17 +644,36 @@ def _generate_ad_subroutine(
                 base = name.removesuffix(AD_SUFFIX)
                 base_decl = routine_org.decls.find_by_name(base)
                 if base_decl is not None:
-                    decl = Declaration(
-                        name,
-                        base_decl.typename,
-                        base_decl.kind,
-                        base_decl.dims,
-                        None,
-                        base_decl.parameter,
-                        init_val=base_decl.init_val,
-                        allocatable=base_decl.allocatable,
-                        declared_in="routine",
+                    subroutine.decls.append(
+                        Declaration(
+                            name,
+                            base_decl.typename,
+                            base_decl.kind,
+                            base_decl.dims,
+                            None,
+                            base_decl.parameter,
+                            init_val=base_decl.init_val,
+                            allocatable=base_decl.allocatable,
+                            declared_in="routine",
+                        )
                     )
+                elif name.startswith(("cycle_flag", "exit_flag")):
+                    subroutine.decls.append(
+                        Declaration(
+                            name,
+                            typename="logical",
+                            declared_in="routine"
+                        )
+                    )
+                elif name.startswith(("exit_do_start")):
+                    subroutine.decls.append(
+                        Declaration(
+                            name,
+                            typename="integer",
+                            declared_in="routine"
+                        )
+                    )
+                continue
             if decl is not None:
                 decl = decl.copy()
                 if decl.intent is not None and decl.intent == "out":

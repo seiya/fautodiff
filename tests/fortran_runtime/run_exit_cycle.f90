@@ -38,7 +38,7 @@ program run_exit_cycle
 contains
 
   subroutine test_loop_exit_cycle
-    real, parameter :: tol = 7e-3
+    real, parameter :: tol = 4e-3
     integer :: n
     real :: x, res, res_eps
     real :: x_ad, res_ad
@@ -46,8 +46,8 @@ contains
     real :: inner1, inner2
 
     eps = 1.0e-3
-    n = 6
-    x = 1.1
+    n = 5
+    x = 2.0
     call loop_exit_cycle(n, x, res)
     call loop_exit_cycle(n, x + eps, res_eps)
     fd = (res_eps - res) / eps

@@ -35,7 +35,6 @@ contains
     real :: work_ad
     real :: work
     integer :: i
-    real :: work_save_21_ad
 
     work = 1.0
     do i = 1, n
@@ -47,10 +46,8 @@ contains
 
     do i = n, 1, - 1
       call fautodiff_data_storage_pop(work)
-      work_save_21_ad = work
       work_ad = z_ad(i) + work_ad ! z(i) = work
       z_ad(i) = 0.0 ! z(i) = work
-      work = work_save_21_ad
       x_ad(i) = work_ad * work ! work = x(i) * work
       work_ad = work_ad * x(i) ! work = x(i) * work
     end do

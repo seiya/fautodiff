@@ -46,7 +46,6 @@ from .operators import (
     OpFunc,
     OpFuncUser,
     OpInt,
-    OpLog,
     OpLogic,
     OpMul,
     OpNeg,
@@ -173,7 +172,7 @@ def _stmt2op(stmt, decls:Block) -> Operator:
         return OpChr(name=name)
 
     if isinstance(stmt, Fortran2003.Logical_Literal_Constant):
-        return OpLogic(name=stmt.string)
+        return OpVar(name=stmt.string, typename="logical")
 
     if isinstance(stmt, Fortran2003.Mult_Operand):
         if stmt.items[1] == "**":
@@ -216,7 +215,7 @@ def _stmt2op(stmt, decls:Block) -> Operator:
     if isinstance(stmt, Fortran2003.Level_4_Expr):
         op = stmt.items[1]
         args = [_stmt2op(stmt.items[0], decls), _stmt2op(stmt.items[2], decls)]
-        return OpLog(op=op, args=args)
+        return OpLogic(op=op, args=args)
 
     print("other")
     print(type(stmt))
