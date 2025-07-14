@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar, Union
 import re
-import copy
 from functools import reduce
 
 AD_SUFFIX = "_ad"
@@ -157,9 +156,7 @@ class Node:
 
     def deep_clone(self) -> "Node":
         """Return a deep clone of this node tree with new ids."""
-        clone = copy.deepcopy(self)
-        Node._assign_new_ids(clone)
-        return clone
+        raise NotImplementedError
 
     @classmethod
     def reset(cls) -> None:
@@ -526,7 +523,7 @@ class Node:
 class Block(Node):
     """A container for a sequence of nodes."""
 
-    __children: List[Node] = field(default_factory=list)
+    _children: List[Node] = field(default_factory=list)
 
     def _set_parent(self, child: Node) -> None:
         if child.parent is not None:
@@ -535,19 +532,25 @@ class Block(Node):
 
     def __post_init__(self):
         super().__post_init__()
-        for child in self.__children:
+        for child in self._children:
             if isinstance(child, Block):
                 raise ValueError("Block in Block is not allowed")
             self._set_parent(child)
 
     def copy(self) -> "Block":
-        return Block(self.__children)
+        return Block(self._children)
+
+    def deep_clone(self) -> "Block":
+        clone = Block()
+        for node in self._children:
+            clone._children.append(node.deep_clone())
+        return clone
 
     def iter_children(self) -> Iterator[Node]:
-        return iter(self.__children)
+        return iter(self._children)
 
     def __getitem__(self, index: int) -> Node:
-        return self.__children[index]
+        return self._children[index]
 
     def generate_ad(
         self,
@@ -560,7 +563,7 @@ class Block(Node):
         warnings: Optional[List[str]] = None,
     ) -> List[Node]:
         ad_code: List[Node] = []
-        iterator = self.__children
+        iterator = self._children
         if reverse:
             iterator = reversed(iterator)
         for node in iterator:
@@ -636,25 +639,25 @@ class Block(Node):
         return None
 
     def remove_child(self, child: Node) -> None:
-        self.__children.remove(child)
+        self._children.remove(child)
 
     def first(self) -> Node:
         """Return the first element."""
-        if len(self.__children) > 0:
-            return self.__children[0]
+        if len(self._children) > 0:
+            return self._children[0]
         return None
 
     def last(self) -> Node:
         """Return the last element."""
-        if len(self.__children) > 0:
-            return self.__children[-1]
+        if len(self._children) > 0:
+            return self._children[-1]
         return None
 
     def append(self, node: Node) -> None:
         """Append ``node`` to this block."""
         self._set_parent(node)
         node.build_do_index_list(self.do_index_list)
-        self.__children.append(node)
+        self._children.append(node)
 
     def extend(self, nodes: Iterable[Node]) -> None:
         """Extend this block with ``nodes``."""
@@ -662,23 +665,23 @@ class Block(Node):
             self.append(node)
 
     def insert_before(self, id: int, node:Node) -> Node:
-        for i, child in enumerate(self.__children):
+        for i, child in enumerate(self._children):
             if child.get_id() == id:
                 node.build_do_index_list(self.do_index_list)
                 self._set_parent(node)
-                return self.__children.insert(i, node)
+                return self._children.insert(i, node)
         raise ValueError("id is not found")
 
     def insert_begin(self, node:Node) -> Node:
         node.build_do_index_list(self.do_index_list)
         self._set_parent(node)
-        return self.__children.insert(0, node)
+        return self._children.insert(0, node)
 
     def __iter__(self):
         return self.iter_children()
 
     def __len__(self) -> int:
-        return len(self.__children)
+        return len(self._children)
 
     def render(self, indent: int = 0) -> List[str]:
         lines: List[str] = []
@@ -687,7 +690,7 @@ class Block(Node):
         return lines
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
-        for child in reversed(self.__children):
+        for child in reversed(self._children):
             vars = child.required_vars(vars, no_accumulate, without_savevar)
         if vars is None:
             vars = VarList()
@@ -702,7 +705,7 @@ class Block(Node):
 
     def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None) -> "Block":
         new_children: List[Node] = []
-        for child in reversed(self.__children):
+        for child in reversed(self._children):
             pruned = child.prune_for(targets, mod_vars)
             if pruned is not None and not pruned.is_effectively_empty():
                 new_children.insert(0, pruned)
@@ -795,6 +798,9 @@ class Statement(Node):
     def copy(self) -> "Statement":
         return Statement(self.body)
 
+    def deep_clone(self) -> "Statement":
+        return self.copy()
+
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         lines = [f"{space}{self.body}\n"]
@@ -810,6 +816,9 @@ class ExitStmt(Node):
 
     def copy(self) -> "ExitStmt":
         return ExitStmt()
+
+    def deep_clone(self) -> "ExitStmt":
+        return self.copy()
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -851,6 +860,9 @@ class CycleStmt(Node):
 
     def copy(self) -> "CycleStmt":
         return CycleStmt()
+
+    def deep_clone(self) -> "CycleStmt":
+        return self.copy()
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -894,6 +906,10 @@ class Use(Node):
 
     def copy(self) -> "Use":
         return Use(self.name, self.only)
+
+    def deep_clone(self) -> "Use":
+        only = list(self.only) if self.only else None
+        return Use(self.name, only)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -946,6 +962,13 @@ class CallStatement(Node):
 
     def copy(self) -> "CallStatement":
         return CallStatement(self.name, self.args, self.arg_keys, self.intents, self.result, self.info, self.ad_info)
+
+    def deep_clone(self) -> "CallStatement":
+        args = [arg.deep_clone() for arg in self.args]
+        arg_keys = list(self.arg_keys) if self.arg_keys else None
+        intents = list(self.intents) if self.intents else None
+        result = self.result.deep_clone() if self.result else None
+        return CallStatement(self.name, args, arg_keys, intents, result, self.info, self.ad_info)
 
     def _iter_vars(self, intents: List[str], kinds: Tuple[str, ...]) -> Iterator[OpVar]:
         for arg, intent in zip(self.args, intents):
@@ -1401,6 +1424,11 @@ class Assignment(Node):
     def copy(self) -> "Assignment":
         return Assignment(self.lhs, self.rhs, self.accumulate, self.info, self.ad_info)
 
+    def deep_clone(self):
+        lhs = self.lhs.deep_clone()
+        rhs = self.rhs.deep_clone()
+        return Assignment(lhs, rhs, self.accumulate, self.info, self.ad_info)
+
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self._rhs_vars:
             yield var
@@ -1512,6 +1540,10 @@ class ClearAssignment(Node):
     def copy(self) -> "ClearAssignment":
         return ClearAssignment(self.lhs, self.info, self.ad_info)
 
+    def deep_clone(self):
+        lhs = self.lhs.deep_clone()
+        return ClearAssignment(lhs, self.info, self.ad_info)
+
     def iter_ref_vars(self) -> Iterator[OpVar]:
         if self.lhs.index is not None:
             for var in self.lhs.index.collect_vars():
@@ -1615,7 +1647,7 @@ class SaveAssignment(Node):
     def copy(self) -> "SaveAssignment":
         return SaveAssignment(self.var, self.id, self.tmpvar, self.load)
 
-    def __deepcopy__(self, memo):
+    def deep_clone(self) -> "SaveAssignment":
         return self.copy()
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
@@ -1789,6 +1821,9 @@ class Allocate(Node):
     def copy(self) -> "Allocate":
         return Allocate(self.vars)
 
+    def deep_clone(self) -> "Allocate":
+        return Allocate(self.vars.deep_clone())
+
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.vars:
             if var.index is not None:
@@ -1873,6 +1908,10 @@ class Deallocate(Node):
     def copy(self) -> "Deallocate":
         return Deallocate(self.vars, self.ad_code)
 
+    def deep_clone(self):
+        vars = [var.deep_clone() for var in self.vars]
+        return Deallocate(vars, self.ad_code)
+
     def iter_ref_vars(self) -> Iterator[OpVar]:
         return iter(())
 
@@ -1952,6 +1991,10 @@ class Declaration(Node):
 
     def copy(self) -> "Declaration":
         return Declaration(self.name, self.typename, self.kind, self.dims, self.intent, self.parameter, self.constant, self.init_val, self.access, self.allocatable, self.declared_in)
+
+    def deep_clone(self) -> "Declaration":
+        dims = tuple(self.dims) if self.dims else None
+        return Declaration(self.name, self.typename, self.kind, dims, self.intent, self.parameter, self.constant, self.init_val, self.access, self.allocatable, self.declared_in)
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         if self.intent in ("in", "inout"):
@@ -2046,7 +2089,7 @@ class Declaration(Node):
 class BranchBlock(Node):
     """An abstract class for ``if`` and ``select case`` branch stracture."""
 
-    cond_blocks: List[Tuple[Operator, Block]] = field(default_factory=list)
+    cond_blocks: List[Tuple[Union[Operator,Tuple[Operator]], Block]] = field(default_factory=list)
 
     def __post_init__(self):
         super().__post_init__()
@@ -2191,6 +2234,14 @@ class IfBlock(BranchBlock):
     def copy(self) -> "IfBlock":
         return IfBlock(self.cond_blocks)
 
+    def deep_clone(self) -> "IfBlock":
+        cond_blocks = []
+        for cond, block in self.cond_blocks:
+            cond = cond.deep_clone() if cond else None
+            block = block.deep_clone()
+            cond_blocks.append((cond, block))
+        return IfBlock(cond_blocks)
+
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for cond, _ in self.cond_blocks:
             if cond is not None:
@@ -2222,6 +2273,15 @@ class SelectBlock(BranchBlock):
 
     def copy(self) -> "SelectBlock":
         return SelectBlock(self.cond_blocks, self.expr)
+
+    def deep_clone(self) -> "SelectBlock":
+        cond_blocks = []
+        for conds, block in self.cond_blocks:
+            conds = tuple(cond.deep_clone() for cond in conds) if conds else None
+            block = block.deep_clone()
+            cond_blocks.append((conds, block))
+        expr = self.expr.deep_clone()
+        return SelectBlock(cond_blocks, expr)
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.expr.collect_vars():
@@ -2277,6 +2337,9 @@ class DoLoop(DoAbst):
 
     def copy(self) -> "DoLoop":
         return DoLoop(self._body, self.index, self.range)
+
+    def deep_clone(self) -> "DoLoop":
+        return DoLoop(self._body.deep_clone(), self.index.deep_clone(), self.range.deep_clone())
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.range.collect_vars():
@@ -2575,6 +2638,9 @@ class DoWhile(DoAbst):
 
     def copy(self) -> "DoWhile":
         return DoWhile(self._body, self.cond)
+
+    def deep_clone(self):
+        return DoWhile(self._body.deep_clone(), self.cond.deep_clone())
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         yield from self.cond.collect_vars()

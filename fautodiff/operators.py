@@ -37,6 +37,17 @@ class AryIndex:
     def copy(self) -> AryIndex:
         return AryIndex(list(self.dims) if self.dims is not None else None)
 
+    def deep_clone(self) -> "AryIndex":
+        dims = None
+        if self.dims is not None:
+            dims = []
+            for dim in self.dims:
+                if isinstance(dim, Operator):
+                    dims.append(dim.deep_clone())
+                else:
+                    dims.append(dim)
+        return AryIndex(dims)
+
     def __len__(self) -> int:
         return len(self.dims) if self.dims is not None else 0
 
@@ -230,7 +241,12 @@ class Operator:
             return f"{arg}"
 
     def deep_clone(self) -> "Operator":
-        clone = copy.deepcopy(self)
+        clone = copy.copy(self)
+        if self.args is not None:
+            clone.args = [
+                arg.deep_clone() if isinstance(arg, Operator) else arg
+                for arg in self.args
+            ]
         return clone
 
     def collect_vars(self, without_index: bool = False) -> List[OpVar]:
@@ -742,6 +758,12 @@ class OpVar(OpLeaf):
             allocatable=self.allocatable,
             declared_in=self.declared_in,
         )
+
+    def deep_clone(self) -> "OpVar":
+        clone = copy.copy(self)
+        if self.index is not None:
+            clone.index = self.index.deep_clone()
+        return clone
 
     def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         vars = [self]
