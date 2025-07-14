@@ -203,14 +203,10 @@ class TestNodeMethods(unittest.TestCase):
         b = OpVar("b")
         c = OpVar("c")
         blk = Block([
-            Block([
-                Assignment(a, OpInt(2)),
-                Assignment(c, a),
-            ]),
-            Block([
-                Assignment(a, OpInt(1)),
-                Assignment(b, a),
-            ]),
+            Assignment(a, OpInt(2)),
+            Assignment(c, a),
+            Assignment(a, OpInt(1)),
+            Assignment(b, a),
         ])
         pruned = blk.prune_for(VarList([b]))
         self.assertEqual(

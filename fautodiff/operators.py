@@ -497,22 +497,29 @@ class Operator:
     def __lt__(self, other):
         if isinstance(other, int):
             return self < OpInt(other)
-        return OpLog("<", args=[self, other])
+        return OpLogic("<", args=[self, other])
 
     def __le__(self, other):
         if isinstance(other, int):
             return self <= OpInt(other)
-        return OpLog("<=", args=[self, other])
+        return OpLogic("<=", args=[self, other])
 
     def __gt__(self, other):
         if isinstance(other, int):
             return self > OpInt(other)
-        return OpLog(">", args=[self, other])
+        return OpLogic(">", args=[self, other])
 
     def __ge__(self, other):
         if isinstance(other, int):
             return self >= OpInt(other)
-        return OpLog(">=", args=[self, other])
+        return OpLogic(">=", args=[self, other])
+
+    def __and__(self, other):
+        return OpLogic(".and.", args=[self, other])
+
+    def __or__(self, other):
+        return OpLogic(".or.", args=[self, other])
+
 
 @dataclass
 class OpLeaf(Operator):
@@ -593,13 +600,22 @@ class OpChr(OpLeaf):
         return self.name
 
 @dataclass
-class OpLogic(OpLeaf):
+class OpTrue(OpLeaf):
 
-    name: str = field(default="")
-
-    def __init__(self, name: str):
+    def __init__(self):
         super().__init__(args=[])
-        self.name = name
+
+    def __str__(self) -> str:
+        return ".true."
+
+@dataclass
+class OpFalse(OpLeaf):
+
+    def __init__(self):
+        super().__init__(args=[])
+
+    def __str__(self) -> str:
+        return ".false."
 
 @dataclass
 class OpReal(OpNum):
@@ -797,12 +813,6 @@ class OpNeg(OpUnary):
         return - self.args[0].derivative(var, target, info, warnings)
 
 @dataclass
-class OpAnd(OpUnary):
-
-    OP: ClassVar[str] = ".and."
-    PRIORITY: ClassVar[int] = 7
-
-@dataclass
 class OpNot(OpUnary):
 
     OP: ClassVar[str] = ".not."
@@ -907,7 +917,8 @@ class OpPow(OpBinary):
         return expo2 * base**(expo - one) * dbase + base**expo * OpFunc("log", args=[base]) * dexpo
 
 @dataclass
-class OpLog(OpBinary):
+class OpLogic(OpBinary):
+    """Logical operations (.and., .or., .gt., .ge., .lt., and .le.)."""
 
     op: str = field(default="")
     PRIORITY: ClassVar[int] = 6
@@ -923,6 +934,14 @@ class OpLog(OpBinary):
         eq = isinstance(self.args[1], OpNeg)
         a1 = self._paren(self.args[1], eq=eq)
         return f"{a0} {self.op} {a1}"
+
+    def __and__(self, other):
+        return OpLogic(".and.", args=[self, other])
+
+    def __or__(self, other):
+        return OpLogic(".or.", args=[self, other])
+
+
 
 INTRINSIC_FUNCTIONS = {
     'abs', 'sqrt', 'exp', 'log', 'log10', 'sin', 'cos', 'tan', 'asin',

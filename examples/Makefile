@@ -29,6 +29,7 @@ $(OUTDIR)/call_module_vars_ad.o: $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_a
 $(OUTDIR)/store_vars_ad.o: $(OUTDIR)/data_storage.o
 $(OUTDIR)/module_vars_ad.o: $(OUTDIR)/data_storage.o
 $(OUTDIR)/allocate_vars_ad.o: $(OUTDIR)/data_storage.o
+$(OUTDIR)/exit_cycle_ad.o: $(OUTDIR)/data_storage.o
 
 clean:
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.mod

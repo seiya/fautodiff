@@ -14,7 +14,8 @@ vpath %.f90 .
 
 PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_control_flow.out run_cross_mod.out \
            run_data_storage.out run_intrinsic_func.out run_real_kind.out run_save_vars.out run_store_vars.out \
-           run_directives.out run_parameter_var.out run_module_vars.out run_call_module_vars.out run_allocate_vars.out
+           run_directives.out run_parameter_var.out run_module_vars.out run_call_module_vars.out run_allocate_vars.out \
+           run_exit_cycle.out
 PROGRAMS = $(addprefix $(OUTDIR)/,$(PROGRAM_NAMES))
 
 .PHONY: all clean
@@ -55,6 +56,7 @@ $(OUTDIR)/run_parameter_var.o: $(OUTDIR)/parameter_var.o $(OUTDIR)/parameter_var
 $(OUTDIR)/run_module_vars.o: $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o
 $(OUTDIR)/run_call_module_vars.o: $(OUTDIR)/call_module_vars.o $(OUTDIR)/call_module_vars_ad.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o
 $(OUTDIR)/run_allocate_vars.o: $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o
+$(OUTDIR)/run_exit_cycle.o: $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(OUTDIR)/data_storage.o
 
 $(OUTDIR)/run_simple_math.out: $(OUTDIR)/run_simple_math.o $(OUTDIR)/simple_math.o $(OUTDIR)/simple_math_ad.o
 $(OUTDIR)/run_arrays.out: $(OUTDIR)/run_arrays.o $(OUTDIR)/arrays.o $(OUTDIR)/arrays_ad.o
@@ -71,6 +73,7 @@ $(OUTDIR)/run_parameter_var.out: $(OUTDIR)/run_parameter_var.o $(OUTDIR)/paramet
 $(OUTDIR)/run_module_vars.out: $(OUTDIR)/run_module_vars.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o $(OUTDIR)/data_storage.o
 $(OUTDIR)/run_call_module_vars.out: $(OUTDIR)/run_call_module_vars.o $(OUTDIR)/call_module_vars.o $(OUTDIR)/call_module_vars_ad.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o $(OUTDIR)/data_storage.o
 $(OUTDIR)/run_allocate_vars.out: $(OUTDIR)/run_allocate_vars.o $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o $(OUTDIR)/data_storage.o
+$(OUTDIR)/run_exit_cycle.out: $(OUTDIR)/run_exit_cycle.o $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(OUTDIR)/data_storage.o
 
 
 clean:

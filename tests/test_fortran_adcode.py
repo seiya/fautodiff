@@ -102,6 +102,10 @@ class TestFortranADCode(unittest.TestCase):
     def test_allocate(self):
         self._run_test('allocate_vars', ['allocate_and_sum', 'module_vars'])
 
+    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
+    def test_exit_cycle(self):
+        self._run_test('exit_cycle', ['loop_exit_cycle'])
+
 
 
 if __name__ == '__main__':
