@@ -2664,7 +2664,11 @@ class DoWhile(DoAbst):
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
-        if not reverse:
+        exitcycle_flags = None
+        if reverse:
+            exitcycles = self._body.collect_exitcycle()
+            exitcycle_flags = [node.flag() for node in exitcycles]
+        else:
             for vname in self.recurrent_vars():
                 assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
 
@@ -2672,18 +2676,35 @@ class DoWhile(DoAbst):
         if reverse:
             body_org = self._body.deep_clone()
             new_body = []
-            recurrent_vars = self.recurrent_vars()
             pushed = []
+            loads = []
+            fwd_body = []
+            if exitcycle_flags:
+                fwd_body = self._body.generate_fwd_in_rev_ad(exitcycle_flags)
+            recurrent_vars = self.recurrent_vars()
+            routine = self.get_routine()
             for node in self._body.iter_children():
                 for var in node.assigned_vars():
                     if var.name in recurrent_vars:
+                        decl = routine.get_var(var.name) if routine else None
+                        if decl is not None and decl.typename == 'integer':
+                            continue
                         if not var in pushed:
                             save = PushPop(var, node.get_id())
                             self._body.insert_begin(save)
                             new_body.append(save.to_load())
                             pushed.append(var)
+            if exitcycle_flags:
+                for flag in exitcycle_flags:
+                    assign = Assignment(flag, OpTrue())
+                    if flag.name.startswith("cycle"):
+                        new_body.append(assign)
+                    else:
+                        loads.append(assign)
             for node in body_org.iter_children():
                 new_body.append(node)
+            if fwd_body:
+                new_body.extend(fwd_body)
             for node in nodes:
                 new_body.append(node)
             body = Block(new_body)
@@ -2699,12 +2720,15 @@ class DoWhile(DoAbst):
 
         if reverse:
             common_vars = self._body.required_vars() & self._body.assigned_vars()
-            blocks: List[Node] = [block]
+            blocks: List[Node] = []
+            blocks.extend(loads)
+            blocks.append(block)
+            routine = self.get_routine()
             for cvar in common_vars:
-                if cvar.name.endswith(AD_SUFFIX):
+                decl = routine.get_var(cvar.name) if routine else None
+                if cvar.name.endswith(AD_SUFFIX) or (decl is not None and decl.typename == 'integer'):
                     continue
                 load = self._save_vars(cvar, saved_vars)
-                #blocks.insert(0, load)
                 blocks.append(load)
         else:
             blocks = [block]
