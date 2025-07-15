@@ -12,6 +12,8 @@ This file provides guidelines for contributors about the repository and develop 
 - Python code is recommended to follow [PEP 8](https://www.python.org/dev/peps/pep-0008/).
 - The generated automatic differentiation code maintains the structure of the original source code as much as possible.
 - The names of modules, functions, subroutines, variables, etc. in the generated code should be the original code names followed by “_ad” as much as possible.
+- Fortran modules in this repository must use file names that match the module
+  name (e.g. ``my_mod`` resides in ``my_mod.f90``).
 
 ## 4. Commit and PR Guidelines
 - Aim for one topic per commit and write clear messages.
@@ -69,6 +71,8 @@ This file provides guidelines for contributors about the repository and develop 
 
 ## 9. Fortran Modules in `fortran_modules`
 - Module names must start with the prefix ``fautodiff_``.
+- Each module should be placed in a file named after the module itself.
+  For example, ``fautodiff_data_storage`` lives in ``fautodiff_data_storage.f90``.
 - Public subroutines provided by these modules must also start with the module
   name followed by an underscore.  For example, ``data_storage`` becomes
   ``fautodiff_data_storage`` and its public routine ``push`` is renamed to

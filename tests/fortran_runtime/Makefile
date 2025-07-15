@@ -45,35 +45,35 @@ $(OUTDIR)/run_call_example.o: $(OUTDIR)/call_example.o $(OUTDIR)/call_example_ad
 $(OUTDIR)/run_control_flow.o: $(OUTDIR)/control_flow.o $(OUTDIR)/control_flow_ad.o
 $(OUTDIR)/run_cross_mod.o: $(OUTDIR)/cross_mod_a.o $(OUTDIR)/cross_mod_a_ad.o \
   $(OUTDIR)/cross_mod_b.o $(OUTDIR)/cross_mod_b_ad.o
-$(OUTDIR)/run_data_storage.o: $(OUTDIR)/data_storage.o
+$(OUTDIR)/run_data_storage.o: $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/run_intrinsic_func.o: $(OUTDIR)/intrinsic_func.o $(OUTDIR)/intrinsic_func_ad.o
 $(OUTDIR)/run_real_kind.o: $(OUTDIR)/real_kind.o $(OUTDIR)/real_kind_ad.o
 $(OUTDIR)/run_save_vars.o: $(OUTDIR)/save_vars.o $(OUTDIR)/save_vars_ad.o
 $(OUTDIR)/run_store_vars.o: $(OUTDIR)/store_vars.o $(OUTDIR)/store_vars_ad.o \
-  $(OUTDIR)/data_storage.o
+  $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/run_directives.o: $(OUTDIR)/directives.o $(OUTDIR)/directives_ad.o
 $(OUTDIR)/run_parameter_var.o: $(OUTDIR)/parameter_var.o $(OUTDIR)/parameter_var_ad.o
 $(OUTDIR)/run_module_vars.o: $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o
 $(OUTDIR)/run_call_module_vars.o: $(OUTDIR)/call_module_vars.o $(OUTDIR)/call_module_vars_ad.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o
 $(OUTDIR)/run_allocate_vars.o: $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o
-$(OUTDIR)/run_exit_cycle.o: $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(OUTDIR)/data_storage.o
+$(OUTDIR)/run_exit_cycle.o: $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(OUTDIR)/fautodiff_data_storage.o
 
 $(OUTDIR)/run_simple_math.out: $(OUTDIR)/run_simple_math.o $(OUTDIR)/simple_math.o $(OUTDIR)/simple_math_ad.o
 $(OUTDIR)/run_arrays.out: $(OUTDIR)/run_arrays.o $(OUTDIR)/arrays.o $(OUTDIR)/arrays_ad.o
 $(OUTDIR)/run_call_example.out: $(OUTDIR)/run_call_example.o $(OUTDIR)/call_example.o $(OUTDIR)/call_example_ad.o
 $(OUTDIR)/run_control_flow.out: $(OUTDIR)/run_control_flow.o $(OUTDIR)/control_flow.o $(OUTDIR)/control_flow_ad.o
 $(OUTDIR)/run_cross_mod.out: $(OUTDIR)/run_cross_mod.o $(OUTDIR)/cross_mod_a.o $(OUTDIR)/cross_mod_a_ad.o $(OUTDIR)/cross_mod_b.o $(OUTDIR)/cross_mod_b_ad.o
-$(OUTDIR)/run_data_storage.out: $(OUTDIR)/run_data_storage.o $(OUTDIR)/data_storage.o
+$(OUTDIR)/run_data_storage.out: $(OUTDIR)/run_data_storage.o $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/run_intrinsic_func.out: $(OUTDIR)/run_intrinsic_func.o $(OUTDIR)/intrinsic_func.o $(OUTDIR)/intrinsic_func_ad.o
 $(OUTDIR)/run_real_kind.out: $(OUTDIR)/run_real_kind.o $(OUTDIR)/real_kind.o $(OUTDIR)/real_kind_ad.o
-$(OUTDIR)/run_save_vars.out: $(OUTDIR)/run_save_vars.o $(OUTDIR)/save_vars.o $(OUTDIR)/save_vars_ad.o $(OUTDIR)/data_storage.o
-$(OUTDIR)/run_store_vars.out: $(OUTDIR)/run_store_vars.o $(OUTDIR)/store_vars.o $(OUTDIR)/store_vars_ad.o $(OUTDIR)/data_storage.o
+$(OUTDIR)/run_save_vars.out: $(OUTDIR)/run_save_vars.o $(OUTDIR)/save_vars.o $(OUTDIR)/save_vars_ad.o $(OUTDIR)/fautodiff_data_storage.o
+$(OUTDIR)/run_store_vars.out: $(OUTDIR)/run_store_vars.o $(OUTDIR)/store_vars.o $(OUTDIR)/store_vars_ad.o $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/run_directives.out: $(OUTDIR)/run_directives.o $(OUTDIR)/directives.o $(OUTDIR)/directives_ad.o
 $(OUTDIR)/run_parameter_var.out: $(OUTDIR)/run_parameter_var.o $(OUTDIR)/parameter_var.o $(OUTDIR)/parameter_var_ad.o
-$(OUTDIR)/run_module_vars.out: $(OUTDIR)/run_module_vars.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o $(OUTDIR)/data_storage.o
-$(OUTDIR)/run_call_module_vars.out: $(OUTDIR)/run_call_module_vars.o $(OUTDIR)/call_module_vars.o $(OUTDIR)/call_module_vars_ad.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o $(OUTDIR)/data_storage.o
-$(OUTDIR)/run_allocate_vars.out: $(OUTDIR)/run_allocate_vars.o $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o $(OUTDIR)/data_storage.o
-$(OUTDIR)/run_exit_cycle.out: $(OUTDIR)/run_exit_cycle.o $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(OUTDIR)/data_storage.o
+$(OUTDIR)/run_module_vars.out: $(OUTDIR)/run_module_vars.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o $(OUTDIR)/fautodiff_data_storage.o
+$(OUTDIR)/run_call_module_vars.out: $(OUTDIR)/run_call_module_vars.o $(OUTDIR)/call_module_vars.o $(OUTDIR)/call_module_vars_ad.o $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o $(OUTDIR)/fautodiff_data_storage.o
+$(OUTDIR)/run_allocate_vars.out: $(OUTDIR)/run_allocate_vars.o $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o $(OUTDIR)/fautodiff_data_storage.o
+$(OUTDIR)/run_exit_cycle.out: $(OUTDIR)/run_exit_cycle.o $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(OUTDIR)/fautodiff_data_storage.o
 
 
 clean:
