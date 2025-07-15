@@ -5,7 +5,7 @@ module exit_cycle_ad
 
 contains
 
-  subroutine loop_exit_cycle_fwd_ad(n, x, x_ad, res, res_ad)
+  subroutine do_exit_cycle_fwd_ad(n, x, x_ad, res, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
@@ -47,29 +47,29 @@ contains
     res = res * x
 
     return
-  end subroutine loop_exit_cycle_fwd_ad
+  end subroutine do_exit_cycle_fwd_ad
 
-  subroutine loop_exit_cycle_rev_ad(n, x, x_ad, res_ad)
+  subroutine do_exit_cycle_rev_ad(n, x, x_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
     real, intent(out) :: x_ad
     real, intent(inout) :: res_ad
     real :: res
-    integer :: exit_do_start_38_ad
+    integer :: exit_do_start_35_ad
     integer :: i
-    logical :: exit_flag_25_ad
-    logical :: exit_flag_35_ad
-    logical :: cycle_flag_21_ad
-    logical :: cycle_flag_30_ad
-    real :: res_save_19_ad
-    real :: res_save_23_ad
-    real :: res_save_27_ad
-    real :: res_save_31_ad
-    real :: res_save_32_ad
-    real :: res_save_36_ad
+    logical :: exit_flag_22_ad
+    logical :: exit_flag_32_ad
+    logical :: cycle_flag_18_ad
+    logical :: cycle_flag_27_ad
+    real :: res_save_16_ad
+    real :: res_save_20_ad
+    real :: res_save_24_ad
+    real :: res_save_28_ad
+    real :: res_save_29_ad
+    real :: res_save_33_ad
 
     res = x**2
-    exit_do_start_38_ad = n
+    exit_do_start_35_ad = n
     do i = 1, n
       call fautodiff_data_storage_push(res)
       res = res * x
@@ -78,7 +78,7 @@ contains
       end if
       res = res * x
       if (i == 4) then
-        exit_do_start_38_ad = i
+        exit_do_start_35_ad = i
         exit
       end if
       res = res * x
@@ -89,7 +89,7 @@ contains
       res = res * x
       if (res > 2.0) then
         res = res * x
-        exit_do_start_38_ad = i
+        exit_do_start_35_ad = i
         exit
       end if
       res = res * x
@@ -97,91 +97,91 @@ contains
 
     x_ad = res_ad * res ! res = res * x
     res_ad = res_ad * x ! res = res * x
-    exit_flag_25_ad = .true.
-    exit_flag_35_ad = .true.
-    do i = exit_do_start_38_ad, 1, - 1
-      cycle_flag_21_ad = .true.
-      cycle_flag_30_ad = .true.
+    exit_flag_22_ad = .true.
+    exit_flag_32_ad = .true.
+    do i = exit_do_start_35_ad, 1, - 1
+      cycle_flag_18_ad = .true.
+      cycle_flag_27_ad = .true.
       call fautodiff_data_storage_pop(res)
-      if (cycle_flag_21_ad .and. exit_flag_25_ad .and. cycle_flag_30_ad .and. exit_flag_35_ad) then
-        res_save_19_ad = res
+      if (cycle_flag_18_ad .and. exit_flag_22_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
+        res_save_16_ad = res
         res = res * x
         if (i == 2) then
-          cycle_flag_21_ad = .false.
+          cycle_flag_18_ad = .false.
         end if
       end if
-      if (cycle_flag_21_ad .and. exit_flag_25_ad .and. cycle_flag_30_ad .and. exit_flag_35_ad) then
-        res_save_23_ad = res
+      if (cycle_flag_18_ad .and. exit_flag_22_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
+        res_save_20_ad = res
         res = res * x
         if (i == 4) then
-          exit_flag_25_ad = .false.
+          exit_flag_22_ad = .false.
         end if
       end if
-      if (cycle_flag_21_ad .and. exit_flag_25_ad .and. cycle_flag_30_ad .and. exit_flag_35_ad) then
-        res_save_27_ad = res
+      if (cycle_flag_18_ad .and. exit_flag_22_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
+        res_save_24_ad = res
         res = res * x
-        res_save_31_ad = res
+        res_save_28_ad = res
         if (res > 4.0) then
           res = res * x
-          cycle_flag_30_ad = .false.
+          cycle_flag_27_ad = .false.
         end if
       end if
-      if (cycle_flag_21_ad .and. exit_flag_25_ad .and. cycle_flag_30_ad .and. exit_flag_35_ad) then
-        res_save_32_ad = res
+      if (cycle_flag_18_ad .and. exit_flag_22_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
+        res_save_29_ad = res
         res = res * x
-        res_save_36_ad = res
+        res_save_33_ad = res
         if (res > 2.0) then
           res = res * x
-          exit_flag_35_ad = .false.
+          exit_flag_32_ad = .false.
         end if
       end if
-      if (cycle_flag_21_ad .and. exit_flag_25_ad .and. cycle_flag_30_ad .and. exit_flag_35_ad) then
+      if (cycle_flag_18_ad .and. exit_flag_22_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
         x_ad = res_ad * res + x_ad ! res = res * x
         res_ad = res_ad * x ! res = res * x
       end if
-      if (cycle_flag_21_ad .and. exit_flag_25_ad .and. cycle_flag_30_ad) then
-        res = res_save_36_ad
+      if (cycle_flag_18_ad .and. exit_flag_22_ad .and. cycle_flag_27_ad) then
+        res = res_save_33_ad
         if (res > 2.0) then
-          exit_flag_35_ad = .true. ! exit
+          exit_flag_32_ad = .true. ! exit
           x_ad = res_ad * res + x_ad ! res = res * x
           res_ad = res_ad * x ! res = res * x
         end if
       end if
-      if (cycle_flag_21_ad .and. exit_flag_25_ad .and. cycle_flag_30_ad .and. exit_flag_35_ad) then
-        res = res_save_32_ad
+      if (cycle_flag_18_ad .and. exit_flag_22_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
+        res = res_save_29_ad
         x_ad = res_ad * res + x_ad ! res = res * x
         res_ad = res_ad * x ! res = res * x
       end if
-      if (cycle_flag_21_ad .and. exit_flag_25_ad .and. exit_flag_35_ad) then
-        res = res_save_31_ad
+      if (cycle_flag_18_ad .and. exit_flag_22_ad .and. exit_flag_32_ad) then
+        res = res_save_28_ad
         if (res > 4.0) then
-          cycle_flag_30_ad = .true. ! cycle
+          cycle_flag_27_ad = .true. ! cycle
           x_ad = res_ad * res + x_ad ! res = res * x
           res_ad = res_ad * x ! res = res * x
         end if
       end if
-      if (cycle_flag_21_ad .and. exit_flag_25_ad .and. cycle_flag_30_ad .and. exit_flag_35_ad) then
-        res = res_save_27_ad
+      if (cycle_flag_18_ad .and. exit_flag_22_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
+        res = res_save_24_ad
         x_ad = res_ad * res + x_ad ! res = res * x
         res_ad = res_ad * x ! res = res * x
       end if
-      if (cycle_flag_21_ad .and. cycle_flag_30_ad .and. exit_flag_35_ad) then
+      if (cycle_flag_18_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
         if (i == 4) then
-          exit_flag_25_ad = .true. ! exit
+          exit_flag_22_ad = .true. ! exit
         end if
       end if
-      if (cycle_flag_21_ad .and. exit_flag_25_ad .and. cycle_flag_30_ad .and. exit_flag_35_ad) then
-        res = res_save_23_ad
+      if (cycle_flag_18_ad .and. exit_flag_22_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
+        res = res_save_20_ad
         x_ad = res_ad * res + x_ad ! res = res * x
         res_ad = res_ad * x ! res = res * x
       end if
-      if (exit_flag_25_ad .and. cycle_flag_30_ad .and. exit_flag_35_ad) then
+      if (exit_flag_22_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
         if (i == 2) then
-          cycle_flag_21_ad = .true. ! cycle
+          cycle_flag_18_ad = .true. ! cycle
         end if
       end if
-      if (cycle_flag_21_ad .and. exit_flag_25_ad .and. cycle_flag_30_ad .and. exit_flag_35_ad) then
-        res = res_save_19_ad
+      if (cycle_flag_18_ad .and. exit_flag_22_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
+        res = res_save_16_ad
         x_ad = res_ad * res + x_ad ! res = res * x
         res_ad = res_ad * x ! res = res * x
       end if
@@ -190,9 +190,9 @@ contains
     res_ad = 0.0 ! res = x**2
 
     return
-  end subroutine loop_exit_cycle_rev_ad
+  end subroutine do_exit_cycle_rev_ad
 
-  subroutine loop_exit_cycle_while_fwd_ad(n, x, x_ad, res, res_ad)
+  subroutine while_exit_cycle_fwd_ad(n, x, x_ad, res, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
@@ -238,29 +238,29 @@ contains
     res = res * x
 
     return
-  end subroutine loop_exit_cycle_while_fwd_ad
+  end subroutine while_exit_cycle_fwd_ad
 
-  subroutine loop_exit_cycle_while_rev_ad(n, x, x_ad, res_ad)
+  subroutine while_exit_cycle_rev_ad(n, x, x_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
     real, intent(out) :: x_ad
     real, intent(inout) :: res_ad
     real :: res
     integer :: i
-    logical :: exit_flag_63_ad
-    logical :: exit_flag_74_ad
-    logical :: cycle_flag_59_ad
-    logical :: cycle_flag_69_ad
-    real :: res_save_56_ad
-    integer :: i_save_60_ad
-    real :: res_save_61_ad
-    real :: res_save_65_ad
-    real :: res_save_70_ad
+    logical :: exit_flag_56_ad
+    logical :: exit_flag_67_ad
+    logical :: cycle_flag_52_ad
+    logical :: cycle_flag_62_ad
+    real :: res_save_49_ad
+    integer :: i_save_53_ad
+    real :: res_save_54_ad
+    real :: res_save_58_ad
+    real :: res_save_63_ad
+    integer :: i_save_63_ad
+    real :: res_save_64_ad
+    real :: res_save_68_ad
+    real :: res_save_69_ad
     integer :: i_save_70_ad
-    real :: res_save_71_ad
-    real :: res_save_75_ad
-    real :: res_save_76_ad
-    integer :: i_save_77_ad
 
     res = x**2
     i = 1
@@ -295,139 +295,107 @@ contains
 
     x_ad = res_ad * res ! res = res * x
     res_ad = res_ad * x ! res = res * x
-    exit_flag_63_ad = .true.
-    exit_flag_74_ad = .true.
+    exit_flag_56_ad = .true.
+    exit_flag_67_ad = .true.
     do while (fautodiff_data_storage_get())
+      cycle_flag_52_ad = .true.
+      cycle_flag_62_ad = .true.
       call fautodiff_data_storage_pop(res)
       call fautodiff_data_storage_pop(i)
-      cycle_flag_59_ad = .true.
-      cycle_flag_69_ad = .true.
-      res_save_56_ad = res
-      res = res * x
-      i_save_60_ad = i
-      if (i == 2) then
-        i = i + 1
-        cycle
-      end if
-      res_save_61_ad = res
-      res = res * x
-      if (i == 4) then
-        exit
-      end if
-      res_save_65_ad = res
-      res = res * x
-      i_save_70_ad = i
-      res_save_70_ad = res
-      if (res > 4.0) then
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
+        res_save_49_ad = res
         res = res * x
-        i = i + 1
-        cycle
-      end if
-      res_save_71_ad = res
-      res = res * x
-      res_save_75_ad = res
-      if (res > 2.0) then
-        res = res * x
-        exit
-      end if
-      res_save_76_ad = res
-      res = res * x
-      i_save_77_ad = i
-      i = i + 1
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        res_save_56_ad = res
-        res = res * x
-        i_save_60_ad = i
+        i_save_53_ad = i
         if (i == 2) then
           i = i + 1
-          cycle_flag_59_ad = .false.
+          cycle_flag_52_ad = .false.
         end if
       end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        res_save_61_ad = res
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
+        res_save_54_ad = res
         res = res * x
         if (i == 4) then
-          exit_flag_63_ad = .false.
+          exit_flag_56_ad = .false.
         end if
       end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        res_save_65_ad = res
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
+        res_save_58_ad = res
         res = res * x
-        i_save_70_ad = i
-        res_save_70_ad = res
+        i_save_63_ad = i
+        res_save_63_ad = res
         if (res > 4.0) then
           res = res * x
           i = i + 1
-          cycle_flag_69_ad = .false.
+          cycle_flag_62_ad = .false.
         end if
       end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        res_save_71_ad = res
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
+        res_save_64_ad = res
         res = res * x
-        res_save_75_ad = res
+        res_save_68_ad = res
         if (res > 2.0) then
           res = res * x
-          exit_flag_74_ad = .false.
+          exit_flag_67_ad = .false.
         end if
       end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        res_save_76_ad = res
-        i_save_77_ad = i
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
+        res_save_69_ad = res
+        i_save_70_ad = i
         i = i + 1
       end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        i = i_save_77_ad
-      end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        res = res_save_76_ad
-        x_ad = res_ad * res + x_ad ! res = res * x
-        res_ad = res_ad * x ! res = res * x
-      end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad) then
-        res = res_save_75_ad
-        if (res > 2.0) then
-          exit_flag_74_ad = .true. ! exit
-          x_ad = res_ad * res + x_ad ! res = res * x
-          res_ad = res_ad * x ! res = res * x
-        end if
-      end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        res = res_save_71_ad
-        x_ad = res_ad * res + x_ad ! res = res * x
-        res_ad = res_ad * x ! res = res * x
-      end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. exit_flag_74_ad) then
-        res = res_save_70_ad
-        if (res > 4.0) then
-          cycle_flag_69_ad = .true. ! cycle
-          x_ad = res_ad * res + x_ad ! res = res * x
-          res_ad = res_ad * x ! res = res * x
-        end if
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
         i = i_save_70_ad
       end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        res = res_save_65_ad
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
+        res = res_save_69_ad
         x_ad = res_ad * res + x_ad ! res = res * x
         res_ad = res_ad * x ! res = res * x
       end if
-      if (cycle_flag_59_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad) then
+        res = res_save_68_ad
+        if (res > 2.0) then
+          exit_flag_67_ad = .true. ! exit
+          x_ad = res_ad * res + x_ad ! res = res * x
+          res_ad = res_ad * x ! res = res * x
+        end if
+      end if
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
+        res = res_save_64_ad
+        x_ad = res_ad * res + x_ad ! res = res * x
+        res_ad = res_ad * x ! res = res * x
+      end if
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. exit_flag_67_ad) then
+        res = res_save_63_ad
+        if (res > 4.0) then
+          cycle_flag_62_ad = .true. ! cycle
+          x_ad = res_ad * res + x_ad ! res = res * x
+          res_ad = res_ad * x ! res = res * x
+        end if
+        i = i_save_63_ad
+      end if
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
+        res = res_save_58_ad
+        x_ad = res_ad * res + x_ad ! res = res * x
+        res_ad = res_ad * x ! res = res * x
+      end if
+      if (cycle_flag_52_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
         if (i == 4) then
-          exit_flag_63_ad = .true. ! exit
+          exit_flag_56_ad = .true. ! exit
         end if
       end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        res = res_save_61_ad
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
+        res = res_save_54_ad
         x_ad = res_ad * res + x_ad ! res = res * x
         res_ad = res_ad * x ! res = res * x
       end if
-      if (exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        i = i_save_60_ad
+      if (exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
+        i = i_save_53_ad
         if (i == 2) then
-          cycle_flag_59_ad = .true. ! cycle
+          cycle_flag_52_ad = .true. ! cycle
         end if
       end if
-      if (cycle_flag_59_ad .and. exit_flag_63_ad .and. cycle_flag_69_ad .and. exit_flag_74_ad) then
-        res = res_save_56_ad
+      if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
+        res = res_save_49_ad
         x_ad = res_ad * res + x_ad ! res = res * x
         res_ad = res_ad * x ! res = res * x
       end if
@@ -436,6 +404,6 @@ contains
     res_ad = 0.0 ! res = x**2
 
     return
-  end subroutine loop_exit_cycle_while_rev_ad
+  end subroutine while_exit_cycle_rev_ad
 
 end module exit_cycle_ad

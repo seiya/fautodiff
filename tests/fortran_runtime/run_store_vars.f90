@@ -38,7 +38,7 @@ contains
 
   subroutine test_do_with_recurrent_scalar
     integer, parameter :: n = 3
-    real, parameter :: tol = 3e-4
+    real, parameter :: tol = 2e-3
     real :: x(n), z(n)
     real :: x_ad(n), z_ad(n)
     real :: z_eps(n), fd(n), eps

@@ -3,7 +3,7 @@ module exit_cycle
 
 contains
 
-  subroutine loop_exit_cycle(n, x, res)
+  subroutine do_exit_cycle(n, x, res)
     integer, intent(in) :: n
     real, intent(in) :: x
     real, intent(out) :: res
@@ -30,9 +30,9 @@ contains
     res = res * x
 
     return
-end subroutine loop_exit_cycle
+end subroutine do_exit_cycle
 
-  subroutine loop_exit_cycle_while(n, x, res)
+  subroutine while_exit_cycle(n, x, res)
     integer, intent(in) :: n
     real, intent(in) :: x
     real, intent(out) :: res
@@ -63,6 +63,6 @@ end subroutine loop_exit_cycle
       i = i + 1
     end do
     res = res * x
-  end subroutine loop_exit_cycle_while
+  end subroutine while_exit_cycle
 
 end module exit_cycle

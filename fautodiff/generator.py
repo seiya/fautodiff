@@ -402,6 +402,8 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
 
     subroutine.ad_init = Block([])
     subroutine.ad_content = Block([])
+    subroutine.ad_init.set_parent(subroutine)
+    subroutine.ad_content.set_parent(subroutine)
 
     skip = bool(routine_org.directives.get("SKIP")) or (len(out_grad_args) == 0 and not has_mod_grad_var)
     if skip:
@@ -502,6 +504,7 @@ def _generate_ad_subroutine(
 
     #print(subroutine.name)
     #print(render_program(ad_code)) # for debugging
+    #print(render_program(routine_org))
 
     if not ad_code.is_effectively_empty():
         for var in ad_code.assigned_vars(without_savevar=True):
@@ -575,9 +578,11 @@ def _generate_ad_subroutine(
 
     if reverse:
         targets = ad_code.required_vars()
+        #print(render_program(ad_code))
         #print("Targets:", targets)
         fw_block = Block(routine_org.content.set_exit_do_start(None))
         fw_block = fw_block.prune_for(targets, mod_vars)
+        #print(render_program(fw_block))
 
         assigned = routine_org.content.assigned_vars()
         required = routine_org.content.required_vars()
@@ -729,8 +734,8 @@ def _generate_ad_subroutine(
                 ref_name = var.reference.name
                 v_org = routine_org.get_var(ref_name)
                 base_decl = routine_org.decls.find_by_name(ref_name)
-                if base_decl is None and routine_org.mod_decls is not None:
-                    base_decl = routine_org.mod_decls.find_by_name(ref_name)
+                if base_decl is None and routine_org.decl_map is not None:
+                    base_decl = routine_org.decl_map.get(ref_name)
             except ValueError:
                 ad_block.extend(ad_code)
                 print("".join(subroutine.render()))

@@ -15,13 +15,16 @@ contains
     real :: work
     integer :: i
 
-    work_ad = 0.0 ! work = 1.0
     work = 1.0
+    work_ad = x_ad(1) * work ! work = x(1) * work
+    work = x(1) * work
+    z_ad(:) = x_ad(:) * work + work_ad * x(:) ! z(:) = x(:) * work
+    z(:) = x(:) * work
     do i = 1, n
       work_ad = x_ad(i) * work + work_ad * x(i) ! work = x(i) * work
       work = x(i) * work
-      z_ad(i) = work_ad ! z(i) = work
-      z(i) = work
+      z_ad(i) = work_ad * 2.0 * work + z_ad(i) ! z(i) = work**2 + z(i)
+      z(i) = work**2 + z(i)
     end do
 
     return
@@ -35,8 +38,14 @@ contains
     real :: work_ad
     real :: work
     integer :: i
+    real :: work_save_16_ad
+    real :: work_save_21_ad
+    real :: work_save_19_ad
 
     work = 1.0
+    work_save_16_ad = work
+    work = x(1) * work
+    work_save_21_ad = work
     do i = 1, n
       call fautodiff_data_storage_push(work)
       work = x(i) * work
@@ -46,11 +55,19 @@ contains
 
     do i = n, 1, - 1
       call fautodiff_data_storage_pop(work)
-      work_ad = z_ad(i) + work_ad ! z(i) = work
-      z_ad(i) = 0.0 ! z(i) = work
+      work_save_19_ad = work
+      work = x(i) * work
+      work_ad = z_ad(i) * 2.0 * work + work_ad ! z(i) = work**2 + z(i)
+      work = work_save_19_ad
       x_ad(i) = work_ad * work ! work = x(i) * work
       work_ad = work_ad * x(i) ! work = x(i) * work
     end do
+    work = work_save_21_ad
+    x_ad(:) = z_ad(:) * work + x_ad(:) ! z(:) = x(:) * work
+    work_ad = sum(z_ad(:) * x(:)) + work_ad ! z(:) = x(:) * work
+    z_ad(:) = 0.0 ! z(:) = x(:) * work
+    work = work_save_16_ad
+    x_ad(1) = work_ad * work + x_ad(1) ! work = x(1) * work
 
     return
   end subroutine do_with_recurrent_scalar_rev_ad
@@ -95,13 +112,13 @@ contains
     real :: y
     real :: z
     real :: a
-    real :: y_save_45_ad
+    real :: y_save_39_ad
 
     y = 0.0
     z = 1.0
     a = y * x
     call fautodiff_data_storage_push(.false.)
-    y_save_45_ad = y
+    y_save_39_ad = y
     do while (y < 10.0)
       call fautodiff_data_storage_push(.true.)
       call fautodiff_data_storage_push(z)
@@ -127,7 +144,7 @@ contains
       a_ad = y_ad + a_ad ! y = y + a
       x_ad = a_ad + x_ad ! a = a + x
     end do
-    y = y_save_45_ad
+    y = y_save_39_ad
     x_ad = a_ad * y + x_ad ! a = y * x
     z_ad = 0.0 ! z = 1.0
     y_ad = 0.0 ! y = 0.0

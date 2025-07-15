@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar, Union
+from typing import Iterable, List, Tuple, Optional, Iterator, Pattern, ClassVar, Union
 import re
 from functools import reduce
 
@@ -344,6 +344,11 @@ class Node:
         else:
             return f"{name}_save_{id}{ext}{AD_SUFFIX}"
 
+    _pattern: ClassVar[Pattern[str]] = re.compile(r"([a-zA-Z][a-zA-Z0-9_]*)_save_([0-9]+)")
+    @classmethod
+    def is_savevar(cls, name: str) -> bool:
+        return bool(cls._pattern.match(name))
+
     def _generate_ad_forward(
         self,
         lhs: OpVar,
@@ -510,6 +515,8 @@ class Node:
                 dev = rhs.derivative(var, target=grad_lhs, info=self.info, warnings=warnings)
                 v = var.add_suffix(AD_SUFFIX)
                 res = grad_lhs * dev
+                if not v.is_array() and res.is_array():
+                    res = OpFunc("sum", args=[res])
                 assigns.append(
                     Assignment(v, res, accumulate=(v != grad_lhs), ad_info=ad_info)
                 )
@@ -657,6 +664,13 @@ class Block(Node):
         """Append ``node`` to this block."""
         self._set_parent(node)
         node.build_do_index_list(self.do_index_list)
+        # for declaration block
+        if isinstance(node, Declaration):
+            routine = self.get_routine()
+            if routine is not None:
+                if routine.decl_map is None:
+                    routine.decl_map = {}
+                routine.decl_map[node.name] = node
         self._children.append(node)
 
     def extend(self, nodes: Iterable[Node]) -> None:
@@ -1112,9 +1126,10 @@ class CallStatement(Node):
                 arg = ad_arg
             i = arg_info["args"].index(arg)
             var = args[i]
-            if not isinstance(var, OpLeaf):
+            if not reverse and isinstance(var, OpFuncUser):
                 var = args_new[i]
             if ad_arg.endswith(AD_SUFFIX):
+                var = args_new[i]
                 var = OpVar(
                     f"{var.name}{AD_SUFFIX}",
                     index=var.index,
@@ -1271,10 +1286,15 @@ class Routine(Node):
     decls: Block = field(default_factory=Block)
     content: Block = field(default_factory=Block)
     directives: dict = field(default_factory=dict)
-    mod_decls: Optional[Block] = None
+    decl_map: Optional[dict] = None
     ad_init: Optional[Block] = None
     ad_content: Optional[Block] = None
     kind: ClassVar[str] = "subroutine"
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.decls.set_parent(self)
+        self.content.set_parent(self)
 
     def _all_blocks(self):
         blocks = [self.decls, self.content]
@@ -1319,9 +1339,11 @@ class Routine(Node):
         return lines
 
     def get_var(self, name: str) -> Optional[OpVar]:
-        decl = self.decls.find_by_name(name)
-        if decl is None and self.mod_decls is not None:
-            decl = self.mod_decls.find_by_name(name)
+        decl = None
+        if self.decl_map is not None:
+            decl = self.decl_map.get(name)
+        if decl is None:
+            decl = self.decls.find_by_name(name)
         if decl is None:
             return None
         intent = decl.intent
@@ -1347,9 +1369,9 @@ class Routine(Node):
         return vars
 
     def is_declared(self, name: str) -> bool:
-        if self.decls.find_by_name(name) is not None:
+        if self.decl_map is not None and self.decl_map.get(name) is not None:
             return True
-        if self.mod_decls is not None and self.mod_decls.find_by_name(name) is not None:
+        if self.decls.find_by_name(name) is not None:
             return True
         return False
 
@@ -1751,16 +1773,16 @@ class PushPop(SaveAssignment):
         op_name = f"fautodiff_data_storage_{op}"
         return [f"{space}call {op_name}({self.var})\n"]
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
-        if vars is None:
-            vars = VarList()
-        else:
-            vars_new = VarList()
-            for name in vars.names():
-                if not name.startswith(f"{self.var.name}_save_"):
-                    vars_new.vars[name] = vars.vars[name]
-            vars = vars_new
-        return super().required_vars(vars, no_accumulate, without_savevar)
+    # def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    #     if vars is None:
+    #         vars = VarList()
+    #     # else:
+    #     #     vars_new = VarList()
+    #     #     for name in vars.names():
+    #     #         if not name.startswith(f"{self.var.name}_save_"):
+    #     #             vars_new.vars[name] = vars.vars[name]
+    #     #     vars = vars_new
+    #     return super().required_vars(vars, no_accumulate, without_savevar)
 
     def to_load(self) -> "PushPop":
         return PushPop(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
@@ -2186,13 +2208,21 @@ class BranchBlock(Node):
         else:
             vars = vars.copy()
         vars_new = VarList()
-        cover_all = False
+        cover_all = False # if else or case default exists
+        to_remove = set()
+        origin_savevars = {name for name in vars.names() if Node.is_savevar(name)}
         for cond, block in self.cond_blocks:
-            vars_new.merge(block.required_vars(vars, no_accumulate, without_savevar))
+            vs = block.required_vars(vars, no_accumulate, without_savevar)
+            vars_new.merge(vs)
+            advars = {name for name in vs.names() if Node.is_savevar(name)}
+            to_remove = to_remove | (origin_savevars - advars)
             if cond is None:
                 cover_all = True
         if not cover_all:
             vars_new.merge(vars)
+        for name in to_remove:
+            if vars_new.vars and name in vars_new.vars:
+                del vars_new.vars[name]
         for var in self.iter_ref_vars():
             vars_new.push(var)
         return vars_new
@@ -2321,6 +2351,111 @@ class DoAbst(Node):
     def collect_exitcycle(self) -> List[Node]:
         return []
 
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+
+        exitcycle_flags = None
+        if reverse:
+            exitcycles = self._body.collect_exitcycle()
+            exitcycle_flags = [node.flag() for node in exitcycles]
+        else:
+            for vname in self.recurrent_vars():
+                assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
+
+        nodes = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, mod_vars, exitcycle_flags, warnings)
+        if self.do:
+            range = self.range
+        else:
+            cond = self.cond
+
+        blocks: List[Node] = []
+        if reverse:
+            if self.do:
+                range = range.reverse()
+            new_body = []
+            fwd_body =self._body.generate_fwd_in_rev_ad(exitcycle_flags)
+            if exitcycle_flags:
+                exit_flag = False
+                for flag in exitcycle_flags:
+                    assign = Assignment(flag, OpTrue())
+                    if flag.name.startswith("cycle"):
+                        new_body.append(assign)
+                    else:
+                        blocks.append(assign)
+                        exit_flag = True
+                if exit_flag and self.do:
+                    range = OpRange([self.exit_do_start(), range[1], range[2]])
+
+            required_vars = self._body.required_vars()
+            assigned_vars = self._body.assigned_vars()
+            common_vars = required_vars & assigned_vars
+            loads = []
+            if self.do:
+                conflict_vars = self.conflict_vars()
+                for cvar in common_vars:
+                    if cvar.name.endswith(AD_SUFFIX) or cvar == self.index or cvar.name in conflict_vars:
+                        continue
+                    save = SaveAssignment(cvar, self._body.get_id())
+                    self._body.insert_begin(save)
+                    load = save.to_load()
+                    saved_vars.append(save.tmpvar)
+                    new_body.append(load)
+                    loads.insert(0, load)
+
+            pushed = []
+            recurrent_vars = self.recurrent_vars()
+            for node in self._body.iter_children():
+                for var in node.assigned_vars():
+                    if var.name in recurrent_vars and (not self.do or var.name in conflict_vars):
+                        if not var in pushed:
+                            save = PushPop(var, node.get_id())
+                            self._body.insert_begin(save)
+                            new_body.append(save.to_load())
+                            pushed.append(var)
+
+            new_body.extend(fwd_body)
+            for node in nodes:
+                new_body.append(node)
+            new_body.extend(loads)
+            nodes = new_body
+            if self.do:
+                assigned_var_names = assigned_vars.names()
+                for var in self.range.collect_vars():
+                    if var.name in assigned_var_names:
+                        load = self._save_vars(var, saved_vars)
+                        blocks.append(load)
+            else:
+                save_false = PushPopL(".false.")
+                self.parent.insert_before(self.get_id(), save_false)
+                save_true = PushPopL(".true.")
+                self._body.insert_begin(save_true)
+                cond = OpFuncUser("fautodiff_data_storage_get", [])
+
+        body = Block(nodes)
+        if self.do:
+            loop = DoLoop(body, self.index, range)
+        else:
+            loop = DoWhile(body, cond)
+        blocks.append(loop)
+
+        if reverse:
+            for cvar in common_vars:
+                if cvar.name.endswith(AD_SUFFIX):
+                    continue
+                if self.do and (cvar == self.index or not cvar.name in conflict_vars):
+                    continue
+                load = self._save_vars(cvar, saved_vars)
+                blocks.append(load)
+
+        return blocks
 
 @dataclass
 class DoLoop(DoAbst):
@@ -2328,6 +2463,7 @@ class DoLoop(DoAbst):
 
     index: OpVar
     range: OpRange
+    do: ClassVar[bool] = True
 
     def __post_init__(self):
         super().__post_init__()
@@ -2415,89 +2551,87 @@ class DoLoop(DoAbst):
                 var_names.append(name)
         return var_names
 
-    def generate_ad(
-        self,
-        saved_vars: List[OpVar],
-        reverse: bool = False,
-        assigned_advars: Optional[VarList] = None,
-        routine_map: Optional[dict] = None,
-        mod_vars: Optional[List[OpVar]] = None,
-        exitcycle_flags: Optional[List[OpVar]] = None,
-        warnings: Optional[list[str]] = None,
-    ) -> List[Node]:
+    # def generate_ad(
+    #     self,
+    #     saved_vars: List[OpVar],
+    #     reverse: bool = False,
+    #     assigned_advars: Optional[VarList] = None,
+    #     routine_map: Optional[dict] = None,
+    #     mod_vars: Optional[List[OpVar]] = None,
+    #     exitcycle_flags: Optional[List[OpVar]] = None,
+    #     warnings: Optional[list[str]] = None,
+    # ) -> List[Node]:
 
-        exitcycle_flags = None
-        if reverse:
-            exitcycles = self._body.collect_exitcycle()
-            exitcycle_flags = []
-            for node in exitcycles:
-                exitcycle_flags.append(node.flag())
-        else:
-            for vname in self.recurrent_vars():
-                assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
+    #     exitcycle_flags = None
+    #     if reverse:
+    #         exitcycles = self._body.collect_exitcycle()
+    #         exitcycle_flags = [node.flag() for node in exitcycles]
+    #     else:
+    #         for vname in self.recurrent_vars():
+    #             assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
 
-        nodes = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, mod_vars, exitcycle_flags, warnings)
-        blocks: List[Node] = []
-        range = self.range
-        if reverse:
-            range = range.reverse()
-            new_body = []
-            pushed = []
-            loads = []
-            fwd_body = self._body.generate_fwd_in_rev_ad(exitcycle_flags)
-            required_vars = self._body.required_vars()
-            assigned_vars = self._body.assigned_vars()
-            common_vars = required_vars & assigned_vars
-            if exitcycle_flags:
-                exit_flag = False
-                for flag in exitcycle_flags:
-                    assign = Assignment(flag, OpTrue())
-                    if flag.name.startswith("cycle"):
-                        new_body.append(assign)
-                    else: # exit
-                        blocks.append(assign)
-                        exit_flag = True
-                if exit_flag:
-                    range = OpRange([self.exit_do_start(), range[1], range[2]])
+    #     nodes = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, mod_vars, exitcycle_flags, warnings)
+    #     blocks: List[Node] = []
+    #     range = self.range
+    #     if reverse:
+    #         range = range.reverse()
+    #         new_body = []
+    #         pushed = []
+    #         loads = []
+    #         fwd_body = self._body.generate_fwd_in_rev_ad(exitcycle_flags)
+    #         required_vars = self._body.required_vars()
+    #         assigned_vars = self._body.assigned_vars()
+    #         common_vars = required_vars & assigned_vars
+    #         if exitcycle_flags:
+    #             exit_flag = False
+    #             for flag in exitcycle_flags:
+    #                 assign = Assignment(flag, OpTrue())
+    #                 if flag.name.startswith("cycle"):
+    #                     new_body.append(assign)
+    #                 else: # exit
+    #                     blocks.append(assign)
+    #                     exit_flag = True
+    #             if exit_flag:
+    #                 range = OpRange([self.exit_do_start(), range[1], range[2]])
 
-            for cvar in common_vars:
-                if cvar == self.index:
-                    continue
-                save = SaveAssignment(cvar, self._body.get_id())
-                self._body.insert_begin(save)
-                load = save.to_load()
-                saved_vars.append(save.tmpvar)
-                new_body.append(load)
-                loads.insert(0, load)
-            recurrent_vars = self.recurrent_vars()
-            conflict_vars = self.conflict_vars()
-            for node in self._body.iter_children():
-                for var in node.assigned_vars():
-                    if var.name in recurrent_vars:
-                        if not var in pushed:
-                            if var.name in conflict_vars:
-                                save = PushPop(var, node.get_id())
-                                self._body.insert_begin(save)
-                                load = save.to_load()
-                                new_body.append(load)
-                            pushed.append(var)
-            new_body.extend(fwd_body)
-            for node in nodes:
-                new_body.append(node)
-            new_body.extend(loads)
-            nodes = new_body
-        body = Block(nodes)
-        index = self.index
-        block = DoLoop(body, index, range)
-        blocks.append(block)
-        if reverse:
-            assigned_var_names = assigned_vars.names()
-            for var in self.range.collect_vars():
-                if var.name in assigned_var_names:
-                    load = self._save_vars(var, saved_vars)
-                    blocks.append(load)
+    #         for cvar in common_vars:
+    #             if cvar == self.index:
+    #                 continue
+    #             save = SaveAssignment(cvar, self._body.get_id())
+    #             self._body.insert_begin(save)
+    #             load = save.to_load()
+    #             saved_vars.append(save.tmpvar)
+    #             new_body.append(load)
+    #             loads.insert(0, load)
+    #         recurrent_vars = self.recurrent_vars()
+    #         conflict_vars = self.conflict_vars()
+    #         for node in self._body.iter_children():
+    #             for var in node.assigned_vars():
+    #                 if var.name in recurrent_vars:
+    #                     if not var in pushed:
+    #                         if var.name in conflict_vars:
+    #                             save = PushPop(var, node.get_id())
+    #                             self._body.insert_begin(save)
+    #                             load = save.to_load()
+    #                             new_body.append(load)
+    #                         pushed.append(var)
+    #         new_body.extend(fwd_body)
+    #         for node in nodes:
+    #             new_body.append(node)
+    #         new_body.extend(loads)
+    #         nodes = new_body
+    #     body = Block(nodes)
+    #     index = self.index
+    #     block = DoLoop(body, index, range)
+    #     blocks.append(block)
+    #     if reverse:
+    #         assigned_var_names = assigned_vars.names()
+    #         for var in self.range.collect_vars():
+    #             if var.name in assigned_var_names:
+    #                 load = self._save_vars(var, saved_vars)
+    #                 blocks.append(load)
 
-        return blocks
+    #     return blocks
 
     def set_exit_do_start(self, assign: Optional[Assignment]) -> List[Node]:
         exitcycles = self._body.collect_exitcycle()
@@ -2631,6 +2765,7 @@ class DoWhile(DoAbst):
     """A ``do while`` loop."""
 
     cond: Operator
+    do: ClassVar[bool] = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -2646,93 +2781,12 @@ class DoWhile(DoAbst):
         yield from self.cond.collect_vars()
 
     def build_do_index_list(self, index_list: List[str]) -> None:
-        for child in self.iter_children():
-            child.build_do_index_list(index_list)
+        self._body.build_do_index_list(index_list)
 
     def recurrent_vars(self) -> List[str]:
         required_vars = self._body.required_vars()
         assigned_vars = self._body.assigned_vars()
         return sorted(set(required_vars.names()) & set(assigned_vars.names()))
-
-    def generate_ad(
-        self,
-        saved_vars: List[OpVar],
-        reverse: bool = False,
-        assigned_advars: Optional[VarList] = None,
-        routine_map: Optional[dict] = None,
-        mod_vars: Optional[List[OpVar]] = None,
-        exitcycle_flags: Optional[List[OpVar]] = None,
-        warnings: Optional[list[str]] = None,
-    ) -> List[Node]:
-        exitcycle_flags = None
-        if reverse:
-            exitcycles = self._body.collect_exitcycle()
-            exitcycle_flags = [node.flag() for node in exitcycles]
-        else:
-            for vname in self.recurrent_vars():
-                assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
-
-        nodes = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, mod_vars, exitcycle_flags, warnings)
-        if reverse:
-            body_org = self._body.deep_clone()
-            new_body = []
-            pushed = []
-            loads = []
-            fwd_body = []
-            if exitcycle_flags:
-                fwd_body = self._body.generate_fwd_in_rev_ad(exitcycle_flags)
-            recurrent_vars = self.recurrent_vars()
-            routine = self.get_routine()
-            for node in self._body.iter_children():
-                for var in node.assigned_vars():
-                    if var.name in recurrent_vars:
-                        decl = routine.get_var(var.name) if routine else None
-                        if decl is not None and decl.typename == 'integer':
-                            continue
-                        if not var in pushed:
-                            save = PushPop(var, node.get_id())
-                            self._body.insert_begin(save)
-                            new_body.append(save.to_load())
-                            pushed.append(var)
-            if exitcycle_flags:
-                for flag in exitcycle_flags:
-                    assign = Assignment(flag, OpTrue())
-                    if flag.name.startswith("cycle"):
-                        new_body.append(assign)
-                    else:
-                        loads.append(assign)
-            for node in body_org.iter_children():
-                new_body.append(node)
-            if fwd_body:
-                new_body.extend(fwd_body)
-            for node in nodes:
-                new_body.append(node)
-            body = Block(new_body)
-            save_false = PushPopL(".false.")
-            self.parent.insert_before(self.get_id(), save_false)
-            save_true = PushPopL(".true.")
-            self._body.insert_begin(save_true)
-            cond = OpFuncUser("fautodiff_data_storage_get", [])
-        else:
-            cond = self.cond
-            body = Block(nodes)
-        block = DoWhile(body, cond)
-
-        if reverse:
-            common_vars = self._body.required_vars() & self._body.assigned_vars()
-            blocks: List[Node] = []
-            blocks.extend(loads)
-            blocks.append(block)
-            routine = self.get_routine()
-            for cvar in common_vars:
-                decl = routine.get_var(cvar.name) if routine else None
-                if cvar.name.endswith(AD_SUFFIX) or (decl is not None and decl.typename == 'integer'):
-                    continue
-                load = self._save_vars(cvar, saved_vars)
-                blocks.append(load)
-        else:
-            blocks = [block]
-        return blocks
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent

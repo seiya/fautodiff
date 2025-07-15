@@ -104,7 +104,7 @@ class TestFortranADCode(unittest.TestCase):
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_exit_cycle(self):
-        self._run_test('exit_cycle', ['loop_exit_cycle'])
+        self._run_test('exit_cycle', ['do_exit_cycle', 'while_exit_cycle'])
 
 
 

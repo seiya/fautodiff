@@ -259,6 +259,10 @@ class Operator:
                     vars.append(var)
         return vars
 
+    def is_array(self) -> bool:
+        """Return true if this is an array"""
+        raise NotImplementedError(f"is_array in {type(self)}")
+
     def find_userfunc(self) -> List[OpFuncUser]:
         funcs = []
         if self.args is None:
@@ -546,6 +550,9 @@ class OpLeaf(Operator):
     def collect_vars(self, without_index: bool = False) -> List[OpVar]:
         return []
 
+    def is_array(self) -> bool:
+        return False
+
     def find_userfunc(self) -> List[OpFuncUser]:
         return []
 
@@ -719,7 +726,11 @@ class OpVar(OpLeaf):
         return typename.startswith("real") or typename.startswith("double")
 
     def is_array(self) -> bool:
-        return self.dims is not None
+        if self.dims is None and self.index is None:
+            return False
+        if self.index is None or any(idx is None or isinstance(idx, OpRange) or idx.is_array() for idx in self.index.dims):
+            return True
+        return False
 
     def change_index(self, index) -> OpVar:
         if index == self.index:
@@ -825,6 +836,9 @@ class OpUnary(Operator):
         a0 = self._paren(self.args[0])
         return f"{self.OP} {a0}"
 
+    def is_array(self) -> bool:
+        return self.args[0].is_array()
+
 @dataclass
 class OpNeg(OpUnary):
 
@@ -855,6 +869,9 @@ class OpBinary(Operator):
         eq = isinstance(self.args[1], OpNeg) or (isinstance(self, OpDiv) and isinstance(self.args[1], OpMul))
         a1 = self._paren(self.args[1], eq=eq)
         return f"{a0} {self.OP} {a1}"
+
+    def is_array(self) -> bool:
+        return self.args[0].is_array() or self.args[1].is_array()
 
 @dataclass
 class OpAdd(OpBinary):
@@ -1012,6 +1029,9 @@ class OpFunc(Operator):
             args.append(f"{arg}")
         args = ", ".join(args)
         return f"{self.name}({args})"
+
+    def is_array(self) -> bool:
+        return any([arg.is_array() for arg in self.args])
 
     def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
 
