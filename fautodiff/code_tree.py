@@ -139,12 +139,11 @@ class Node:
         """Return AD converted nodes."""
         return []
 
-    def set_exitcycle_flag(self) -> "Node":
-        return self
-
-    def set_exit_do_start(self, assign: Optional[Assignment]) -> List["Node"]:
+    def set_exitcycle_flag(self) -> List["Node"]:
         return [self]
 
+    def set_exit_do_start(self, assign: Optional[Assignment], label: Optional[str] = None) -> List["Node"]:
+        return [self]
 
     def _save_vars(self, var: OpVar, saved_vars: List[OpVar]) -> SaveAssignment:
         id = self.get_id()
@@ -585,8 +584,11 @@ class Block(Node):
                     flags = [flag for flag in exitcycle_flags if not flag in ec_flags]
                 else:
                     flags = exitcycle_flags
-                cond = reduce(lambda x, y: x & y, flags)
-                ad_code.append(IfBlock([(cond, Block(nodes))]))
+                if flags:
+                    cond = reduce(lambda x, y: x & y, flags)
+                    ad_code.append(IfBlock([(cond, Block(nodes))]))
+                else:
+                    ad_code.extend(nodes)
             else:
                 ad_code.extend(nodes)
         return ad_code
@@ -604,7 +606,9 @@ class Block(Node):
             ce_flags = node.collect_exitcycle()
             if isinstance(node, (ExitStmt, CycleStmt)) or ce_flags:
                 if not isinstance(node, (ExitStmt, CycleStmt)):
-                    block.append(node.set_exitcycle_flag())
+                    if block is None:
+                        block = []
+                    block.extend(node.set_exitcycle_flag())
                 if block:
                     nodes.append(IfBlock([(cond, Block(block))]))
                 block = None
@@ -617,26 +621,32 @@ class Block(Node):
             nodes.append(IfBlock([(cond, Block(block))]))
         return nodes
 
-    def set_exitcycle_flag(self) -> Node:
+    def set_exitcycle_flag(self) -> List[Node]:
         nodes: List[Node] = []
         for node in self.iter_children():
             if isinstance(node, (ExitStmt, CycleStmt)):
                 nodes.append(Assignment(node.flag(), OpFalse()))
             else:
-                nodes.append(node.set_exitcycle_flag())
-        return Block(nodes)
+                nodes.extend(node.set_exitcycle_flag())
+        return nodes
 
-    def set_exit_do_start(self, assign: Optional[Assignment]) -> List[Node]:
+    def set_exit_do_start(self, assign: Optional[Assignment], label: Optional[str] = None) -> List[Node]:
         nodes: List[Node] = []
         for node in self.iter_children():
             if isinstance(node, ExitStmt):
                 if assign:
                     nodes.append(assign)
-                    nodes.append(node)
+                    if label is None:
+                        nodes.append(node)
+                    else:
+                        nodes.append(Assignment(node.flag(), OpFalse()))
+                        node = node.copy()
+                        node.label = label
+                        nodes.append(node)
                 else:
                     raise RuntimeError("assign is necessary")
             else:
-                nodes.extend(node.set_exit_do_start(assign))
+                nodes.extend(node.set_exit_do_start(assign, label))
         return nodes
 
     def find_by_name(self, name: str) -> Optional[Declaration]:
@@ -828,15 +838,18 @@ class Statement(Node):
 class ExitStmt(Node):
     """Representation of an ``exit`` statement."""
 
+    label: Optional[str] = field(default=None)
+
     def copy(self) -> "ExitStmt":
-        return ExitStmt()
+        return ExitStmt(self.label)
 
     def deep_clone(self) -> "ExitStmt":
         return self.copy()
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        return [f"{space}exit\n"]
+        label = f" {self.label}" if self.label else ""
+        return [f"{space}exit{label}\n"]
 
     def generate_ad(
         self,
@@ -849,7 +862,8 @@ class ExitStmt(Node):
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         if reverse:
-            return [Assignment(self.flag(), OpTrue(), ad_info="exit")]
+            label = f" {self.label}" if self.label else ""
+            return [Assignment(self.flag(), OpTrue(), ad_info=f"exit{label}")]
         return [self]
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
@@ -872,15 +886,18 @@ class ExitStmt(Node):
 class CycleStmt(Node):
     """Representation of a ``cycle`` statement."""
 
+    label: Optional[str] = field(default=None)
+
     def copy(self) -> "CycleStmt":
-        return CycleStmt()
+        return CycleStmt(self.label)
 
     def deep_clone(self) -> "CycleStmt":
         return self.copy()
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        return [f"{space}cycle\n"]
+        label = f" {self.label}" if self.label else ""
+        return [f"{space}cycle{label}\n"]
 
     def generate_ad(
         self,
@@ -893,7 +910,8 @@ class CycleStmt(Node):
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         if reverse:
-            return [Assignment(self.flag(), OpTrue(), ad_info="cycle")]
+            label = f" {self.label}" if self.label else ""
+            return [Assignment(self.flag(), OpTrue(), ad_info=f"cycle{label}")]
         return [self]
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
@@ -2183,19 +2201,21 @@ class BranchBlock(Node):
             blocks = [block]
         return blocks
 
-    def set_exitcycle_flag(self) -> DoAbst:
+    def set_exitcycle_flag(self) -> List[Node]:
         cond_blocks: List[tuple] = []
         for cond, block in self.cond_blocks:
-            cond_blocks.append((cond, block.set_exitcycle_flag()))
+            nodes = block.set_exitcycle_flag()
+            body = Block(nodes)
+            cond_blocks.append((cond, body))
         if isinstance(self, IfBlock):
-            return IfBlock(cond_blocks)
+            return [IfBlock(cond_blocks)]
         else: # SelectBlock
-            return SelectBlock(cond_blocks, expr=self.expre)
+            return [SelectBlock(cond_blocks, expr=self.expre)]
 
-    def set_exit_do_start(self, assign: Optional[Assignment]) -> List["BranchBlock"]:
+    def set_exit_do_start(self, assign: Optional[Assignment], label: Optional[str] = None) -> List["BranchBlock"]:
         cond_blocks: List[tuple] = []
         for cond, block in self.cond_blocks:
-            block = Block(block.set_exit_do_start(assign))
+            block = Block(block.set_exit_do_start(assign, label))
             cond_blocks.append((cond, block))
         if isinstance(self, IfBlock):
             return [IfBlock(cond_blocks)]
@@ -2349,7 +2369,18 @@ class DoAbst(Node):
         yield self._body
 
     def collect_exitcycle(self) -> List[Node]:
-        return []
+        vars = []
+        for var in self._body.iter_children():
+            if isinstance(var, (ExitStmt, CycleStmt)):
+                if var.label and self.label != var.label:
+                    vars.append(var)
+            else:
+                ec = var.collect_exitcycle()
+                if ec:
+                    for v in ec:
+                        if v.label and self.label != v.label:
+                            vars.append(v)
+        return vars
 
     def generate_ad(
         self,
@@ -2375,13 +2406,14 @@ class DoAbst(Node):
             range = self.range
         else:
             cond = self.cond
+        label = self.label
 
         blocks: List[Node] = []
         if reverse:
             if self.do:
                 range = range.reverse()
             new_body = []
-            fwd_body =self._body.generate_fwd_in_rev_ad(exitcycle_flags)
+            fwd_body = self._body.generate_fwd_in_rev_ad(exitcycle_flags)
             if exitcycle_flags:
                 exit_flag = False
                 for flag in exitcycle_flags:
@@ -2393,6 +2425,7 @@ class DoAbst(Node):
                         exit_flag = True
                 if exit_flag and self.do:
                     range = OpRange([self.exit_do_start(), range[1], range[2]])
+                label = f"label_{self.get_id()}{AD_SUFFIX}"
 
             required_vars = self._body.required_vars()
             assigned_vars = self._body.assigned_vars()
@@ -2441,9 +2474,9 @@ class DoAbst(Node):
 
         body = Block(nodes)
         if self.do:
-            loop = DoLoop(body, self.index, range)
+            loop = DoLoop(body, self.index, range, label)
         else:
-            loop = DoWhile(body, cond)
+            loop = DoWhile(body, cond, label)
         blocks.append(loop)
 
         if reverse:
@@ -2457,12 +2490,17 @@ class DoAbst(Node):
 
         return blocks
 
+    def set_exitcycle_flag(self) -> List[Node]:
+        label = f"label_{self.get_id()}{AD_SUFFIX}"
+        return self.set_exit_do_start(None, label)
+
 @dataclass
 class DoLoop(DoAbst):
     """A ``do`` loop."""
 
     index: OpVar
     range: OpRange
+    label: Optional[str] = field(default=None)
     do: ClassVar[bool] = True
 
     def __post_init__(self):
@@ -2472,10 +2510,10 @@ class DoLoop(DoAbst):
             raise ValueError(f"range must be OpRange: f{type(self.range)}")
 
     def copy(self) -> "DoLoop":
-        return DoLoop(self._body, self.index, self.range)
+        return DoLoop(self._body, self.index, self.range, self.label)
 
     def deep_clone(self) -> "DoLoop":
-        return DoLoop(self._body.deep_clone(), self.index.deep_clone(), self.range.deep_clone())
+        return DoLoop(self._body.deep_clone(), self.index.deep_clone(), self.range.deep_clone(), self.label)
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.range.collect_vars():
@@ -2551,95 +2589,17 @@ class DoLoop(DoAbst):
                 var_names.append(name)
         return var_names
 
-    # def generate_ad(
-    #     self,
-    #     saved_vars: List[OpVar],
-    #     reverse: bool = False,
-    #     assigned_advars: Optional[VarList] = None,
-    #     routine_map: Optional[dict] = None,
-    #     mod_vars: Optional[List[OpVar]] = None,
-    #     exitcycle_flags: Optional[List[OpVar]] = None,
-    #     warnings: Optional[list[str]] = None,
-    # ) -> List[Node]:
-
-    #     exitcycle_flags = None
-    #     if reverse:
-    #         exitcycles = self._body.collect_exitcycle()
-    #         exitcycle_flags = [node.flag() for node in exitcycles]
-    #     else:
-    #         for vname in self.recurrent_vars():
-    #             assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
-
-    #     nodes = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, mod_vars, exitcycle_flags, warnings)
-    #     blocks: List[Node] = []
-    #     range = self.range
-    #     if reverse:
-    #         range = range.reverse()
-    #         new_body = []
-    #         pushed = []
-    #         loads = []
-    #         fwd_body = self._body.generate_fwd_in_rev_ad(exitcycle_flags)
-    #         required_vars = self._body.required_vars()
-    #         assigned_vars = self._body.assigned_vars()
-    #         common_vars = required_vars & assigned_vars
-    #         if exitcycle_flags:
-    #             exit_flag = False
-    #             for flag in exitcycle_flags:
-    #                 assign = Assignment(flag, OpTrue())
-    #                 if flag.name.startswith("cycle"):
-    #                     new_body.append(assign)
-    #                 else: # exit
-    #                     blocks.append(assign)
-    #                     exit_flag = True
-    #             if exit_flag:
-    #                 range = OpRange([self.exit_do_start(), range[1], range[2]])
-
-    #         for cvar in common_vars:
-    #             if cvar == self.index:
-    #                 continue
-    #             save = SaveAssignment(cvar, self._body.get_id())
-    #             self._body.insert_begin(save)
-    #             load = save.to_load()
-    #             saved_vars.append(save.tmpvar)
-    #             new_body.append(load)
-    #             loads.insert(0, load)
-    #         recurrent_vars = self.recurrent_vars()
-    #         conflict_vars = self.conflict_vars()
-    #         for node in self._body.iter_children():
-    #             for var in node.assigned_vars():
-    #                 if var.name in recurrent_vars:
-    #                     if not var in pushed:
-    #                         if var.name in conflict_vars:
-    #                             save = PushPop(var, node.get_id())
-    #                             self._body.insert_begin(save)
-    #                             load = save.to_load()
-    #                             new_body.append(load)
-    #                         pushed.append(var)
-    #         new_body.extend(fwd_body)
-    #         for node in nodes:
-    #             new_body.append(node)
-    #         new_body.extend(loads)
-    #         nodes = new_body
-    #     body = Block(nodes)
-    #     index = self.index
-    #     block = DoLoop(body, index, range)
-    #     blocks.append(block)
-    #     if reverse:
-    #         assigned_var_names = assigned_vars.names()
-    #         for var in self.range.collect_vars():
-    #             if var.name in assigned_var_names:
-    #                 load = self._save_vars(var, saved_vars)
-    #                 blocks.append(load)
-
-    #     return blocks
-
-    def set_exit_do_start(self, assign: Optional[Assignment]) -> List[Node]:
+    def set_exit_do_start(self, assign: Optional[Assignment], label: Optional[str] = None) -> List[Node]:
         exitcycles = self._body.collect_exitcycle()
         if exitcycles and any(isinstance(ec, ExitStmt) for ec in exitcycles):
             exit_do_start = self.exit_do_start()
             assign = Assignment(exit_do_start, self.index)
-            body = Block(self._body.set_exit_do_start(assign))
-            loop = DoLoop(body, self.index, self.range)
+            body = Block(self._body.set_exit_do_start(assign, label))
+            if label: # this means that this node is in ad_code
+                label = f"label_{self.get_id()}{AD_SUFFIX}"
+            else:
+                label = self.label
+            loop = DoLoop(body, self.index, self.range, label)
             return [Assignment(exit_do_start, self.range[1]), loop]
         return [self]
 
@@ -2648,12 +2608,14 @@ class DoLoop(DoAbst):
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        header = f"{space}do {self.index} = {self.range[0]}, {self.range[1]}"
+        label = f"{self.label}: " if self.label else ""
+        header = f"{space}{label}do {self.index} = {self.range[0]}, {self.range[1]}"
         if self.range[2] is not None:
             header = f"{header}, {self.range[2]}"
         lines = [f"{header}\n"]
         lines.extend(self._body.render(indent+1))
-        lines.append(f"{space}end do\n")
+        label = f" {self.label}" if self.label else ""
+        lines.append(f"{space}end do{label}\n")
         return lines
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
@@ -2720,31 +2682,9 @@ class DoLoop(DoAbst):
             targets.push(var)
         new_body = self._body.prune_for(targets, mod_vars)
 
-        # def _reducedim_from_tmpvar(node: Node) -> None:
-        #     for child in node.iter_children():
-        #         if isinstance(child, SaveAssignment):
-        #             if child.tmpvar.index is None:
-        #                 continue
-        #             name = child.tmpvar.name
-        #             if (not any(name == var.name for var in targets)) and child.tmpvar == child.lhs:
-        #                 if set(self.do_index_list) <= set(child.tmpvar.index_list()):
-        #                     index_new = []
-        #                     child.tmpvar.reduced_dims = []
-        #                     for i, idx in enumerate(child.tmpvar.index):
-        #                         if isinstance(idx, OpVar) and idx.name in self.do_index_list:
-        #                             child.tmpvar.reduced_dims.append(i)
-        #                         else:
-        #                             index_new.append(idx)
-        #                     child.tmpvar.index = AryIndex(index_new)
-        #             continue
-        #         if isinstance(child, DoLoop):
-        #             continue
-        #         _reducedim_from_tmpvar(child)
-        # _reducedim_from_tmpvar(new_body)
-
         if new_body.is_effectively_empty():
             return Block([])
-        return DoLoop(new_body, self.index, self.range)
+        return DoLoop(new_body, self.index, self.range, self.label)
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         if assigned_vars is None:
@@ -2765,6 +2705,7 @@ class DoWhile(DoAbst):
     """A ``do while`` loop."""
 
     cond: Operator
+    label: Optional[str] = field(default=None)
     do: ClassVar[bool] = False
 
     def __post_init__(self):
@@ -2772,10 +2713,10 @@ class DoWhile(DoAbst):
         self.do_index_list = ["__never_match__"]
 
     def copy(self) -> "DoWhile":
-        return DoWhile(self._body, self.cond)
+        return DoWhile(self._body, self.cond, self.label)
 
     def deep_clone(self):
-        return DoWhile(self._body.deep_clone(), self.cond.deep_clone())
+        return DoWhile(self._body.deep_clone(), self.cond.deep_clone(), self.label)
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         yield from self.cond.collect_vars()
@@ -2790,14 +2731,21 @@ class DoWhile(DoAbst):
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        lines = [f"{space}do while ({self.cond})\n"]
+        label = f"{self.label}: " if self.label else ""
+        lines = [f"{space}{label}do while ({self.cond})\n"]
         lines.extend(self._body.render(indent+1))
-        lines.append(f"{space}end do\n")
+        label = f" {self.label}" if self.label else ""
+        lines.append(f"{space}end do{label}\n")
         return lines
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.copy()
+        for var in self.cond.collect_vars():
+            vars.push(var)
         vars = self._body.required_vars(vars, no_accumulate, without_savevar)
-        vars = vars.copy()
         for var in self.cond.collect_vars():
             vars.push(var)
         return vars
@@ -2810,12 +2758,12 @@ class DoWhile(DoAbst):
         new_body = self._body.prune_for(targets, mod_vars)
         targets = targets.copy()
         targets.merge(new_body.required_vars(targets))
-        #for var in self.cond.collect_vars():
-        #    targets.push(var)
+        for var in self.cond.collect_vars():
+            targets.push(var)
         new_body = self._body.prune_for(targets, mod_vars)
         if new_body.is_effectively_empty():
             return Block([])
-        return DoWhile(new_body, self.cond)
+        return DoWhile(new_body, self.cond, self.label)
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         if assigned_vars is None:

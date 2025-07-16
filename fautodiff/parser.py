@@ -790,9 +790,12 @@ def _parse_routine(content,
                 idx += 1
             idx += 1
             body = _block(stmt.content[idx:-1], decl_map)
+            if not isinstance(stmt.content[-1], Fortran2003.End_Do_Stmt):
+                raise ValueError("Unexpected error")
+            label = stmt.content[-1].items[1].string if stmt.content[-1].items[1] is not None else None
             if stmt.content[idx-1].items[1].items[0] is not None:
                 cond = _stmt2op(stmt.content[idx - 1].items[1].items[0], decl_map)
-                return DoWhile(body, cond)
+                return DoWhile(body, cond, label=label)
             else:
                 itm = stmt.content[idx - 1].items[1].items[1]
                 index = _stmt2op(itm[0], decl_map)
@@ -802,13 +805,15 @@ def _parse_routine(content,
                     step = None
                 else:
                     step = _stmt2op(itm[1][2], decl_map)
-                return DoLoop(body, index, OpRange([start_val, end_val, step]))
+                return DoLoop(body, index, OpRange([start_val, end_val, step]), label=label)
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return Statement("return")
         if isinstance(stmt, Fortran2003.Exit_Stmt):
-            return ExitStmt()
+            label = stmt.items[1].string if stmt.items[1] is not None else None
+            return ExitStmt(label=label)
         if isinstance(stmt, Fortran2003.Cycle_Stmt):
-            return CycleStmt()
+            label = stmt.items[1].string if stmt.items[1] is not None else None
+            return CycleStmt(label=label)
 
         print(type(stmt))
         print(stmt.items)
