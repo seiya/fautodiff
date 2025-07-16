@@ -13,6 +13,7 @@ module fautodiff_data_storage
      module procedure push_scalar_r8
      module procedure push_ary_l
      module procedure push_scalar_l
+     module procedure push_scalar_i
   end interface fautodiff_data_storage_push
 
   interface fautodiff_data_storage_pop
@@ -22,7 +23,8 @@ module fautodiff_data_storage
      module procedure pop_scalar_r8
      module procedure pop_scalar_l
      module procedure pop_ary_l
-   end interface fautodiff_data_storage_pop
+     module procedure pop_scalar_i
+  end interface fautodiff_data_storage_pop
 
    interface fautodiff_data_storage_get
      module procedure get_scalar_l
@@ -37,8 +39,12 @@ module fautodiff_data_storage
   end type ptr_r8_t
 
   type :: ptr_l_t
-     logical, pointer, contiguous :: ptr(:)
+    logical, pointer, contiguous :: ptr(:)
   end type ptr_l_t
+
+  type :: ptr_i_t
+     integer, pointer, contiguous :: ptr(:)
+  end type ptr_i_t
 
   type :: page_t
      integer :: page_num = 1
@@ -56,6 +62,8 @@ module fautodiff_data_storage
 
   type(ptr_l_t) :: ary_l(MAX_PAGE_NUM)
   type(page_t) :: page_l
+  type(ptr_i_t) :: ary_i(MAX_PAGE_NUM)
+  type(page_t) :: page_i
 
 contains
 
@@ -199,6 +207,53 @@ contains
 
     return
   end subroutine push_scalar_l
+
+  subroutine push_ary_i(ary)
+    integer, intent(in), contiguous :: ary(:)
+    integer, pointer, contiguous :: ptr(:)
+    integer(8) :: len
+    integer :: i0, i1
+
+    len = size(ary)
+
+    i0 = 1
+
+    do while (len > 0)
+
+       if (.not. associated(ary_i(page_i%page_num)%ptr)) then
+          allocate(ary_i(page_i%page_num)%ptr(PAGE_SIZE))
+       end if
+       ptr => ary_i(page_i%page_num)%ptr
+
+       i1 = i0 + min(len - 1, PAGE_SIZE - page_i%pos)
+       ptr(page_i%pos:page_i%pos + i1 - i0) = ary(i0:i1)
+       len = len - (i1 - i0 + 1)
+       page_i%pos = page_i%pos + i1 - i0 + 1
+       i0 = i1 + 1
+
+       if (page_i%pos > PAGE_SIZE) then
+          page_i%pos = 1
+          page_i%page_num = page_i%page_num + 1
+          if (page_i%page_num > MAX_PAGE_NUM) then
+             print *, "Page number exceeds the limit"
+             error stop 1
+          end if
+       end if
+
+    end do
+
+    return
+  end subroutine push_ary_i
+
+  subroutine push_scalar_i(scalar)
+    integer, intent(in) :: scalar
+    integer :: buf(1)
+    buf(1) = scalar
+
+    call push_ary_i(buf)
+
+    return
+  end subroutine push_scalar_i
 
   subroutine pop_ary_r4(ary)
     real, intent(out), contiguous :: ary(:)
@@ -346,6 +401,59 @@ contains
 
     return
   end subroutine pop_scalar_l
+
+  subroutine pop_ary_i(ary)
+    integer, intent(out), contiguous :: ary(:)
+    integer, pointer, contiguous :: ptr(:)
+    integer(8) :: len
+    integer :: i0, i1
+
+    len = size(ary)
+
+    i1 = len
+
+    if (len > data_size(page_i)) then
+       print *, "Stored data is not enough: ", len, data_size(page_i)
+       error stop 1
+    end if
+
+    do while (len > 0)
+
+       if (.not. associated(ary_i(page_i%page_num)%ptr)) then
+          print *, "Accessing empty memory"
+          error stop 1
+       end if
+       ptr => ary_i(page_i%page_num)%ptr
+
+       i0 = i1 - min(len, page_i%pos - 1) + 1
+       ary(i0:i1) = ptr(page_i%pos - (i1 - i0 + 1):page_i%pos - 1)
+       len = len - (i1 - i0 + 1)
+       page_i%pos = page_i%pos - (i1 - i0 + 1)
+       i1 = i0 - 1
+
+       if (page_i%pos < 1) then
+          page_i%pos = PAGE_SIZE
+          page_i%page_num = page_i%page_num - 1
+          if (page_i%page_num < 1) then
+             print *, "Page number is below one"
+             error stop 1
+          end if
+       end if
+
+    end do
+
+    return
+  end subroutine pop_ary_i
+
+  subroutine pop_scalar_i(scalar)
+    integer, intent(out) :: scalar
+    integer :: buf(1)
+
+    call pop_ary_i(buf)
+    scalar = buf(1)
+
+    return
+  end subroutine pop_scalar_i
 
   function get_scalar_l() result(scalar)
     logical :: scalar

@@ -14,7 +14,7 @@ from fparser.two import Fortran2003, Fortran2008
 from fparser.two.parser import ParserFactory
 from fparser.two.utils import walk
 from packaging.version import Version, parse
-from typing import List, Optional
+from typing import List, Tuple, Optional
 
 from .code_tree import (
     Assignment,
@@ -79,11 +79,11 @@ def _stmt_name(stmt):
     raise AttributeError("Could not determine statement name")
 
 
-def _stmt2op(stmt, decls:Block) -> Operator:
+def _stmt2op(stmt, decl_map:dict) -> Operator:
     """Return Operator from statement."""
 
     if isinstance(stmt, Fortran2003.Actual_Arg_Spec):
-        return _stmt2op(stmt.items[1], decls)
+        return _stmt2op(stmt.items[1], decl_map)
 
     if isinstance(stmt, Fortran2003.Int_Literal_Constant):
         return OpInt(val=int(stmt.items[0]), kind=stmt.items[1])
@@ -109,8 +109,8 @@ def _stmt2op(stmt, decls:Block) -> Operator:
 
     if isinstance(stmt, Fortran2003.Name):
         name = stmt.tofortran()
-        decl = decls.find_by_name(name)
-        if decl is not None:
+        if name in decl_map:
+            decl = decl_map[name]
             kind = decl.kind
             if (
                 kind is None
@@ -126,42 +126,46 @@ def _stmt2op(stmt, decls:Block) -> Operator:
             name=name,
             typename=decl.typename,
             kind=kind,
+            dims=decl.dims,
             is_constant=decl.parameter or getattr(decl, "constant", False),
             allocatable=getattr(decl, "allocatable", False),
+            declared_in=decl.declared_in,
         )
 
     if isinstance(stmt, Fortran2003.Part_Ref):
         name = stmt.items[0].tofortran()
-        index = AryIndex([_stmt2op(x, decls) for x in stmt.items[1].items])
-        decl = decls.find_by_name(name)
-        if decl is None:  # must be function
+        index = AryIndex([_stmt2op(x, decl_map) for x in stmt.items[1].items])
+        if name in decl_map: # must be array
+            decl = decl_map[name]
+            return OpVar(
+                name=name,
+                index=index,
+                typename=decl.typename,
+                kind=decl.kind,
+                dims=decl.dims,
+                is_constant=decl.parameter or getattr(decl, "constant", False),
+                allocatable=getattr(decl, "allocatable", False),
+                declared_in=decl.declared_in,
+            )
+        else:  # must be function
             name_l = name.lower()
             args = [
-                _stmt2op(arg, decls)
+                _stmt2op(arg, decl_map)
                 for arg in getattr(stmt.items[1], "items", [])
                 if not isinstance(arg, str)
             ]
             if name_l in INTRINSIC_FUNCTIONS:
                 return OpFunc(name_l, args)
             return OpFuncUser(name_l, args)
-        else:
-            return OpVar(
-                name=name,
-                index=index,
-                typename=decl.typename,
-                kind=decl.kind,
-                is_constant=decl.parameter or getattr(decl, "constant", False),
-                allocatable=getattr(decl, "allocatable", False),
-            )
 
     if isinstance(stmt, Fortran2003.Subscript_Triplet):
-        args = [(x and _stmt2op(x, decls)) for x in stmt.items]
+        args = [(x and _stmt2op(x, decl_map)) for x in stmt.items]
         return OpRange(args)
 
     if isinstance(stmt, Fortran2003.Intrinsic_Function_Reference):
         name = stmt.items[0].tofortran().lower()
         args = [
-            _stmt2op(arg, decls)
+            _stmt2op(arg, decl_map)
             for arg in getattr(stmt.items[1], "items", [])
             if not isinstance(arg, str)
         ]
@@ -176,14 +180,14 @@ def _stmt2op(stmt, decls:Block) -> Operator:
 
     if isinstance(stmt, Fortran2003.Mult_Operand):
         if stmt.items[1] == "**":
-            args = [_stmt2op(stmt.items[0], decls), _stmt2op(stmt.items[2], decls)]
+            args = [_stmt2op(stmt.items[0], decl_map), _stmt2op(stmt.items[2], decl_map)]
             return OpPow(args)
         else:
             raise ValueError(f"Unsupported Mult_operand type: {stmt}")
 
     if isinstance(stmt, Fortran2003.Level_2_Unary_Expr):
         op = stmt.items[0]
-        args = [_stmt2op(stmt.items[1], decls)]
+        args = [_stmt2op(stmt.items[1], decl_map)]
         if op == "-":
             return OpNeg(args)
         else:
@@ -191,7 +195,7 @@ def _stmt2op(stmt, decls:Block) -> Operator:
 
     if isinstance(stmt, Fortran2003.Level_2_Expr):
         op = stmt.items[1]
-        args = [_stmt2op(stmt.items[0], decls), _stmt2op(stmt.items[2], decls)]
+        args = [_stmt2op(stmt.items[0], decl_map), _stmt2op(stmt.items[2], decl_map)]
         if op == "+":
             return OpAdd(args)
         elif op == "-":
@@ -201,7 +205,7 @@ def _stmt2op(stmt, decls:Block) -> Operator:
 
     if isinstance(stmt, Fortran2003.Add_Operand):
         op = stmt.items[1]
-        args = [_stmt2op(stmt.items[0], decls), _stmt2op(stmt.items[2], decls)]
+        args = [_stmt2op(stmt.items[0], decl_map), _stmt2op(stmt.items[2], decl_map)]
         if op == "*":
             return OpMul(args)
         elif op == "/":
@@ -210,11 +214,11 @@ def _stmt2op(stmt, decls:Block) -> Operator:
             raise ValueError(f"Unsupported Add_Operand type: {stmt}")
 
     if isinstance(stmt, Fortran2003.Parenthesis):
-        return _stmt2op(stmt.items[1], decls)
+        return _stmt2op(stmt.items[1], decl_map)
 
     if isinstance(stmt, Fortran2003.Level_4_Expr):
         op = stmt.items[1]
-        args = [_stmt2op(stmt.items[0], decls), _stmt2op(stmt.items[2], decls)]
+        args = [_stmt2op(stmt.items[0], decl_map), _stmt2op(stmt.items[2], decl_map)]
         return OpLogic(op=op, args=args)
 
     print("other")
@@ -378,37 +382,77 @@ def _parse_decl_stmt(
 
     return decls
 
+def _parse_directive(text: str, directives: dict) -> None:
+    body = text[5:].strip()
+    if ":" in body:
+        key, rest = body.split(":", 1)
+        key = key.strip().upper()
+        values = [a.strip() for a in rest.split(",") if a.strip()]
+        directives[key] = values
+    else:
+        directives[body.strip().upper()] = True
+    return
 
 def _parse_decls(
     spec,
-    constant_vars=None,
     *,
-    allow_intent=True,
-    allow_access=False,
-    declared_in="routine",
-) -> Block:
+    directives: dict,
+    decl_map: dict,
+    declared_in: str ="routine",
+    allow_intent: bool = True,
+    allow_access: bool = False,
+    default_access: Optional[str] = None
+) -> Tuple[List[Node],List[Declaration]]:
     """Return declarations parsed from a specification part."""
 
-    decls = Block([])
-    if spec is None:
-        return decls
+    nodes: List[Node] = []
+    decls: List[Declaration] = []
+    access_map = {}
 
     for item in spec.content:
         if isinstance(item, Fortran2003.Implicit_Part):
             for cnt in item.content:
                 if isinstance(cnt, Fortran2003.Comment):
-                    if cnt.items[0] != "":
-                        decls.append(Statement(cnt.items[0]))
+                    text = cnt.items[0].strip()
+                    if text.startswith("!$FAD"):
+                        _parse_directive(text, directives)
+                        continue
+                    if text != "":
+                        nodes.append(Statement(text))
                     continue
                 if isinstance(cnt, Fortran2003.Implicit_Stmt):
-                    decls.append(Statement(cnt.string))
+                    nodes.append(Statement(cnt.string))
             continue
         if isinstance(item, Fortran2003.Use_Stmt):
             only = None
             if item.items[4] is not None:
                 only = [s.string for s in item.items[4].items]
-            decls.append(Use(item.items[2].string, only=only))
+            nodes.append(Use(item.items[2].string, only=only))
             continue
+        if isinstance(item, Fortran2003.Access_Stmt):
+            if not allow_access:
+                raise RuntimeError("Unexpected error")
+            access_spec = item.items[0].lower()
+            if item.items[1] is None:
+                default_access = access_spec
+                nodes.append(Statement(item.string))
+            else:
+                for n in item.items[1].items:
+                    name_n = n.string
+                    if name_n in decl_map:
+                        decl_map[name_n].access = access_spec
+                    else:
+                        access_map[name_n] = access_spec
+            continue
+        # if isinstance(item, Fortran2003.Comment):
+        #     text = item.items[0].strip()
+        #     if text.startswith("!$FAD"):
+        #         _parse_directive(text, directives)
+        #         continue
+        #     print(text)
+        #     if item.items[0] != "":
+        #         decls.append(Statement(text))
+        #     continue
         if isinstance(
             item,
             (
@@ -416,6 +460,7 @@ def _parse_decls(
                 Fortran2008.type_declaration_stmt_r501.Type_Declaration_Stmt,
             ),
         ):
+            constant_vars = directives.get("CONSTANT_VARS")
             for decl in _parse_decl_stmt(
                 item,
                 constant_vars,
@@ -423,12 +468,43 @@ def _parse_decls(
                 allow_access=allow_access,
                 declared_in=declared_in,
             ):
+                if allow_access and decl.access is None:
+                    if decl.name in access_map:
+                        decl.access = access_map.pop(decl.name)
+                    else:
+                        decl.access = default_access
+                decl_map[decl.name] = decl
                 decls.append(decl)
             continue
         raise RuntimeError(f"Unsupported statement: {type(item)} {item}")
+    return (nodes, decls)
 
-    return decls
-
+def _search_use(name: str, only: Optional[List[str]], decl_map: dict, module_map: dict, search_dirs: Optional[List[str]]):
+    used = module_map.get(name) if module_map else None
+    if used and used.decls is not None:
+        for d in used.decls:
+            if only is None or (d.name in only):
+                decl_map[d.name] = _clone_decl(d, declared_in="use")
+    elif search_dirs:
+        vars_map = _load_fadmod_decls(name, search_dirs)
+        for vname, info in vars_map.items():
+            if only is None or vname in only:
+                decl_map[vname] = Declaration(
+                        vname,
+                        info["typename"],
+                        info.get("kind"),
+                        dims=(
+                            tuple(info["dims"])
+                            if info.get("dims") is not None
+                            else None
+                        ),
+                        intent=None,
+                        parameter=info.get("parameter", False),
+                        constant=info.get("constant", False),
+                        init_val=info.get("init_val"),
+                        access=info.get("access"),
+                        declared_in="use",
+                    )
 
 def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
     factory = ParserFactory().create(std="f2008")
@@ -442,8 +518,6 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
         output.append(mod_node)
         module_map[name] = mod_node
 
-        default_access = "public"
-        access_map = {}
         decl_map = {}
         module_directives = {}
         allocate_vars: List[OpVar] = []
@@ -456,90 +530,21 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
             if isinstance(part, Fortran2003.Comment):
                 continue
             if isinstance(part, Fortran2003.Specification_Part):
-                for c in part.content:
-                    if isinstance(c, Fortran2003.Comment):
-                        text = c.items[0].strip()
-                        if text.startswith("!$FAD"):
-                            body = text[5:].strip()
-                            if ":" in body:
-                                key, rest = body.split(":", 1)
-                                key = key.strip().upper()
-                                values = [a.strip() for a in rest.split(",") if a.strip()]
-                                module_directives[key] = values
-                            else:
-                                module_directives[body.strip().upper()] = True
-                            continue
-                        if c.items[0] != "":
-                            mod_node.body.append(Statement(c.items[0]))
-                        continue
-                    if isinstance(c, Fortran2003.Implicit_Part):
-                        for cnt in c.content:
-                            if isinstance(cnt, Fortran2003.Comment):
-                                text = cnt.items[0].strip()
-                                if text.startswith("!$FAD"):
-                                    body = text[5:].strip()
-                                    if ":" in body:
-                                        key, rest = body.split(":", 1)
-                                        key = key.strip().upper()
-                                        values = [a.strip() for a in rest.split(",") if a.strip()]
-                                        module_directives[key] = values
-                                    else:
-                                        module_directives[body.strip().upper()] = True
-                                    continue
-                                if cnt.items[0] != "":
-                                    mod_node.body.append(Statement(cnt.items[0]))
-                                continue
-                            if isinstance(cnt, Fortran2003.Implicit_Stmt):
-                                mod_node.body.append(Statement(cnt.string))
-                            continue
-                        continue
-                    if isinstance(c, Fortran2003.Use_Stmt):
-                        only = None
-                        if c.items[4] is not None:
-                            only = [s.string for s in c.items[4].items]
-                        mod_node.body.append(Use(c.items[2].string, only=only))
-                        continue
-                    if isinstance(c, Fortran2003.Access_Stmt):
-                        access_spec = c.items[0].lower()
-                        if c.items[1] is None:
-                            default_access = access_spec
-                            mod_node.body.append(Statement(c.string))
-                        else:
-                            for n in c.items[1].items:
-                                name_n = n.string
-                                if name_n in decl_map:
-                                    decl_map[name_n].access = access_spec
-                                else:
-                                    access_map[name_n] = access_spec
-                        continue
-                    if isinstance(
-                        c,
-                        Fortran2008.type_declaration_stmt_r501.Type_Declaration_Stmt,
-                    ):
-                        if mod_node.decls is None:
-                            mod_node.decls = Block([])
-                        for decl in _parse_decl_stmt(
-                            c,
+                nodes, decls = _parse_decls(
+                            part,
+                            directives=module_directives,
+                            decl_map=decl_map,
+                            declared_in="module",
                             allow_intent=False,
                             allow_access=True,
-                            declared_in="module",
-                        ):
-                            if decl.access is None:
-                                if decl.name in access_map:
-                                    decl.access = access_map.pop(decl.name)
-                                else:
-                                    decl.access = default_access
-                            decl.constant = False
-                            decl_map[decl.name] = decl
-                            mod_node.decls.append(decl)
-                        continue
-                    print(type(c), c)
-                    print(c.items)
-                    raise RuntimeError(f"Unsupported statement: {type(c)} {c.string}")
+                            default_access="public"
+                        )
                 if "CONSTANT_VARS" in module_directives:
                     for n in module_directives["CONSTANT_VARS"]:
                         if n in decl_map:
                             decl_map[n].constant = True
+                mod_node.decls = Block(decls)
+                mod_node.body.extend(nodes)
                 continue
             if isinstance(part, Fortran2003.Module_Subprogram_Part):
                 for c in part.content:
@@ -556,7 +561,7 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
                     ):
                         mod_node.routines.append(
                             _parse_routine(
-                                c, src_name, mod_node, module_map, allocate_vars, search_dirs
+                                c, src_name, allocate_vars, decl_map, module_map, search_dirs,
                             )
                         )
                     else:
@@ -587,10 +592,16 @@ def find_subroutines(modules: List[Module]) -> List[str]:
     return names
 
 
-def _parse_routine(content, src_name: str, module: Optional[Module]=None, module_map: Optional[dict]=None, allocate_vars: Optional[OpVar]=None, search_dirs: Optional[List[str]]=None):
+def _parse_routine(content,
+                   src_name: str,
+                   allocate_vars: List[OpVar],
+                   decl_map_mod: dict,
+                   module_map, dict,
+                   search_dirs: Optional[List[str]]=None
+                   ):
     """Return node tree correspoinding to the input AST"""
 
-    def _parse_stmt(stmt, decls: Block) -> Optional[Node]:
+    def _parse_stmt(stmt, decl_map: dict) -> Optional[Node]:
         if isinstance(stmt, Fortran2003.Comment):
             return None
         line_no = None
@@ -602,8 +613,8 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
             "code": stmt.string,
         }
         if isinstance(stmt, Fortran2003.Assignment_Stmt):
-            lhs = _stmt2op(stmt.items[0], decls)
-            rhs = _stmt2op(stmt.items[2], decls)
+            lhs = _stmt2op(stmt.items[0], decl_map)
+            rhs = _stmt2op(stmt.items[2], decl_map)
             return Assignment(lhs, rhs, False, info)
         if isinstance(stmt, Fortran2003.Write_Stmt):
             return None
@@ -621,7 +632,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                         if arg.items[0] is not None:
                             key = str(arg.items[0])
                         val = arg.items[1]
-                    args.append(_stmt2op(val, decls))
+                    args.append(_stmt2op(val, decl_map))
                     arg_keys.append(key)
             return CallStatement(name, args, arg_keys=arg_keys, info=info)
         if isinstance(stmt, Fortran2003.Allocate_Stmt):
@@ -633,7 +644,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
             vars = []
             if alloc_list is not None:
                 for alloc in alloc_list.items:
-                    var = _stmt2op(alloc.items[0], decls)
+                    var = _stmt2op(alloc.items[0], decl_map)
                     shape = alloc.items[1]
                     if shape is not None:
                         dims = []
@@ -644,12 +655,12 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                                 if lb is None and ub is None:
                                     dims.append(None)
                                 elif lb is None:
-                                    dims.append(_stmt2op(ub, decls))
+                                    dims.append(_stmt2op(ub, decl_map))
                                 else:
                                     dims.append(
                                         OpRange([
-                                            _stmt2op(lb, decls),
-                                            _stmt2op(ub, decls),
+                                            _stmt2op(lb, decl_map),
+                                            _stmt2op(ub, decl_map),
                                             None,
                                         ])
                                     )
@@ -657,7 +668,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                             for spec in shape.items:
                                 if isinstance(spec, str):
                                     continue
-                                dims.append(_stmt2op(spec, decls))
+                                dims.append(_stmt2op(spec, decl_map))
                         if dims:
                             var = var.change_index(AryIndex(dims))
                     vars.append(var)
@@ -674,7 +685,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                 for obj in obj_list.items:
                     if isinstance(obj, str):
                         continue
-                    v = _stmt2op(obj, decls)
+                    v = _stmt2op(obj, decl_map)
                     var = next((v2 for v2 in allocate_vars if v2.name == v.name), None)
                     if var is None:
                         raise ValueError(
@@ -687,7 +698,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
             if isinstance(stmt.content[0], Fortran2003.Comment):
                 # skip comment
                 stmt.content.pop(0)
-            cond = _stmt2op(stmt.content[0].items[0], decls)
+            cond = _stmt2op(stmt.content[0].items[0], decl_map)
             i = 1
             seg = []
             while i < len(stmt.content):
@@ -703,12 +714,12 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                     break
                 seg.append(itm)
                 i += 1
-            body = _block(seg, decls)
+            body = _block(seg, decl_map)
             cond_blocks.append((cond, body))
             while i < len(stmt.content):
                 itm = stmt.content[i]
                 if isinstance(itm, Fortran2003.Else_If_Stmt):
-                    cond2 = _stmt2op(itm.items[0], decls)
+                    cond2 = _stmt2op(itm.items[0], decl_map)
                     i += 1
                     seg = []
                     while i < len(stmt.content):
@@ -724,7 +735,7 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                             break
                         seg.append(j)
                         i += 1
-                    blk = _block(seg, decls)
+                    blk = _block(seg, decl_map)
                     cond_blocks.append((cond2, blk))
                 elif isinstance(itm, Fortran2003.Else_Stmt):
                     i += 1
@@ -735,20 +746,20 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                             break
                         seg.append(j)
                         i += 1
-                    cond_blocks.append((None, _block(seg, decls)))
+                    cond_blocks.append((None, _block(seg, decl_map)))
                 elif isinstance(itm, Fortran2003.End_If_Stmt):
                     i += 1
                 else:
                     i += 1
             return IfBlock(cond_blocks)
         if isinstance(stmt, Fortran2008.if_stmt_r837.If_Stmt):
-            cond = _stmt2op(stmt.items[0], decls)
-            body = _block([stmt.items[1]], decls)
+            cond = _stmt2op(stmt.items[0], decl_map)
+            body = _block([stmt.items[1]], decl_map)
             if body is None:
                 return None
             return IfBlock([(cond, body)])
         if isinstance(stmt, Fortran2003.Case_Construct):
-            expr = _stmt2op(stmt.content[0].items[0], decls)
+            expr = _stmt2op(stmt.content[0].items[0], decl_map)
             cond_blocks = []
             default = None
             i = 1
@@ -761,12 +772,12 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
                 ):
                     seg.append(stmt.content[i])
                     i += 1
-                blk = _block(seg, decls)
+                blk = _block(seg, decl_map)
                 if stmt_cond.tofortran() == "CASE DEFAULT":
                     conds = None
                 else:
                     conds = tuple(
-                        _stmt2op(cond, decls)
+                        _stmt2op(cond, decl_map)
                         for cond in stmt_cond.items[0].items[0].items
                     )
                 cond_blocks.append((conds, blk))
@@ -778,19 +789,19 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
             ):
                 idx += 1
             idx += 1
-            body = _block(stmt.content[idx:-1], decls)
+            body = _block(stmt.content[idx:-1], decl_map)
             if stmt.content[idx-1].items[1].items[0] is not None:
-                cond = _stmt2op(stmt.content[idx - 1].items[1].items[0], decls)
+                cond = _stmt2op(stmt.content[idx - 1].items[1].items[0], decl_map)
                 return DoWhile(body, cond)
             else:
                 itm = stmt.content[idx - 1].items[1].items[1]
-                index = _stmt2op(itm[0], decls)
-                start_val = _stmt2op(itm[1][0], decls)
-                end_val = _stmt2op(itm[1][1], decls)
+                index = _stmt2op(itm[0], decl_map)
+                start_val = _stmt2op(itm[1][0], decl_map)
+                end_val = _stmt2op(itm[1][1], decl_map)
                 if len(itm[1]) == 2:
                     step = None
                 else:
-                    step = _stmt2op(itm[1][2], decls)
+                    step = _stmt2op(itm[1][2], decl_map)
                 return DoLoop(body, index, OpRange([start_val, end_val, step]))
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return Statement("return")
@@ -803,28 +814,22 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
         print(stmt.items)
         raise ValueError(f"stmt is not supported: {stmt}")
 
-    def _block(body_list, decls: Block) -> Block:
+    def _block(body_list, decl_map: dict) -> Block:
         blk = Block([])
         for st in body_list:
-            node = _parse_stmt(st, decls)
+            node = _parse_stmt(st, decl_map)
             if node is not None:
                 blk.append(node)
         return blk
 
     stmt = None
     directives = {}
+    decl_map = decl_map_mod.copy()
     for item in content.content:
         if isinstance(item, Fortran2003.Comment):
             text = item.items[0].strip()
             if text.startswith("!$FAD"):
-                body = text[5:].strip()
-                if ":" in body:
-                    key, rest = body.split(":", 1)
-                    key = key.strip().upper()
-                    values = [a.strip() for a in rest.split(",") if a.strip()]
-                    directives[key] = values
-                else:
-                    directives[body.strip().upper()] = True
+                _parse_directive(text, directives)
             continue
         if isinstance(item, (Fortran2003.Subroutine_Stmt, Fortran2003.Function_Stmt)):
             stmt = item
@@ -835,110 +840,25 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
             elif isinstance(content, Fortran2003.Function_Subprogram):
                 result = str(stmt.items[3].items[0])
                 routine = Function(name, args, result)
+            else:
+                raise ValueError(type(content))
             routine.directives = directives
             continue
         if isinstance(item, Fortran2003.Specification_Part):
-            const_vars = (
-                routine.directives.get("CONSTANT_VARS") if routine.directives else None
-            )
-            routine.decls = _parse_decls(
+            nodes, decls = _parse_decls(
                 item,
-                const_vars,
+                directives=directives,
+                decl_map=decl_map,
+                declared_in="routine",
                 allow_intent=True,
                 allow_access=False,
-                declared_in="routine",
             )
-
-            # build mod declarations for use in execution parsing
-            mod_decls = Block([])
-            Node._id_counter -= 1
-            if module is not None:
-                for child in module.body.iter_children():
-                    if isinstance(child, Use):
-                        mod_decls.append(child)
-                        used = module_map.get(child.name) if module_map else None
-                        if used and used.decls is not None:
-                            for d in used.decls:
-                                if child.only is None or (d.name in child.only):
-                                    mod_decls.append(
-                                        _clone_decl(d, declared_in="use")
-                                    )
-                        elif search_dirs:
-                            vars_map = _load_fadmod_decls(child.name, search_dirs)
-                            for name, info in vars_map.items():
-                                if child.only is None or name in child.only:
-                                    mod_decls.append(
-                                        Declaration(
-                                            name,
-                                            info["typename"],
-                                            info.get("kind"),
-                                            (
-                                                tuple(info["dims"])
-                                                if info.get("dims") is not None
-                                                else None
-                                            ),
-                                            None,
-                                            info.get("parameter", False),
-                                            info.get("constant", False),
-                                            init_val=info.get("init_val"),
-                                            access=info.get("access"),
-                                            declared_in="use",
-                                        )
-                                    )
-            if module is not None and module.decls is not None:
-                mod_decls.extend(list(module.decls.iter_children()))
-            for child in routine.decls.iter_children():
-                if isinstance(child, Use):
-                    used = module_map.get(child.name) if module_map else None
-                    if used and used.decls is not None:
-                        for d in used.decls:
-                            if child.only is None or (d.name in child.only):
-                                mod_decls.append(
-                                    _clone_decl(d, declared_in="use")
-                                )
-                    elif search_dirs:
-                        vars_map = _load_fadmod_decls(child.name, search_dirs)
-                        for name, info in vars_map.items():
-                            if child.only is None or name in child.only:
-                                mod_decls.append(
-                                    Declaration(
-                                        name,
-                                        info["typename"],
-                                        info.get("kind"),
-                                        (
-                                            tuple(info["dims"])
-                                            if info.get("dims") is not None
-                                            else None
-                                        ),
-                                        None,
-                                        info.get("parameter", False),
-                                        info.get("constant", False),
-                                        init_val=info.get("init_val"),
-                                        access=info.get("access"),
-                                        allocatable=info.get("allocatable", False),
-                                        declared_in="use",
-                                    )
-                                )
-
-            mod_decls.extend(list(routine.decls.iter_children()))
-            routine.mod_decls = mod_decls
-            const_vars = []
-            if module is not None and "CONSTANT_VARS" in module.directives:
-                const_vars.extend(module.directives["CONSTANT_VARS"])
-            if routine.directives:
-                const_vars.extend(routine.directives.get("CONSTANT_VARS", []))
-            if const_vars:
-                for name in const_vars:
-                    decl = routine.mod_decls.find_by_name(name)
-                    if decl is not None:
-                        decl.constant = True
+            routine.decls = Block(nodes + decls)
+            routine.decl_map = decl_map
             continue
         if isinstance(item, Fortran2003.Execution_Part):
-            decls = (
-                routine.mod_decls if routine.mod_decls is not None else routine.decls
-            )
             for stmt in item.content:
-                node = _parse_stmt(stmt, decls)
+                node = _parse_stmt(stmt, routine.decl_map)
                 if node is not None:
                     routine.content.append(node)
             continue
@@ -948,92 +868,8 @@ def _parse_routine(content, src_name: str, module: Optional[Module]=None, module
             continue
         raise RuntimeError(f"Unsupported statement: {type(item)} {item.items}")
 
-    if routine.mod_decls is None:
-        # merge declarations from module and used modules
-        mod_decls = Block([])
-        Node._id_counter -= 1
-        if module is not None:
-            for child in module.body.iter_children():
-                if isinstance(child, Use):
-                    mod_decls.append(child)
-                    used = module_map.get(child.name) if module_map else None
-                    if used and used.decls is not None:
-                        for d in used.decls:
-                            if child.only is None or (d.name in child.only):
-                                mod_decls.append(
-                                    _clone_decl(d, declared_in="use")
-                                )
-                    elif search_dirs:
-                        vars_map = _load_fadmod_decls(child.name, search_dirs)
-                        for name, info in vars_map.items():
-                            if child.only is None or name in child.only:
-                                mod_decls.append(
-                                    Declaration(
-                                        name,
-                                        info["typename"],
-                                        info.get("kind"),
-                                        (
-                                            tuple(info["dims"])
-                                            if info.get("dims") is not None
-                                            else None
-                                        ),
-                                        None,
-                                        info.get("parameter", False),
-                                        info.get("constant", False),
-                                        init_val=info.get("init_val"),
-                                        access=info.get("access"),
-                                        allocatable=info.get("allocatable", False),
-                                        declared_in="use",
-                                    )
-                                )
-            if module.decls is not None:
-                mod_decls.extend(list(module.decls.iter_children()))
-
-        for child in routine.decls.iter_children():
-            if isinstance(child, Use):
-                used = module_map.get(child.name) if module_map else None
-                if used and used.decls is not None:
-                    for d in used.decls:
-                        if child.only is None or (d.name in child.only):
-                            mod_decls.append(
-                                _clone_decl(d, declared_in="use")
-                            )
-                elif search_dirs:
-                    vars_map = _load_fadmod_decls(child.name, search_dirs)
-                    for name, info in vars_map.items():
-                        if child.only is None or name in child.only:
-                            mod_decls.append(
-                                Declaration(
-                                    name,
-                                    info["typename"],
-                                    info.get("kind"),
-                                    (
-                                        tuple(info["dims"])
-                                        if info.get("dims") is not None
-                                        else None
-                                    ),
-                                    None,
-                                    info.get("parameter", False),
-                                    info.get("constant", False),
-                                    init_val=info.get("init_val"),
-                                    access=info.get("access"),
-                                    allocatable=info.get("allocatable", False),
-                                    declared_in="use",
-                                )
-                            )
-
-        mod_decls.extend(list(routine.decls.iter_children()))
-        routine.mod_decls = mod_decls
-
-    const_vars = []
-    if module is not None and "CONSTANT_VARS" in module.directives:
-        const_vars.extend(module.directives["CONSTANT_VARS"])
-    if routine.directives:
-        const_vars.extend(routine.directives.get("CONSTANT_VARS", []))
-    if const_vars:
-        for name in const_vars:
-            decl = routine.mod_decls.find_by_name(name)
-            if decl is not None:
-                decl.constant = True
+    if routine.decl_map is None:
+        routine.decl_map = decl_map
+        raise RuntimeError("Unexpected error")
 
     return routine

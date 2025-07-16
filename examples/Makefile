@@ -16,7 +16,7 @@ vpath %.f90 .
 all: $(HELPER_OBJS) $(OBJS)
 
 $(OUTDIR)/%.o: %.f90
-	$(FC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
+	$(FC) $(FFLAGS) -c $< -I$(OUTDIR) -J $(OUTDIR) -o $@
 
 # AD modules depend on their original modules
 $(OUTDIR)/%_ad.o: $(OUTDIR)/%.o

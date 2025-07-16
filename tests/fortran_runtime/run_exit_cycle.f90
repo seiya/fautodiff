@@ -5,7 +5,8 @@ program run_exit_cycle
   real, parameter :: tol = 1.0e-4
 
   integer, parameter :: I_all = 0
-  integer, parameter :: I_loop_exit_cycle = 1
+  integer, parameter :: I_do_exit_cycle = 1
+  integer, parameter :: I_while_exit_cycle = 2
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -19,8 +20,10 @@ program run_exit_cycle
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("loop_exit_cycle")
-              i_test = I_loop_exit_cycle
+           case ("do_exit_cycle")
+              i_test = I_do_exit_cycle
+           case ("while_exit_cycle")
+              i_test = I_while_exit_cycle
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -30,14 +33,17 @@ program run_exit_cycle
      end if
   end if
 
-  if (i_test == I_loop_exit_cycle .or. i_test == I_all) then
-     call test_loop_exit_cycle
+  if (i_test == I_do_exit_cycle .or. i_test == I_all) then
+     call test_do_exit_cycle
+  end if
+  if (i_test == I_while_exit_cycle .or. i_test == I_all) then
+     call test_while_exit_cycle
   end if
 
   stop
 contains
 
-  subroutine test_loop_exit_cycle
+  subroutine test_do_exit_cycle
     real, parameter :: tol = 4e-3
     integer :: n
     real :: x, res, res_eps
@@ -48,25 +54,57 @@ contains
     eps = 1.0e-3
     n = 5
     x = 2.0
-    call loop_exit_cycle(n, x, res)
-    call loop_exit_cycle(n, x + eps, res_eps)
+    call do_exit_cycle(n, x, res)
+    call do_exit_cycle(n, x + eps, res_eps)
     fd = (res_eps - res) / eps
     x_ad = 1.0
-    call loop_exit_cycle_fwd_ad(n, x, x_ad, res, res_ad)
+    call do_exit_cycle_fwd_ad(n, x, x_ad, res, res_ad)
     if (abs((res_ad - fd) / fd) > tol) then
-       print *, 'test_loop_exit_cycle_fwd failed', res_ad, fd
+       print *, 'test_do_exit_cycle_fwd failed', res_ad, fd
        error stop 1
     end if
 
     inner1 = res_ad**2
-    call loop_exit_cycle_rev_ad(n, x, x_ad, res_ad)
+    call do_exit_cycle_rev_ad(n, x, x_ad, res_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
-      print *, 'test_loop_exit_cycle_rev failed', inner1, inner2
+      print *, 'test_do_exit_cycle_rev failed', inner1, inner2
       error stop 1
     end if
 
     return
-  end subroutine test_loop_exit_cycle
+  end subroutine test_do_exit_cycle
+
+  subroutine test_while_exit_cycle
+    real, parameter :: tol = 4e-3
+    integer :: n
+    real :: x, res, res_eps
+    real :: x_ad, res_ad
+    real :: fd, eps
+    real :: inner1, inner2
+
+    eps = 1.0e-3
+    n = 5
+    x = 2.0
+    call while_exit_cycle(n, x, res)
+    call while_exit_cycle(n, x + eps, res_eps)
+    fd = (res_eps - res) / eps
+    x_ad = 1.0
+    call while_exit_cycle_fwd_ad(n, x, x_ad, res, res_ad)
+    if (abs((res_ad - fd) / fd) > tol) then
+       print *, 'test_while_exit_cycle_fwd failed', res_ad, fd
+       error stop 1
+    end if
+
+    inner1 = res_ad**2
+    call while_exit_cycle_rev_ad(n, x, x_ad, res_ad)
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+      print *, 'test_while_exit_cycle_rev failed', inner1, inner2
+      error stop 1
+    end if
+
+    return
+  end subroutine test_while_exit_cycle
 
 end program run_exit_cycle

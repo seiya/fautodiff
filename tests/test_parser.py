@@ -157,12 +157,12 @@ class TestParser(unittest.TestCase):
         self.assertIsNotNone(decl)
         self.assertEqual(decl.kind, "RP")
 
-    def test_routine_mod_decls(self):
+    def test_routine_decl_map(self):
         src = Path(__file__).resolve().parents[1] / "examples" / "real_kind.f90"
         module = parser.parse_file(str(src))[0]
         routine = next(r for r in module.routines if r.name == "scale_rp")
         self.assertTrue(routine.is_declared("RP"))
-        decl = routine.mod_decls.find_by_name("RP")
+        decl = routine.decl_map.get("RP")
         self.assertIsNotNone(decl)
         var = routine.get_var("RP")
         self.assertIsNotNone(var)
@@ -354,12 +354,12 @@ class TestParser(unittest.TestCase):
         routine = module.routines[0]
         self.assertIn("CONSTANT_VARS", module.directives)
         self.assertEqual(module.directives["CONSTANT_VARS"], ["c"])
-        decl = routine.mod_decls.find_by_name("c")
+        decl = routine.decl_map.get("c")
         self.assertTrue(decl.constant)
         var = routine.get_var("c")
         self.assertFalse(var.ad_target)
 
-    def test_mod_decls_from_fadmod(self):
+    def test_decl_map_from_fadmod(self):
         code_tree.Node.reset()
         from tempfile import TemporaryDirectory
 
@@ -400,7 +400,7 @@ class TestParser(unittest.TestCase):
             routine = modules[0].routines[0]
 
         self.assertTrue(routine.is_declared("K"))
-        decl = routine.mod_decls.find_by_name("K")
+        decl = routine.decl_map.get("K")
         self.assertIsNotNone(decl)
         self.assertTrue(decl.parameter)
 
@@ -458,7 +458,7 @@ class TestParser(unittest.TestCase):
         decl_a_module = moda.decls.find_by_name("a")
         self.assertEqual(decl_a_module.declared_in, "module")
 
-        decl_a_use = routine.mod_decls.find_by_name("a")
+        decl_a_use = routine.decl_map.get("a")
         self.assertEqual(decl_a_use.declared_in, "use")
 
         var_a = routine.get_var("a")

@@ -11,10 +11,11 @@ contains
     integer :: i
 
     work = 1.0
-
+    work = x(1) * work
+    z(:) = x(:) * work
     do i = 1, n
        work = x(i) * work
-       z(i) = work
+       z(i) = work**2 + z(i)
     end do
 
     return
