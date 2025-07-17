@@ -88,6 +88,7 @@ def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str]) -> Subroutine:
                 arg.dims,
                 arg.intent,
                 allocatable=arg.allocatable,
+                pointer=arg.pointer,
                 declared_in="routine",
             )
         )
@@ -159,13 +160,15 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, d
                         for name, info in vars_data.items():
                             vars.append(
                                 OpVar(
-                                    name = name,
-                                    typename = info.get("typename"),
-                                    kind = info.get("kind", None),
-                                    dims = info.get("dims", None),
-                                    is_constant = info.get("constant", False),
-                                    allocatable = info.get("allocatable", False),
-                                ))
+                                    name=name,
+                                    typename=info.get("typename"),
+                                    kind=info.get("kind", None),
+                                    dims=info.get("dims", None),
+                                    is_constant=info.get("constant", False),
+                                    allocatable=info.get("allocatable", False),
+                                    pointer=info.get("pointer", False),
+                                )
+                            )
                         variables[mod] = vars
                 except Exception:
                     pass
@@ -205,6 +208,7 @@ def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
                     "init_val": d.init_val,
                     "access": d.access,
                     "allocatable": d.allocatable,
+                    "pointer": d.pointer,
                 }
 
     if not routines_data and not variables_data:
@@ -259,6 +263,7 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
                 ad_target=True,
                 is_constant=arg.is_constant,
                 allocatable=arg.allocatable,
+                pointer=arg.pointer,
             )
             args.append(var)
             grad_args.append(var)
@@ -283,6 +288,7 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
                 var.dims,
                 var.intent,
                 allocatable=var.allocatable,
+                pointer=var.pointer,
                 declared_in="routine",
             )
         )
@@ -350,6 +356,7 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                     ad_target=True,
                     is_constant=arg.is_constant,
                     allocatable=arg.allocatable,
+                    pointer=arg.pointer,
                 )
                 args.append(var)
                 grad_args.append(var)
@@ -372,6 +379,7 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                     ad_target=True,
                     is_constant=arg.is_constant,
                     allocatable=arg.allocatable,
+                    pointer=arg.pointer,
                 )
                 args.append(var)
                 grad_args.append(var)
@@ -394,6 +402,7 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                 var.dims,
                 var.intent,
                 allocatable=var.allocatable,
+                pointer=var.pointer,
                 declared_in="routine",
             )
         )
@@ -527,6 +536,7 @@ def _generate_ad_subroutine(
                             base_decl.parameter if base_decl else False,
                             init_val=base_decl.init_val if base_decl else None,
                             allocatable=base_decl.allocatable if base_decl else False,
+                            pointer=base_decl.pointer if base_decl else False,
                             declared_in="routine",
                         )
                     )
@@ -659,6 +669,7 @@ def _generate_ad_subroutine(
                             base_decl.parameter,
                             init_val=base_decl.init_val,
                             allocatable=base_decl.allocatable,
+                            pointer=base_decl.pointer,
                             declared_in="routine",
                         )
                     )
@@ -777,6 +788,7 @@ def _generate_ad_subroutine(
                 base_decl.parameter if base_decl else False,
                 init_val=base_decl.init_val if base_decl else None,
                 allocatable=base_decl.allocatable if base_decl else False,
+                pointer=base_decl.pointer if base_decl else False,
                 declared_in="routine",
             )
         )
@@ -857,7 +869,11 @@ def generate_ad(
                 if mod.decls is None:
                     mod.decls = Block([])
                 decl = mod_org.decls.find_by_name(var.name)
-                init_val = str(OpReal("0.0", kind=decl.kind)) if not decl.allocatable else None
+                init_val = (
+                    str(OpReal("0.0", kind=decl.kind))
+                    if not (decl.allocatable or decl.pointer)
+                    else None
+                )
                 mod.decls.append(Declaration(f"{var.name}{AD_SUFFIX}",
                                              typename = decl.typename,
                                              kind = decl.kind,
@@ -865,6 +881,7 @@ def generate_ad(
                                              init_val = init_val,
                                              #access = decl.access,
                                              allocatable = decl.allocatable,
+                                             pointer = decl.pointer,
                                              declared_in = "module",
                                              )
                                 )

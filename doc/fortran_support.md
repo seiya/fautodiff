@@ -28,6 +28,7 @@ This document summarizes the Fortran constructs handled by the AD code generator
 - `allocate` and `deallocate` statements generate corresponding operations for AD variables.
 - Module variables imported with `use` are differentiated by default. Use the `CONSTANT_VARS` directive to mark them as constants.
 - If no `_ad` variable exists for such module variables, any `allocate` or `deallocate` is omitted.
+- Pointer variables may also be declared. They behave like allocatable variables in the generated AD code and use `associated` checks for module-level pointers.
 
 ## Parameter and Module Variables
 - Parameter constants remain untouched.

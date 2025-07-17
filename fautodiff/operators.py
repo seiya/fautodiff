@@ -676,6 +676,7 @@ class OpVar(OpLeaf):
     is_constant: Optional[bool] = field(default=None, repr=False)
     reference: Optional["OpVar"] = field(repr=False, default=None)
     allocatable: Optional[bool] = field(default=None, repr=False)
+    pointer: Optional[bool] = field(default=None, repr=False)
     declared_in: Optional[str] = field(default=None, repr=False)
     reduced_dims: Optional[List[int]] = field(init=False, repr=False, default=None)
 
@@ -691,6 +692,7 @@ class OpVar(OpLeaf):
         ad_target: Optional[bool] = None,
         is_constant: Optional[bool] = None,
         allocatable: Optional[bool] = None,
+        pointer: Optional[bool] = None,
         declared_in: Optional[str] = None,
     ):
         super().__init__(args=[])
@@ -710,6 +712,7 @@ class OpVar(OpLeaf):
         self.ad_target = ad_target
         self.is_constant = is_constant
         self.allocatable = allocatable
+        self.pointer = pointer
         self.declared_in = declared_in
         if self.ad_target is None and self.typename is not None:
             typename = self.typename.lower()
@@ -746,6 +749,7 @@ class OpVar(OpLeaf):
             ad_target=self.ad_target,
             is_constant=self.is_constant,
             allocatable=self.allocatable,
+            pointer=self.pointer,
             declared_in=self.declared_in,
         )
 
@@ -767,6 +771,7 @@ class OpVar(OpLeaf):
             ad_target=self.ad_target,
             is_constant=self.is_constant,
             allocatable=self.allocatable,
+            pointer=self.pointer,
             declared_in=self.declared_in,
         )
 
