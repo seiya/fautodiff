@@ -464,5 +464,26 @@ class TestParser(unittest.TestCase):
         var_a = routine.get_var("a")
         self.assertEqual(var_a.declared_in, "use")
 
+    def test_parse_pointer_decl(self):
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+              subroutine foo()
+                real, pointer :: p(:)
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        decl = routine.decls.find_by_name("p")
+        self.assertIsNotNone(decl)
+        self.assertTrue(decl.pointer)
+        self.assertEqual(
+            render_program(Block([decl])).strip(),
+            "real, pointer :: p(:)"
+        )
+
 if __name__ == "__main__":
     unittest.main()

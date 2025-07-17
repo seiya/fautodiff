@@ -129,6 +129,7 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
             dims=decl.dims,
             is_constant=decl.parameter or getattr(decl, "constant", False),
             allocatable=getattr(decl, "allocatable", False),
+            pointer=getattr(decl, "pointer", False),
             declared_in=decl.declared_in,
         )
 
@@ -145,6 +146,7 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
                 dims=decl.dims,
                 is_constant=decl.parameter or getattr(decl, "constant", False),
                 allocatable=getattr(decl, "allocatable", False),
+                pointer=getattr(decl, "pointer", False),
                 declared_in=decl.declared_in,
             )
         else:  # must be function
@@ -279,6 +281,7 @@ def _clone_decl(decl: Declaration, declared_in: str) -> Declaration:
         init_val=decl.init_val,
         access=decl.access,
         allocatable=decl.allocatable,
+        pointer=decl.pointer,
         declared_in=declared_in,
     )
 
@@ -331,6 +334,7 @@ def _parse_decl_stmt(
     parameter = False
     access = None
     allocatable = False
+    pointer = False
     attrs = stmt.items[1]
     if attrs is not None:
         for attr in attrs.items:
@@ -344,6 +348,8 @@ def _parse_decl_stmt(
                 parameter = True
             if name == "allocatable":
                 allocatable = True
+            if name == "pointer":
+                pointer = True
             if allow_access and name in ("public", "private"):
                 access = name
 
@@ -376,6 +382,7 @@ def _parse_decl_stmt(
                 init_val=init_val,
                 access=access,
                 allocatable=allocatable,
+                pointer=pointer,
                 declared_in=declared_in,
             )
         )
@@ -401,7 +408,9 @@ def _parse_decls(
     declared_in: str ="routine",
     allow_intent: bool = True,
     allow_access: bool = False,
-    default_access: Optional[str] = None
+    default_access: Optional[str] = None,
+    module_map: Optional[dict] = None,
+    search_dirs: Optional[List[str]] = None,
 ) -> Tuple[List[Node],List[Declaration]]:
     """Return declarations parsed from a specification part."""
 
@@ -427,7 +436,9 @@ def _parse_decls(
             only = None
             if item.items[4] is not None:
                 only = [s.string for s in item.items[4].items]
-            nodes.append(Use(item.items[2].string, only=only))
+            mod_name = item.items[2].string
+            nodes.append(Use(mod_name, only=only))
+            _search_use(mod_name, only, decl_map, module_map, search_dirs)
             continue
         if isinstance(item, Fortran2003.Access_Stmt):
             if not allow_access:
@@ -503,6 +514,7 @@ def _search_use(name: str, only: Optional[List[str]], decl_map: dict, module_map
                         constant=info.get("constant", False),
                         init_val=info.get("init_val"),
                         access=info.get("access"),
+                        pointer=info.get("pointer", False),
                         declared_in="use",
                     )
 
@@ -537,7 +549,9 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
                             declared_in="module",
                             allow_intent=False,
                             allow_access=True,
-                            default_access="public"
+                            default_access="public",
+                            module_map=module_map,
+                            search_dirs=search_dirs,
                         )
                 if "CONSTANT_VARS" in module_directives:
                     for n in module_directives["CONSTANT_VARS"]:
@@ -857,6 +871,8 @@ def _parse_routine(content,
                 declared_in="routine",
                 allow_intent=True,
                 allow_access=False,
+                module_map=module_map,
+                search_dirs=search_dirs,
             )
             routine.decls = Block(nodes + decls)
             routine.decl_map = decl_map
@@ -875,6 +891,5 @@ def _parse_routine(content,
 
     if routine.decl_map is None:
         routine.decl_map = decl_map
-        raise RuntimeError("Unexpected error")
 
     return routine

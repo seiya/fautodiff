@@ -1890,7 +1890,8 @@ class Allocate(Node):
     @classmethod
     def _add_if(cls, node: Node, var: OpVar, is_mod_var: bool) -> Node:
         if is_mod_var:
-            cond = OpFunc("allocated", args=[var.change_index(None)])
+            func = "associated" if var.pointer else "allocated"
+            cond = OpFunc(func, args=[var.change_index(None)])
             body = Block([node])
             if isinstance(node, Allocate):
                 cond = OpNot([cond])
@@ -1989,6 +1990,7 @@ class Declaration(Node):
     init_val: Optional[str] = None
     access: Optional[str] = None
     allocatable: bool = False
+    pointer: bool = False
     declared_in: Optional[str] = None
 
     def __post_init__(self):
@@ -1997,11 +1999,37 @@ class Declaration(Node):
             raise ValueError(f"dims must be tuple of str: {type(dims)}")
 
     def copy(self) -> "Declaration":
-        return Declaration(self.name, self.typename, self.kind, self.dims, self.intent, self.parameter, self.constant, self.init_val, self.access, self.allocatable, self.declared_in)
+        return Declaration(
+            self.name,
+            self.typename,
+            self.kind,
+            self.dims,
+            self.intent,
+            self.parameter,
+            self.constant,
+            self.init_val,
+            self.access,
+            self.allocatable,
+            self.pointer,
+            self.declared_in,
+        )
 
     def deep_clone(self) -> "Declaration":
         dims = tuple(self.dims) if self.dims else None
-        return Declaration(self.name, self.typename, self.kind, dims, self.intent, self.parameter, self.constant, self.init_val, self.access, self.allocatable, self.declared_in)
+        return Declaration(
+            self.name,
+            self.typename,
+            self.kind,
+            dims,
+            self.intent,
+            self.parameter,
+            self.constant,
+            self.init_val,
+            self.access,
+            self.allocatable,
+            self.pointer,
+            self.declared_in,
+        )
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         if self.intent in ("in", "inout"):
@@ -2011,6 +2039,7 @@ class Declaration(Node):
                 kind=self.kind,
                 is_constant=self.parameter or self.constant,
                 allocatable=self.allocatable,
+                pointer=self.pointer,
                 declared_in=self.declared_in,
             )
         else:
@@ -2026,6 +2055,7 @@ class Declaration(Node):
             kind=self.kind,
             is_constant=self.parameter or self.constant,
             allocatable=self.allocatable,
+            pointer=self.pointer,
             dims=self.dims,
             intent=self.intent,
             declared_in=self.declared_in,
@@ -2042,6 +2072,8 @@ class Declaration(Node):
             line += f", {self.access}"
         if self.allocatable:
             line += ", allocatable"
+        if self.pointer:
+            line += ", pointer"
         if self.intent is not None:
             pad = "  " if self.intent == "in" else " "
             line += f", intent({self.intent})" + pad + f":: {self.name}"
@@ -2080,6 +2112,7 @@ class Declaration(Node):
                         kind=self.kind,
                         is_constant=self.parameter or self.constant,
                         allocatable=self.allocatable,
+                        pointer=self.pointer,
                         declared_in=self.declared_in,
                     )
                 )
