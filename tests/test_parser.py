@@ -485,5 +485,24 @@ class TestParser(unittest.TestCase):
             "real, pointer :: p(:)"
         )
 
+    def test_parse_pointer_assignment(self):
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+              subroutine foo(p, q)
+                real, pointer :: p
+                real :: q
+                p => q
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        stmt = routine.content.first()
+        self.assertIsInstance(stmt, code_tree.PointerAssignment)
+        self.assertEqual(render_program(Block([stmt])), "p => q\n")
+
 if __name__ == "__main__":
     unittest.main()
