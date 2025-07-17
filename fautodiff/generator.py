@@ -580,7 +580,7 @@ def _generate_ad_subroutine(
         targets = ad_code.required_vars()
         #print(render_program(ad_code))
         #print("Targets:", targets)
-        fw_block = Block(routine_org.content.set_exit_do_start(None))
+        fw_block = Block(routine_org.content.set_for_exitcycle(None))
         fw_block = fw_block.prune_for(targets, mod_vars)
         #print(render_program(fw_block))
 
