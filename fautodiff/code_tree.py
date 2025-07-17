@@ -1533,6 +1533,91 @@ class Assignment(Node):
 
 
 @dataclass
+class PointerAssignment(Node):
+    """A pointer assignment statement ``lhs => rhs``."""
+
+    lhs: OpVar
+    rhs: Operator
+    info: Optional[dict] = field(repr=False, default=None)
+    ad_info: Optional[str] = field(repr=False, default=None)
+    _rhs_vars: List[OpVar] = field(init=False, repr=False)
+    _ufuncs: List[OpFuncUser] = field(init=False, repr=False)
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not isinstance(self.lhs, OpVar):
+            raise ValueError(f"lhs must be OpVar: {type(self.lhs)}")
+        if not isinstance(self.rhs, Operator):
+            raise ValueError(f"rhs must be Operator: {type(self.rhs)}")
+        self._rhs_vars = list(self.rhs.collect_vars())
+        self._ufuncs = self.rhs.find_userfunc()
+
+    def copy(self) -> "PointerAssignment":
+        return PointerAssignment(self.lhs, self.rhs, self.info, self.ad_info)
+
+    def deep_clone(self):
+        lhs = self.lhs.deep_clone()
+        rhs = self.rhs.deep_clone()
+        return PointerAssignment(lhs, rhs, self.info, self.ad_info)
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        for var in self._rhs_vars:
+            yield var
+        if self.lhs.index is not None:
+            for var in self.lhs.index.collect_vars():
+                yield var
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        yield self.lhs
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        return [self]
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        ad_comment = ""
+        if self.ad_info is not None:
+            ad_comment = f" ! {self.ad_info}"
+        return [f"{space}{self.lhs} => {self.rhs}{ad_comment}\n"]
+
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        lhs = self.lhs
+        if vars is None:
+            vars = VarList()
+        else:
+            if not isinstance(vars, VarList):
+                raise ValueError(f"Must be VarList: {type(vars)}")
+            vars = vars.copy()
+            vars.remove(lhs)
+        for var in lhs.collect_vars():
+            if var != lhs:
+                vars.push(var)
+        for var in self._rhs_vars:
+            vars.push(var)
+        return vars
+
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        if assigned_vars is None:
+            assigned_vars = VarList()
+        if self.lhs.name.endswith(AD_SUFFIX):
+            assigned_vars = assigned_vars.copy()
+            assigned_vars.push(self.lhs)
+        return assigned_vars
+
+
+@dataclass
 class ClearAssignment(Node):
 
     lhs: OpVar
