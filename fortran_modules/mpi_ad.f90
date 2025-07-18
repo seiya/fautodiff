@@ -37,106 +37,158 @@ module mpi_ad
   interface mpi_bcast_fwd_ad
      module procedure mpi_bcast_fwd_ad_r4
      module procedure mpi_bcast_fwd_ad_r8
+     module procedure mpi_bcast_fwd_ad_scalar_r4
+     module procedure mpi_bcast_fwd_ad_scalar_r8
   end interface
   interface mpi_bcast_rev_ad
      module procedure mpi_bcast_rev_ad_r4
      module procedure mpi_bcast_rev_ad_r8
+     module procedure mpi_bcast_rev_ad_scalar_r4
+     module procedure mpi_bcast_rev_ad_scalar_r8
   end interface
   interface mpi_reduce_fwd_ad
      module procedure mpi_reduce_fwd_ad_r4
      module procedure mpi_reduce_fwd_ad_r8
+     module procedure mpi_reduce_fwd_ad_scalar_r4
+     module procedure mpi_reduce_fwd_ad_scalar_r8
   end interface
   interface mpi_reduce_rev_ad
      module procedure mpi_reduce_rev_ad_r4
      module procedure mpi_reduce_rev_ad_r8
+     module procedure mpi_reduce_rev_ad_scalar_r4
+     module procedure mpi_reduce_rev_ad_scalar_r8
   end interface
   interface mpi_allreduce_fwd_ad
      module procedure mpi_allreduce_fwd_ad_r4
      module procedure mpi_allreduce_fwd_ad_r8
+     module procedure mpi_allreduce_fwd_ad_scalar_r4
+     module procedure mpi_allreduce_fwd_ad_scalar_r8
   end interface
   interface mpi_allreduce_rev_ad
      module procedure mpi_allreduce_rev_ad_r4
      module procedure mpi_allreduce_rev_ad_r8
+     module procedure mpi_allreduce_rev_ad_scalar_r4
+     module procedure mpi_allreduce_rev_ad_scalar_r8
   end interface
   interface mpi_recv_fwd_ad
      module procedure mpi_recv_fwd_ad_r4
      module procedure mpi_recv_fwd_ad_r8
+     module procedure mpi_recv_fwd_ad_scalar_r4
+     module procedure mpi_recv_fwd_ad_scalar_r8
   end interface
   interface mpi_recv_rev_ad
      module procedure mpi_recv_rev_ad_r4
      module procedure mpi_recv_rev_ad_r8
+     module procedure mpi_recv_rev_ad_scalar_r4
+     module procedure mpi_recv_rev_ad_scalar_r8
   end interface
   interface mpi_send_fwd_ad
      module procedure mpi_send_fwd_ad_r4
      module procedure mpi_send_fwd_ad_r8
+     module procedure mpi_send_fwd_ad_scalar_r4
+     module procedure mpi_send_fwd_ad_scalar_r8
   end interface
   interface mpi_send_rev_ad
      module procedure mpi_send_rev_ad_r4
      module procedure mpi_send_rev_ad_r8
+     module procedure mpi_send_rev_ad_scalar_r4
+     module procedure mpi_send_rev_ad_scalar_r8
   end interface
   interface mpi_isend_fwd_ad
      module procedure mpi_isend_fwd_ad_r4
      module procedure mpi_isend_fwd_ad_r8
+     module procedure mpi_isend_fwd_ad_scalar_r4
+     module procedure mpi_isend_fwd_ad_scalar_r8
   end interface
   interface mpi_isend_rev_ad
      module procedure mpi_isend_rev_ad_r4
      module procedure mpi_isend_rev_ad_r8
+     module procedure mpi_isend_rev_ad_scalar_r4
+     module procedure mpi_isend_rev_ad_scalar_r8
   end interface
   interface mpi_irecv_fwd_ad
      module procedure mpi_irecv_fwd_ad_r4
      module procedure mpi_irecv_fwd_ad_r8
+     module procedure mpi_irecv_fwd_ad_scalar_r4
+     module procedure mpi_irecv_fwd_ad_scalar_r8
   end interface
   interface mpi_irecv_rev_ad
      module procedure mpi_irecv_rev_ad_r4
      module procedure mpi_irecv_rev_ad_r8
+     module procedure mpi_irecv_rev_ad_scalar_r4
+     module procedure mpi_irecv_rev_ad_scalar_r8
   end interface
   interface mpi_put_fwd_ad
      module procedure mpi_put_fwd_ad_r4
      module procedure mpi_put_fwd_ad_r8
+     module procedure mpi_put_fwd_ad_scalar_r4
+     module procedure mpi_put_fwd_ad_scalar_r8
   end interface
   interface mpi_put_rev_ad
      module procedure mpi_put_rev_ad_r4
      module procedure mpi_put_rev_ad_r8
+     module procedure mpi_put_rev_ad_scalar_r4
+     module procedure mpi_put_rev_ad_scalar_r8
   end interface
   interface mpi_get_fwd_ad
      module procedure mpi_get_fwd_ad_r4
      module procedure mpi_get_fwd_ad_r8
+     module procedure mpi_get_fwd_ad_scalar_r4
+     module procedure mpi_get_fwd_ad_scalar_r8
   end interface
   interface mpi_get_rev_ad
      module procedure mpi_get_rev_ad_r4
      module procedure mpi_get_rev_ad_r8
+     module procedure mpi_get_rev_ad_scalar_r4
+     module procedure mpi_get_rev_ad_scalar_r8
   end interface
   interface mpi_accumulate_fwd_ad
      module procedure mpi_accumulate_fwd_ad_r4
      module procedure mpi_accumulate_fwd_ad_r8
+     module procedure mpi_accumulate_fwd_ad_scalar_r4
+     module procedure mpi_accumulate_fwd_ad_scalar_r8
   end interface
   interface mpi_accumulate_rev_ad
      module procedure mpi_accumulate_rev_ad_r4
      module procedure mpi_accumulate_rev_ad_r8
+     module procedure mpi_accumulate_rev_ad_scalar_r4
+     module procedure mpi_accumulate_rev_ad_scalar_r8
   end interface
   interface mpi_send_init_fwd_ad
      module procedure mpi_send_init_fwd_ad_r4
      module procedure mpi_send_init_fwd_ad_r8
+     module procedure mpi_send_init_fwd_ad_scalar_r4
+     module procedure mpi_send_init_fwd_ad_scalar_r8
   end interface
   interface mpi_send_init_fwd_rev_ad
      module procedure mpi_send_init_fwd_rev_ad_r4
      module procedure mpi_send_init_fwd_rev_ad_r8
+     module procedure mpi_send_init_fwd_rev_ad_scalar_r4
+     module procedure mpi_send_init_fwd_rev_ad_scalar_r8
   end interface
   interface mpi_send_init_rev_ad
      module procedure mpi_send_init_rev_ad_r4
      module procedure mpi_send_init_rev_ad_r8
+     module procedure mpi_send_init_rev_ad_scalar_r4
+     module procedure mpi_send_init_rev_ad_scalar_r8
   end interface
   interface mpi_recv_init_fwd_ad
      module procedure mpi_recv_init_fwd_ad_r4
      module procedure mpi_recv_init_fwd_ad_r8
+     module procedure mpi_recv_init_fwd_ad_scalar_r4
+     module procedure mpi_recv_init_fwd_ad_scalar_r8
   end interface
   interface mpi_recv_init_fwd_rev_ad
      module procedure mpi_recv_init_fwd_rev_ad_r4
      module procedure mpi_recv_init_fwd_rev_ad_r8
+     module procedure mpi_recv_init_fwd_rev_ad_scalar_r4
+     module procedure mpi_recv_init_fwd_rev_ad_scalar_r8
   end interface
   interface mpi_recv_init_rev_ad
      module procedure mpi_recv_init_rev_ad_r4
      module procedure mpi_recv_init_rev_ad_r8
+     module procedure mpi_recv_init_rev_ad_scalar_r4
+     module procedure mpi_recv_init_rev_ad_scalar_r8
   end interface
   interface mpi_start_ad
      module procedure mpi_start_ad
@@ -231,6 +283,58 @@ contains
     end if
   end subroutine mpi_bcast_rev_ad_r8
 
+  subroutine mpi_bcast_fwd_ad_scalar_r4(buffer, buffer_ad, count, datatype, root, comm, ierr)
+    real, intent(inout) :: buffer
+    real, intent(inout) :: buffer_ad
+    integer, intent(in) :: count, datatype, root, comm
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b(1) = buffer
+    b_ad(1) = buffer_ad
+    call mpi_bcast_fwd_ad_r4(b, b_ad, 1, datatype, root, comm, ierr)
+    buffer = b(1)
+    buffer_ad = b_ad(1)
+  end subroutine mpi_bcast_fwd_ad_scalar_r4
+
+  subroutine mpi_bcast_rev_ad_scalar_r4(buffer, buffer_ad, count, datatype, root, comm, ierr)
+    real, intent(inout) :: buffer
+    real, intent(inout) :: buffer_ad
+    integer, intent(in) :: count, datatype, root, comm
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b(1) = buffer
+    b_ad(1) = buffer_ad
+    call mpi_bcast_rev_ad_r4(b, b_ad, 1, datatype, root, comm, ierr)
+    buffer = b(1)
+    buffer_ad = b_ad(1)
+  end subroutine mpi_bcast_rev_ad_scalar_r4
+
+  subroutine mpi_bcast_fwd_ad_scalar_r8(buffer, buffer_ad, count, datatype, root, comm, ierr)
+    real(8), intent(inout) :: buffer
+    real(8), intent(inout) :: buffer_ad
+    integer, intent(in) :: count, datatype, root, comm
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b(1) = buffer
+    b_ad(1) = buffer_ad
+    call mpi_bcast_fwd_ad_r8(b, b_ad, 1, datatype, root, comm, ierr)
+    buffer = b(1)
+    buffer_ad = b_ad(1)
+  end subroutine mpi_bcast_fwd_ad_scalar_r8
+
+  subroutine mpi_bcast_rev_ad_scalar_r8(buffer, buffer_ad, count, datatype, root, comm, ierr)
+    real(8), intent(inout) :: buffer
+    real(8), intent(inout) :: buffer_ad
+    integer, intent(in) :: count, datatype, root, comm
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b(1) = buffer
+    b_ad(1) = buffer_ad
+    call mpi_bcast_rev_ad_r8(b, b_ad, 1, datatype, root, comm, ierr)
+    buffer = b(1)
+    buffer_ad = b_ad(1)
+  end subroutine mpi_bcast_rev_ad_scalar_r8
+
   subroutine mpi_reduce_fwd_ad_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, root, comm, ierr)
     real, intent(in) :: sendbuf(*)
     real, intent(in) :: sendbuf_ad(*)
@@ -287,6 +391,70 @@ contains
     if (rank == root) recvbuf_ad(:count) = 0.0_8
   end subroutine mpi_reduce_rev_ad_r8
 
+  subroutine mpi_reduce_fwd_ad_scalar_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, root, comm, ierr)
+    real, intent(in) :: sendbuf
+    real, intent(in) :: sendbuf_ad
+    real, intent(out) :: recvbuf
+    real, intent(out) :: recvbuf_ad
+    integer, intent(in) :: count, datatype, op, root, comm
+    integer, intent(out), optional :: ierr
+    real :: s(1), s_ad(1), r(1), r_ad(1)
+    s(1) = sendbuf
+    s_ad(1) = sendbuf_ad
+    call mpi_reduce_fwd_ad_r4(s, s_ad, r, r_ad, 1, datatype, op, root, comm, ierr)
+    recvbuf = r(1)
+    recvbuf_ad = r_ad(1)
+  end subroutine mpi_reduce_fwd_ad_scalar_r4
+
+  subroutine mpi_reduce_rev_ad_scalar_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, root, comm, ierr)
+    real, intent(in) :: sendbuf
+    real, intent(inout) :: sendbuf_ad
+    real, intent(in) :: recvbuf
+    real, intent(inout) :: recvbuf_ad
+    integer, intent(in) :: count, datatype, op, root, comm
+    integer, intent(out), optional :: ierr
+    real :: s(1), s_ad(1), r(1), r_ad(1)
+    s(1) = sendbuf
+    s_ad(1) = sendbuf_ad
+    r(1) = recvbuf
+    r_ad(1) = recvbuf_ad
+    call mpi_reduce_rev_ad_r4(s, s_ad, r, r_ad, 1, datatype, op, root, comm, ierr)
+    sendbuf_ad = s_ad(1)
+    recvbuf_ad = r_ad(1)
+  end subroutine mpi_reduce_rev_ad_scalar_r4
+
+  subroutine mpi_reduce_fwd_ad_scalar_r8(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, root, comm, ierr)
+    real(8), intent(in) :: sendbuf
+    real(8), intent(in) :: sendbuf_ad
+    real(8), intent(out) :: recvbuf
+    real(8), intent(out) :: recvbuf_ad
+    integer, intent(in) :: count, datatype, op, root, comm
+    integer, intent(out), optional :: ierr
+    real(8) :: s(1), s_ad(1), r(1), r_ad(1)
+    s(1) = sendbuf
+    s_ad(1) = sendbuf_ad
+    call mpi_reduce_fwd_ad_r8(s, s_ad, r, r_ad, 1, datatype, op, root, comm, ierr)
+    recvbuf = r(1)
+    recvbuf_ad = r_ad(1)
+  end subroutine mpi_reduce_fwd_ad_scalar_r8
+
+  subroutine mpi_reduce_rev_ad_scalar_r8(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, root, comm, ierr)
+    real(8), intent(in) :: sendbuf
+    real(8), intent(inout) :: sendbuf_ad
+    real(8), intent(in) :: recvbuf
+    real(8), intent(inout) :: recvbuf_ad
+    integer, intent(in) :: count, datatype, op, root, comm
+    integer, intent(out), optional :: ierr
+    real(8) :: s(1), s_ad(1), r(1), r_ad(1)
+    s(1) = sendbuf
+    s_ad(1) = sendbuf_ad
+    r(1) = recvbuf
+    r_ad(1) = recvbuf_ad
+    call mpi_reduce_rev_ad_r8(s, s_ad, r, r_ad, 1, datatype, op, root, comm, ierr)
+    sendbuf_ad = s_ad(1)
+    recvbuf_ad = r_ad(1)
+  end subroutine mpi_reduce_rev_ad_scalar_r8
+
   subroutine mpi_allreduce_fwd_ad_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
     real, intent(in) :: sendbuf(*)
     real, intent(in) :: sendbuf_ad(*)
@@ -337,6 +505,70 @@ contains
     recvbuf_ad(:count) = 0.0_8
   end subroutine mpi_allreduce_rev_ad_r8
 
+  subroutine mpi_allreduce_fwd_ad_scalar_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+    real, intent(in) :: sendbuf
+    real, intent(in) :: sendbuf_ad
+    real, intent(out) :: recvbuf
+    real, intent(out) :: recvbuf_ad
+    integer, intent(in) :: count, datatype, op, comm
+    integer, intent(out), optional :: ierr
+    real :: s(1), s_ad(1), r(1), r_ad(1)
+    s(1) = sendbuf
+    s_ad(1) = sendbuf_ad
+    call mpi_allreduce_fwd_ad_r4(s, s_ad, r, r_ad, 1, datatype, op, comm, ierr)
+    recvbuf = r(1)
+    recvbuf_ad = r_ad(1)
+  end subroutine mpi_allreduce_fwd_ad_scalar_r4
+
+  subroutine mpi_allreduce_rev_ad_scalar_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+    real, intent(in) :: sendbuf
+    real, intent(inout) :: sendbuf_ad
+    real, intent(in) :: recvbuf
+    real, intent(inout) :: recvbuf_ad
+    integer, intent(in) :: count, datatype, op, comm
+    integer, intent(out), optional :: ierr
+    real :: s(1), s_ad(1), r(1), r_ad(1)
+    s(1) = sendbuf
+    s_ad(1) = sendbuf_ad
+    r(1) = recvbuf
+    r_ad(1) = recvbuf_ad
+    call mpi_allreduce_rev_ad_r4(s, s_ad, r, r_ad, 1, datatype, op, comm, ierr)
+    sendbuf_ad = s_ad(1)
+    recvbuf_ad = r_ad(1)
+  end subroutine mpi_allreduce_rev_ad_scalar_r4
+
+  subroutine mpi_allreduce_fwd_ad_scalar_r8(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+    real(8), intent(in) :: sendbuf
+    real(8), intent(in) :: sendbuf_ad
+    real(8), intent(out) :: recvbuf
+    real(8), intent(out) :: recvbuf_ad
+    integer, intent(in) :: count, datatype, op, comm
+    integer, intent(out), optional :: ierr
+    real(8) :: s(1), s_ad(1), r(1), r_ad(1)
+    s(1) = sendbuf
+    s_ad(1) = sendbuf_ad
+    call mpi_allreduce_fwd_ad_r8(s, s_ad, r, r_ad, 1, datatype, op, comm, ierr)
+    recvbuf = r(1)
+    recvbuf_ad = r_ad(1)
+  end subroutine mpi_allreduce_fwd_ad_scalar_r8
+
+  subroutine mpi_allreduce_rev_ad_scalar_r8(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+    real(8), intent(in) :: sendbuf
+    real(8), intent(inout) :: sendbuf_ad
+    real(8), intent(in) :: recvbuf
+    real(8), intent(inout) :: recvbuf_ad
+    integer, intent(in) :: count, datatype, op, comm
+    integer, intent(out), optional :: ierr
+    real(8) :: s(1), s_ad(1), r(1), r_ad(1)
+    s(1) = sendbuf
+    s_ad(1) = sendbuf_ad
+    r(1) = recvbuf
+    r_ad(1) = recvbuf_ad
+    call mpi_allreduce_rev_ad_r8(s, s_ad, r, r_ad, 1, datatype, op, comm, ierr)
+    sendbuf_ad = s_ad(1)
+    recvbuf_ad = r_ad(1)
+  end subroutine mpi_allreduce_rev_ad_scalar_r8
+
 
   subroutine mpi_recv_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, status, ierr)
     real, intent(out) :: buf(*)
@@ -380,6 +612,56 @@ contains
     status = 0
   end subroutine mpi_recv_rev_ad_r8
 
+  subroutine mpi_recv_fwd_ad_scalar_r4(buf, buf_ad, count, datatype, source, tag, comm, status, ierr)
+    real, intent(out) :: buf
+    real, intent(out) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: status(MPI_STATUS_SIZE)
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    call mpi_recv_fwd_ad_r4(b, b_ad, 1, datatype, source, tag, comm, status, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_recv_fwd_ad_scalar_r4
+
+  subroutine mpi_recv_rev_ad_scalar_r4(buf, buf_ad, count, datatype, source, tag, comm, status, ierr)
+    real, intent(out) :: buf
+    real, intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: status(MPI_STATUS_SIZE)
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b_ad(1) = buf_ad
+    call mpi_recv_rev_ad_r4(b, b_ad, 1, datatype, source, tag, comm, status, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_recv_rev_ad_scalar_r4
+
+  subroutine mpi_recv_fwd_ad_scalar_r8(buf, buf_ad, count, datatype, source, tag, comm, status, ierr)
+    real(8), intent(out) :: buf
+    real(8), intent(out) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: status(MPI_STATUS_SIZE)
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    call mpi_recv_fwd_ad_r8(b, b_ad, 1, datatype, source, tag, comm, status, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_recv_fwd_ad_scalar_r8
+
+  subroutine mpi_recv_rev_ad_scalar_r8(buf, buf_ad, count, datatype, source, tag, comm, status, ierr)
+    real(8), intent(out) :: buf
+    real(8), intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: status(MPI_STATUS_SIZE)
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b_ad(1) = buf_ad
+    call mpi_recv_rev_ad_r8(b, b_ad, 1, datatype, source, tag, comm, status, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_recv_rev_ad_scalar_r8
+
   subroutine mpi_send_fwd_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, ierr)
     real, intent(in) :: buf(*)
     real, intent(in) :: buf_ad(*)
@@ -417,6 +699,52 @@ contains
     call MPI_Recv(tmp, count, datatype, dest, tag, comm, MPI_STATUS_IGNORE, ierr)
     buf_ad(:count) = buf_ad(:count) + tmp(:count)
   end subroutine mpi_send_rev_ad_r8
+
+  subroutine mpi_send_fwd_ad_scalar_r4(buf, buf_ad, count, datatype, dest, tag, comm, ierr)
+    real, intent(in) :: buf
+    real, intent(in) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_send_fwd_ad_r4(b, b_ad, 1, datatype, dest, tag, comm, ierr)
+  end subroutine mpi_send_fwd_ad_scalar_r4
+
+  subroutine mpi_send_rev_ad_scalar_r4(buf, buf_ad, count, datatype, dest, tag, comm, ierr)
+    real, intent(in) :: buf
+    real, intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_send_rev_ad_r4(b, b_ad, 1, datatype, dest, tag, comm, ierr)
+    buf_ad = b_ad(1)
+  end subroutine mpi_send_rev_ad_scalar_r4
+
+  subroutine mpi_send_fwd_ad_scalar_r8(buf, buf_ad, count, datatype, dest, tag, comm, ierr)
+    real(8), intent(in) :: buf
+    real(8), intent(in) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_send_fwd_ad_r8(b, b_ad, 1, datatype, dest, tag, comm, ierr)
+  end subroutine mpi_send_fwd_ad_scalar_r8
+
+  subroutine mpi_send_rev_ad_scalar_r8(buf, buf_ad, count, datatype, dest, tag, comm, ierr)
+    real(8), intent(in) :: buf
+    real(8), intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_send_rev_ad_r8(b, b_ad, 1, datatype, dest, tag, comm, ierr)
+    buf_ad = b_ad(1)
+  end subroutine mpi_send_rev_ad_scalar_r8
 
   subroutine mpi_isend_fwd_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
     real, intent(in) :: buf(*)
@@ -460,6 +788,56 @@ contains
     buf_ad(:count) = buf_ad(:count) + tmp(:count)
   end subroutine mpi_isend_rev_ad_r8
 
+  subroutine mpi_isend_fwd_ad_scalar_r4(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+    real, intent(in) :: buf
+    real, intent(in) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_isend_fwd_ad_r4(b, b_ad, 1, datatype, dest, tag, comm, request, request_ad, ierr)
+  end subroutine mpi_isend_fwd_ad_scalar_r4
+
+  subroutine mpi_isend_rev_ad_scalar_r4(buf, buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+    real, intent(in) :: buf
+    real, intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_isend_rev_ad_r4(b, b_ad, 1, datatype, dest, tag, comm, request_ad, ierr)
+    buf_ad = b_ad(1)
+  end subroutine mpi_isend_rev_ad_scalar_r4
+
+  subroutine mpi_isend_fwd_ad_scalar_r8(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+    real(8), intent(in) :: buf
+    real(8), intent(in) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_isend_fwd_ad_r8(b, b_ad, 1, datatype, dest, tag, comm, request, request_ad, ierr)
+  end subroutine mpi_isend_fwd_ad_scalar_r8
+
+  subroutine mpi_isend_rev_ad_scalar_r8(buf, buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+    real(8), intent(in) :: buf
+    real(8), intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_isend_rev_ad_r8(b, b_ad, 1, datatype, dest, tag, comm, request_ad, ierr)
+    buf_ad = b_ad(1)
+  end subroutine mpi_isend_rev_ad_scalar_r8
+
   subroutine mpi_irecv_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
     real, intent(out) :: buf(*)
     real, intent(out) :: buf_ad(*)
@@ -499,6 +877,56 @@ contains
     call MPI_Isend(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
     buf_ad(:count) = 0.0_8
   end subroutine mpi_irecv_rev_ad_r8
+
+  subroutine mpi_irecv_fwd_ad_scalar_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+    real, intent(out) :: buf
+    real, intent(out) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    call mpi_irecv_fwd_ad_r4(b, b_ad, 1, datatype, source, tag, comm, request, request_ad, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_irecv_fwd_ad_scalar_r4
+
+  subroutine mpi_irecv_rev_ad_scalar_r4(buf, buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    real, intent(out) :: buf
+    real, intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b_ad(1) = buf_ad
+    call mpi_irecv_rev_ad_r4(b, b_ad, 1, datatype, source, tag, comm, request_ad, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_irecv_rev_ad_scalar_r4
+
+  subroutine mpi_irecv_fwd_ad_scalar_r8(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+    real(8), intent(out) :: buf
+    real(8), intent(out) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    call mpi_irecv_fwd_ad_r8(b, b_ad, 1, datatype, source, tag, comm, request, request_ad, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_irecv_fwd_ad_scalar_r8
+
+  subroutine mpi_irecv_rev_ad_scalar_r8(buf, buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    real(8), intent(out) :: buf
+    real(8), intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b_ad(1) = buf_ad
+    call mpi_irecv_rev_ad_r8(b, b_ad, 1, datatype, source, tag, comm, request_ad, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_irecv_rev_ad_scalar_r8
 
   subroutine mpi_put_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real, intent(in) :: origin(*)
@@ -546,6 +974,56 @@ contains
     call MPI_Put(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
   end subroutine mpi_put_rev_ad_r8
 
+  subroutine mpi_put_fwd_ad_scalar_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real, intent(in) :: origin
+    real, intent(in) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real :: o(1), o_ad(1)
+    o(1) = origin
+    o_ad(1) = origin_ad
+    call mpi_put_fwd_ad_r4(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, win, ierr)
+  end subroutine mpi_put_fwd_ad_scalar_r4
+
+  subroutine mpi_put_rev_ad_scalar_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real, intent(in) :: origin
+    real, intent(inout) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real :: o(1), o_ad(1)
+    o(1) = origin
+    o_ad(1) = origin_ad
+    call mpi_put_rev_ad_r4(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, win, ierr)
+    origin_ad = o_ad(1)
+  end subroutine mpi_put_rev_ad_scalar_r4
+
+  subroutine mpi_put_fwd_ad_scalar_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real(8), intent(in) :: origin
+    real(8), intent(in) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real(8) :: o(1), o_ad(1)
+    o(1) = origin
+    o_ad(1) = origin_ad
+    call mpi_put_fwd_ad_r8(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, win, ierr)
+  end subroutine mpi_put_fwd_ad_scalar_r8
+
+  subroutine mpi_put_rev_ad_scalar_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real(8), intent(in) :: origin
+    real(8), intent(inout) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real(8) :: o(1), o_ad(1)
+    o(1) = origin
+    o_ad(1) = origin_ad
+    call mpi_put_rev_ad_r8(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, win, ierr)
+    origin_ad = o_ad(1)
+  end subroutine mpi_put_rev_ad_scalar_r8
+
   subroutine mpi_get_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real, intent(out) :: origin(*)
     real, intent(out) :: origin_ad(*)
@@ -585,6 +1063,56 @@ contains
     call MPI_Accumulate(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, MPI_SUM, win, ierr)
     origin_ad(:origin_count) = 0.0_8
   end subroutine mpi_get_rev_ad_r8
+
+  subroutine mpi_get_fwd_ad_scalar_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real, intent(out) :: origin
+    real, intent(out) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real :: o(1), o_ad(1)
+    call mpi_get_fwd_ad_r4(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, win, ierr)
+    origin = o(1)
+    origin_ad = o_ad(1)
+  end subroutine mpi_get_fwd_ad_scalar_r4
+
+  subroutine mpi_get_rev_ad_scalar_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real, intent(out) :: origin
+    real, intent(inout) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real :: o(1), o_ad(1)
+    o_ad(1) = origin_ad
+    call mpi_get_rev_ad_r4(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, win, ierr)
+    origin = o(1)
+    origin_ad = o_ad(1)
+  end subroutine mpi_get_rev_ad_scalar_r4
+
+  subroutine mpi_get_fwd_ad_scalar_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real(8), intent(out) :: origin
+    real(8), intent(out) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real(8) :: o(1), o_ad(1)
+    call mpi_get_fwd_ad_r8(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, win, ierr)
+    origin = o(1)
+    origin_ad = o_ad(1)
+  end subroutine mpi_get_fwd_ad_scalar_r8
+
+  subroutine mpi_get_rev_ad_scalar_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real(8), intent(out) :: origin
+    real(8), intent(inout) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real(8) :: o(1), o_ad(1)
+    o_ad(1) = origin_ad
+    call mpi_get_rev_ad_r8(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, win, ierr)
+    origin = o(1)
+    origin_ad = o_ad(1)
+  end subroutine mpi_get_rev_ad_scalar_r8
 
   subroutine mpi_accumulate_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
     real, intent(in) :: origin(*)
@@ -631,6 +1159,56 @@ contains
     tmp = 0.0_8
     call MPI_Put(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
   end subroutine mpi_accumulate_rev_ad_r8
+
+  subroutine mpi_accumulate_fwd_ad_scalar_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+    real, intent(in) :: origin
+    real, intent(in) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real :: o(1), o_ad(1)
+    o(1) = origin
+    o_ad(1) = origin_ad
+    call mpi_accumulate_fwd_ad_r4(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, op, win, ierr)
+  end subroutine mpi_accumulate_fwd_ad_scalar_r4
+
+  subroutine mpi_accumulate_rev_ad_scalar_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+    real, intent(in) :: origin
+    real, intent(inout) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real :: o(1), o_ad(1)
+    o(1) = origin
+    o_ad(1) = origin_ad
+    call mpi_accumulate_rev_ad_r4(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, op, win, ierr)
+    origin_ad = o_ad(1)
+  end subroutine mpi_accumulate_rev_ad_scalar_r4
+
+  subroutine mpi_accumulate_fwd_ad_scalar_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+    real(8), intent(in) :: origin
+    real(8), intent(in) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real(8) :: o(1), o_ad(1)
+    o(1) = origin
+    o_ad(1) = origin_ad
+    call mpi_accumulate_fwd_ad_r8(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, op, win, ierr)
+  end subroutine mpi_accumulate_fwd_ad_scalar_r8
+
+  subroutine mpi_accumulate_rev_ad_scalar_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+    real(8), intent(in) :: origin
+    real(8), intent(inout) :: origin_ad
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
+    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer, intent(out), optional :: ierr
+    real(8) :: o(1), o_ad(1)
+    o(1) = origin
+    o_ad(1) = origin_ad
+    call mpi_accumulate_rev_ad_r8(o, o_ad, 1, origin_datatype, target_rank, target_disp, 1, target_datatype, op, win, ierr)
+    origin_ad = o_ad(1)
+  end subroutine mpi_accumulate_rev_ad_scalar_r8
 
   subroutine mpi_send_init_fwd_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
     real, intent(in) :: buf(*)
@@ -740,6 +1318,82 @@ contains
     end do
   end subroutine mpi_send_init_rev_ad_r8
 
+  subroutine mpi_send_init_fwd_ad_scalar_r4(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+    real, intent(in) :: buf
+    real, intent(in) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_send_init_fwd_ad_r4(b, b_ad, 1, datatype, dest, tag, comm, request, request_ad, ierr)
+  end subroutine mpi_send_init_fwd_ad_scalar_r4
+
+  subroutine mpi_send_init_fwd_rev_ad_scalar_r4(buf, buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+    real, intent(in) :: buf
+    real, intent(inout), target :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_send_init_fwd_rev_ad_r4(b, b_ad, 1, datatype, dest, tag, comm, request_ad, ierr)
+    buf_ad = b_ad(1)
+  end subroutine mpi_send_init_fwd_rev_ad_scalar_r4
+
+  subroutine mpi_send_init_rev_ad_scalar_r4(buf, buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+    real, intent(in) :: buf
+    real, intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(inout) :: request_ad
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_send_init_rev_ad_r4(b, b_ad, 1, datatype, dest, tag, comm, request_ad, ierr)
+    buf_ad = b_ad(1)
+  end subroutine mpi_send_init_rev_ad_scalar_r4
+
+  subroutine mpi_send_init_fwd_ad_scalar_r8(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+    real(8), intent(in) :: buf
+    real(8), intent(in) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_send_init_fwd_ad_r8(b, b_ad, 1, datatype, dest, tag, comm, request, request_ad, ierr)
+  end subroutine mpi_send_init_fwd_ad_scalar_r8
+
+  subroutine mpi_send_init_fwd_rev_ad_scalar_r8(buf, buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+    real(8), intent(in) :: buf
+    real(8), intent(inout), target :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_send_init_fwd_rev_ad_r8(b, b_ad, 1, datatype, dest, tag, comm, request_ad, ierr)
+    buf_ad = b_ad(1)
+  end subroutine mpi_send_init_fwd_rev_ad_scalar_r8
+
+  subroutine mpi_send_init_rev_ad_scalar_r8(buf, buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+    real(8), intent(in) :: buf
+    real(8), intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(inout) :: request_ad
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b(1) = buf
+    b_ad(1) = buf_ad
+    call mpi_send_init_rev_ad_r8(b, b_ad, 1, datatype, dest, tag, comm, request_ad, ierr)
+    buf_ad = b_ad(1)
+  end subroutine mpi_send_init_rev_ad_scalar_r8
+
   subroutine mpi_recv_init_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
     real, intent(out) :: buf(*)
     real, intent(out) :: buf_ad(*)
@@ -845,6 +1499,82 @@ contains
        end if
     end do
   end subroutine mpi_recv_init_rev_ad_r8
+
+  subroutine mpi_recv_init_fwd_ad_scalar_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+    real, intent(out) :: buf
+    real, intent(out) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    call mpi_recv_init_fwd_ad_r4(b, b_ad, 1, datatype, source, tag, comm, request, request_ad, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_recv_init_fwd_ad_scalar_r4
+
+  subroutine mpi_recv_init_fwd_rev_ad_scalar_r4(buf, buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    real, intent(out) :: buf
+    real, intent(inout), target :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b_ad(1) = buf_ad
+    call mpi_recv_init_fwd_rev_ad_r4(b, b_ad, 1, datatype, source, tag, comm, request_ad, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_recv_init_fwd_rev_ad_scalar_r4
+
+  subroutine mpi_recv_init_rev_ad_scalar_r4(buf, buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    real, intent(out) :: buf
+    real, intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(inout) :: request_ad
+    integer, intent(out), optional :: ierr
+    real :: b(1), b_ad(1)
+    b_ad(1) = buf_ad
+    call mpi_recv_init_rev_ad_r4(b, b_ad, 1, datatype, source, tag, comm, request_ad, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_recv_init_rev_ad_scalar_r4
+
+  subroutine mpi_recv_init_fwd_ad_scalar_r8(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+    real(8), intent(out) :: buf
+    real(8), intent(out) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    call mpi_recv_init_fwd_ad_r8(b, b_ad, 1, datatype, source, tag, comm, request, request_ad, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_recv_init_fwd_ad_scalar_r8
+
+  subroutine mpi_recv_init_fwd_rev_ad_scalar_r8(buf, buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    real(8), intent(out) :: buf
+    real(8), intent(inout), target :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b_ad(1) = buf_ad
+    call mpi_recv_init_fwd_rev_ad_r8(b, b_ad, 1, datatype, source, tag, comm, request_ad, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_recv_init_fwd_rev_ad_scalar_r8
+
+  subroutine mpi_recv_init_rev_ad_scalar_r8(buf, buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    real(8), intent(out) :: buf
+    real(8), intent(inout) :: buf_ad
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(inout) :: request_ad
+    integer, intent(out), optional :: ierr
+    real(8) :: b(1), b_ad(1)
+    b_ad(1) = buf_ad
+    call mpi_recv_init_rev_ad_r8(b, b_ad, 1, datatype, source, tag, comm, request_ad, ierr)
+    buf = b(1)
+    buf_ad = b_ad(1)
+  end subroutine mpi_recv_init_rev_ad_scalar_r8
 
   subroutine mpi_start_ad(request, request_ad, ierr)
     integer, intent(inout) :: request, request_ad
