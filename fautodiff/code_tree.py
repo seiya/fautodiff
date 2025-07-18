@@ -1974,7 +1974,14 @@ class Allocate(Node):
 
     @classmethod
     def _add_if(cls, node: Node, var: OpVar, is_mod_var: bool) -> Node:
-        if is_mod_var:
+        """Wrap ``node`` in a conditional block when needed."""
+
+        # Pointer arguments and module variables might already be
+        # allocated/associated outside of the current routine.  Guard the
+        # (de)allocation so we do not operate on them twice.  Local pointer
+        # variables have a well defined state so do not require this check.
+        check = is_mod_var or (var.intent in ("in", "inout") and (var.allocatable or var.pointer))
+        if check:
             func = "associated" if var.pointer else "allocated"
             cond = OpFunc(func, args=[var.change_index(None)])
             body = Block([node])
@@ -2032,15 +2039,12 @@ class Deallocate(Node):
             is_mod_var = var.name in mod_var_names
             ad_var = var.add_suffix(AD_SUFFIX)
             if reverse:
-                #if not is_mod_var:
-                #    nodes.append(Allocate([var]))
                 if var.ad_target:
                     nodes.append(Allocate._add_if(Allocate([ad_var]), ad_var, is_mod_var))
             else:
                 if var.ad_target:
-                    nodes.append(Allocate._add_if(Deallocate([ad_var], ad_code=True), ad_var, is_mod_var))
-                if not is_mod_var:
-                    nodes.append(Deallocate([var], ad_code=True))
+                    nodes.append(Deallocate([ad_var], ad_code=True))
+                nodes.append(Deallocate([var], ad_code=True))
         return nodes
 
     def is_effectively_empty(self) -> bool:

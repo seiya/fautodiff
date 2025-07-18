@@ -594,11 +594,13 @@ def _generate_ad_subroutine(
         fw_block = fw_block.prune_for(targets, mod_vars)
         #print(render_program(fw_block))
 
-        assigned = routine_org.content.assigned_vars()
-        required = routine_org.content.required_vars()
+        assigned = fw_block.assigned_vars(without_savevar=True)
+        assigned = ad_code.assigned_vars(assigned, without_savevar=True)
+        required = ad_code.required_vars(without_savevar=True)
+        required = fw_block.required_vars(required, without_savevar=True)
         common = assigned & required
         mod_names = [v.name for v in mod_vars]
-        cross_vars = sorted({v.name for v in common if v.name in mod_names and not v.name.endswith(AD_SUFFIX)})
+        cross_vars = sorted([v.name for v in common if v.name in mod_names and not v.name.endswith(AD_SUFFIX)])
         routine_info["cross_mod_vars"] = cross_vars
         routine_info["arg_info"]["cross_mod_vars"] = cross_vars
         if cross_vars:
