@@ -598,7 +598,9 @@ def _generate_ad_subroutine(
         required = routine_org.content.required_vars()
         common = assigned & required
         mod_names = [v.name for v in mod_vars]
-        cross_vars = sorted({v.name for v in common if v.name in mod_names and not v.name.endswith(AD_SUFFIX)})
+        candidates = [v.name for v in common if v.name in mod_names and not v.name.endswith(AD_SUFFIX)]
+        ad_used = {v.name for v in ad_block.collect_vars()}
+        cross_vars = sorted([name for name in candidates if name in ad_used])
         routine_info["cross_mod_vars"] = cross_vars
         routine_info["arg_info"]["cross_mod_vars"] = cross_vars
         if cross_vars:

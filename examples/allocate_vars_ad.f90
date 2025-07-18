@@ -1,6 +1,5 @@
 module allocate_vars_ad
   use allocate_vars
-  use fautodiff_data_storage
   implicit none
 
   real, allocatable :: mod_arr_diff_ad(:)
@@ -101,17 +100,6 @@ contains
     return
   end subroutine module_vars_init_rev_ad
 
-  subroutine module_vars_init_fwd_rev_ad(n, x)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-
-    call fautodiff_data_storage_push(mod_arr)
-    call fautodiff_data_storage_push(mod_arr_diff)
-    call module_vars_init(n, x)
-
-    return
-  end subroutine module_vars_init_fwd_rev_ad
-
   subroutine module_vars_main_fwd_ad(n, x, x_ad)
     integer, intent(in)  :: n
     real, intent(out) :: x
@@ -143,16 +131,6 @@ contains
 
     return
   end subroutine module_vars_main_rev_ad
-
-  subroutine module_vars_main_fwd_rev_ad(n, x)
-    integer, intent(in)  :: n
-    real, intent(out) :: x
-
-    call fautodiff_data_storage_push(mod_arr_diff)
-    call module_vars_main(n, x)
-
-    return
-  end subroutine module_vars_main_fwd_rev_ad
 
   subroutine module_vars_finalize_fwd_ad(n, x, x_ad)
     integer, intent(in)  :: n
