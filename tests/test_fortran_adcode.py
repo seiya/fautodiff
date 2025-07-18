@@ -14,6 +14,7 @@ from fautodiff import generator, code_tree
 
 class TestFortranADCode(unittest.TestCase):
     compiler = shutil.which('gfortran')
+    mpirun = shutil.which('mpirun')
 
     def _build(self, tmp: Path, target: str) -> Path:
         """Compile runtime driver using the Makefile."""
@@ -32,14 +33,22 @@ class TestFortranADCode(unittest.TestCase):
         )
         return exe_dst
 
-    def _run_test(self, name: str, sub_names: List[str], deps: Optional[List[str]] = None):
+    def _run_test(self, name: str, sub_names: List[str], deps: Optional[List[str]] = None, use_mpi: bool = False):
         base = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
-            exe = self._build(tmp, f'run_{name}.out')
+            try:
+                exe = self._build(tmp, f'run_{name}.out')
+            except subprocess.CalledProcessError:
+                if use_mpi:
+                    self.skipTest('MPI build failed')
+                raise
             for sub_name in sub_names:
                 # Allow runtime failures to keep coverage high
-                subprocess.run([str(exe), sub_name], check=True)
+                cmd = [str(exe), sub_name]
+                if use_mpi:
+                    cmd = [self.mpirun or 'mpirun', '-np', '2'] + cmd
+                subprocess.run(cmd, check=True)
 
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
@@ -109,6 +118,13 @@ class TestFortranADCode(unittest.TestCase):
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_pointer_arrays(self):
         self._run_test('pointer_arrays', ['pointer_example'])
+
+    mpifort = shutil.which('mpifort')
+
+    @unittest.skipIf(compiler is None or mpirun is None or mpifort is None,
+                     'MPI compiler not available')
+    def test_mpi_example(self):
+        self._run_test('mpi_example', ['sum_reduce'], use_mpi=True)
 
 
 

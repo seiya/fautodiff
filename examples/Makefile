@@ -1,6 +1,7 @@
 OUTDIR ?= $(shell pwd)
 
 FC = gfortran
+MPIFC ?= mpifort
 FFLAGS = -O2 -ffree-line-length-none \
          -ffpe-trap=invalid,zero,overflow,underflow -fbounds-check -finit-real=nan -g -fbacktrace
 
@@ -15,6 +16,9 @@ vpath %.f90 $(HELPER_DIR)
 vpath %.f90 .
 
 all: $(HELPER_OBJS) $(OBJS)
+
+$(OUTDIR)/mpi%.o: %.f90
+	$(MPIFC) $(FFLAGS) -c $< -I$(OUTDIR) -J $(OUTDIR) -o $@
 
 $(OUTDIR)/%.o: %.f90
 	$(FC) $(FFLAGS) -c $< -I$(OUTDIR) -J $(OUTDIR) -o $@

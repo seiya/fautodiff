@@ -1,6 +1,7 @@
 OUTDIR ?= $(shell pwd)
 
 FC = gfortran
+MPIFC ?= mpifort
 FFLAGS = -O2 -ffree-line-length-none \
          -ffpe-trap=invalid,zero,overflow,underflow -fbounds-check -finit-real=nan -g -fbacktrace
 
@@ -16,7 +17,7 @@ vpath %.f90 .
 PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_control_flow.out run_cross_mod.out \
            run_data_storage.out run_intrinsic_func.out run_real_kind.out run_save_vars.out run_store_vars.out \
            run_directives.out run_parameter_var.out run_module_vars.out run_call_module_vars.out run_allocate_vars.out \
-           run_exit_cycle.out run_pointer_arrays.out
+           run_exit_cycle.out run_pointer_arrays.out run_mpi_example.out
 PROGRAMS = $(addprefix $(OUTDIR)/,$(PROGRAM_NAMES))
 
 .PHONY: all clean
@@ -27,11 +28,17 @@ all: $(PROGRAMS)
 $(OUTDIR)/run_%.out: $(OUTDIR)/run_%.o
 	$(FC) -o $@ $^
 
+$(OUTDIR)/run_mpi_example.out: $(OUTDIR)/run_mpi_example.o $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
+	$(MPIFC) -o $@ $^
+
 $(OUTDIR)/run_%.o: run_%.f90
 	$(FC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
 
+$(OUTDIR)/run_mpi_example.o: run_mpi_example.f90
+	$(MPIFC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
+
 $(OUTDIR)/%.o: %.f90
-	$(MAKE) -C $(MOD_DIR) OUTDIR=$(OUTDIR) $@
+	$(MAKE) -C $(MOD_DIR) OUTDIR=$(OUTDIR) MPIFC=$(MPIFC) $@
 
 # AD modules depend on their original modules
 $(OUTDIR)/%_ad.o: $(OUTDIR)/%.mod
@@ -59,6 +66,7 @@ $(OUTDIR)/run_call_module_vars.o: $(OUTDIR)/call_module_vars.o $(OUTDIR)/call_mo
 $(OUTDIR)/run_allocate_vars.o: $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o
 $(OUTDIR)/run_exit_cycle.o: $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/run_pointer_arrays.o: $(OUTDIR)/pointer_arrays.o $(OUTDIR)/pointer_arrays_ad.o
+$(OUTDIR)/run_mpi_example.o: $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
 
 $(OUTDIR)/run_simple_math.out: $(OUTDIR)/run_simple_math.o $(OUTDIR)/simple_math.o $(OUTDIR)/simple_math_ad.o
 $(OUTDIR)/run_arrays.out: $(OUTDIR)/run_arrays.o $(OUTDIR)/arrays.o $(OUTDIR)/arrays_ad.o
@@ -77,6 +85,7 @@ $(OUTDIR)/run_call_module_vars.out: $(OUTDIR)/run_call_module_vars.o $(OUTDIR)/c
 $(OUTDIR)/run_allocate_vars.out: $(OUTDIR)/run_allocate_vars.o $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/run_exit_cycle.out: $(OUTDIR)/run_exit_cycle.o $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/run_pointer_arrays.out: $(OUTDIR)/run_pointer_arrays.o $(OUTDIR)/pointer_arrays.o $(OUTDIR)/pointer_arrays_ad.o
+$(OUTDIR)/run_mpi_example.out: $(OUTDIR)/run_mpi_example.o $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
 
 
 clean:
