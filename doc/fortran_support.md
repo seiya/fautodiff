@@ -75,3 +75,19 @@ stack before calling the original routine.  The corresponding `<name>_rev_ad`
 subroutine pops the values at entry so that derivative computations use the
 correct state.  Calls to this routine from other AD code automatically invoke
 the wrapper in the forward sweep.
+
+## MPI persistent communication
+
+The helper module `mpi_ad` provides wrappers for persistent MPI operations. Use
+`fautodiff_mpi_send_init_fwd_ad` together with
+`fautodiff_mpi_send_init_fwd_rev_ad` and their receive counterparts to create
+paired primal and adjoint requests.  The `_fwd_rev_ad` routines register each
+request so that the reverse sweep can update gradients.  The corresponding
+`fautodiff_mpi_send_init_rev_ad` and `fautodiff_mpi_recv_init_rev_ad` routines
+free these registrations during the reverse sweep.
+
+Persistent requests are started by calling `fautodiff_mpi_wait_ad` (or
+`waitall_ad`) which internally invokes `MPI_Start` on both the primal and
+adjoint handles.  The `fautodiff_mpi_start_ad` wrappers then wait for completion
+and accumulate received adjoint data (or reset send buffers) so persistent
+communications behave like their non-persistent counterparts in reverse mode.
