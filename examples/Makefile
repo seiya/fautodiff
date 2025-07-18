@@ -17,7 +17,7 @@ vpath %.f90 .
 
 all: $(HELPER_OBJS) $(OBJS)
 
-$(OUTDIR)/mpi%.o: %.f90
+$(OUTDIR)/mpi_%.o: mpi_%.f90
 	$(MPIFC) $(FFLAGS) -c $< -I$(OUTDIR) -J $(OUTDIR) -o $@
 
 $(OUTDIR)/%.o: %.f90
@@ -35,6 +35,7 @@ $(OUTDIR)/store_vars_ad.o: $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/module_vars_ad.o: $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/allocate_vars_ad.o: $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/exit_cycle_ad.o: $(OUTDIR)/fautodiff_data_storage.o
+$(OUTDIR)/mpi_example_ad.o: $(OUTDIR)/mpi_ad.o
 
 clean:
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.mod
