@@ -151,6 +151,24 @@ class TestGenerator(unittest.TestCase):
         variables = data.get("variables", {})
         self.assertIn("c", variables)
 
+    def test_fadmod_variable_defaults(self):
+        code_tree.Node.reset()
+        fadmod = Path("module_vars.fadmod")
+        if fadmod.exists():
+            fadmod.unlink()
+        generator.generate_ad("examples/module_vars.f90", warn=False)
+        data = json.loads(fadmod.read_text())
+        var_a = data.get("variables", {}).get("a")
+        self.assertIsNotNone(var_a)
+        self.assertIn("typename", var_a)
+        self.assertNotIn("parameter", var_a)
+        self.assertNotIn("constant", var_a)
+        self.assertNotIn("dims", var_a)
+        self.assertNotIn("kind", var_a)
+        self.assertNotIn("init_val", var_a)
+        self.assertNotIn("allocatable", var_a)
+        self.assertNotIn("pointer", var_a)
+
     def test_module_vars_directive(self):
         code_tree.Node.reset()
         import textwrap
