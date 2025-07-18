@@ -200,17 +200,24 @@ def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
     if mod.decls is not None:
         for d in mod.decls.iter_children():
             if isinstance(d, Declaration):
-                variables_data[d.name] = {
-                    "typename": d.typename,
-                    "kind": d.kind,
-                    "dims": list(d.dims) if d.dims is not None else None,
-                    "parameter": d.parameter,
-                    "constant": d.constant,
-                    "init_val": d.init_val,
-                    "access": d.access,
-                    "allocatable": d.allocatable,
-                    "pointer": d.pointer,
-                }
+                info = {"typename": d.typename}
+                if d.kind is not None:
+                    info["kind"] = d.kind
+                if d.dims is not None:
+                    info["dims"] = list(d.dims)
+                if d.parameter:
+                    info["parameter"] = True
+                if d.constant:
+                    info["constant"] = True
+                if d.init_val is not None:
+                    info["init_val"] = d.init_val
+                if d.access is not None:
+                    info["access"] = d.access
+                if d.allocatable:
+                    info["allocatable"] = True
+                if d.pointer:
+                    info["pointer"] = True
+                variables_data[d.name] = info
 
     if not routines_data and not variables_data:
         return
