@@ -71,12 +71,16 @@ This file provides guidelines for contributors about the repository and develop 
 
 ## 9. Fortran Modules in `fortran_modules`
 - Module names must start with the prefix ``fautodiff_``.
+  Wrappers for external modules (e.g. MPI) are an exception: these use
+  ``<module>_ad`` as the module name without the ``fautodiff_`` prefix.
 - Each module should be placed in a file named after the module itself.
   For example, ``fautodiff_data_storage`` lives in ``fautodiff_data_storage.f90``.
 - Public subroutines provided by these modules must also start with the module
   name followed by an underscore.  For example, ``data_storage`` becomes
   ``fautodiff_data_storage`` and its public routine ``push`` is renamed to
   ``fautodiff_data_storage_push``.
+- For AD wrappers of external modules such as MPI, use ``<module>_ad.f90`` as the
+  file name and name the module ``<module>_ad``.
 
 ## 10. Runtime Verification in `tests/fortran_runtime`
 The programs under `tests/fortran_runtime` check that the generated AD code
