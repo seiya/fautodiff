@@ -305,6 +305,14 @@ class TestGenerator(unittest.TestCase):
         self.assertIn('MPI_Recv_init', routines)
         self.assertEqual(routines['MPI_Recv_init']['name_fwd_rev_ad'], 'mpi_recv_init_fwd_rev_ad')
 
+    def test_mpi_example(self):
+        code_tree.Node.reset()
+        generated = generator.generate_ad(
+            'examples/mpi_example.f90', warn=False, search_dirs=['fortran_modules']
+        )
+        expected = Path('examples/mpi_example_ad.f90').read_text()
+        self.assertEqual(generated, expected)
+
 
 def _make_example_test(src: Path):
     def test(self):
@@ -318,7 +326,7 @@ def _make_example_test(src: Path):
 
 examples_dir = Path("examples")
 for _src in sorted(examples_dir.glob("*.f90")):
-    if _src.name.endswith("_ad.f90") or _src.stem in {"cross_mod_a", "cross_mod_b", "call_module_vars", "pointer_arrays"}:
+    if _src.name.endswith("_ad.f90") or _src.stem in {"cross_mod_a", "cross_mod_b", "call_module_vars", "pointer_arrays", "mpi_example"}:
         continue
     test_name = f"test_{_src.stem}"
     setattr(TestGenerator, test_name, _make_example_test(_src))
