@@ -1,7 +1,8 @@
 OUTDIR ?= $(shell pwd)
 
 FC = gfortran
-FFLAGS = -O2 -ffree-line-length-none
+FFLAGS = -O2 -ffree-line-length-none \
+         -ffpe-trap=invalid,zero,overflow,underflow -fbounds-check -finit-real=nan -g -fbacktrace
 
 SRCS := $(wildcard *.f90)
 OBJS := $(addprefix $(OUTDIR)/,$(SRCS:.f90=.o))
@@ -10,7 +11,6 @@ HELPER_DIR = ../fortran_modules
 HELPER_SRCS = $(wildcard $(HELPER_DIR)/*.f90)
 HELPER_OBJS = $(addprefix $(OUTDIR)/,$(notdir $(HELPER_SRCS:.f90=.o)))
 
-vpath %.f90 $(OUTDIR)
 vpath %.f90 $(HELPER_DIR)
 vpath %.f90 .
 

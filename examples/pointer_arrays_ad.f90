@@ -48,8 +48,6 @@ contains
     real, pointer :: p_ad(:)
     integer :: i
 
-    allocate(p(n))
-
     x_ad = 0.0
 
     if (.not. associated(mod_p_ad)) then
@@ -70,7 +68,6 @@ contains
       deallocate(mod_p_ad)
     end if
     deallocate(p_ad)
-    deallocate(p)
 
     return
   end subroutine pointer_example_rev_ad

@@ -38,6 +38,7 @@ program run_pointer_arrays
 contains
 
   subroutine test_pointer_example
+    real, parameter :: tol = 4.0e-4
     integer, parameter :: n = 5
     real :: x, res, res_eps
     real :: x_ad, res_ad
@@ -50,6 +51,7 @@ contains
     call pointer_example(n, x + eps, res_eps)
     fd = (res_eps - res) / eps
     x_ad = 1.0
+    allocate(mod_p(n))
     call pointer_example_fwd_ad(n, x, x_ad, res, res_ad)
     if (abs((res_ad - fd) / fd) > tol) then
        print *, 'test_pointer_example_fwd failed', res_ad, fd
@@ -63,6 +65,8 @@ contains
        print *, 'test_pointer_example_rev failed', inner1, inner2
        error stop 1
     end if
+
+    deallocate(mod_p)
 
     return
   end subroutine test_pointer_example

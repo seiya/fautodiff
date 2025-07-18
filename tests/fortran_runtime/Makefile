@@ -1,14 +1,14 @@
 OUTDIR ?= $(shell pwd)
 
 FC = gfortran
-FFLAGS = -O2 -ffree-line-length-none
+FFLAGS = -O2 -ffree-line-length-none \
+         -ffpe-trap=invalid,zero,overflow,underflow -fbounds-check -finit-real=nan -g -fbacktrace
 
 HELPER_DIR = ../../fortran_modules
 MOD_DIR = ../../examples
 MOD_SRCS = $(wildcard $(MOD_DIR)/*.f90)
 MOD_OBJS = $(addprefix $(OUTDIR)/,$(notdir $(MOD_SRCS:.f90=.o)))
 
-vpath %.f90 $(OUTDIR)
 vpath %.f90 $(HELPER_DIR)
 vpath %.f90 $(MOD_DIR)
 vpath %.f90 .
@@ -59,8 +59,6 @@ $(OUTDIR)/run_call_module_vars.o: $(OUTDIR)/call_module_vars.o $(OUTDIR)/call_mo
 $(OUTDIR)/run_allocate_vars.o: $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o
 $(OUTDIR)/run_exit_cycle.o: $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/run_pointer_arrays.o: $(OUTDIR)/pointer_arrays.o $(OUTDIR)/pointer_arrays_ad.o
-$(OUTDIR)/pointer_arrays_ad.o: $(OUTDIR)/pointer_arrays.mod $(OUTDIR)/pointer_arrays_ad.f90
-	$(FC) $(FFLAGS) -c $(OUTDIR)/pointer_arrays_ad.f90 -I$(OUTDIR) -J $(OUTDIR) -o $@
 
 $(OUTDIR)/run_simple_math.out: $(OUTDIR)/run_simple_math.o $(OUTDIR)/simple_math.o $(OUTDIR)/simple_math_ad.o
 $(OUTDIR)/run_arrays.out: $(OUTDIR)/run_arrays.o $(OUTDIR)/arrays.o $(OUTDIR)/arrays_ad.o

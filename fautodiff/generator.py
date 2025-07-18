@@ -799,7 +799,7 @@ def _generate_ad_subroutine(
         prune_targets = VarList(grad_args + mod_ad_vars)
     else:
         prune_targets = VarList(grad_args + mod_vars + mod_ad_vars + out_args)
-    subroutine = subroutine.prune_for(prune_targets, mod_vars)
+    subroutine = subroutine.prune_for(prune_targets, mod_vars, decl_map=subroutine.decl_map)
 
     mod_var_names = [var.name for var in mod_vars + mod_ad_vars]
     required_vnames = [str(var) for var in subroutine.required_vars() if var.name not in mod_var_names]
