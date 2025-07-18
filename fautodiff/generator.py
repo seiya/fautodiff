@@ -186,10 +186,14 @@ def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
         info = routine_map.get(r.name)
         if info is None:
             continue
+        skip = info.get("skip") or (
+            info.get("name_fwd_ad") is None and info.get("name_rev_ad") is None
+        )
+        if skip:
+            routines_data[r.name] = {"skip": True}
+            continue
         info = dict(info)
         info["module"] = mod_name
-        if info.get("name_fwd_ad") is None and info.get("name_rev_ad") is None:
-            info["skip"] = True
         if info.get("cross_mod_vars"):
             info["cross_mod_vars"] = list(info["cross_mod_vars"])
         if info.get("name_fwd_rev_ad"):
