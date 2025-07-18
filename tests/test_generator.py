@@ -228,6 +228,32 @@ class TestGenerator(unittest.TestCase):
         self.assertIn("foo", routines)
         self.assertTrue(routines["foo"].get("skip"))
 
+    def test_optional_argument(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module optmod
+            contains
+              subroutine foo(x, y)
+                real, intent(inout) :: x
+                real, intent(in), optional :: y
+                if (present(y)) then
+                  x = x + y
+                end if
+              end subroutine foo
+            end module optmod
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "opt.f90"
+            src_path.write_text(src)
+            generated = generator.generate_ad(str(src_path), warn=False)
+            self.assertIn("real, optional, intent(in)  :: y", generated)
+
 
 def _make_example_test(src: Path):
     def test(self):

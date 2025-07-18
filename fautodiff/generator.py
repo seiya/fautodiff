@@ -89,6 +89,7 @@ def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str]) -> Subroutine:
                 arg.intent,
                 allocatable=arg.allocatable,
                 pointer=arg.pointer,
+                optional=arg.optional,
                 declared_in="routine",
             )
         )
@@ -289,6 +290,7 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
                 var.intent,
                 allocatable=var.allocatable,
                 pointer=var.pointer,
+                optional=var.optional,
                 declared_in="routine",
             )
         )
@@ -403,6 +405,7 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                 var.intent,
                 allocatable=var.allocatable,
                 pointer=var.pointer,
+                optional=var.optional,
                 declared_in="routine",
             )
         )
@@ -537,6 +540,7 @@ def _generate_ad_subroutine(
                             init_val=base_decl.init_val if base_decl else None,
                             allocatable=base_decl.allocatable if base_decl else False,
                             pointer=base_decl.pointer if base_decl else False,
+                            optional=base_decl.optional if base_decl else False,
                             declared_in="routine",
                         )
                     )
@@ -672,6 +676,7 @@ def _generate_ad_subroutine(
                             init_val=base_decl.init_val,
                             allocatable=base_decl.allocatable,
                             pointer=base_decl.pointer,
+                            optional=base_decl.optional,
                             declared_in="routine",
                         )
                     )
@@ -791,6 +796,7 @@ def _generate_ad_subroutine(
                 init_val=base_decl.init_val if base_decl else None,
                 allocatable=base_decl.allocatable if base_decl else False,
                 pointer=base_decl.pointer if base_decl else False,
+                optional=base_decl.optional if base_decl else False,
                 declared_in="routine",
             )
         )
@@ -884,6 +890,7 @@ def generate_ad(
                                              #access = decl.access,
                                              allocatable = decl.allocatable,
                                              pointer = decl.pointer,
+                                             optional = decl.optional,
                                              declared_in = "module",
                                              )
                                 )

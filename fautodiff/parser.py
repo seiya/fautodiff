@@ -133,6 +133,7 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
             is_constant=decl.parameter or getattr(decl, "constant", False),
             allocatable=getattr(decl, "allocatable", False),
             pointer=getattr(decl, "pointer", False),
+            optional=getattr(decl, "optional", False),
             declared_in=decl.declared_in,
         )
 
@@ -150,6 +151,7 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
                 is_constant=decl.parameter or getattr(decl, "constant", False),
                 allocatable=getattr(decl, "allocatable", False),
                 pointer=getattr(decl, "pointer", False),
+                optional=getattr(decl, "optional", False),
                 declared_in=decl.declared_in,
             )
         else:  # must be function
@@ -290,6 +292,7 @@ def _clone_decl(decl: Declaration, declared_in: str) -> Declaration:
         access=decl.access,
         allocatable=decl.allocatable,
         pointer=decl.pointer,
+        optional=decl.optional,
         declared_in=declared_in,
     )
 
@@ -343,6 +346,7 @@ def _parse_decl_stmt(
     access = None
     allocatable = False
     pointer = False
+    optional = False
     attrs = stmt.items[1]
     if attrs is not None:
         for attr in attrs.items:
@@ -358,6 +362,8 @@ def _parse_decl_stmt(
                 allocatable = True
             if name == "pointer":
                 pointer = True
+            if name == "optional":
+                optional = True
             if allow_access and name in ("public", "private"):
                 access = name
 
@@ -391,6 +397,7 @@ def _parse_decl_stmt(
                 access=access,
                 allocatable=allocatable,
                 pointer=pointer,
+                optional=optional,
                 declared_in=declared_in,
             )
         )
@@ -523,6 +530,7 @@ def _search_use(name: str, only: Optional[List[str]], decl_map: dict, module_map
                         init_val=info.get("init_val"),
                         access=info.get("access"),
                         pointer=info.get("pointer", False),
+                        optional=info.get("optional", False),
                         declared_in="use",
                     )
 
