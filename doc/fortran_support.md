@@ -66,7 +66,15 @@ earlier statements.
 
 The generator internally builds a tree of nodes (`Block`, `Assignment`, `IfBlock`, and so on) defined in `fautodiff.code_tree` and renders it back to Fortran after inserting derivative updates.
 
-## Cross-subroutine module variables
+## Wrapper routine in forward step in reverse-mode AD
+Wrapper routines whose names end with `_fwd_rev_ad` are used whenever
+the forward sweep of reverse-mode AD requires extra processing in addition to
+calling the primal routine.  They may push or restore
+module variables or register MPI requests for later completion.  The
+corresponding `<name>_rev_ad` routines run during the reverse sweep to
+complete these actions and accumulate gradients.
+
+### Cross-subroutine module variables
 
 When a routine both reads and writes a module variable, its reverse-mode version
 needs the value from before the call.  The generator emits a wrapper
@@ -76,18 +84,24 @@ subroutine pops the values at entry so that derivative computations use the
 correct state.  Calls to this routine from other AD code automatically invoke
 the wrapper in the forward sweep.
 
-## MPI persistent communication
+### MPI communication with requests
 
 The helper module `mpi_ad` provides wrappers for persistent MPI operations. Use
-`fautodiff_mpi_send_init_fwd_ad` together with
-`fautodiff_mpi_send_init_fwd_rev_ad` and their receive counterparts to create
+`mpi_send_init_fwd_ad` together with
+`mpi_send_init_fwd_rev_ad` and their receive counterparts to create
 paired primal and adjoint requests.  The `_fwd_rev_ad` routines register each
 request so that the reverse sweep can update gradients.  The corresponding
-`fautodiff_mpi_send_init_rev_ad` and `fautodiff_mpi_recv_init_rev_ad` routines
+`mpi_send_init_rev_ad` and `mpi_recv_init_rev_ad` routines
 free these registrations during the reverse sweep.
 
 Persistent requests are started by calling `fautodiff_mpi_wait_ad` (or
 `waitall_ad`) which internally invokes `MPI_Start` on both the primal and
 adjoint handles.  The `fautodiff_mpi_start_ad` wrappers then wait for completion
-and accumulate received adjoint data (or reset send buffers) so persistent
-communications behave like their non-persistent counterparts in reverse mode.
+and accumulate received adjoint data (or reset send buffers).
+
+Nonblocking routines such as `MPI_Isend` and `MPI_Irecv` use the same
+infrastructure.  Their wrappers `mpi_isend_fwd_rev_ad` and
+`mpi_irecv_fwd_rev_ad` register each request so that
+`mpi_wait_ad` can issue the corresponding `MPI_Isend` or `MPI_Irecv`.
+During the reverse sweep the `*_rev_ad` variants wait on these operations,
+update gradients, and clean up the stored records.
