@@ -30,4 +30,73 @@ contains
     return
   end subroutine sum_reduce_rev_ad
 
+    subroutine isend_irecv_fwd_ad(x, x_ad, y, y_ad,comm, tag)
+    real, intent(inout) :: x(2)
+    real, intent(inout) :: x_ad(2)
+    real, intent(out) :: y
+    real, intent(out) :: y_ad
+    integer, intent(in)  :: comm
+    integer, intent(in)  :: tag
+    integer :: reqr
+    integer :: reqr_ad
+    integer :: reqs
+    integer :: reqs_ad
+    integer :: ierr, rank, size
+    integer :: pn, pp
+
+    call MPI_Comm_rank(comm, rank, ierr)
+    call MPI_Comm_size(comm, size, ierr)
+
+    x(:) = x(:) + rank
+    pn = modulo(rank - 1, size)
+    pp = modulo(rank + 1, size)
+    call MPI_Irecv_fwd_ad(x(1), x_ad(1), 1, MPI_REAL, pn, tag, comm, reqr, reqr_ad, ierr)
+    call MPI_Isend_fwd_ad(x(2), x_ad(2), 1, MPI_REAL, pp, tag, comm, reqs, reqs_ad, ierr)
+    y_ad = x_ad(2) ! y = x(2)
+    y = x(2)
+    call MPI_Wait_fwd_ad(reqs, MPI_STATUS_IGNORE, ierr)
+    call MPI_Wait_fwd_ad(reqr, MPI_STATUS_IGNORE, ierr)
+    y_ad = x_ad(1) + x_ad(2) ! y = x(1) + x(2)
+    y = x(1) + x(2)
+
+    return
+  end subroutine isend_irecv_fwd_ad
+
+  subroutine isend_irecv_rev_ad(x, x_ad, y, y_ad, comm, tag)
+    real, intent(inout) :: x(2)
+    real, intent(inout) :: x_ad(2)
+    real, intent(out) :: y
+    real, intent(out) :: y_ad
+    integer, intent(in)  :: comm
+    integer, intent(in)  :: tag
+    integer :: reqr_ad
+    integer :: reqs_ad
+    integer :: ierr, rank, size
+    integer :: pn, pp
+
+    call MPI_Comm_rank(comm, rank, ierr)
+    call MPI_Comm_size(comm, size, ierr)
+
+    x(:) = x(:) + rank
+    pn = modulo(rank - 1, size)
+    pp = modulo(rank + 1, size)
+    call MPI_Irecv_fwd_rev_ad(x(1), x_ad(1), MPI_REAL, pn, tag, comm, reqr_ad, ierr)
+    call MPI_Isend_fwd_rev_ad(x(2), x_ad(2), MPI_REAL, pp, tag, comm, reqs_ad, ierr)
+    y = x(2)
+    call MPI_Wait_fwd_rev_ad(reqs, MPI_STATUS_IGNORE, ierr)
+    call MPI_Wait_fwd_rev_ad(reqr, MPI_STATUS_IGNORE, ierr)
+    y = x(1) + x(2)
+
+    x_ad(1) = y_ad ! y = x(1) + x(2)
+    x_ad(2) = y_ad ! y = x(1) + x(2)
+    y_ad = 0.0 ! y = x(1) + x(2)
+    call MPI_Wait_rev_ad(reqs_ad, MPI_STATUS_IGNORE, ierr)
+    call MPI_Wait_rev_ad(reqr_ad, MPI_STATUS_IGNORE, ierr)
+    x_ad(2) = y_ad ! y = x(2)
+    call MPI_Irecv_rev_ad(x(1), x_ad(1), MPI_REAL, pn, tag, comm, reqr_ad, ierr)
+    call MPI_Isend_rev_ad(x(2), x_ad(2), MPI_REAL, pp, tag, comm, reqs_ad, ierr)
+
+    return
+  end subroutine isend_irecv_rev_ad
+
 end module mpi_example_ad
