@@ -272,6 +272,35 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad(str(src_path), warn=False)
             self.assertIn("real, optional, intent(in)  :: y", generated)
 
+    def test_persistent_mpi_wrappers(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module pmpi
+              use mpi
+            contains
+              subroutine foo(buf, r, comm)
+                real :: buf(1)
+                integer :: r, comm, req, ierr
+                call MPI_Send_init(buf, 1, MPI_REAL, r, 0, comm, req, ierr)
+                call MPI_Start(req, ierr)
+                call MPI_Wait(req, MPI_STATUS_IGNORE, ierr)
+              end subroutine foo
+            end module pmpi
+            """
+        )
+
+        fadmod = Path(__file__).resolve().parents[1] / 'fortran_modules' / 'mpi.fadmod'
+        data = json.loads(fadmod.read_text())
+        routines = data.get('routines', {})
+        self.assertIn('MPI_Start', routines)
+        self.assertEqual(routines['MPI_Start']['name_fwd_ad'], 'fautodiff_mpi_start_ad')
+        self.assertIn('MPI_Wait', routines)
+        self.assertEqual(routines['MPI_Wait']['name_fwd_ad'], 'fautodiff_mpi_wait_ad')
+
 
 def _make_example_test(src: Path):
     def test(self):

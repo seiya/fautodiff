@@ -26,6 +26,10 @@ module mpi_ad
   public :: fautodiff_mpi_send_init_rev_ad
   public :: fautodiff_mpi_recv_init_fwd_ad
   public :: fautodiff_mpi_recv_init_rev_ad
+  public :: fautodiff_mpi_start_ad
+  public :: fautodiff_mpi_startall_ad
+  public :: fautodiff_mpi_wait_ad
+  public :: fautodiff_mpi_waitall_ad
 
   interface fautodiff_mpi_bcast_fwd_ad
      module procedure mpi_bcast_fwd_ad_r4
@@ -123,6 +127,43 @@ module mpi_ad
      module procedure mpi_recv_init_rev_ad_r4
      module procedure mpi_recv_init_rev_ad_r8
   end interface
+  interface fautodiff_mpi_start_ad
+     module procedure mpi_start_ad
+  end interface
+  interface fautodiff_mpi_startall_ad
+     module procedure mpi_startall_ad
+  end interface
+  interface fautodiff_mpi_wait_ad
+     module procedure mpi_wait_ad
+  end interface
+  interface fautodiff_mpi_waitall_ad
+     module procedure mpi_waitall_ad
+  end interface
+
+  integer, parameter :: FAD_MPI_OP_SEND = 1
+  integer, parameter :: FAD_MPI_OP_RECV = 2
+  integer, parameter :: MAX_PERSISTENT = 1024
+
+  type :: persistent_req_r4
+     real, pointer, contiguous :: buf(:) => null()
+     real, allocatable :: tmp(:)
+     integer :: count = 0
+     integer :: datatype = 0
+     integer :: op_type = 0
+     integer :: request_ad = MPI_REQUEST_NULL
+  end type persistent_req_r4
+
+  type :: persistent_req_r8
+     real(8), pointer, contiguous :: buf(:) => null()
+     real(8), allocatable :: tmp(:)
+     integer :: count = 0
+     integer :: datatype = 0
+     integer :: op_type = 0
+     integer :: request_ad = MPI_REQUEST_NULL
+  end type persistent_req_r8
+
+  type(persistent_req_r4) :: req_map_r4(MAX_PERSISTENT)
+  type(persistent_req_r8) :: req_map_r8(MAX_PERSISTENT)
 
 contains
 
@@ -584,7 +625,20 @@ contains
     integer, intent(in) :: count, datatype, dest, tag, comm
     integer, intent(out) :: request_ad
     integer, intent(out), optional :: ierr
-    call MPI_Recv_init(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+    integer :: i
+
+    do i = 1, MAX_PERSISTENT
+       if (req_map_r4(i)%request_ad == MPI_REQUEST_NULL) exit
+    end do
+    if (i > MAX_PERSISTENT) stop "too many persistent requests"
+
+    allocate(req_map_r4(i)%tmp(count))
+    req_map_r4(i)%buf => buf_ad
+    req_map_r4(i)%count = count
+    req_map_r4(i)%datatype = datatype
+    req_map_r4(i)%op_type = FAD_MPI_OP_SEND
+    call MPI_Recv_init(req_map_r4(i)%tmp, count, datatype, dest, tag, comm, request_ad, ierr)
+    req_map_r4(i)%request_ad = request_ad
   end subroutine mpi_send_init_rev_ad_r4
 
   subroutine mpi_send_init_fwd_ad_r8(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
@@ -603,7 +657,20 @@ contains
     integer, intent(in) :: count, datatype, dest, tag, comm
     integer, intent(out) :: request_ad
     integer, intent(out), optional :: ierr
-    call MPI_Recv_init(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+    integer :: i
+
+    do i = 1, MAX_PERSISTENT
+       if (req_map_r8(i)%request_ad == MPI_REQUEST_NULL) exit
+    end do
+    if (i > MAX_PERSISTENT) stop "too many persistent requests"
+
+    allocate(req_map_r8(i)%tmp(count))
+    req_map_r8(i)%buf => buf_ad
+    req_map_r8(i)%count = count
+    req_map_r8(i)%datatype = datatype
+    req_map_r8(i)%op_type = FAD_MPI_OP_SEND
+    call MPI_Recv_init(req_map_r8(i)%tmp, count, datatype, dest, tag, comm, request_ad, ierr)
+    req_map_r8(i)%request_ad = request_ad
   end subroutine mpi_send_init_rev_ad_r8
 
   subroutine mpi_recv_init_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
@@ -622,7 +689,19 @@ contains
     integer, intent(in) :: count, datatype, source, tag, comm
     integer, intent(out) :: request_ad
     integer, intent(out), optional :: ierr
+    integer :: i
+
+    do i = 1, MAX_PERSISTENT
+       if (req_map_r4(i)%request_ad == MPI_REQUEST_NULL) exit
+    end do
+    if (i > MAX_PERSISTENT) stop "too many persistent requests"
+
+    req_map_r4(i)%buf => buf_ad
+    req_map_r4(i)%count = count
+    req_map_r4(i)%datatype = datatype
+    req_map_r4(i)%op_type = FAD_MPI_OP_RECV
     call MPI_Send_init(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    req_map_r4(i)%request_ad = request_ad
   end subroutine mpi_recv_init_rev_ad_r4
 
   subroutine mpi_recv_init_fwd_ad_r8(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
@@ -641,7 +720,90 @@ contains
     integer, intent(in) :: count, datatype, source, tag, comm
     integer, intent(out) :: request_ad
     integer, intent(out), optional :: ierr
+    integer :: i
+
+    do i = 1, MAX_PERSISTENT
+       if (req_map_r8(i)%request_ad == MPI_REQUEST_NULL) exit
+    end do
+    if (i > MAX_PERSISTENT) stop "too many persistent requests"
+
+    req_map_r8(i)%buf => buf_ad
+    req_map_r8(i)%count = count
+    req_map_r8(i)%datatype = datatype
+    req_map_r8(i)%op_type = FAD_MPI_OP_RECV
     call MPI_Send_init(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    req_map_r8(i)%request_ad = request_ad
   end subroutine mpi_recv_init_rev_ad_r8
+
+  subroutine mpi_start_ad(request, request_ad, ierr)
+    integer, intent(inout) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    call MPI_Start(request, ierr)
+    call MPI_Start(request_ad, ierr)
+  end subroutine mpi_start_ad
+
+  subroutine mpi_startall_ad(count, array_of_requests, array_of_requests_ad, ierr)
+    integer, intent(in) :: count
+    integer, intent(inout) :: array_of_requests(count)
+    integer, intent(inout) :: array_of_requests_ad(count)
+    integer, intent(out), optional :: ierr
+    call MPI_Startall(count, array_of_requests, ierr)
+    call MPI_Startall(count, array_of_requests_ad, ierr)
+  end subroutine mpi_startall_ad
+
+  subroutine update_persistent(request_ad)
+    integer, intent(in) :: request_ad
+    integer :: i
+
+    do i = 1, MAX_PERSISTENT
+       if (req_map_r4(i)%request_ad == request_ad) then
+          if (req_map_r4(i)%op_type == FAD_MPI_OP_SEND) then
+             req_map_r4(i)%buf(:req_map_r4(i)%count) = req_map_r4(i)%buf(:req_map_r4(i)%count) + &
+                  req_map_r4(i)%tmp(:req_map_r4(i)%count)
+             req_map_r4(i)%tmp = 0.0
+          else if (req_map_r4(i)%op_type == FAD_MPI_OP_RECV) then
+             req_map_r4(i)%buf(:req_map_r4(i)%count) = 0.0
+          end if
+          return
+       end if
+    end do
+
+    do i = 1, MAX_PERSISTENT
+       if (req_map_r8(i)%request_ad == request_ad) then
+          if (req_map_r8(i)%op_type == FAD_MPI_OP_SEND) then
+             req_map_r8(i)%buf(:req_map_r8(i)%count) = req_map_r8(i)%buf(:req_map_r8(i)%count) + &
+                  req_map_r8(i)%tmp(:req_map_r8(i)%count)
+             req_map_r8(i)%tmp = 0.0_8
+          else if (req_map_r8(i)%op_type == FAD_MPI_OP_RECV) then
+             req_map_r8(i)%buf(:req_map_r8(i)%count) = 0.0_8
+          end if
+          return
+       end if
+    end do
+  end subroutine update_persistent
+
+  subroutine mpi_wait_ad(request, request_ad, status, ierr)
+    integer, intent(inout) :: request, request_ad
+    integer, intent(out) :: status(MPI_STATUS_SIZE)
+    integer, intent(out), optional :: ierr
+    call MPI_Wait(request, status, ierr)
+    call MPI_Wait(request_ad, MPI_STATUS_IGNORE, ierr)
+    call update_persistent(request_ad)
+  end subroutine mpi_wait_ad
+
+  subroutine mpi_waitall_ad(count, array_of_requests, array_of_requests_ad, statuses, ierr)
+    integer, intent(in) :: count
+    integer, intent(inout) :: array_of_requests(count)
+    integer, intent(inout) :: array_of_requests_ad(count)
+    integer, intent(out) :: statuses(MPI_STATUS_SIZE, count)
+    integer, intent(out), optional :: ierr
+    integer :: i
+
+    call MPI_Waitall(count, array_of_requests, statuses, ierr)
+    call MPI_Waitall(count, array_of_requests_ad, MPI_STATUSES_IGNORE, ierr)
+    do i = 1, count
+       call update_persistent(array_of_requests_ad(i))
+    end do
+  end subroutine mpi_waitall_ad
 
 end module mpi_ad
