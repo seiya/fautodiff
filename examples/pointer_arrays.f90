@@ -1,7 +1,10 @@
 module pointer_arrays
   implicit none
+
   real, pointer :: mod_p(:)
+
 contains
+
   subroutine pointer_example(n, x, res)
     integer, intent(in) :: n
     real, intent(in) :: x
@@ -24,4 +27,5 @@ contains
 
     return
   end subroutine pointer_example
+
 end module pointer_arrays

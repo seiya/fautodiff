@@ -144,9 +144,7 @@ contains
       x_ad = x_ad + mod_arr_diff_ad(i) * mod_arr(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
       x = x + mod_arr(i) * mod_arr_diff(i)
     end do
-    if (allocated(mod_arr_diff_ad)) then
-      deallocate(mod_arr_diff_ad)
-    end if
+    deallocate(mod_arr_diff_ad)
 
     return
   end subroutine module_vars_finalize_fwd_ad

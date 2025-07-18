@@ -35,9 +35,7 @@ contains
     end do
     deallocate(p_ad)
     deallocate(p)
-    if (associated(mod_p_ad)) then
-      deallocate(mod_p_ad)
-    end if
+    deallocate(mod_p_ad)
 
     return
   end subroutine pointer_example_fwd_ad

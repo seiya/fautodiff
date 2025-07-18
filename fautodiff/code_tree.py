@@ -1980,7 +1980,7 @@ class Allocate(Node):
         # allocated/associated outside of the current routine.  Guard the
         # (de)allocation so we do not operate on them twice.  Local pointer
         # variables have a well defined state so do not require this check.
-        check = is_mod_var or (var.pointer and var.intent is not None)
+        check = is_mod_var or (var.intent in ("in", "inout") and (var.allocatable or var.pointer))
         if check:
             func = "associated" if var.pointer else "allocated"
             cond = OpFunc(func, args=[var.change_index(None)])
@@ -2043,27 +2043,8 @@ class Deallocate(Node):
                     nodes.append(Allocate._add_if(Allocate([ad_var]), ad_var, is_mod_var))
             else:
                 if var.ad_target:
-                    # ``ad_var`` inherits the pointer attribute from ``var``. Guard
-                    # the deallocation when the original variable is a module
-                    # variable or a pointer argument. This avoids runtime errors
-                    # when the array was never associated.
-                    nodes.append(
-                        Allocate._add_if(
-                            Deallocate([ad_var], ad_code=True),
-                            ad_var,
-                            is_mod_var or (ad_var.pointer and ad_var.intent is not None),
-                        )
-                    )
-                if not is_mod_var:
-                    # Local pointer arrays have a well defined state, so only
-                    # arguments need association checks.
-                    nodes.append(
-                        Allocate._add_if(
-                            Deallocate([var], ad_code=True),
-                            var,
-                            var.pointer and var.intent is not None,
-                        )
-                    )
+                    nodes.append(Deallocate([ad_var], ad_code=True))
+                nodes.append(Deallocate([var], ad_code=True))
         return nodes
 
     def is_effectively_empty(self) -> bool:
