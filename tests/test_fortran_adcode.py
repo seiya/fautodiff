@@ -106,6 +106,10 @@ class TestFortranADCode(unittest.TestCase):
     def test_exit_cycle(self):
         self._run_test('exit_cycle', ['do_exit_cycle', 'while_exit_cycle'])
 
+    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
+    def test_pointer_arrays(self):
+        self._run_test('pointer_arrays', ['pointer_example'])
+
 
 
 if __name__ == '__main__':

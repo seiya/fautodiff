@@ -1,7 +1,8 @@
 OUTDIR ?= $(shell pwd)
 
 FC = gfortran
-FFLAGS = -O2 -ffree-line-length-none
+FFLAGS = -O2 -ffree-line-length-none \
+         -ffpe-trap=invalid,zero,overflow,underflow -fbounds-check -finit-real=nan -g -fbacktrace
 
 SRCS := $(wildcard *.f90)
 OBJS := $(addprefix $(OUTDIR)/,$(SRCS:.f90=.o))
