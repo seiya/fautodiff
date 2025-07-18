@@ -47,6 +47,8 @@ from .operators import (
     OpFunc,
     OpFuncUser,
     OpInt,
+    OpFalse,
+    OpTrue,
     OpLogic,
     OpMul,
     OpNeg,
@@ -179,7 +181,12 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
         return OpChr(name=name)
 
     if isinstance(stmt, Fortran2003.Logical_Literal_Constant):
-        return OpVar(name=stmt.string, typename="logical")
+        const = stmt.string.lower()
+        if const in (".true.", ".t."):
+            return OpTrue()
+        if const in (".false.", ".f."):
+            return OpFalse()
+        raise ValueError(f"Unsupported logical constant: {stmt.string}")
 
     if isinstance(stmt, Fortran2003.Mult_Operand):
         if stmt.items[1] == "**":
