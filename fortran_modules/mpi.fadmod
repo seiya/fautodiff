@@ -1689,5 +1689,294 @@
       "skip": true
     }
   },
-  "variables": {}
+  "variables": {
+    "MPI_COMM_WORLD": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_STATUS_SIZE": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_STATUS_IGNORE": {
+      "typename": "integer",
+      "kind": null,
+      "dims": [
+        "MPI_STATUS_SIZE"
+      ],
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_SUM": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_MAX": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_MIN": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_PROD": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_MAXLOC": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_MINLOC": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_LAND": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_LOR": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_LXOR": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_BAND": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_BOR": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_BXOR": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_REPLACE": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_INT": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_INTEGER": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_REAL": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_DOUBLE_PRECISION": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_COMPLEX": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_DOUBLE_COMPLEX": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_LOGICAL": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_CHARACTER": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_BYTE": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    },
+    "MPI_REAL8": {
+      "typename": "integer",
+      "kind": null,
+      "dims": null,
+      "parameter": true,
+      "constant": true,
+      "init_val": null,
+      "access": "public",
+      "allocatable": false,
+      "pointer": false
+    }
+  }
 }
