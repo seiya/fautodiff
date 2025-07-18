@@ -297,9 +297,13 @@ class TestGenerator(unittest.TestCase):
         data = json.loads(fadmod.read_text())
         routines = data.get('routines', {})
         self.assertIn('MPI_Start', routines)
-        self.assertEqual(routines['MPI_Start']['name_fwd_ad'], 'fautodiff_mpi_start_ad')
+        self.assertEqual(routines['MPI_Start']['name_fwd_ad'], 'mpi_start_ad')
         self.assertIn('MPI_Wait', routines)
-        self.assertEqual(routines['MPI_Wait']['name_fwd_ad'], 'fautodiff_mpi_wait_ad')
+        self.assertEqual(routines['MPI_Wait']['name_fwd_ad'], 'mpi_wait_ad')
+        self.assertIn('MPI_Send_init', routines)
+        self.assertEqual(routines['MPI_Send_init']['name_fwd_rev_ad'], 'mpi_send_init_fwd_rev_ad')
+        self.assertIn('MPI_Recv_init', routines)
+        self.assertEqual(routines['MPI_Recv_init']['name_fwd_rev_ad'], 'mpi_recv_init_fwd_rev_ad')
 
 
 def _make_example_test(src: Path):

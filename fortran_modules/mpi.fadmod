@@ -1113,6 +1113,7 @@
         "out",
         "out"
       ],
+      "name_fwd_rev_ad": "mpi_send_init_fwd_rev_ad",
       "name_rev_ad": "mpi_send_init_rev_ad",
       "args_rev_ad": [
         "buf",
@@ -1216,6 +1217,7 @@
         "out",
         "out"
       ],
+      "name_fwd_rev_ad": "mpi_recv_init_fwd_rev_ad",
       "name_rev_ad": "mpi_recv_init_rev_ad",
       "args_rev_ad": [
         "buf",
