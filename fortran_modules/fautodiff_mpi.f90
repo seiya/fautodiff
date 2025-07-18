@@ -12,6 +12,16 @@ module fautodiff_mpi
   public :: fautodiff_mpi_recv_rev_ad
   public :: fautodiff_mpi_send_fwd_ad
   public :: fautodiff_mpi_send_rev_ad
+  public :: fautodiff_mpi_put_fwd_ad
+  public :: fautodiff_mpi_put_rev_ad
+  public :: fautodiff_mpi_get_fwd_ad
+  public :: fautodiff_mpi_get_rev_ad
+  public :: fautodiff_mpi_accumulate_fwd_ad
+  public :: fautodiff_mpi_accumulate_rev_ad
+  public :: fautodiff_mpi_send_init_fwd_ad
+  public :: fautodiff_mpi_send_init_rev_ad
+  public :: fautodiff_mpi_recv_init_fwd_ad
+  public :: fautodiff_mpi_recv_init_rev_ad
 
   interface fautodiff_mpi_bcast_fwd_ad
      module procedure mpi_bcast_fwd_ad_r4
@@ -52,6 +62,46 @@ module fautodiff_mpi
   interface fautodiff_mpi_send_rev_ad
      module procedure mpi_send_rev_ad_r4
      module procedure mpi_send_rev_ad_r8
+  end interface
+  interface fautodiff_mpi_put_fwd_ad
+     module procedure mpi_put_fwd_ad_r4
+     module procedure mpi_put_fwd_ad_r8
+  end interface
+  interface fautodiff_mpi_put_rev_ad
+     module procedure mpi_put_rev_ad_r4
+     module procedure mpi_put_rev_ad_r8
+  end interface
+  interface fautodiff_mpi_get_fwd_ad
+     module procedure mpi_get_fwd_ad_r4
+     module procedure mpi_get_fwd_ad_r8
+  end interface
+  interface fautodiff_mpi_get_rev_ad
+     module procedure mpi_get_rev_ad_r4
+     module procedure mpi_get_rev_ad_r8
+  end interface
+  interface fautodiff_mpi_accumulate_fwd_ad
+     module procedure mpi_accumulate_fwd_ad_r4
+     module procedure mpi_accumulate_fwd_ad_r8
+  end interface
+  interface fautodiff_mpi_accumulate_rev_ad
+     module procedure mpi_accumulate_rev_ad_r4
+     module procedure mpi_accumulate_rev_ad_r8
+  end interface
+  interface fautodiff_mpi_send_init_fwd_ad
+     module procedure mpi_send_init_fwd_ad_r4
+     module procedure mpi_send_init_fwd_ad_r8
+  end interface
+  interface fautodiff_mpi_send_init_rev_ad
+     module procedure mpi_send_init_rev_ad_r4
+     module procedure mpi_send_init_rev_ad_r8
+  end interface
+  interface fautodiff_mpi_recv_init_fwd_ad
+     module procedure mpi_recv_init_fwd_ad_r4
+     module procedure mpi_recv_init_fwd_ad_r8
+  end interface
+  interface fautodiff_mpi_recv_init_rev_ad
+     module procedure mpi_recv_init_rev_ad_r4
+     module procedure mpi_recv_init_rev_ad_r8
   end interface
 
 contains
@@ -295,5 +345,205 @@ contains
     call MPI_Recv(tmp, count, datatype, dest, tag, comm, MPI_STATUS_IGNORE, ierr)
     buf_ad(:count) = buf_ad(:count) + tmp(:count)
   end subroutine mpi_send_rev_ad_r8
+
+  subroutine mpi_put_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real, intent(in) :: origin(*)
+    real, intent(in) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win
+    integer, intent(out), optional :: ierr
+    call MPI_Put(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    call MPI_Put(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+  end subroutine mpi_put_fwd_ad_r4
+
+  subroutine mpi_put_rev_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real, intent(in) :: origin(*)
+    real, intent(inout) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win
+    integer, intent(out), optional :: ierr
+    real :: tmp(origin_count)
+    call MPI_Get(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    origin_ad(:origin_count) = origin_ad(:origin_count) + tmp(:origin_count)
+    tmp = 0.0
+    call MPI_Put(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+  end subroutine mpi_put_rev_ad_r4
+
+  subroutine mpi_put_fwd_ad_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real(8), intent(in) :: origin(*)
+    real(8), intent(in) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win
+    integer, intent(out), optional :: ierr
+    call MPI_Put(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    call MPI_Put(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+  end subroutine mpi_put_fwd_ad_r8
+
+  subroutine mpi_put_rev_ad_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real(8), intent(in) :: origin(*)
+    real(8), intent(inout) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win
+    integer, intent(out), optional :: ierr
+    real(8) :: tmp(origin_count)
+    call MPI_Get(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    origin_ad(:origin_count) = origin_ad(:origin_count) + tmp(:origin_count)
+    tmp = 0.0_8
+    call MPI_Put(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+  end subroutine mpi_put_rev_ad_r8
+
+  subroutine mpi_get_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real, intent(out) :: origin(*)
+    real, intent(out) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win
+    integer, intent(out), optional :: ierr
+    call MPI_Get(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    call MPI_Get(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+  end subroutine mpi_get_fwd_ad_r4
+
+  subroutine mpi_get_rev_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real, intent(out) :: origin(*)
+    real, intent(inout) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win
+    integer, intent(out), optional :: ierr
+    call MPI_Accumulate(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, MPI_SUM, win, ierr)
+    origin_ad(:origin_count) = 0.0
+  end subroutine mpi_get_rev_ad_r4
+
+  subroutine mpi_get_fwd_ad_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real(8), intent(out) :: origin(*)
+    real(8), intent(out) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win
+    integer, intent(out), optional :: ierr
+    call MPI_Get(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    call MPI_Get(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+  end subroutine mpi_get_fwd_ad_r8
+
+  subroutine mpi_get_rev_ad_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    real(8), intent(out) :: origin(*)
+    real(8), intent(inout) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win
+    integer, intent(out), optional :: ierr
+    call MPI_Accumulate(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, MPI_SUM, win, ierr)
+    origin_ad(:origin_count) = 0.0_8
+  end subroutine mpi_get_rev_ad_r8
+
+  subroutine mpi_accumulate_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+    real, intent(in) :: origin(*)
+    real, intent(in) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win
+    integer, intent(out), optional :: ierr
+    call MPI_Accumulate(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+    call MPI_Accumulate(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+  end subroutine mpi_accumulate_fwd_ad_r4
+
+  subroutine mpi_accumulate_rev_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+    real, intent(in) :: origin(*)
+    real, intent(inout) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win
+    integer, intent(out), optional :: ierr
+    real :: tmp(origin_count)
+    call MPI_Get(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    origin_ad(:origin_count) = origin_ad(:origin_count) + tmp(:origin_count)
+    tmp = 0.0
+    call MPI_Put(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+  end subroutine mpi_accumulate_rev_ad_r4
+
+  subroutine mpi_accumulate_fwd_ad_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+    real(8), intent(in) :: origin(*)
+    real(8), intent(in) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win
+    integer, intent(out), optional :: ierr
+    call MPI_Accumulate(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+    call MPI_Accumulate(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+  end subroutine mpi_accumulate_fwd_ad_r8
+
+  subroutine mpi_accumulate_rev_ad_r8(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
+    real(8), intent(in) :: origin(*)
+    real(8), intent(inout) :: origin_ad(*)
+    integer, intent(in) :: origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win
+    integer, intent(out), optional :: ierr
+    real(8) :: tmp(origin_count)
+    call MPI_Get(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+    origin_ad(:origin_count) = origin_ad(:origin_count) + tmp(:origin_count)
+    tmp = 0.0_8
+    call MPI_Put(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
+  end subroutine mpi_accumulate_rev_ad_r8
+
+  subroutine mpi_send_init_fwd_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+    real, intent(in) :: buf(*)
+    real, intent(in) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    call MPI_Send_init(buf, count, datatype, dest, tag, comm, request, ierr)
+    call MPI_Send_init(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+  end subroutine mpi_send_init_fwd_ad_r4
+
+  subroutine mpi_send_init_rev_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+    real, intent(in) :: buf(*)
+    real, intent(inout) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    request = MPI_REQUEST_NULL
+    call MPI_Recv_init(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+  end subroutine mpi_send_init_rev_ad_r4
+
+  subroutine mpi_send_init_fwd_ad_r8(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+    real(8), intent(in) :: buf(*)
+    real(8), intent(in) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    call MPI_Send_init(buf, count, datatype, dest, tag, comm, request, ierr)
+    call MPI_Send_init(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+  end subroutine mpi_send_init_fwd_ad_r8
+
+  subroutine mpi_send_init_rev_ad_r8(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+    real(8), intent(in) :: buf(*)
+    real(8), intent(inout) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    request = MPI_REQUEST_NULL
+    call MPI_Recv_init(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+  end subroutine mpi_send_init_rev_ad_r8
+
+  subroutine mpi_recv_init_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+    real, intent(out) :: buf(*)
+    real, intent(out) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    call MPI_Recv_init(buf, count, datatype, source, tag, comm, request, ierr)
+    call MPI_Recv_init(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+  end subroutine mpi_recv_init_fwd_ad_r4
+
+  subroutine mpi_recv_init_rev_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+    real, intent(out) :: buf(*)
+    real, intent(inout) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    request = MPI_REQUEST_NULL
+    call MPI_Send_init(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+  end subroutine mpi_recv_init_rev_ad_r4
+
+  subroutine mpi_recv_init_fwd_ad_r8(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+    real(8), intent(out) :: buf(*)
+    real(8), intent(out) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    call MPI_Recv_init(buf, count, datatype, source, tag, comm, request, ierr)
+    call MPI_Recv_init(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+  end subroutine mpi_recv_init_fwd_ad_r8
+
+  subroutine mpi_recv_init_rev_ad_r8(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+    real(8), intent(out) :: buf(*)
+    real(8), intent(inout) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    request = MPI_REQUEST_NULL
+    call MPI_Send_init(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+  end subroutine mpi_recv_init_rev_ad_r8
 
 end module fautodiff_mpi

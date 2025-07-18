@@ -690,6 +690,801 @@
         "out"
       ],
       "module": "fautodiff_mpi"
+    },
+    "MPI_Put": {
+      "args": [
+        "origin",
+        "origin_count",
+        "origin_datatype",
+        "target_rank",
+        "target_disp",
+        "target_count",
+        "target_datatype",
+        "win",
+        "ierr"
+      ],
+      "intents": [
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "dims": [
+        [
+          "origin_count"
+        ],
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "type": [
+        "real",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": "fautodiff_mpi_put_fwd_ad",
+      "args_fwd_ad": [
+        "origin",
+        "origin_ad",
+        "origin_count",
+        "origin_datatype",
+        "target_rank",
+        "target_disp",
+        "target_count",
+        "target_datatype",
+        "win",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "name_rev_ad": "fautodiff_mpi_put_rev_ad",
+      "args_rev_ad": [
+        "origin",
+        "origin_ad",
+        "origin_count",
+        "origin_datatype",
+        "target_rank",
+        "target_disp",
+        "target_count",
+        "target_datatype",
+        "win",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "in",
+        "inout",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "module": "fautodiff_mpi"
+    },
+    "MPI_Get": {
+      "args": [
+        "origin",
+        "origin_count",
+        "origin_datatype",
+        "target_rank",
+        "target_disp",
+        "target_count",
+        "target_datatype",
+        "win",
+        "ierr"
+      ],
+      "intents": [
+        "out",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "dims": [
+        [
+          "origin_count"
+        ],
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "type": [
+        "real",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": "fautodiff_mpi_get_fwd_ad",
+      "args_fwd_ad": [
+        "origin",
+        "origin_ad",
+        "origin_count",
+        "origin_datatype",
+        "target_rank",
+        "target_disp",
+        "target_count",
+        "target_datatype",
+        "win",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "out",
+        "out",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "name_rev_ad": "fautodiff_mpi_get_rev_ad",
+      "args_rev_ad": [
+        "origin",
+        "origin_ad",
+        "origin_count",
+        "origin_datatype",
+        "target_rank",
+        "target_disp",
+        "target_count",
+        "target_datatype",
+        "win",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "out",
+        "inout",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "module": "fautodiff_mpi"
+    },
+    "MPI_Accumulate": {
+      "args": [
+        "origin",
+        "origin_count",
+        "origin_datatype",
+        "target_rank",
+        "target_disp",
+        "target_count",
+        "target_datatype",
+        "op",
+        "win",
+        "ierr"
+      ],
+      "intents": [
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "dims": [
+        [
+          "origin_count"
+        ],
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "type": [
+        "real",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": "fautodiff_mpi_accumulate_fwd_ad",
+      "args_fwd_ad": [
+        "origin",
+        "origin_ad",
+        "origin_count",
+        "origin_datatype",
+        "target_rank",
+        "target_disp",
+        "target_count",
+        "target_datatype",
+        "op",
+        "win",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "name_rev_ad": "fautodiff_mpi_accumulate_rev_ad",
+      "args_rev_ad": [
+        "origin",
+        "origin_ad",
+        "origin_count",
+        "origin_datatype",
+        "target_rank",
+        "target_disp",
+        "target_count",
+        "target_datatype",
+        "op",
+        "win",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "in",
+        "inout",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "module": "fautodiff_mpi"
+    },
+    "MPI_Send_init": {
+      "args": [
+        "buf",
+        "count",
+        "datatype",
+        "dest",
+        "tag",
+        "comm",
+        "request",
+        "ierr"
+      ],
+      "intents": [
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out"
+      ],
+      "dims": [
+        [
+          "count"
+        ],
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "type": [
+        "real",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": "fautodiff_mpi_send_init_fwd_ad",
+      "args_fwd_ad": [
+        "buf",
+        "buf_ad",
+        "count",
+        "datatype",
+        "dest",
+        "tag",
+        "comm",
+        "request",
+        "request_ad",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out",
+        "out"
+      ],
+      "name_rev_ad": "fautodiff_mpi_send_init_rev_ad",
+      "args_rev_ad": [
+        "buf",
+        "buf_ad",
+        "count",
+        "datatype",
+        "dest",
+        "tag",
+        "comm",
+        "request",
+        "request_ad",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "in",
+        "inout",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "module": "fautodiff_mpi"
+    },
+    "MPI_Recv_init": {
+      "args": [
+        "buf",
+        "count",
+        "datatype",
+        "source",
+        "tag",
+        "comm",
+        "request",
+        "ierr"
+      ],
+      "intents": [
+        "out",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out"
+      ],
+      "dims": [
+        [
+          "count"
+        ],
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "type": [
+        "real",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": "fautodiff_mpi_recv_init_fwd_ad",
+      "args_fwd_ad": [
+        "buf",
+        "buf_ad",
+        "count",
+        "datatype",
+        "source",
+        "tag",
+        "comm",
+        "request",
+        "request_ad",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "out",
+        "out",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out",
+        "out"
+      ],
+      "name_rev_ad": "fautodiff_mpi_recv_init_rev_ad",
+      "args_rev_ad": [
+        "buf",
+        "buf_ad",
+        "count",
+        "datatype",
+        "source",
+        "tag",
+        "comm",
+        "request",
+        "request_ad",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "out",
+        "inout",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "module": "fautodiff_mpi"
+    },
+    "MPI_Start": {
+      "args": [
+        "request",
+        "ierr"
+      ],
+      "intents": [
+        "inout",
+        "out"
+      ],
+      "dims": [
+        null,
+        null
+      ],
+      "type": [
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null
+      ],
+      "name_fwd_ad": null,
+      "args_fwd_ad": [
+        "request",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "inout",
+        "out"
+      ],
+      "name_rev_ad": null,
+      "args_rev_ad": [
+        "request",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "inout",
+        "out"
+      ],
+      "module": "mpi",
+      "skip": true
+    },
+    "MPI_Startall": {
+      "args": [
+        "count",
+        "array_of_requests",
+        "ierr"
+      ],
+      "intents": [
+        "in",
+        "inout",
+        "out"
+      ],
+      "dims": [
+        null,
+        [
+          "count"
+        ],
+        null
+      ],
+      "type": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": null,
+      "args_fwd_ad": [
+        "count",
+        "array_of_requests",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "in",
+        "inout",
+        "out"
+      ],
+      "name_rev_ad": null,
+      "args_rev_ad": [
+        "count",
+        "array_of_requests",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "in",
+        "inout",
+        "out"
+      ],
+      "module": "mpi",
+      "skip": true
+    },
+    "MPI_Wait": {
+      "args": [
+        "request",
+        "status",
+        "ierr"
+      ],
+      "intents": [
+        "inout",
+        "out",
+        "out"
+      ],
+      "dims": [
+        null,
+        null,
+        null
+      ],
+      "type": [
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": null,
+      "args_fwd_ad": [
+        "request",
+        "status",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "inout",
+        "out",
+        "out"
+      ],
+      "name_rev_ad": null,
+      "args_rev_ad": [
+        "request",
+        "status",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "inout",
+        "out",
+        "out"
+      ],
+      "module": "mpi",
+      "skip": true
+    },
+    "MPI_Waitall": {
+      "args": [
+        "count",
+        "array_of_requests",
+        "array_of_statuses",
+        "ierr"
+      ],
+      "intents": [
+        "in",
+        "inout",
+        "out",
+        "out"
+      ],
+      "dims": [
+        null,
+        [
+          "count"
+        ],
+        [
+          "count"
+        ],
+        null
+      ],
+      "type": [
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": null,
+      "args_fwd_ad": [
+        "count",
+        "array_of_requests",
+        "array_of_statuses",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "in",
+        "inout",
+        "out",
+        "out"
+      ],
+      "name_rev_ad": null,
+      "args_rev_ad": [
+        "count",
+        "array_of_requests",
+        "array_of_statuses",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "in",
+        "inout",
+        "out",
+        "out"
+      ],
+      "module": "mpi",
+      "skip": true
+    },
+    "MPI_Request_free": {
+      "args": [
+        "request",
+        "ierr"
+      ],
+      "intents": [
+        "inout",
+        "out"
+      ],
+      "dims": [
+        null,
+        null
+      ],
+      "type": [
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null
+      ],
+      "name_fwd_ad": null,
+      "args_fwd_ad": [
+        "request",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "inout",
+        "out"
+      ],
+      "name_rev_ad": null,
+      "args_rev_ad": [
+        "request",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "inout",
+        "out"
+      ],
+      "module": "mpi",
+      "skip": true
     }
   },
   "variables": {}
