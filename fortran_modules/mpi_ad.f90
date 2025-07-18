@@ -738,8 +738,10 @@ contains
   subroutine mpi_start_ad(request, request_ad, ierr)
     integer, intent(inout) :: request, request_ad
     integer, intent(out), optional :: ierr
-    call MPI_Start(request, ierr)
-    call MPI_Start(request_ad, ierr)
+
+    call MPI_Wait(request, MPI_STATUS_IGNORE, ierr)
+    call MPI_Wait(request_ad, MPI_STATUS_IGNORE, ierr)
+    call update_persistent(request_ad)
   end subroutine mpi_start_ad
 
   subroutine mpi_startall_ad(count, array_of_requests, array_of_requests_ad, ierr)
@@ -747,8 +749,13 @@ contains
     integer, intent(inout) :: array_of_requests(count)
     integer, intent(inout) :: array_of_requests_ad(count)
     integer, intent(out), optional :: ierr
-    call MPI_Startall(count, array_of_requests, ierr)
-    call MPI_Startall(count, array_of_requests_ad, ierr)
+    integer :: i
+
+    call MPI_Waitall(count, array_of_requests, MPI_STATUSES_IGNORE, ierr)
+    call MPI_Waitall(count, array_of_requests_ad, MPI_STATUSES_IGNORE, ierr)
+    do i = 1, count
+       call update_persistent(array_of_requests_ad(i))
+    end do
   end subroutine mpi_startall_ad
 
   subroutine update_persistent(request_ad)
@@ -786,9 +793,10 @@ contains
     integer, intent(inout) :: request, request_ad
     integer, intent(out) :: status(MPI_STATUS_SIZE)
     integer, intent(out), optional :: ierr
-    call MPI_Wait(request, status, ierr)
-    call MPI_Wait(request_ad, MPI_STATUS_IGNORE, ierr)
-    call update_persistent(request_ad)
+
+    call MPI_Start(request, ierr)
+    call MPI_Start(request_ad, ierr)
+    status = 0
   end subroutine mpi_wait_ad
 
   subroutine mpi_waitall_ad(count, array_of_requests, array_of_requests_ad, statuses, ierr)
@@ -797,13 +805,10 @@ contains
     integer, intent(inout) :: array_of_requests_ad(count)
     integer, intent(out) :: statuses(MPI_STATUS_SIZE, count)
     integer, intent(out), optional :: ierr
-    integer :: i
 
-    call MPI_Waitall(count, array_of_requests, statuses, ierr)
-    call MPI_Waitall(count, array_of_requests_ad, MPI_STATUSES_IGNORE, ierr)
-    do i = 1, count
-       call update_persistent(array_of_requests_ad(i))
-    end do
+    call MPI_Startall(count, array_of_requests, ierr)
+    call MPI_Startall(count, array_of_requests_ad, ierr)
+    statuses = 0
   end subroutine mpi_waitall_ad
 
 end module mpi_ad
