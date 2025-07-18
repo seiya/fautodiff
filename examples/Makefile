@@ -10,6 +10,7 @@ HELPER_DIR = ../fortran_modules
 HELPER_SRCS = $(wildcard $(HELPER_DIR)/*.f90)
 HELPER_OBJS = $(addprefix $(OUTDIR)/,$(notdir $(HELPER_SRCS:.f90=.o)))
 
+vpath %.f90 $(OUTDIR)
 vpath %.f90 $(HELPER_DIR)
 vpath %.f90 .
 
