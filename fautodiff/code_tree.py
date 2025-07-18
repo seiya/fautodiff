@@ -1342,6 +1342,7 @@ class Routine(Node):
             intent=intent,
             ad_target=None,
             is_constant=decl.parameter or getattr(decl, "constant", False),
+            optional=decl.optional,
             declared_in=decl.declared_in,
         )
 
@@ -2076,6 +2077,7 @@ class Declaration(Node):
     access: Optional[str] = None
     allocatable: bool = False
     pointer: bool = False
+    optional: bool = False
     declared_in: Optional[str] = None
 
     def __post_init__(self):
@@ -2096,6 +2098,7 @@ class Declaration(Node):
             self.access,
             self.allocatable,
             self.pointer,
+            self.optional,
             self.declared_in,
         )
 
@@ -2113,6 +2116,7 @@ class Declaration(Node):
             self.access,
             self.allocatable,
             self.pointer,
+            self.optional,
             self.declared_in,
         )
 
@@ -2125,6 +2129,7 @@ class Declaration(Node):
                 is_constant=self.parameter or self.constant,
                 allocatable=self.allocatable,
                 pointer=self.pointer,
+                optional=self.optional,
                 declared_in=self.declared_in,
             )
         else:
@@ -2141,6 +2146,7 @@ class Declaration(Node):
             is_constant=self.parameter or self.constant,
             allocatable=self.allocatable,
             pointer=self.pointer,
+            optional=self.optional,
             dims=self.dims,
             intent=self.intent,
             declared_in=self.declared_in,
@@ -2159,6 +2165,8 @@ class Declaration(Node):
             line += ", allocatable"
         if self.pointer:
             line += ", pointer"
+        if self.optional:
+            line += ", optional"
         if self.intent is not None:
             pad = "  " if self.intent == "in" else " "
             line += f", intent({self.intent})" + pad + f":: {self.name}"
@@ -2198,6 +2206,7 @@ class Declaration(Node):
                         is_constant=self.parameter or self.constant,
                         allocatable=self.allocatable,
                         pointer=self.pointer,
+                        optional=self.optional,
                         declared_in=self.declared_in,
                     )
                 )

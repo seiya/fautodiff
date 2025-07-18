@@ -504,5 +504,29 @@ class TestParser(unittest.TestCase):
         self.assertIsInstance(stmt, code_tree.PointerAssignment)
         self.assertEqual(render_program(Block([stmt])), "p => q\n")
 
+    def test_parse_optional_argument(self):
+        src = textwrap.dedent(
+            """
+            module optmod
+            contains
+              subroutine foo(x, y)
+                real, intent(inout) :: x
+                real, intent(in), optional :: y
+                if (present(y)) then
+                  x = x + y
+                end if
+              end subroutine foo
+            end module optmod
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        decl = routine.decls.find_by_name("y")
+        self.assertTrue(decl.optional)
+        self.assertEqual(
+            render_program(Block([decl])).strip(),
+            "real, optional, intent(in)  :: y",
+        )
+
 if __name__ == "__main__":
     unittest.main()
