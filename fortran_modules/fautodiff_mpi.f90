@@ -476,13 +476,12 @@ contains
     call MPI_Send_init(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
   end subroutine mpi_send_init_fwd_ad_r4
 
-  subroutine mpi_send_init_rev_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+  subroutine mpi_send_init_rev_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
     real, intent(in) :: buf(*)
     real, intent(inout) :: buf_ad(*)
     integer, intent(in) :: count, datatype, dest, tag, comm
-    integer, intent(out) :: request, request_ad
+    integer, intent(out) :: request_ad
     integer, intent(out), optional :: ierr
-    request = MPI_REQUEST_NULL
     call MPI_Recv_init(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
   end subroutine mpi_send_init_rev_ad_r4
 
@@ -496,13 +495,12 @@ contains
     call MPI_Send_init(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
   end subroutine mpi_send_init_fwd_ad_r8
 
-  subroutine mpi_send_init_rev_ad_r8(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+  subroutine mpi_send_init_rev_ad_r8(buf, buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
     real(8), intent(in) :: buf(*)
     real(8), intent(inout) :: buf_ad(*)
     integer, intent(in) :: count, datatype, dest, tag, comm
-    integer, intent(out) :: request, request_ad
+    integer, intent(out) :: request_ad
     integer, intent(out), optional :: ierr
-    request = MPI_REQUEST_NULL
     call MPI_Recv_init(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
   end subroutine mpi_send_init_rev_ad_r8
 
@@ -516,13 +514,12 @@ contains
     call MPI_Recv_init(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
   end subroutine mpi_recv_init_fwd_ad_r4
 
-  subroutine mpi_recv_init_rev_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+  subroutine mpi_recv_init_rev_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
     real, intent(out) :: buf(*)
     real, intent(inout) :: buf_ad(*)
     integer, intent(in) :: count, datatype, source, tag, comm
-    integer, intent(out) :: request, request_ad
+    integer, intent(out) :: request_ad
     integer, intent(out), optional :: ierr
-    request = MPI_REQUEST_NULL
     call MPI_Send_init(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
   end subroutine mpi_recv_init_rev_ad_r4
 
@@ -536,13 +533,12 @@ contains
     call MPI_Recv_init(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
   end subroutine mpi_recv_init_fwd_ad_r8
 
-  subroutine mpi_recv_init_rev_ad_r8(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+  subroutine mpi_recv_init_rev_ad_r8(buf, buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
     real(8), intent(out) :: buf(*)
     real(8), intent(inout) :: buf_ad(*)
     integer, intent(in) :: count, datatype, source, tag, comm
-    integer, intent(out) :: request, request_ad
+    integer, intent(out) :: request_ad
     integer, intent(out), optional :: ierr
-    request = MPI_REQUEST_NULL
     call MPI_Send_init(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
   end subroutine mpi_recv_init_rev_ad_r8
 
