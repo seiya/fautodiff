@@ -1,4 +1,4 @@
-module fautodiff_mpi
+module mpi_ad
   use mpi
   implicit none
   private
@@ -644,4 +644,4 @@ contains
     call MPI_Send_init(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
   end subroutine mpi_recv_init_rev_ad_r8
 
-end module fautodiff_mpi
+end module mpi_ad
