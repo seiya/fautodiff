@@ -590,6 +590,212 @@
       ],
       "module": "fautodiff_mpi"
     },
+    "MPI_Isend": {
+      "args": [
+        "buf",
+        "count",
+        "datatype",
+        "dest",
+        "tag",
+        "comm",
+        "request",
+        "ierr"
+      ],
+      "intents": [
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out"
+      ],
+      "dims": [
+        [
+          "count"
+        ],
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "type": [
+        "real",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": "fautodiff_mpi_isend_fwd_ad",
+      "args_fwd_ad": [
+        "buf",
+        "buf_ad",
+        "count",
+        "datatype",
+        "dest",
+        "tag",
+        "comm",
+        "request",
+        "request_ad",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out",
+        "out"
+      ],
+      "name_rev_ad": "fautodiff_mpi_isend_rev_ad",
+      "args_rev_ad": [
+        "buf",
+        "buf_ad",
+        "count",
+        "datatype",
+        "dest",
+        "tag",
+        "comm",
+        "request_ad",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "in",
+        "inout",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out"
+      ],
+      "module": "fautodiff_mpi"
+    },
+    "MPI_Irecv": {
+      "args": [
+        "buf",
+        "count",
+        "datatype",
+        "source",
+        "tag",
+        "comm",
+        "request",
+        "ierr"
+      ],
+      "intents": [
+        "out",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out"
+      ],
+      "dims": [
+        [
+          "count"
+        ],
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "type": [
+        "real",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": "fautodiff_mpi_irecv_fwd_ad",
+      "args_fwd_ad": [
+        "buf",
+        "buf_ad",
+        "count",
+        "datatype",
+        "source",
+        "tag",
+        "comm",
+        "request",
+        "request_ad",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "out",
+        "out",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out",
+        "out"
+      ],
+      "name_rev_ad": "fautodiff_mpi_irecv_rev_ad",
+      "args_rev_ad": [
+        "buf",
+        "buf_ad",
+        "count",
+        "datatype",
+        "source",
+        "tag",
+        "comm",
+        "request_ad",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "out",
+        "inout",
+        "in",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out",
+        "out"
+      ],
+      "module": "fautodiff_mpi"
+    },
     "MPI_Recv": {
       "args": [
         "buf",

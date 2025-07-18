@@ -12,6 +12,10 @@ module fautodiff_mpi
   public :: fautodiff_mpi_recv_rev_ad
   public :: fautodiff_mpi_send_fwd_ad
   public :: fautodiff_mpi_send_rev_ad
+  public :: fautodiff_mpi_isend_fwd_ad
+  public :: fautodiff_mpi_isend_rev_ad
+  public :: fautodiff_mpi_irecv_fwd_ad
+  public :: fautodiff_mpi_irecv_rev_ad
   public :: fautodiff_mpi_put_fwd_ad
   public :: fautodiff_mpi_put_rev_ad
   public :: fautodiff_mpi_get_fwd_ad
@@ -62,6 +66,22 @@ module fautodiff_mpi
   interface fautodiff_mpi_send_rev_ad
      module procedure mpi_send_rev_ad_r4
      module procedure mpi_send_rev_ad_r8
+  end interface
+  interface fautodiff_mpi_isend_fwd_ad
+     module procedure mpi_isend_fwd_ad_r4
+     module procedure mpi_isend_fwd_ad_r8
+  end interface
+  interface fautodiff_mpi_isend_rev_ad
+     module procedure mpi_isend_rev_ad_r4
+     module procedure mpi_isend_rev_ad_r8
+  end interface
+  interface fautodiff_mpi_irecv_fwd_ad
+     module procedure mpi_irecv_fwd_ad_r4
+     module procedure mpi_irecv_fwd_ad_r8
+  end interface
+  interface fautodiff_mpi_irecv_rev_ad
+     module procedure mpi_irecv_rev_ad_r4
+     module procedure mpi_irecv_rev_ad_r8
   end interface
   interface fautodiff_mpi_put_fwd_ad
      module procedure mpi_put_fwd_ad_r4
@@ -345,6 +365,88 @@ contains
     call MPI_Recv(tmp, count, datatype, dest, tag, comm, MPI_STATUS_IGNORE, ierr)
     buf_ad(:count) = buf_ad(:count) + tmp(:count)
   end subroutine mpi_send_rev_ad_r8
+
+  subroutine mpi_isend_fwd_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+    real, intent(in) :: buf(*)
+    real, intent(in) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    call MPI_Isend(buf, count, datatype, dest, tag, comm, request, ierr)
+    call MPI_Isend(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+  end subroutine mpi_isend_fwd_ad_r4
+
+  subroutine mpi_isend_rev_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+    real, intent(in) :: buf(*)
+    real, intent(inout) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    real :: tmp(count)
+    call MPI_Irecv(tmp, count, datatype, dest, tag, comm, request_ad, ierr)
+    buf_ad(:count) = buf_ad(:count) + tmp(:count)
+  end subroutine mpi_isend_rev_ad_r4
+
+  subroutine mpi_isend_fwd_ad_r8(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
+    real(8), intent(in) :: buf(*)
+    real(8), intent(in) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    call MPI_Isend(buf, count, datatype, dest, tag, comm, request, ierr)
+    call MPI_Isend(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+  end subroutine mpi_isend_fwd_ad_r8
+
+  subroutine mpi_isend_rev_ad_r8(buf, buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
+    real(8), intent(in) :: buf(*)
+    real(8), intent(inout) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, dest, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    real(8) :: tmp(count)
+    call MPI_Irecv(tmp, count, datatype, dest, tag, comm, request_ad, ierr)
+    buf_ad(:count) = buf_ad(:count) + tmp(:count)
+  end subroutine mpi_isend_rev_ad_r8
+
+  subroutine mpi_irecv_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+    real, intent(out) :: buf(*)
+    real, intent(out) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    call MPI_Irecv(buf, count, datatype, source, tag, comm, request, ierr)
+    call MPI_Irecv(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+  end subroutine mpi_irecv_fwd_ad_r4
+
+  subroutine mpi_irecv_rev_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    real, intent(out) :: buf(*)
+    real, intent(inout) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    call MPI_Isend(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    buf_ad(:count) = 0.0
+  end subroutine mpi_irecv_rev_ad_r4
+
+  subroutine mpi_irecv_fwd_ad_r8(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
+    real(8), intent(out) :: buf(*)
+    real(8), intent(out) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request, request_ad
+    integer, intent(out), optional :: ierr
+    call MPI_Irecv(buf, count, datatype, source, tag, comm, request, ierr)
+    call MPI_Irecv(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+  end subroutine mpi_irecv_fwd_ad_r8
+
+  subroutine mpi_irecv_rev_ad_r8(buf, buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    real(8), intent(out) :: buf(*)
+    real(8), intent(inout) :: buf_ad(*)
+    integer, intent(in) :: count, datatype, source, tag, comm
+    integer, intent(out) :: request_ad
+    integer, intent(out), optional :: ierr
+    call MPI_Isend(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
+    buf_ad(:count) = 0.0_8
+  end subroutine mpi_irecv_rev_ad_r8
 
   subroutine mpi_put_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real, intent(in) :: origin(*)
