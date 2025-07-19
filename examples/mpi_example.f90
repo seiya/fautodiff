@@ -16,10 +16,11 @@ contains
     return
   end subroutine sum_reduce
 
-  subroutine isend_irecv(x, y, comm, tag)
+  subroutine isend_irecv(x, y, comm)
     real, intent(inout) :: x(2)
     real, intent(out) :: y
-    integer, intent(in) :: comm, tag
+    integer, intent(in) :: comm
+    integer, parameter :: tag = 0
     integer :: reqr, reqs
     integer :: ierr, rank, size
     integer :: pn, pp
@@ -35,7 +36,7 @@ contains
     y = x(2)
     call MPI_Wait(reqs, MPI_STATUS_IGNORE, ierr)
     call MPI_Wait(reqr, MPI_STATUS_IGNORE, ierr)
-    y = x(1) + x(2)
+    y = x(1) + y
 
     return
   end subroutine isend_irecv
