@@ -28,7 +28,7 @@ all: $(PROGRAMS)
 $(OUTDIR)/run_%.out: $(OUTDIR)/run_%.o
 	$(FC) -o $@ $^
 
-$(OUTDIR)/run_mpi_example.out: $(OUTDIR)/run_mpi_example.o $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
+$(OUTDIR)/run_mpi_example.out: $(OUTDIR)/run_mpi_example.o
 	$(MPIFC) -o $@ $^
 
 $(OUTDIR)/run_%.o: run_%.f90
