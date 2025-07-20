@@ -209,6 +209,7 @@ contains
     d_ad = r_ad ! d = dble(r) + dble(i2)
     d = dble(r) + dble(i2)
     n = nint(r)
+    c = achar(ichar(c) + i2)
 
     return
   end subroutine casting_intrinsics_fwd_ad

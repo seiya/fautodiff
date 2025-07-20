@@ -51,7 +51,6 @@ contains
     real, intent(out) :: y
 
     call fautodiff_data_storage_push(a)
-    call inc_and_use(x, y)
 
     return
   end subroutine inc_and_use_fwd_rev_ad

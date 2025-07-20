@@ -9,6 +9,7 @@ contains
     real(8), intent(inout) :: x_ad
 
     x_ad = x_ad * 2.0d0 ! x = x * 2.0_8
+    x = x * 2.0d0
 
     return
   end subroutine scale_8_fwd_ad
@@ -27,6 +28,7 @@ contains
     real(RP), intent(inout) :: x_ad
 
     x_ad = x_ad * 2.0_RP ! x = x * 2.0_RP
+    x = x * 2.0_RP
 
     return
   end subroutine scale_rp_fwd_ad
@@ -45,6 +47,7 @@ contains
     double precision, intent(inout) :: x_ad
 
     x_ad = x_ad * 2.0d0 ! x = x * 2.0d0
+    x = x * 2.0d0
 
     return
   end subroutine scale_dp_fwd_ad

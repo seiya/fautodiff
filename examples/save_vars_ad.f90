@@ -529,6 +529,7 @@ contains
       x(i) = x(i) * (x(i + 1) - x(i - 1)) * 0.5
     end do
     x_ad(n) = - x_ad(n) * x(n - 1) * 0.5 - x_ad(n - 1) * x(n) * 0.5 ! x(n) = - x(n) * x(n-1) * 0.5
+    x(n) = - x(n) * x(n - 1) * 0.5
 
     return
   end subroutine do_with_stencil_array_fwd_ad

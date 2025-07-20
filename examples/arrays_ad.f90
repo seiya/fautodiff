@@ -45,6 +45,7 @@ contains
 
     do i = 1, n
       a_ad(i) = a_ad(i) * 2.0 ! a(i) = a(i) * 2.0
+      a(i) = a(i) * 2.0
     end do
 
     return

@@ -11,6 +11,7 @@ contains
     real, intent(in)  :: b_ad
 
     a_ad = a_ad + b_ad ! a = a + b
+    a = a + b
 
     return
   end subroutine inc_fwd_ad
