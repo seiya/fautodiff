@@ -374,7 +374,6 @@
       ],
       "name_rev_ad": "mpi_send_rev_ad",
       "args_rev_ad": [
-        "buf",
         "buf_ad",
         "count",
         "datatype",
@@ -384,7 +383,6 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "in",
         "inout",
         "in",
         "in",
@@ -473,9 +471,9 @@
         "out",
         "out"
       ],
+      "name_fwd_rev_ad": "mpi_isend_fwd_rev_ad",
       "name_rev_ad": "mpi_isend_rev_ad",
       "args_rev_ad": [
-        "buf",
         "buf_ad",
         "count",
         "datatype",
@@ -486,7 +484,6 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "in",
         "inout",
         "in",
         "in",
@@ -576,9 +573,9 @@
         "out",
         "out"
       ],
+      "name_fwd_rev_ad": "mpi_irecv_fwd_rev_ad",
       "name_rev_ad": "mpi_irecv_rev_ad",
       "args_rev_ad": [
-        "buf",
         "buf_ad",
         "count",
         "datatype",
@@ -589,7 +586,6 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "out",
         "inout",
         "in",
         "in",
@@ -679,25 +675,21 @@
       ],
       "name_rev_ad": "mpi_recv_rev_ad",
       "args_rev_ad": [
-        "buf",
         "buf_ad",
         "count",
         "datatype",
         "source",
         "tag",
         "comm",
-        "status",
         "ierr"
       ],
       "intents_rev_ad": [
-        "out",
-        "out",
+        "inout",
         "in",
         "in",
         "in",
         "in",
         "in",
-        "out",
         "out"
       ],
       "module": "mpi"
@@ -1116,7 +1108,6 @@
       "name_fwd_rev_ad": "mpi_send_init_fwd_rev_ad",
       "name_rev_ad": "mpi_send_init_rev_ad",
       "args_rev_ad": [
-        "buf",
         "buf_ad",
         "count",
         "datatype",
@@ -1127,14 +1118,13 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "in",
         "inout",
         "in",
         "in",
         "in",
         "in",
-        "out",
-        "out",
+        "in",
+        "inout",
         "out"
       ],
       "module": "mpi"
@@ -1220,7 +1210,6 @@
       "name_fwd_rev_ad": "mpi_recv_init_fwd_rev_ad",
       "name_rev_ad": "mpi_recv_init_rev_ad",
       "args_rev_ad": [
-        "buf",
         "buf_ad",
         "count",
         "datatype",
@@ -1231,14 +1220,13 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "out",
         "inout",
         "in",
         "in",
         "in",
         "in",
-        "out",
-        "out",
+        "in",
+        "inout",
         "out"
       ],
       "module": "mpi"
@@ -1275,14 +1263,13 @@
         "inout",
         "out"
       ],
-      "name_rev_ad": "mpi_start_ad",
+      "name_fwd_rev_ad": "mpi_start_fwd_rev_ad",
+      "name_rev_ad": "mpi_start_rev_ad",
       "args_rev_ad": [
-        "request",
         "request_ad",
         "ierr"
       ],
       "intents_rev_ad": [
-        "inout",
         "inout",
         "out"
       ],
@@ -1329,16 +1316,15 @@
         "inout",
         "out"
       ],
-      "name_rev_ad": "mpi_startall_ad",
+      "name_fwd_rev_ad": "mpi_startall_fwd_rev_ad",
+      "name_rev_ad": "mpi_startall_rev_ad",
       "args_rev_ad": [
         "count",
-        "array_of_requests",
         "array_of_requests_ad",
         "ierr"
       ],
       "intents_rev_ad": [
         "in",
-        "inout",
         "inout",
         "out"
       ],
@@ -1375,25 +1361,24 @@
         "request",
         "request_ad",
         "status",
+        "status_ad",
         "ierr"
       ],
       "intents_fwd_ad": [
         "inout",
         "inout",
         "out",
+        "out",
         "out"
       ],
-      "name_rev_ad": "mpi_wait_ad",
+      "name_fwd_rev_ad": "mpi_wait_fwd_rev_ad",
+      "name_rev_ad": "mpi_wait_rev_ad",
       "args_rev_ad": [
-        "request",
         "request_ad",
-        "status",
         "ierr"
       ],
       "intents_rev_ad": [
         "inout",
-        "inout",
-        "out",
         "out"
       ],
       "module": "mpi"
@@ -1438,7 +1423,8 @@
         "count",
         "array_of_requests",
         "array_of_requests_ad",
-        "array_of_statuses",
+        "statuses",
+        "statuses_ad",
         "ierr"
       ],
       "intents_fwd_ad": [
@@ -1446,21 +1432,19 @@
         "inout",
         "inout",
         "out",
+        "out",
         "out"
       ],
-      "name_rev_ad": "mpi_waitall_ad",
+      "name_fwd_rev_ad": "mpi_waitall_fwd_rev_ad",
+      "name_rev_ad": "mpi_waitall_rev_ad",
       "args_rev_ad": [
         "count",
-        "array_of_requests",
         "array_of_requests_ad",
-        "array_of_statuses",
         "ierr"
       ],
       "intents_rev_ad": [
         "in",
         "inout",
-        "inout",
-        "out",
         "out"
       ],
       "module": "mpi"
