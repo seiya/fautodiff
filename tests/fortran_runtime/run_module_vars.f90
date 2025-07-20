@@ -48,6 +48,7 @@ contains
     a = 3.0
     x = 2.0
     call inc_and_use_fwd_rev_ad(x, y)
+    call inc_and_use(x, y)
     a = 3.0
     call inc_and_use(x + eps, y_eps)
     fd = (y_eps - y) / eps

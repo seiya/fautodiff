@@ -470,7 +470,7 @@ contains
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
 
-    call MPI_Allreduce(recvbuf_ad, sendbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    call MPI_Allreduce(recvbuf_ad, sendbuf_ad, count, datatype, op, comm, ierr)
     recvbuf_ad(:count) = 0.0
   end subroutine mpi_allreduce_rev_ad_r4
 
@@ -492,7 +492,7 @@ contains
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
 
-    call MPI_Allreduce(recvbuf_ad, sendbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    call MPI_Allreduce(recvbuf_ad, sendbuf_ad, count, datatype, op, comm, ierr)
     recvbuf_ad(:count) = 0.0_8
   end subroutine mpi_allreduce_rev_ad_r8
 

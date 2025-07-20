@@ -1045,6 +1045,34 @@ class CallStatement(Node):
         if arg_info.get("skip") or arg_info.get(name_key) is None:
             return [Statement(f"! {name} is skiped")]
 
+        tmp_vars = []
+        call_args = list(self.args)
+        arg_keys = list(self.arg_keys)
+        param_names = list(arg_info["args"])
+        if self.result is not None:
+            param_names_no_res = param_names[:-1]
+        else:
+            param_names_no_res = param_names
+
+        # for keyword arguments, we need to order them
+        ordered = [None] * len(param_names_no_res)
+        used = [False] * len(param_names_no_res)
+        pos = 0
+        for arg, key in zip(call_args, arg_keys):
+            if key is None:
+                while pos < len(param_names_no_res) and used[pos]:
+                    pos += 1
+                if pos < len(param_names_no_res):
+                    ordered[pos] = arg
+                    used[pos] = True
+                    pos += 1
+            else:
+                if key in param_names_no_res:
+                    idx = param_names_no_res.index(key)
+                    ordered[idx] = arg
+                    used[idx] = True
+
+        # if arguments are operators or functions, we need to save them
         def _push_arg(i, arg):
             if not isinstance(arg, OpLeaf) and arg_info["type"][i] == "real":
                 name = self._save_var_name(f"{self.name}_arg{i}", self.get_id(), no_suffix=True)
@@ -1062,31 +1090,6 @@ class CallStatement(Node):
                 )
             else:
                 args_new.append(arg)
-        tmp_vars = []
-        call_args = list(self.args)
-        arg_keys = list(self.arg_keys)
-        param_names = list(arg_info["args"])
-        if self.result is not None:
-            param_names_no_res = param_names[:-1]
-        else:
-            param_names_no_res = param_names
-
-        ordered = [None] * len(param_names_no_res)
-        used = [False] * len(param_names_no_res)
-        pos = 0
-        for arg, key in zip(call_args, arg_keys):
-            if key is None:
-                while pos < len(param_names_no_res) and used[pos]:
-                    pos += 1
-                if pos < len(param_names_no_res):
-                    ordered[pos] = arg
-                    used[pos] = True
-                    pos += 1
-            else:
-                if key in param_names_no_res:
-                    idx = param_names_no_res.index(key)
-                    ordered[idx] = arg
-                    used[idx] = True
         args = []
         args_new = []
         for i, arg in enumerate(ordered):
@@ -1095,6 +1098,8 @@ class CallStatement(Node):
         if self.result is not None:
             _push_arg(len(param_names_no_res), self.result)
             args.append(self.result)
+
+        # get arguments for ad call based on fadmod information
         ad_args = []
         if reverse:
             name_key = "name_rev_ad"
@@ -1124,6 +1129,7 @@ class CallStatement(Node):
                     is_constant=var.is_constant,
                 )
             ad_args.append(var)
+
         ad_call = CallStatement(name=arg_info[name_key], args=ad_args, intents=arg_info[intents_key], ad_info=self.info["code"])
         if not reverse:
             for i, arg in enumerate(ad_args):

@@ -66,14 +66,14 @@ def _contains_pushpop(node) -> bool:
     return False
 
 
-def _replace_fwd_rev_calls(node, routine_map):
-    """Rename calls in ``node`` to use *_fwd_rev_ad wrappers when available."""
+def _add_fwd_rev_calls(node, routine_map):
+    """Add *_fwd_rev_ad wrapper routine before the call when available."""
     if isinstance(node, CallStatement):
         info = routine_map.get(node.name)
         if info is not None and info.get("name_fwd_rev_ad"):
-            node.name = info["name_fwd_rev_ad"]
-    for child in getattr(node, "iter_children", lambda: [])():
-        _replace_fwd_rev_calls(child, routine_map)
+            node.parent.insert_before(node.get_id(), CallStatement(info["name_fwd_rev_ad"], node.args))
+    for child in list(getattr(node, "iter_children", lambda: [])()):
+        _add_fwd_rev_calls(child, routine_map)
 
 
 def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str]) -> Subroutine:
@@ -95,8 +95,6 @@ def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str]) -> Subroutine:
         )
     for name in vars:
         sub.content.append(PushPop(OpVar(name), sub.get_id()))
-    call = CallStatement(routine_org.name, [OpVar(a) for a in routine_org.args])
-    sub.content.append(call)
     sub.ad_init = Block([])
     sub.ad_content = Block([])
     return sub
@@ -624,7 +622,7 @@ def _generate_ad_subroutine(
                 subroutine.content.insert_begin(pop)
             routine_info["fwd_rev_subroutine"] = _make_fwd_rev_wrapper(routine_org, cross_vars)
 
-        _replace_fwd_rev_calls(fw_block, routine_map)
+        _add_fwd_rev_calls(fw_block, routine_map)
 
         flag = True
         while flag:
