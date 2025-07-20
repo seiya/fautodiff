@@ -11,6 +11,7 @@ contains
     real, intent(in)  :: b_ad
 
     a_ad = a_ad * 2.0 + b_ad ! a = a * 2.0 + b
+    a = a * 2.0 + b
 
     return
   end subroutine foo_fwd_ad

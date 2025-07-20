@@ -485,11 +485,7 @@ def _generate_ad_subroutine(
     out_grad_args = routine_info["out_grad_args"]
     has_grad_input = routine_info["has_grad_input"]
     # list of original intent(out) arguments
-    out_args = [
-        var
-        for var in routine_org.arg_vars()
-        if (var.intent or "inout") == "out"
-    ]
+    out_args = [var for var in routine_org.arg_vars() if (var.intent is None or var.intent in ("out", "inout"))]
     ad_block = subroutine.ad_content
 
     has_mod_grad_input = False

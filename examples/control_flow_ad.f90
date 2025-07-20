@@ -13,9 +13,11 @@ contains
     real, intent(out) :: z_ad
 
     if (x > 0.0) then
+      y = y + 1.0
       z_ad = x_ad ! z = x
       z = x
     else if (x < 0.0) then
+      y = y - 1.0
       z_ad = - x_ad ! z = -x
       z = - x
     else
