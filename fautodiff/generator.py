@@ -66,14 +66,14 @@ def _contains_pushpop(node) -> bool:
     return False
 
 
-def _add_fwd_rev_calls(node, routine_map):
+def _add_fwd_rev_calls(node, routine_map, generic_map):
     """Add *_fwd_rev_ad wrapper routine before the call when available."""
     if isinstance(node, CallStatement):
-        info = routine_map.get(node.name)
-        if info is not None and info.get("name_fwd_rev_ad"):
-            node.parent.insert_before(node.get_id(), CallStatement(info["name_fwd_rev_ad"], node.args))
+        arg_info = Node.get_arg_info(node, routine_map, generic_map)
+        if arg_info is not None and arg_info.get("name_fwd_rev_ad"):
+            node.parent.insert_before(node.get_id(), CallStatement(arg_info["name_fwd_rev_ad"], node.args))
     for child in list(getattr(node, "iter_children", lambda: [])()):
-        _add_fwd_rev_calls(child, routine_map)
+        _add_fwd_rev_calls(child, routine_map, generic_map)
 
 
 def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str]) -> Subroutine:
@@ -100,10 +100,10 @@ def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str]) -> Subroutine:
     return sub
 
 
-def _set_call_intents(node, routine_map):
+def _set_call_intents(node, routine_map, generic_map):
     """Populate ``CallStatement.intents`` using ``routine_map`` recursively."""
     if isinstance(node, CallStatement):
-        arg_info = routine_map.get(node.name)
+        arg_info = Node.get_arg_info(node, routine_map, generic_map)
         if arg_info is not None and "intents" in arg_info:
             intents = list(arg_info["intents"])
             params = list(arg_info["args"])
@@ -135,14 +135,15 @@ def _set_call_intents(node, routine_map):
                 reordered.append(intents[-1])
             node.intents = reordered
     for child in getattr(node, "iter_children", lambda: [])():
-        _set_call_intents(child, routine_map)
+        _set_call_intents(child, routine_map, generic_map)
 
 
-def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, dict]:
-    """Load routine and variable maps from ``mod_names`` using ``search_dirs``."""
+def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, dict, dict]:
+    """Load routine, variable and generic maps from ``mod_names`` using ``search_dirs``."""
 
     routines = {}
     variables = {}
+    generics = {}
     for mod in mod_names:
         for d in search_dirs:
             path = Path(d) / f"{mod}.fadmod"
@@ -150,6 +151,7 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, d
                 try:
                     data = json.loads(path.read_text())
                     vars_data = data.pop("variables", {})
+                    generics.update(data.pop("generics", {}))
                     if "routines" in data:
                         routines.update(data.get("routines", {}))
                     else:
@@ -172,7 +174,7 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, d
                 except Exception:
                     pass
                 break
-    return routines, variables
+    return routines, variables, generics
 
 
 def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
@@ -466,6 +468,7 @@ def _generate_ad_subroutine(
     mod_org: Module,
     routine_org: Routine,
     routine_map: dict,
+    generic_map: dict,
     mod_vars: List[OpVar],
     routine_info: dict,
     warnings: List[str],
@@ -499,7 +502,7 @@ def _generate_ad_subroutine(
         subroutine.ad_content = ad_block
         return subroutine, False, set()
 
-    _set_call_intents(routine_org.content, routine_map)
+    _set_call_intents(routine_org.content, routine_map, generic_map)
 
     saved_vars: List[OpVar] = []
     if reverse:
@@ -511,6 +514,7 @@ def _generate_ad_subroutine(
         reverse=reverse,
         assigned_advars=assigned_advars,
         routine_map=routine_map,
+        generic_map=generic_map,
         mod_vars=mod_vars,
         warnings=warnings,
     )
@@ -622,7 +626,7 @@ def _generate_ad_subroutine(
                 subroutine.content.insert_begin(pop)
             routine_info["fwd_rev_subroutine"] = _make_fwd_rev_wrapper(routine_org, cross_vars)
 
-        _add_fwd_rev_calls(fw_block, routine_map)
+        _add_fwd_rev_calls(fw_block, routine_map, generic_map)
 
         flag = True
         while flag:
@@ -865,6 +869,7 @@ def generate_ad(
         fadmod_dir = Path(fadmod_dir)
 
     routine_map = {}
+    generic_routines = {}
     for mod_org in modules_org:
         name = mod_org.name
         mod = Module(f"{name}{AD_SUFFIX}")
@@ -916,8 +921,9 @@ def generate_ad(
                     routine_map[r.name] = routine_info["arg_info"]
 
         used_mods = mod_org.find_use_modules()
-        loaded, vars_info = _load_fadmods(used_mods, search_dirs)
+        loaded, vars_info, generic_map = _load_fadmods(used_mods, search_dirs)
         routine_map.update(loaded)
+        generic_routines.update(generic_map)
         for name, vars in vars_info.items():
             mod_vars.extend(vars)
 
@@ -930,6 +936,7 @@ def generate_ad(
                     mod_org,
                     routine,
                     routine_map,
+                    generic_routines,
                     mod_vars,
                     routine_info_fwd[routine.name],
                     warnings,
@@ -943,6 +950,7 @@ def generate_ad(
                     mod_org,
                     routine,
                     routine_map,
+                    generic_routines,
                     mod_vars,
                     routine_info_rev[routine.name],
                     warnings,

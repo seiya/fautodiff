@@ -132,6 +132,7 @@ class Node:
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -352,6 +353,24 @@ class Node:
     def is_savevar(cls, name: str) -> bool:
         return bool(cls._pattern.match(name))
 
+    @classmethod
+    def get_arg_info(cls, routine: Union[OpFuncUser, CallStatement], routine_map: Optional[dict] = None, generic_map: Optional[dict] = None) -> Optional[dict]:
+        """Return argument information for the given name."""
+        if routine_map is None:
+            return None
+        name = routine.name
+        argtypes = [arg.typename for arg in routine.args]
+        arg_info = routine_map.get(name)
+        if arg_info is None and generic_map and name in generic_map:
+            for cand in generic_map[name]:
+                if cand in routine_map:
+                    arg_info = routine_map[cand]
+                    if arg_info is not None:
+                        if arg_info.get("intents") is not None and arg_info.get("intents") != routine.intents:
+                            if arg_info.get("type") is not None and arg_info.get("type") != argtypes:
+                                return arg_info
+        return None
+
     def _generate_ad_forward(
         self,
         lhs: OpVar,
@@ -359,6 +378,7 @@ class Node:
         assigned_advars: VarList,
         saved_vars: List[OpVar],
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
@@ -368,7 +388,9 @@ class Node:
         for n, ufunc in enumerate(funcs):
             if routine_map is None:
                 raise RuntimeError("routine_map is necessary for CallStatement")
-            arg_info = routine_map[ufunc.name]
+            arg_info = Node.get_arg_info(ufunc, routine_map, generic_map)
+            if arg_info is None:
+                raise RuntimeError(f"Not found in routime_map: {ufunc.name}")
             if rhs == ufunc and len(funcs) == 1:
                 result = lhs
             else:
@@ -398,6 +420,7 @@ class Node:
                 reverse=False,
                 assigned_advars=assigned_advars,
                 routine_map=routine_map,
+                generic_map=generic_map,
                 mod_vars=mod_vars,
                 warnings=warnings,
             )
@@ -444,6 +467,7 @@ class Node:
         rhs: Operator,
         saved_vars: List[OpVar],
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
@@ -453,7 +477,9 @@ class Node:
         for n, ufunc in enumerate(funcs):
             if routine_map is None:
                 raise RuntimeError("routine_map is necessary for CallStatement")
-            arg_info = routine_map[ufunc.name]
+            arg_info = Node.get_arg_info(ufunc, routine_map, generic_map)
+            if arg_info is None:
+                raise RuntimeError(f"Not found in routime_map: {ufunc.name}")
             if rhs == ufunc and len(funcs) == 1:
                 result = lhs
             else:
@@ -479,6 +505,7 @@ class Node:
                 saved_vars,
                 reverse=True,
                 routine_map=routine_map,
+                generic_map=generic_map,
                 mod_vars=mod_vars,
                 warnings=warnings,
             )
@@ -568,6 +595,7 @@ class Block(Node):
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[List[str]] = None,
@@ -581,7 +609,7 @@ class Block(Node):
                 ec_flags = [ec.flag() for ec in node.collect_exitcycle()]
             else:
                 ec_flags = None
-            nodes = node.generate_ad(saved_vars, reverse, assigned_advars, routine_map, mod_vars, ec_flags, warnings)
+            nodes = node.generate_ad(saved_vars, reverse, assigned_advars, routine_map, generic_map, mod_vars, ec_flags, warnings)
             nodes = [node for node in nodes if node and not node.is_effectively_empty()]
             if reverse and nodes and exitcycle_flags and not isinstance(node, (ExitStmt, CycleStmt)):
                 if ec_flags:
@@ -849,6 +877,7 @@ class ExitCycle(Node):
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -1029,6 +1058,7 @@ class CallStatement(Node):
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -1036,10 +1066,10 @@ class CallStatement(Node):
         if routine_map is None:
             raise RuntimeError("routine_map is necessary for CallStatement")
         name = self.name
-        if not name in routine_map:
+        arg_info = Node.get_arg_info(self, routine_map, generic_map)
+        if arg_info is None:
             print(routine_map)
             raise RuntimeError(f"Not found in routime_map: {name}")
-        arg_info = routine_map[name]
 
         name_key = "name_rev_ad" if reverse else "name_fwd_ad"
         if arg_info.get("skip") or arg_info.get(name_key) is None:
@@ -1145,6 +1175,7 @@ class CallStatement(Node):
                             rhs,
                             saved_vars,
                             routine_map=routine_map,
+                            generic_map=generic_map,
                             mod_vars=mod_vars,
                             warnings=warnings,
                         )
@@ -1158,6 +1189,7 @@ class CallStatement(Node):
                             assigned_advars,
                             saved_vars,
                             routine_map=routine_map,
+                            generic_map=generic_map,
                             mod_vars=mod_vars,
                             warnings=warnings,
                         )
@@ -1304,6 +1336,7 @@ class Routine(Node):
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -1462,6 +1495,7 @@ class Assignment(Node):
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -1474,6 +1508,7 @@ class Assignment(Node):
                     self.rhs,
                     saved_vars,
                     routine_map=routine_map,
+                    generic_map=generic_map,
                     mod_vars=mod_vars,
                     warnings=warnings,
                 )
@@ -1485,6 +1520,7 @@ class Assignment(Node):
                 assigned_advars,
                 saved_vars,
                 routine_map=routine_map,
+                generic_map=generic_map,
                 mod_vars=mod_vars,
                 warnings=warnings,
             )
@@ -1586,6 +1622,7 @@ class PointerAssignment(Node):
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -1660,6 +1697,7 @@ class ClearAssignment(Node):
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -1943,6 +1981,7 @@ class Allocate(Node):
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -2034,6 +2073,7 @@ class Deallocate(Node):
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -2263,13 +2303,14 @@ class BranchBlock(Node):
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         cond_blocks = []
         for cond, block in self.cond_blocks:
-            nodes = block.generate_ad(saved_vars, reverse, assigned_advars, routine_map, mod_vars, exitcycle_flags, warnings)
+            nodes = block.generate_ad(saved_vars, reverse, assigned_advars, routine_map, generic_map, mod_vars, exitcycle_flags, warnings)
             if reverse:
                 nodes_new = block.set_for_exitcycle(exitcycle_flags)
                 if nodes_new:
@@ -2487,6 +2528,7 @@ class DoAbst(Node):
         reverse: bool = False,
         assigned_advars: Optional[VarList] = None,
         routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
@@ -2500,7 +2542,7 @@ class DoAbst(Node):
             for vname in self.recurrent_vars():
                 assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
 
-        nodes = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, mod_vars, exitcycle_flags, warnings)
+        nodes = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, generic_map, mod_vars, exitcycle_flags, warnings)
         if self.do:
             range = self.range
         else:
