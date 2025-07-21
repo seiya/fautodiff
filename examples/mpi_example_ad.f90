@@ -34,7 +34,7 @@ contains
     return
   end subroutine sum_reduce_rev_ad
 
-    subroutine isend_irecv_fwd_ad(x, x_ad, y, y_ad, comm)
+  subroutine isend_irecv_fwd_ad(x, x_ad, y, y_ad, comm)
     real, intent(inout) :: x(2)
     real, intent(inout) :: x_ad(2)
     real, intent(out) :: y

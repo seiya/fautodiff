@@ -359,16 +359,31 @@ class Node:
         if routine_map is None:
             return None
         name = routine.name
-        argtypes = [arg.typename for arg in routine.args]
         arg_info = routine_map.get(name)
+        if arg_info is not None:
+            if not arg_info.get("skip") and (arg_info["args"] is None or len(arg_info["args"]) != len(routine.args)):
+                raise RuntimeError(
+                    f"Argument length mismatch for {name}: "
+                    f"{len(arg_info['args'])} != {len(routine.args)}"
+                )
+            return arg_info
+        argtypes = [arg.typename for arg in routine.args]
+        argkinds = [arg.kind for arg in routine.args]
+        argdims = [(arg.dims and len(arg.dims)) for arg in routine.args]
         if arg_info is None and generic_map and name in generic_map:
             for cand in generic_map[name]:
-                if cand in routine_map:
-                    arg_info = routine_map[cand]
-                    if arg_info is not None:
-                        if arg_info.get("intents") is not None and arg_info.get("intents") != routine.intents:
-                            if arg_info.get("type") is not None and arg_info.get("type") != argtypes:
-                                return arg_info
+                if not cand in routine_map:
+                    raise RuntimeError(f"Not found in routine_map: {cand}")
+                arg_info = routine_map[cand]
+                if "type" in arg_info and arg_info["type"] == argtypes:
+                    if "kind" in arg_info and arg_info["kind"] == argkinds:
+                        if "dims" in arg_info and [(arg and len(arg)) for arg in arg_info["dims"]] == argdims:
+                            if arg_info["args"] is None or len(arg_info["args"]) != len(routine.args):
+                                raise RuntimeError(
+                                    f"Argument length mismatch for {name}: "
+                                    f"{len(arg_info['args'])} != {len(routine.args)}"
+                                )
+                            return arg_info
         return None
 
     def _generate_ad_forward(
@@ -1068,7 +1083,7 @@ class CallStatement(Node):
         name = self.name
         arg_info = Node.get_arg_info(self, routine_map, generic_map)
         if arg_info is None:
-            print(routine_map)
+            #print(routine_map)
             raise RuntimeError(f"Not found in routime_map: {name}")
 
         name_key = "name_rev_ad" if reverse else "name_fwd_ad"

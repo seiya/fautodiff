@@ -879,7 +879,7 @@ def generate_ad(
             if not isinstance(child, Use):
                 mod.body.append(child)
 
-        mod_vars = mod_org.decls.collect_vars() if mod_org.decls is not None else []
+        mod_vars = [var for var in mod_org.decls.collect_vars() if not var.is_constant] if mod_org.decls is not None else []
         has_mod_grad_var = False
         for var in mod_vars:
             if var.ad_target:
@@ -925,7 +925,9 @@ def generate_ad(
         routine_map.update(loaded)
         generic_routines.update(generic_map)
         for name, vars in vars_info.items():
-            mod_vars.extend(vars)
+            vars = [v for v in vars if not v.is_constant]
+            if vars:
+                mod_vars.extend(vars)
 
         # Generate AD subroutines
         ad_modules_used = set()

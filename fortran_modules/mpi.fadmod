@@ -58,7 +58,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_bcast_fwd_ad_r4",
+      "name_fwd_ad": "mpi_bcast_fwd_ad",
       "args_fwd_ad": [
         "buffer",
         "buffer_ad",
@@ -77,7 +77,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_bcast_rev_ad_r4",
+      "name_rev_ad": "mpi_bcast_rev_ad",
       "args_rev_ad": [
         "buffer_ad",
         "count",
@@ -139,7 +139,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_bcast_fwd_ad_r8",
+      "name_fwd_ad": "mpi_bcast_fwd_ad",
       "args_fwd_ad": [
         "buffer",
         "buffer_ad",
@@ -149,7 +149,7 @@
         "comm",
         "ierr"
       ],
-      "intents_fwd_ad_r8": [
+      "intents_fwd_ad": [
         "inout",
         "inout",
         "in",
@@ -158,7 +158,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_bcast_rev_ad_r8",
+      "name_rev_ad": "mpi_bcast_rev_ad",
       "args_rev_ad": [
         "buffer_ad",
         "count",
@@ -177,7 +177,7 @@
       ],
       "module": "mpi"
     },
-    "MPI_Bcast_scalar_r4": {
+    "MPI_Bcast_scalar": {
       "args": [
         "buffer",
         "count",
@@ -218,7 +218,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_bcast_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_bcast_fwd_ad",
       "args_fwd_ad": [
         "buffer",
         "buffer_ad",
@@ -237,7 +237,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_bcast_rev_ad_scalar_r4",
+      "name_rev_ad": "mpi_bcast_rev_ad",
       "args_rev_ad": [
         "buffer_ad",
         "count",
@@ -297,7 +297,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_bcast_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_bcast_fwd_ad",
       "args_fwd_ad": [
         "buffer",
         "buffer_ad",
@@ -316,7 +316,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_bcast_rev_ad_scalar_r8",
+      "name_rev_ad": "mpi_bcast_rev_ad",
       "args_rev_ad": [
         "buffer_ad",
         "count",
@@ -611,7 +611,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_reduce_fwd_ad_r4",
+      "name_fwd_ad": "mpi_reduce_fwd_ad",
       "args_fwd_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -636,7 +636,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_reduce_rev_ad_r4",
+      "name_rev_ad": "mpi_reduce_rev_ad",
       "args_rev_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -718,7 +718,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_reduce_fwd_ad_r8",
+      "name_fwd_ad": "mpi_reduce_fwd_ad",
       "args_fwd_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -743,7 +743,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_reduce_rev_ad_r8",
+      "name_rev_ad": "mpi_reduce_rev_ad",
       "args_rev_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -821,7 +821,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_reduce_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_reduce_fwd_ad",
       "args_fwd_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -846,7 +846,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_reduce_rev_ad_scalar_r4",
+      "name_rev_ad": "mpi_reduce_rev_ad",
       "args_rev_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -924,7 +924,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_reduce_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_reduce_fwd_ad",
       "args_fwd_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -949,7 +949,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_reduce_rev_ad_scalar_r8",
+      "name_rev_ad": "mpi_reduce_rev_ad",
       "args_rev_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -1026,7 +1026,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_allreduce_fwd_ad_r4",
+      "name_fwd_ad": "mpi_allreduce_fwd_ad",
       "args_fwd_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -1049,11 +1049,9 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_allreduce_rev_ad_r4",
+      "name_rev_ad": "mpi_allreduce_rev_ad",
       "args_rev_ad": [
-        "sendbuf",
         "sendbuf_ad",
-        "recvbuf",
         "recvbuf_ad",
         "count",
         "datatype",
@@ -1063,8 +1061,6 @@
       ],
       "intents_rev_ad": [
         "in",
-        "in",
-        "out",
         "out",
         "in",
         "in",
@@ -1124,7 +1120,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_allreduce_fwd_ad_r8",
+      "name_fwd_ad": "mpi_allreduce_fwd_ad",
       "args_fwd_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -1147,11 +1143,9 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_allreduce_rev_ad_r8",
+      "name_rev_ad": "mpi_allreduce_rev_ad",
       "args_rev_ad": [
-        "sendbuf",
         "sendbuf_ad",
-        "recvbuf",
         "recvbuf_ad",
         "count",
         "datatype",
@@ -1161,8 +1155,6 @@
       ],
       "intents_rev_ad": [
         "in",
-        "in",
-        "out",
         "out",
         "in",
         "in",
@@ -1218,7 +1210,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_allreduce_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_allreduce_fwd_ad",
       "args_fwd_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -1241,7 +1233,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_allreduce_rev_ad_scalar_r4",
+      "name_rev_ad": "mpi_allreduce_rev_ad",
       "args_rev_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -1312,7 +1304,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_allreduce_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_allreduce_fwd_ad",
       "args_fwd_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -1335,7 +1327,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_allreduce_rev_ad_scalar_r8",
+      "name_rev_ad": "mpi_allreduce_rev_ad",
       "args_rev_ad": [
         "sendbuf",
         "sendbuf_ad",
@@ -1408,7 +1400,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_send_fwd_ad_r4",
+      "name_fwd_ad": "mpi_send_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -1429,7 +1421,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_send_rev_ad_r4",
+      "name_rev_ad": "mpi_send_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -1498,7 +1490,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_send_fwd_ad_r8",
+      "name_fwd_ad": "mpi_send_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -1519,7 +1511,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_send_rev_ad_r8",
+      "name_rev_ad": "mpi_send_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -1586,7 +1578,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_send_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_send_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -1607,7 +1599,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_send_rev_ad_scalar_r4",
+      "name_rev_ad": "mpi_send_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -1674,7 +1666,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_send_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_send_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -1695,7 +1687,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_send_rev_ad_scalar_r8",
+      "name_rev_ad": "mpi_send_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -1769,7 +1761,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_isend_fwd_ad_r4",
+      "name_fwd_ad": "mpi_isend_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -1794,8 +1786,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_isend_fwd_rev_ad_r4",
-      "name_rev_ad": "mpi_isend_rev_ad_r4",
+      "name_fwd_rev_ad": "mpi_isend_fwd_rev_ad",
+      "name_rev_ad": "mpi_isend_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -1871,7 +1863,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_isend_fwd_ad_r8",
+      "name_fwd_ad": "mpi_isend_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -1896,8 +1888,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_isend_fwd_rev_ad_r8",
-      "name_rev_ad": "mpi_isend_rev_ad_r8",
+      "name_fwd_rev_ad": "mpi_isend_fwd_rev_ad",
+      "name_rev_ad": "mpi_isend_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -1971,7 +1963,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_isend_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_isend_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -1996,8 +1988,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_isend_fwd_rev_ad_scalar_r4",
-      "name_rev_ad": "mpi_isend_rev_ad_scalar_r4",
+      "name_fwd_rev_ad": "mpi_isend_fwd_rev_ad",
+      "name_rev_ad": "mpi_isend_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -2071,7 +2063,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_isend_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_isend_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -2096,8 +2088,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_isend_fwd_rev_ad_scalar_r8",
-      "name_rev_ad": "mpi_isend_rev_ad_scalar_r8",
+      "name_fwd_rev_ad": "mpi_isend_fwd_rev_ad",
+      "name_rev_ad": "mpi_isend_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -2173,7 +2165,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_irecv_fwd_ad_r4",
+      "name_fwd_ad": "mpi_irecv_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -2198,8 +2190,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_irecv_fwd_rev_ad_r4",
-      "name_rev_ad": "mpi_irecv_rev_ad_r4",
+      "name_fwd_rev_ad": "mpi_irecv_fwd_rev_ad",
+      "name_rev_ad": "mpi_irecv_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -2275,7 +2267,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_irecv_fwd_ad_r8",
+      "name_fwd_ad": "mpi_irecv_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -2300,8 +2292,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_irecv_fwd_rev_ad_r8",
-      "name_rev_ad": "mpi_irecv_rev_ad_r8",
+      "name_fwd_rev_ad": "mpi_irecv_fwd_rev_ad",
+      "name_rev_ad": "mpi_irecv_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -2375,7 +2367,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_irecv_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_irecv_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -2400,8 +2392,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_irecv_fwd_rev_ad_scalar_r4",
-      "name_rev_ad": "mpi_irecv_rev_ad_scalar_r4",
+      "name_fwd_rev_ad": "mpi_irecv_fwd_rev_ad",
+      "name_rev_ad": "mpi_irecv_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -2475,7 +2467,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_irecv_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_irecv_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -2500,8 +2492,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_irecv_fwd_rev_ad_scalar_r8",
-      "name_rev_ad": "mpi_irecv_rev_ad_scalar_r8",
+      "name_fwd_rev_ad": "mpi_irecv_fwd_rev_ad",
+      "name_rev_ad": "mpi_irecv_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -2577,7 +2569,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_recv_fwd_ad_r4",
+      "name_fwd_ad": "mpi_recv_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -2600,7 +2592,7 @@
         "out",
         "out"
       ],
-      "name_rev_ad": "mpi_recv_rev_ad_r4",
+      "name_rev_ad": "mpi_recv_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -2674,7 +2666,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_recv_fwd_ad_r8",
+      "name_fwd_ad": "mpi_recv_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -2697,7 +2689,7 @@
         "out",
         "out"
       ],
-      "name_rev_ad": "mpi_recv_rev_ad_r8",
+      "name_rev_ad": "mpi_recv_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -2769,7 +2761,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_recv_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_recv_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -2792,7 +2784,7 @@
         "out",
         "out"
       ],
-      "name_rev_ad": "mpi_recv_rev_ad_scalar_r4",
+      "name_rev_ad": "mpi_recv_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -2864,7 +2856,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_recv_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_recv_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -2887,7 +2879,7 @@
         "out",
         "out"
       ],
-      "name_rev_ad": "mpi_recv_rev_ad_scalar_r8",
+      "name_rev_ad": "mpi_recv_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -2966,7 +2958,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_put_fwd_ad_r4",
+      "name_fwd_ad": "mpi_put_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -2990,7 +2982,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_put_rev_ad_r4",
+      "name_rev_ad": "mpi_put_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -3074,7 +3066,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_put_fwd_ad_r8",
+      "name_fwd_ad": "mpi_put_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -3098,7 +3090,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_put_rev_ad_r8",
+      "name_rev_ad": "mpi_put_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -3180,7 +3172,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_put_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_put_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -3204,7 +3196,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_put_rev_ad_scalar_r4",
+      "name_rev_ad": "mpi_put_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -3286,7 +3278,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_put_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_put_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -3310,7 +3302,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_put_rev_ad_scalar_r8",
+      "name_rev_ad": "mpi_put_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -3394,7 +3386,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_get_fwd_ad_r4",
+      "name_fwd_ad": "mpi_get_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -3418,7 +3410,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_get_rev_ad_r4",
+      "name_rev_ad": "mpi_get_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -3502,7 +3494,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_get_fwd_ad_r8",
+      "name_fwd_ad": "mpi_get_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -3526,7 +3518,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_get_rev_ad_r8",
+      "name_rev_ad": "mpi_get_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -3608,7 +3600,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_get_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_get_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -3632,7 +3624,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_get_rev_ad_scalar_r4",
+      "name_rev_ad": "mpi_get_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -3714,7 +3706,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_get_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_get_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -3738,7 +3730,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_get_rev_ad_scalar_r8",
+      "name_rev_ad": "mpi_get_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -3827,7 +3819,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_accumulate_fwd_ad_r4",
+      "name_fwd_ad": "mpi_accumulate_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -3853,7 +3845,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_accumulate_rev_ad_r4",
+      "name_rev_ad": "mpi_accumulate_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -3944,7 +3936,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_accumulate_fwd_ad_r8",
+      "name_fwd_ad": "mpi_accumulate_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -3970,7 +3962,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_accumulate_rev_ad_r8",
+      "name_rev_ad": "mpi_accumulate_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -4059,7 +4051,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_accumulate_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_accumulate_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -4085,7 +4077,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_accumulate_rev_ad_scalar_r4",
+      "name_rev_ad": "mpi_accumulate_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -4174,7 +4166,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_accumulate_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_accumulate_fwd_ad",
       "args_fwd_ad": [
         "origin",
         "origin_ad",
@@ -4200,7 +4192,7 @@
         "in",
         "out"
       ],
-      "name_rev_ad": "mpi_accumulate_rev_ad_scalar_r8",
+      "name_rev_ad": "mpi_accumulate_rev_ad",
       "args_rev_ad": [
         "origin",
         "origin_ad",
@@ -4281,7 +4273,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_send_init_fwd_ad_r4",
+      "name_fwd_ad": "mpi_send_init_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -4306,8 +4298,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_send_init_fwd_rev_ad_r4",
-      "name_rev_ad": "mpi_send_init_rev_ad_r4",
+      "name_fwd_rev_ad": "mpi_send_init_fwd_rev_ad",
+      "name_rev_ad": "mpi_send_init_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -4383,7 +4375,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_send_init_fwd_ad_r8",
+      "name_fwd_ad": "mpi_send_init_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -4408,8 +4400,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_send_init_fwd_rev_ad_r8",
-      "name_rev_ad": "mpi_send_init_rev_ad_r8",
+      "name_fwd_rev_ad": "mpi_send_init_fwd_rev_ad",
+      "name_rev_ad": "mpi_send_init_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -4483,7 +4475,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_send_init_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_send_init_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -4508,8 +4500,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_send_init_fwd_rev_ad_scalar_r4",
-      "name_rev_ad": "mpi_send_init_rev_ad_scalar_r4",
+      "name_fwd_rev_ad": "mpi_send_init_fwd_rev_ad",
+      "name_rev_ad": "mpi_send_init_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -4583,7 +4575,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_send_init_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_send_init_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -4608,8 +4600,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_send_init_fwd_rev_ad_scalar_r8",
-      "name_rev_ad": "mpi_send_init_rev_ad_scalar_r8",
+      "name_fwd_rev_ad": "mpi_send_init_fwd_rev_ad",
+      "name_rev_ad": "mpi_send_init_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -4685,7 +4677,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_recv_init_fwd_ad_r4",
+      "name_fwd_ad": "mpi_recv_init_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -4710,8 +4702,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_recv_init_fwd_rev_ad_r4",
-      "name_rev_ad": "mpi_recv_init_rev_ad_r4",
+      "name_fwd_rev_ad": "mpi_recv_init_fwd_rev_ad",
+      "name_rev_ad": "mpi_recv_init_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -4787,7 +4779,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_recv_init_fwd_ad_r8",
+      "name_fwd_ad": "mpi_recv_init_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -4812,8 +4804,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_recv_init_fwd_rev_ad_r8",
-      "name_rev_ad": "mpi_recv_init_rev_ad_r8",
+      "name_fwd_rev_ad": "mpi_recv_init_fwd_rev_ad",
+      "name_rev_ad": "mpi_recv_init_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -4887,7 +4879,7 @@
         null,
         null
       ],
-      "name_fwd_ad": "mpi_recv_init_fwd_ad_scalar_r4",
+      "name_fwd_ad": "mpi_recv_init_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -4912,8 +4904,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_recv_init_fwd_rev_ad_scalar_r4",
-      "name_rev_ad": "mpi_recv_init_rev_ad_scalar_r4",
+      "name_fwd_rev_ad": "mpi_recv_init_fwd_rev_ad",
+      "name_rev_ad": "mpi_recv_init_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",
@@ -4987,7 +4979,7 @@
         "8",
         "8"
       ],
-      "name_fwd_ad": "mpi_recv_init_fwd_ad_scalar_r8",
+      "name_fwd_ad": "mpi_recv_init_fwd_ad",
       "args_fwd_ad": [
         "buf",
         "buf_ad",
@@ -5012,8 +5004,8 @@
         "out",
         "out"
       ],
-      "name_fwd_rev_ad": "mpi_recv_init_fwd_rev_ad_scalar_r8",
-      "name_rev_ad": "mpi_recv_init_rev_ad_scalar_r8",
+      "name_fwd_rev_ad": "mpi_recv_init_fwd_rev_ad",
+      "name_rev_ad": "mpi_recv_init_rev_ad",
       "args_rev_ad": [
         "buf_ad",
         "count",

@@ -573,6 +573,8 @@ class OpInt(OpNum):
 
     val: int = field(default=-999)
     target: Optional[OpVar] = None
+    typename: ClassVar[Optional[str]] = "integer"
+    dims: ClassVar[Optional[Tuple[str]]] = None
 
     def __init__(self, val: int, kind: Optional[str] = None, target: Optional[OpVar] = None):
         super().__init__(args=[], kind=kind)
