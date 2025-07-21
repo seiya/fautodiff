@@ -1100,7 +1100,7 @@ contains
     real, intent(in) :: origin(*)
     real, intent(in) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
 
     call MPI_Put(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
@@ -1110,7 +1110,7 @@ contains
   subroutine mpi_put_rev_ad_r4(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real, intent(inout) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real :: tmp(origin_count)
 
@@ -1124,7 +1124,7 @@ contains
     real(8), intent(in) :: origin(*)
     real(8), intent(in) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
 
     call MPI_Put(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
@@ -1134,7 +1134,7 @@ contains
   subroutine mpi_put_rev_ad_r8(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real(8), intent(inout) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real(8) :: tmp(origin_count)
 
@@ -1148,7 +1148,7 @@ contains
     real, intent(in) :: origin
     real, intent(in) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real :: o(1), o_ad(1)
 
@@ -1160,7 +1160,7 @@ contains
   subroutine mpi_put_rev_ad_scalar_r4(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real, intent(inout) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real :: o_ad(1)
 
@@ -1173,7 +1173,7 @@ contains
     real(8), intent(in) :: origin
     real(8), intent(in) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real(8) :: o(1), o_ad(1)
 
@@ -1185,7 +1185,7 @@ contains
   subroutine mpi_put_rev_ad_scalar_r8(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real(8), intent(inout) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real(8) :: o_ad(1)
 
@@ -1198,7 +1198,7 @@ contains
     real, intent(out) :: origin(*)
     real, intent(out) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
 
     call MPI_Get(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
@@ -1208,7 +1208,7 @@ contains
   subroutine mpi_get_rev_ad_r4(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real, intent(inout) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
 
     call MPI_Accumulate(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, MPI_SUM, win, ierr)
@@ -1219,7 +1219,7 @@ contains
     real(8), intent(out) :: origin(*)
     real(8), intent(out) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
 
     call MPI_Get(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
@@ -1229,7 +1229,7 @@ contains
   subroutine mpi_get_rev_ad_r8(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real(8), intent(inout) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
 
     call MPI_Accumulate(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, MPI_SUM, win, ierr)
@@ -1240,7 +1240,7 @@ contains
     real, intent(out) :: origin
     real, intent(out) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real :: o(1), o_ad(1)
 
@@ -1252,7 +1252,7 @@ contains
   subroutine mpi_get_rev_ad_scalar_r4(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real, intent(inout) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real :: o_ad(1)
 
@@ -1265,7 +1265,7 @@ contains
     real(8), intent(out) :: origin
     real(8), intent(out) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real(8) :: o(1), o_ad(1)
 
@@ -1277,7 +1277,7 @@ contains
   subroutine mpi_get_rev_ad_scalar_r8(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real(8), intent(inout) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real(8) :: o_ad(1)
 
@@ -1290,7 +1290,7 @@ contains
     real, intent(in) :: origin(*)
     real, intent(in) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
 
     call MPI_Accumulate(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
@@ -1300,7 +1300,7 @@ contains
   subroutine mpi_accumulate_rev_ad_r4(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
     real, intent(inout) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real :: tmp(origin_count)
 
@@ -1314,7 +1314,7 @@ contains
     real(8), intent(in) :: origin(*)
     real(8), intent(in) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
 
     call MPI_Accumulate(origin, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
@@ -1324,7 +1324,7 @@ contains
   subroutine mpi_accumulate_rev_ad_r8(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
     real(8), intent(inout) :: origin_ad(*)
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real(8) :: tmp(origin_count)
 
@@ -1338,7 +1338,7 @@ contains
     real, intent(in) :: origin
     real, intent(in) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real :: o(1), o_ad(1)
 
@@ -1350,7 +1350,7 @@ contains
   subroutine mpi_accumulate_rev_ad_scalar_r4(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
     real, intent(inout) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real :: o_ad(1)
 
@@ -1363,7 +1363,7 @@ contains
     real(8), intent(in) :: origin
     real(8), intent(in) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real(8) :: o(1), o_ad(1)
 
@@ -1375,7 +1375,7 @@ contains
   subroutine mpi_accumulate_rev_ad_scalar_r8(origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
     real(8), intent(inout) :: origin_ad
     integer, intent(in) :: origin_count, origin_datatype, target_rank, target_count, target_datatype, op, win
-    integer(kind=MPI_ADDRESS_KIND) :: target_disp
+    integer(kind=MPI_ADDRESS_KIND), intent(in) :: target_disp
     integer, intent(out), optional :: ierr
     real(8) :: o_ad(1)
 

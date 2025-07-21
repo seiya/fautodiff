@@ -82,11 +82,12 @@ def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str]) -> Subroutine:
     for arg in routine_org.arg_vars():
         sub.decls.append(
             Declaration(
-                arg.name,
-                arg.typename,
-                arg.kind,
-                arg.dims,
-                arg.intent,
+                name=arg.name,
+                typename=arg.typename,
+                kind=arg.kind,
+                char_len=arg.char_len,
+                dims=arg.dims,
+                intent=arg.intent,
                 allocatable=arg.allocatable,
                 pointer=arg.pointer,
                 optional=arg.optional,
@@ -150,12 +151,19 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, d
             if path.exists():
                 try:
                     data = json.loads(path.read_text())
-                    vars_data = data.pop("variables", {})
                     generics.update(data.pop("generics", {}))
-                    if "routines" in data:
-                        routines.update(data.get("routines", {}))
-                    else:
-                        routines.update(data)
+                    routines_data = data.get("routines", {})
+                    if routines_data:
+                        for name, info in routines_data.items():
+                            nargs = len(info["args"])
+                            for key in ["intents", "dims", "type", "kind"]:
+                                if key in info:
+                                    if len(info[key]) != nargs:
+                                        raise RuntimeError(f"invalid routine data: {name} {info}")
+                                else:
+                                    info[key] = [None] * nargs
+                    routines.update(routines_data)
+                    vars_data = data.pop("variables", {})
                     if vars_data:
                         vars = []
                         for name, info in vars_data.items():
@@ -294,11 +302,12 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
     for var in args:
         subroutine.decls.append(
             Declaration(
-                var.name,
-                var.typename,
-                var.kind,
-                var.dims,
-                var.intent,
+                name=var.name,
+                typename=var.typename,
+                kind=var.kind,
+                char_len=var.char_len,
+                dims=var.dims,
+                intent=var.intent,
                 allocatable=var.allocatable,
                 pointer=var.pointer,
                 optional=var.optional,
@@ -409,11 +418,12 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
     for var in args:
         subroutine.decls.append(
             Declaration(
-                var.name,
-                var.typename,
-                var.kind,
-                var.dims,
-                var.intent,
+                name=var.name,
+                typename=var.typename,
+                kind=var.kind,
+                char_len=var.char_len,
+                dims=var.dims,
+                intent=var.intent,
                 allocatable=var.allocatable,
                 pointer=var.pointer,
                 optional=var.optional,
@@ -540,12 +550,11 @@ def _generate_ad_subroutine(
                 if v_org is not None and not subroutine.is_declared(name):
                     subroutine.decls.append(
                         Declaration(
-                            name,
-                            v_org.typename,
-                            v_org.kind,
-                            v_org.dims,
-                            None,
-                            base_decl.parameter if base_decl else False,
+                            name=name,
+                            typename=v_org.typename,
+                            kind=v_org.kind,
+                            dims=v_org.dims,
+                            parameter=base_decl.parameter if base_decl else False,
                             init_val=base_decl.init_val if base_decl else None,
                             allocatable=base_decl.allocatable if base_decl else False,
                             pointer=base_decl.pointer if base_decl else False,
@@ -676,12 +685,11 @@ def _generate_ad_subroutine(
                 if base_decl is not None:
                     subroutine.decls.append(
                         Declaration(
-                            name,
-                            base_decl.typename,
-                            base_decl.kind,
-                            base_decl.dims,
-                            None,
-                            base_decl.parameter,
+                            name=name,
+                            typename=base_decl.typename,
+                            kind=base_decl.kind,
+                            dims=base_decl.dims,
+                            parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
                             allocatable=base_decl.allocatable,
                             pointer=base_decl.pointer,
@@ -796,12 +804,11 @@ def _generate_ad_subroutine(
             kind = var.kind
         subroutine.decls.append(
             Declaration(
-                var.name,
-                typename,
-                kind,
-                dims,
-                None,
-                base_decl.parameter if base_decl else False,
+                name=var.name,
+                typename=typename,
+                kind=kind,
+                dims=dims,
+                parameter=base_decl.parameter if base_decl else False,
                 init_val=base_decl.init_val if base_decl else None,
                 allocatable=base_decl.allocatable if base_decl else False,
                 pointer=base_decl.pointer if base_decl else False,
@@ -895,6 +902,7 @@ def generate_ad(
                 mod.decls.append(Declaration(f"{var.name}{AD_SUFFIX}",
                                              typename = decl.typename,
                                              kind = decl.kind,
+                                             char_len=decl.char_len,
                                              dims = decl.dims,
                                              init_val = init_val,
                                              #access = decl.access,

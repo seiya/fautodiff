@@ -361,10 +361,14 @@ class Node:
         name = routine.name
         arg_info = routine_map.get(name)
         if arg_info is not None:
-            if not arg_info.get("skip") and (arg_info["args"] is None or len(arg_info["args"]) != len(routine.args)):
+            nargs = len(routine.args)
+            if isinstance(routine, OpFuncUser) or routine.result is not None:
+                nargs += 1
+            if not arg_info.get("skip") and (arg_info["args"] is None or len(arg_info["args"]) != nargs):
                 raise RuntimeError(
                     f"Argument length mismatch for {name}: "
-                    f"{len(arg_info['args'])} != {len(routine.args)}"
+                    f"{len(arg_info['args'])} != {len(routine.args)} "
+                    f"({arg_info['args']}) ({[v.name for v in routine.args]})"
                 )
             return arg_info
         argtypes = [arg.typename for arg in routine.args]
@@ -378,11 +382,6 @@ class Node:
                 if "type" in arg_info and arg_info["type"] == argtypes:
                     if "kind" in arg_info and arg_info["kind"] == argkinds:
                         if "dims" in arg_info and [(arg and len(arg)) for arg in arg_info["dims"]] == argdims:
-                            if arg_info["args"] is None or len(arg_info["args"]) != len(routine.args):
-                                raise RuntimeError(
-                                    f"Argument length mismatch for {name}: "
-                                    f"{len(arg_info['args'])} != {len(routine.args)}"
-                                )
                             return arg_info
         return None
 
@@ -1064,7 +1063,8 @@ class CallStatement(Node):
         for arg, intent in zip(self.args, intents):
             if intent in ("in", "inout"):
                 for var in arg.collect_vars():
-                    vars.push(var)
+                    if not var.is_constant:
+                        vars.push(var)
         return vars
 
     def generate_ad(
@@ -1391,6 +1391,7 @@ class Routine(Node):
         return OpVar(
             name,
             kind=decl.kind,
+            char_len=decl.char_len,
             dims=decl.dims,
             typename=decl.typename,
             intent=intent,
@@ -2130,7 +2131,8 @@ class Declaration(Node):
     name: str
     typename: str
     kind: Optional[str] = None
-    dims: Optional[Tuple[str]] = None
+    char_len: Optional[str] = None
+    dims: Optional[Union[Tuple[str],str]] = None
     intent: Optional[str] = None
     parameter: bool = False
     constant: bool = False
@@ -2139,46 +2141,60 @@ class Declaration(Node):
     allocatable: bool = False
     pointer: bool = False
     optional: bool = False
+    target: bool = False
+    type_def: Optional[TypeDef] = None
     declared_in: Optional[str] = None
 
     def __post_init__(self):
         super().__post_init__()
-        if self.dims is not None and not isinstance(self.dims, tuple):
-            raise ValueError(f"dims must be tuple of str: {type(dims)}")
+        if self.kind is not None and not isinstance(self.kind, str):
+            raise ValueError(f"kind must be str: {type(self.kind)}")
+        if self.char_len is not None and not isinstance(self.char_len, str):
+            raise ValueError(f"char_len must be str: {type(self.char_len)}")
+        if self.dims is not None and not (isinstance(self.dims, tuple) or self.dims == "*"):
+            raise ValueError(f"dims must be tuple of str or '*': {type(self.dims)}")
+        if self.intent is not None and not isinstance(self.intent, str):
+            raise ValueError(f"intent must be str: {type(self.intent)}")
 
     def copy(self) -> "Declaration":
         return Declaration(
-            self.name,
-            self.typename,
-            self.kind,
-            self.dims,
-            self.intent,
-            self.parameter,
-            self.constant,
-            self.init_val,
-            self.access,
-            self.allocatable,
-            self.pointer,
-            self.optional,
-            self.declared_in,
+            name=self.name,
+            typename=self.typename,
+            kind=self.kind,
+            char_len=self.char_len,
+            dims=self.dims,
+            intent=self.intent,
+            parameter=self.parameter,
+            constant=self.constant,
+            init_val=self.init_val,
+            access=self.access,
+            allocatable=self.allocatable,
+            pointer=self.pointer,
+            optional=self.optional,
+            target=self.target,
+            type_def=self.type_def,
+            declared_in=self.declared_in,
         )
 
     def deep_clone(self) -> "Declaration":
         dims = tuple(self.dims) if self.dims else None
         return Declaration(
-            self.name,
-            self.typename,
-            self.kind,
-            dims,
-            self.intent,
-            self.parameter,
-            self.constant,
-            self.init_val,
-            self.access,
-            self.allocatable,
-            self.pointer,
-            self.optional,
-            self.declared_in,
+            name=self.name,
+            typename=self.typename,
+            kind=self.kind,
+            char_len=self.char_len,
+            dims=dims,
+            intent=self.intent,
+            parameter=self.parameter,
+            constant=self.constant,
+            init_val=self.init_val,
+            access=self.access,
+            allocatable=self.allocatable,
+            pointer=self.pointer,
+            optional=self.optional,
+            target=self.target,
+            type_def=self.type_def,
+            declared_in=self.declared_in,
         )
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
@@ -2218,6 +2234,8 @@ class Declaration(Node):
         line = f"{space}{self.typename}"
         if self.kind is not None:
             line += f"({self.kind})"
+        if self.char_len is not None:
+            line += f"(len={self.char_len})"
         if self.parameter:
             line += ", parameter"
         if self.access is not None:
@@ -2228,6 +2246,8 @@ class Declaration(Node):
             line += ", pointer"
         if self.optional:
             line += ", optional"
+        if self.target:
+            line += ", target"
         if self.intent is not None:
             pad = "  " if self.intent == "in" else " "
             line += f", intent({self.intent})" + pad + f":: {self.name}"
@@ -2279,6 +2299,43 @@ class Declaration(Node):
             return self.deep_clone()
         return None
 
+
+@dataclass
+class Interface(Node):
+    """Class for interface"""
+
+    name: str
+    module_procs: Optional[List[str]] = field(default=None) # module procedures
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not isinstance(self.name, str):
+            raise ValueError(f"name must be str: {type(self.name)}")
+        if self.module_procs is not None and not isinstance(self.module_procs, list):
+            raise ValueError(f"module_procs must be list: {type(self.module_procs)}")
+
+
+@dataclass
+class TypeDef(Node):
+    """Class for type declaration"""
+
+    name: str
+    components: List[Declaration]
+    map: Dict[str, Declaration] = field(init=False, repr=False, default=None)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.map = {}
+        for decl in self.components:
+            if not isinstance(decl, Declaration):
+                raise ValueError(f"components must be a list of Declaration: {self.components}")
+            self.map[decl.name] = decl
+
+    def __getitem__(self, name: str) -> Optional[Declaration]:
+        return self.map.get(name)
+
+    def iter_children(self) -> Iterator[Node]:
+        return iter(self.components)
 
 @dataclass
 class BranchBlock(Node):
@@ -2473,9 +2530,10 @@ class SelectBlock(BranchBlock):
     """A ``select case`` construct."""
 
     expr: Operator = field(default=None)
+    select_type: bool = False
 
     def copy(self) -> "SelectBlock":
-        return SelectBlock(self.cond_blocks, self.expr)
+        return SelectBlock(self.cond_blocks, self.expr, self.select_type)
 
     def deep_clone(self) -> "SelectBlock":
         cond_blocks = []
@@ -2484,7 +2542,7 @@ class SelectBlock(BranchBlock):
             block = block.deep_clone()
             cond_blocks.append((conds, block))
         expr = self.expr.deep_clone()
-        return SelectBlock(cond_blocks, expr)
+        return SelectBlock(cond_blocks, expr, self.select_type)
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.expr.collect_vars():
@@ -2497,13 +2555,15 @@ class SelectBlock(BranchBlock):
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        lines = [f"{space}select case ({self.expr})\n"]
+        case = "type" if self.select_type else "case"
+        lines = [f"{space}select {case} ({self.expr})\n"]
+        case = "type is" if self.select_type else "case"
         for cond, block in self.cond_blocks:
             if cond is not None:
                 conds = ', '.join([str(co) for co in cond])
-                lines.append(f"{space}case ({conds})\n")
+                lines.append(f"{space}{case} ({conds})\n")
             else:
-                lines.append(f"{space}case default\n")
+                lines.append(f"{space}{case} default\n")
             lines.extend(block.render(indent+1))
         lines.append(f"{space}end select\n")
         return lines

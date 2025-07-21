@@ -2,86 +2,28 @@
 """Generate mpi.fadmod from mpi_ad.f90 using fautodiff.parser."""
 from __future__ import annotations
 
+import os
+import sys
+# Ensure the package can be imported when running from the source tree
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 import json
 import re
 import tempfile
 from pathlib import Path
+from typing import List, Dict
 
 from fautodiff import parser
-from fautodiff.code_tree import Declaration
-
-_INTERF_RE = re.compile(r"^\s*interface\s+(\w+)", re.I)
-_END_INTERF_RE = re.compile(r"^\s*end\s+interface", re.I)
-_TYPE_DEF_RE = re.compile(r"^\s*type\b(?!\()", re.I)
-_END_TYPE_RE = re.compile(r"^\s*end\s*type", re.I)
-_SUB_START_RE = re.compile(r"^\s*subroutine\s+(\w+)", re.I)
-_END_SUB_RE = re.compile(r"^\s*end\s+subroutine", re.I)
-_DECL_RE = re.compile(
-    r"^\s*(use\b|implicit\b|integer\b|real\b|type\(|logical\b|character\b|complex\b|double\s+precision\b)",
-    re.I,
+from fautodiff.code_tree import (
+    Declaration,
+    Interface,
 )
-_STAR_RE = re.compile(r"\(\s*\*\s*\)")
+
 _MODE_RE = re.compile(r"mpi_(.*?)(_fwd_rev_ad|_fwd_ad|_rev_ad)(?:_(.*))?$", re.I)
 
-
-def _preprocess(path: Path) -> tuple[Path, dict[str, list[str]]]:
-    """Return path to a simplified source file and collected generics."""
-    interfaces: dict[str, list[str]] = {}
-    out_lines: list[str] = []
-    buf: list[str] = []
-    state = None
-    sub_lines: list[str] = []
-    with path.open() as f:
-        for line in f:
-            if state is None:
-                m = _INTERF_RE.match(line)
-                if m:
-                    state = "interface"
-                    name = m.group(1)
-                    buf = []
-                    continue
-                if _TYPE_DEF_RE.match(line):
-                    state = "type"
-                    continue
-                if _SUB_START_RE.match(line):
-                    state = "sub"
-                    sub_lines = [_STAR_RE.sub("(1)", line.rstrip())]
-                    continue
-                out_lines.append(_STAR_RE.sub("(1)", line.rstrip()))
-            elif state == "interface":
-                if _END_INTERF_RE.match(line):
-                    procs = []
-                    for l in buf:
-                        m2 = re.search(r"module procedure\s+(\w+)", l, re.I)
-                        if m2:
-                            procs.append(m2.group(1))
-                    interfaces[name] = procs
-                    state = None
-                else:
-                    buf.append(line)
-            elif state == "type":
-                if _END_TYPE_RE.match(line):
-                    state = None
-            elif state == "sub":
-                sub_lines.append(line.rstrip())
-                if _END_SUB_RE.match(line):
-                    processed = [sub_lines[0]]
-                    i = 1
-                    while i < len(sub_lines) - 1 and _DECL_RE.match(sub_lines[i]):
-                        processed.append(_STAR_RE.sub("(1)", sub_lines[i]))
-                        i += 1
-                    processed.append("  ! body removed")
-                    processed.append(sub_lines[-1])
-                    out_lines.extend(processed)
-                    state = None
-    tmp = tempfile.NamedTemporaryFile("w", suffix=".f90", delete=False)
-    tmp.write("\n".join(out_lines))
-    tmp.close()
-    return Path(tmp.name), interfaces
-
-
-def _collect_routines(mod) -> dict[str, dict]:
-    routines: dict[str, dict] = {}
+def _collect_routines(mod, routines: Dict[str, dict]) -> Dict[str, dict]:
     for sub in mod.routines:
         name = sub.name
         if not name.startswith("mpi_"):
@@ -92,81 +34,150 @@ def _collect_routines(mod) -> dict[str, dict]:
         base, mode, variant = m.groups()
         base_upper = "MPI_" + base.capitalize()
         variant_upper = base_upper + ("_" + variant if variant else "")
-        decls: dict[str, Declaration] = sub.decl_map or {}
+        decls: Dict[str, Declaration] = sub.decl_map or {}
         args = sub.args
         info = routines.setdefault(variant_upper, {"module": "mpi"})
-        mpi_args = [a for a in args if not a.endswith("_ad")]
-        if "args" not in info:
+        if mode == "_fwd_ad":
+            mpi_args = [a for a in args if not a.endswith("_ad")]
             info["args"] = mpi_args
-            info["intents"] = [decls.get(a).intent if decls.get(a) else None for a in mpi_args]
-            info["dims"] = [list(decls.get(a).dims) if decls.get(a) and decls.get(a).dims else None for a in mpi_args]
-            info["type"] = [decls.get(a).typename.lower() if decls.get(a) else None for a in mpi_args]
-            info["kind"] = [decls.get(a).kind for a in mpi_args]
-        tag = {"_fwd_ad": "fwd_ad", "_rev_ad": "rev_ad", "_fwd_rev_ad": "fwd_rev_ad"}[mode]
-        info[f"name_{tag}"] = name
-        info[f"args_{tag}"] = args
-        info[f"intents_{tag}"] = [decls.get(a).intent if decls.get(a) else None for a in args]
+            intents = []
+            dims = []
+            types = []
+            kinds = []
+            for arg in mpi_args:
+                intents.append(decls.get(arg).intent if decls.get(arg) else None)
+                if decls.get(arg) and decls.get(arg).dims:
+                    dim = []
+                    for d in decls.get(arg).dims:
+                        if d == "*" and "count" in mpi_args:
+                            dim.append("count")
+                        else:
+                            dim.append(d)
+                else:
+                    dim = None
+                dims.append(dim)
+                types.append(decls.get(arg).typename.lower() if decls.get(arg) else None)
+                kinds.append(decls.get(arg).kind)
+            info["intents"] = intents
+            info["dims"] = dims
+            info["type"] = types
+            info["kind"] = kinds
+        info[f"name{mode}"] = f"{base_upper}{mode}"
+        info[f"args{mode}"] = args
+        info[f"intents{mode}"] = [decls.get(a).intent if decls.get(a) else None for a in args]
     return routines
 
 
-def _interfaces_to_generics(ifaces: dict[str, list[str]]) -> dict[str, list[str]]:
-    generics: dict[str, list[str]] = {}
-    for name, procs in ifaces.items():
-        m = _MODE_RE.match(name)
+def _interfaces_to_generics(mod) -> Dict[str, List[str]]:
+    generics: Dict[str, List[str]] = {}
+    for node in mod.body.iter_children():
+        if not isinstance(node, Interface):
+            continue
+        m = _MODE_RE.match(node.name)
         if not m:
             continue
-        base = m.group(1)
+        base, mode, variant = m.groups()
         base_upper = "MPI_" + base.capitalize()
-        lst = []
-        for p in procs:
-            pm = _MODE_RE.match(p)
-            if not pm:
-                continue
-            variant = pm.group(3)
-            var_upper = base_upper + ("_" + variant if variant else "")
-            lst.append(var_upper)
-        if lst:
-            generics[base_upper] = lst
+        if mode == "_fwd_ad":
+            name = base_upper
+            lst = []
+            for proc in node.module_procs:
+                m = _MODE_RE.match(proc)
+                if not m:
+                    continue
+                base, _, variant = m.groups()
+                proc = "MPI_" + base.capitalize()
+                proc = proc + ("_" + variant if variant else "")
+                lst.append(proc)
+            if lst:
+                generics[name] = lst
     return generics
 
+# MPI routines
+routines_mpi: Dict[str, dict] = {
+    "MPI_Comm_rank": {
+        "args": [
+            "comm",
+            "rank",
+            "ierror"
+        ],
+        "intents": [
+            "in",
+            "out",
+            "out"
+        ],
+        "type": [
+            "integer",
+            "integer",
+            "integer"
+        ]
+    },
+    "MPI_Comm_size": {
+        "args": [
+            "comm",
+            "size",
+            "ierror"
+        ],
+        "intents": [
+            "in",
+            "out",
+            "out"
+        ],
+        "type": [
+            "integer",
+            "integer",
+            "integer"
+        ]
+    }
+}
+
+
+# MPI constants
+variables: Dict[str, dict] = {
+    "MPI_COMM_WORLD": {},
+    "MPI_STATUS_SIZE": {},
+    "MPI_STATUS_IGNORE": {"dims": ["MPI_STATUS_SIZE"]},
+    "MPI_STATUSES_IGNORE": {"dims": ["MPI_STATUS_SIZE", ":"]},
+    "MPI_REQUEST_NULL": {},
+    "MPI_SUM": {},
+    "MPI_MAX": {},
+    "MPI_MIN": {},
+    "MPI_PROD": {},
+    "MPI_MAXLOC": {},
+    "MPI_MINLOC": {},
+    "MPI_LAND": {},
+    "MPI_LOR": {},
+    "MPI_LXOR": {},
+    "MPI_BAND": {},
+    "MPI_BOR": {},
+    "MPI_BXOR": {},
+    "MPI_REPLACE": {},
+    "MPI_INT": {},
+    "MPI_INTEGER": {},
+    "MPI_REAL": {},
+    "MPI_DOUBLE_PRECISION": {},
+    "MPI_COMPLEX": {},
+    "MPI_DOUBLE_COMPLEX": {},
+    "MPI_LOGICAL": {},
+    "MPI_CHARACTER": {},
+    "MPI_BYTE": {},
+    "MPI_REAL8": {},
+}
+common = {"typename": "integer", "parameter": True}
+decl_map = {}
+for name, v in variables.items():
+    v.update(common)
+    dims = tuple(v.get("dims")) if "dims" in v else None
+    decl_map[name] = Declaration(name=name, typename="integer", dims=dims, parameter=True)
 
 def main() -> None:
     here = Path(__file__).resolve().parent
-    src = here / "mpi_ad.f90"
-    tmp, interfaces = _preprocess(src)
-    mod = parser.parse_file(str(tmp))[0]
-    routines = _collect_routines(mod)
-    generics = _interfaces_to_generics(interfaces)
-    variables = {
-        "MPI_COMM_WORLD": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_STATUS_SIZE": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_STATUS_IGNORE": {"typename": "integer", "dims": ["MPI_STATUS_SIZE"], "parameter": True, "constant": True, "access": "public"},
-        "MPI_SUM": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_MAX": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_MIN": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_PROD": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_MAXLOC": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_MINLOC": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_LAND": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_LOR": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_LXOR": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_BAND": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_BOR": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_BXOR": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_REPLACE": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_INT": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_INTEGER": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_REAL": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_DOUBLE_PRECISION": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_COMPLEX": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_DOUBLE_COMPLEX": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_LOGICAL": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_CHARACTER": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_BYTE": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-        "MPI_REAL8": {"typename": "integer", "parameter": True, "constant": True, "access": "public"},
-    }
+    src = str(here / "mpi_ad.f90")
+    mod = parser.parse_file(src, search_dirs=[str(here)], decl_map=decl_map)[0]
+    routines = _collect_routines(mod, routines_mpi)
+    generics = _interfaces_to_generics(mod)
     data = {"routines": routines, "variables": variables, "generics": generics}
-    (here / "mpi.fadmod").write_text(json.dumps(data, indent=2))
+    print(json.dumps(data, indent=2))
 
 
 if __name__ == "__main__":

@@ -157,6 +157,51 @@ class TestParser(unittest.TestCase):
         self.assertIsNotNone(decl)
         self.assertEqual(decl.kind, "RP")
 
+    def test_parse_dimension(self):
+        src = textwrap.dedent(
+            """\
+        module test
+        contains
+          subroutine foo(n, x, y)
+            integer :: n
+            real, dimension(:) :: x
+            real, dimension(n) :: y
+          end subroutine foo
+        end module test
+        """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        decl = routine.decls.find_by_name("x")
+        self.assertIsNotNone(decl)
+        self.assertEqual(decl.dims, (":",))
+        decl = routine.decls.find_by_name("y")
+        self.assertIsNotNone(decl)
+        self.assertEqual(decl.dims, ("n",))
+
+    def test_parse_public(self):
+        src = textwrap.dedent(
+            """\
+        module test
+          private
+          real, public :: x
+          real, private :: y
+          real :: z
+        contains
+        end module test
+        """
+        )
+        module = parser.parse_src(src)[0]
+        decl = module.decls.find_by_name("x")
+        self.assertIsNotNone(decl)
+        self.assertEqual(decl.access, "public")
+        decl = module.decls.find_by_name("y")
+        self.assertIsNotNone(decl)
+        self.assertEqual(decl.access, "private")
+        decl = module.decls.find_by_name("z")
+        self.assertIsNotNone(decl)
+        self.assertEqual(decl.access, "private")
+
     def test_routine_decl_map(self):
         src = Path(__file__).resolve().parents[1] / "examples" / "real_kind.f90"
         module = parser.parse_file(str(src))[0]
