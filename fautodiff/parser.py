@@ -309,25 +309,6 @@ def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
     return {}
 
 
-def _clone_decl(decl: Declaration, declared_in: str) -> Declaration:
-    return Declaration(
-        decl.name,
-        decl.typename,
-        decl.kind,
-        decl.dims,
-        decl.intent,
-        decl.parameter,
-        decl.constant,
-        init_val=decl.init_val,
-        access=decl.access,
-        allocatable=decl.allocatable,
-        pointer=decl.pointer,
-        optional=decl.optional,
-        type_def=decl.type_def,
-        declared_in=declared_in,
-    )
-
-
 def _parse_decl_stmt(
     stmt,
     constant_vars=None,
@@ -635,7 +616,9 @@ def _search_use(name: str, only: Optional[List[str]], decl_map: dict, module_map
     if used and used.decls is not None:
         for d in used.decls:
             if only is None or (d.name in only):
-                decl_map[d.name] = _clone_decl(d, declared_in="use")
+                d = d.copy()
+                d.declared_in = "use"
+                decl_map[d.name] = d
     elif search_dirs:
         vars_map = _load_fadmod_decls(name, search_dirs)
         for vname, info in vars_map.items():

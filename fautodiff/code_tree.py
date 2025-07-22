@@ -977,6 +977,8 @@ class CallStatement(Node):
     result: Optional[OpVar] = None
     info: Optional[dict] = field(repr=False, default=None)
     ad_info: Optional[str] = field(repr=False, default=None)
+    associated_vars: Optional[List[OpVar]] = field(default=None)
+    donot_prune: bool = False
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -1010,7 +1012,15 @@ class CallStatement(Node):
         arg_keys = list(self.arg_keys) if self.arg_keys else None
         intents = list(self.intents) if self.intents else None
         result = self.result.deep_clone() if self.result else None
-        return CallStatement(self.name, args, arg_keys, intents, result, self.info, self.ad_info)
+        return CallStatement(name=self.name,
+                             args=args,
+                             arg_keys=arg_keys,
+                             intents=intents,
+                             result=result,
+                             info=self.info,
+                             ad_info=self.ad_info,
+                             associated_vars=self.associated_vars,
+                             donot_prune=self.donot_prune)
 
     def _iter_vars(self, intents: List[str], kinds: Tuple[str, ...]) -> Iterator[OpVar]:
         for arg, intent in zip(self.args, intents):
@@ -1049,7 +1059,7 @@ class CallStatement(Node):
         return False
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
-        intents = self.intents or ["in"] * len(self.args)
+        intents = self.intents or ["inout"] * len(self.args)
         if vars is None:
             vars = VarList()
         else:
@@ -1065,7 +1075,39 @@ class CallStatement(Node):
                 for var in arg.collect_vars():
                     if not var.is_constant:
                         vars.push(var)
+                if self.associated_vars is not None:
+                    for var in self.associated_vars:
+                        vars.push(var)
         return vars
+
+    @classmethod
+    def rename_args(cls,
+                    vars_org: List[Operator],
+                    args_org: List[str],
+                    args_target: List[str],
+                    vars_tmp: Optional[List[OpVar]] = None,
+                    reverse: bool = False,
+                    ) -> List[OpVar]:
+        if len(vars_org) != len(args_org):
+            raise ValueError(f"length of vars_org and args_org must be the same")
+        vars_target = []
+        for arg in args_target:
+            if arg.endswith(AD_SUFFIX):
+                arg_org = arg.removesuffix(AD_SUFFIX)
+                add_ad = True
+            else:
+                arg_org = arg
+                add_ad = False
+            idx = args_org.index(arg_org)
+            var = vars_org[idx]
+            if vars_tmp is not None:
+                if not reverse and isinstance(var, OpFuncUser) or add_ad:
+                    var = vars_tmp[idx]
+            if add_ad:
+                if isinstance(var, OpVar) and not var.is_constant:
+                    var = var.add_suffix(AD_SUFFIX)
+            vars_target.append(var)
+        return vars_target
 
     def generate_ad(
         self,
@@ -1088,7 +1130,10 @@ class CallStatement(Node):
 
         name_key = "name_rev_ad" if reverse else "name_fwd_ad"
         if arg_info.get("skip") or arg_info.get(name_key) is None:
-            return [Statement(f"! {name} is skiped")]
+            if reverse:
+                return [Statement(f"! {name} is skiped")]
+            else:
+                return[self]
 
         tmp_vars = []
         call_args = list(self.args)
@@ -1116,9 +1161,12 @@ class CallStatement(Node):
                     idx = param_names_no_res.index(key)
                     ordered[idx] = arg
                     used[idx] = True
+        if self.result is not None:
+            ordered.append(self.result)
 
         # if arguments are operators or functions, we need to save them
-        def _push_arg(i, arg):
+        args_new = []
+        for i, arg in enumerate(ordered):
             if not isinstance(arg, OpLeaf) and arg_info["type"][i] == "real":
                 name = self._save_var_name(f"{self.name}_arg{i}", self.get_id(), no_suffix=True)
                 tmp = OpVar(name, typename="real")
@@ -1135,14 +1183,6 @@ class CallStatement(Node):
                 )
             else:
                 args_new.append(arg)
-        args = []
-        args_new = []
-        for i, arg in enumerate(ordered):
-            _push_arg(i, arg)
-            args.append(arg)
-        if self.result is not None:
-            _push_arg(len(param_names_no_res), self.result)
-            args.append(self.result)
 
         # get arguments for ad call based on fadmod information
         ad_args = []
@@ -1154,28 +1194,41 @@ class CallStatement(Node):
             name_key = "name_fwd_ad"
             args_key = "args_fwd_ad"
             intents_key = "intents_fwd_ad"
-        for ad_arg in arg_info[args_key]:
-            if ad_arg.endswith(AD_SUFFIX):
-                arg = ad_arg.removesuffix(AD_SUFFIX)
-            else:
-                arg = ad_arg
-            i = arg_info["args"].index(arg)
-            var = args[i]
-            if not reverse and isinstance(var, OpFuncUser):
-                var = args_new[i]
-            if ad_arg.endswith(AD_SUFFIX):
-                var = args_new[i]
-                var = OpVar(
-                    f"{var.name}{AD_SUFFIX}",
-                    index=var.index,
-                    kind=var.kind,
-                    typename=var.typename,
-                    ad_target=var.ad_target,
-                    is_constant=var.is_constant,
-                )
-            ad_args.append(var)
+        ad_args = CallStatement.rename_args(ordered, arg_info["args"], arg_info[args_key], args_new, reverse)
+        # for ad_arg in arg_info[args_key]:
+        #     if ad_arg.endswith(AD_SUFFIX):
+        #         arg = ad_arg.removesuffix(AD_SUFFIX)
+        #     else:
+        #         arg = ad_arg
+        #     i = arg_info["args"].index(arg)
+        #     var = args[i]
+        #     if not reverse and isinstance(var, OpFuncUser):
+        #         var = args_new[i]
+        #     if ad_arg.endswith(AD_SUFFIX):
+        #         var = args_new[i]
+        #         if var.is_constant:
+        #             ad_name = var.name
+        #         else:
+        #             ad_name = f"{var.name}{AD_SUFFIX}"
+        #         var = OpVar(
+        #             name=ad_name,
+        #             index=var.index,
+        #             kind=var.kind,
+        #             typename=var.typename,
+        #             ad_target=var.ad_target,
+        #             is_constant=var.is_constant,
+        #         )
+        #     ad_args.append(var)
+        if self.associated_vars is None:
+            associated_vars = None
+        else:
+            associated_vars = []
+            for var in self.associated_vars:
+                if not reverse:
+                    associated_vars.append(var)
+                associated_vars.append(var.add_suffix(AD_SUFFIX))
 
-        ad_call = CallStatement(name=arg_info[name_key], args=ad_args, intents=arg_info[intents_key], ad_info=self.info["code"])
+        ad_call = CallStatement(name=arg_info[name_key], args=ad_args, intents=arg_info[intents_key], ad_info=self.info["code"], associated_vars=associated_vars)
         if not reverse:
             for i, arg in enumerate(ad_args):
                 if arg_info["intents_fwd_ad"][i] in ("out", "inout"):
@@ -1253,6 +1306,18 @@ class CallStatement(Node):
                 blocks.append(self)
 
         return blocks
+
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional["CallStatement"]:
+        if self.donot_prune:
+            return self.deep_clone()
+        for var in self.assigned_vars():
+            if var in targets:
+                return self.deep_clone()
+        if self.associated_vars is not None:
+            for var in self.associated_vars:
+                if var in targets:
+                    return self.deep_clone()
+        return None
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         if assigned_vars is None:

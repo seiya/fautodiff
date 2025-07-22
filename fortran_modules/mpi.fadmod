@@ -843,7 +843,7 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "inout",
+        "out",
         "inout",
         "in",
         "in",
@@ -937,7 +937,7 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "inout",
+        "out",
         "inout",
         "in",
         "in",
@@ -1027,7 +1027,7 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "inout",
+        "out",
         "inout",
         "in",
         "in",
@@ -1117,7 +1117,7 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "inout",
+        "out",
         "inout",
         "in",
         "in",
@@ -5163,15 +5163,6 @@
         "inout",
         "out"
       ],
-      "name_fwd_rev_ad": "MPI_Start_fwd_rev_ad",
-      "args_fwd_rev_ad": [
-        "request_ad",
-        "ierr"
-      ],
-      "intents_fwd_rev_ad": [
-        "inout",
-        "out"
-      ],
       "name_rev_ad": "MPI_Start_rev_ad",
       "args_rev_ad": [
         "request_ad",
@@ -5221,17 +5212,6 @@
       "intents_fwd_ad": [
         "in",
         "inout",
-        "inout",
-        "out"
-      ],
-      "name_fwd_rev_ad": "MPI_Startall_fwd_rev_ad",
-      "args_fwd_rev_ad": [
-        "count",
-        "array_of_requests_ad",
-        "ierr"
-      ],
-      "intents_fwd_rev_ad": [
-        "in",
         "inout",
         "out"
       ],
@@ -5288,15 +5268,6 @@
         "inout",
         "inout",
         "inout",
-        "inout",
-        "out"
-      ],
-      "name_fwd_rev_ad": "MPI_Wait_fwd_rev_ad",
-      "args_fwd_rev_ad": [
-        "request_ad",
-        "ierr"
-      ],
-      "intents_fwd_rev_ad": [
         "inout",
         "out"
       ],
@@ -5361,17 +5332,6 @@
         "inout",
         "inout",
         "inout",
-        "inout",
-        "out"
-      ],
-      "name_fwd_rev_ad": "MPI_Waitall_fwd_rev_ad",
-      "args_fwd_rev_ad": [
-        "count",
-        "array_of_requests_ad",
-        "ierr"
-      ],
-      "intents_fwd_rev_ad": [
-        "in",
         "inout",
         "out"
       ],

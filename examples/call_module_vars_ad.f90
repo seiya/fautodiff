@@ -32,7 +32,7 @@ contains
     real :: y
 
     z = x * 2.0
-    call inc_and_use_fwd_rev_ad(x, y)
+    call inc_and_use_fwd_rev_ad()
     call inc_and_use(x, y)
 
     z_ad = y_ad * y ! y = y * z
