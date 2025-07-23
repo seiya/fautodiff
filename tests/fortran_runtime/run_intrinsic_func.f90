@@ -5,10 +5,11 @@ program run_intrinsic_func
   real, parameter :: tol = 1.0e-4
 
   integer, parameter :: I_all = 0
-  integer, parameter :: I_casting = 1
-  integer, parameter :: I_math = 2
+  integer, parameter :: I_math = 1
+  integer, parameter :: I_reduction = 2
   integer, parameter :: I_non_diff = 3
   integer, parameter :: I_special = 4
+  integer, parameter :: I_casting = 5
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -22,14 +23,16 @@ program run_intrinsic_func
         call get_command_argument(1, arg, status=status)
         if (status == 0) then
            select case(arg)
-           case ("casting")
-              i_test = I_casting
            case ("math")
               i_test = I_math
+           case ("reduction")
+              i_test = I_reduction
            case ("non_diff")
               i_test = I_non_diff
            case ("special")
               i_test = I_special
+           case ("casting")
+              i_test = I_casting
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -39,11 +42,11 @@ program run_intrinsic_func
      end if
   end if
 
-  if (i_test == I_casting .or. i_test == I_all) then
-     call test_casting
-  end if
   if (i_test == I_math .or. i_test == I_all) then
      call test_math
+  end if
+  if (i_test == I_reduction .or. i_test == I_all) then
+     call test_reduction
   end if
   if (i_test == I_non_diff .or. i_test == I_all) then
      call test_non_diff
@@ -51,47 +54,12 @@ program run_intrinsic_func
   if (i_test == I_special .or. i_test == I_all) then
      call test_special
   end if
+  if (i_test == I_casting .or. i_test == I_all) then
+     call test_casting
+  end if
 
   stop
 contains
-
-  subroutine test_casting
-    integer :: i, n
-    real :: r
-    real :: r_ad
-    real ::  r_eps, fd, eps
-    double precision :: d, d_eps, d_ad
-    character(len=1) :: c
-    double precision :: inner1, inner2
-
-    eps = 1.0e-3
-    i = 3
-    r = 4.5
-    c = 'A'
-    call casting_intrinsics(i, r, d, c, n)
-    call casting_intrinsics(i, r + eps, d_eps, c, n)
-    fd = (d_eps - d) / eps
-    r_ad = 1.0
-    call casting_intrinsics_fwd_ad(i, r, r_ad, d, d_ad, c, n)
-    if (abs((d_ad - fd) / fd) > tol) then
-       print *, 'test_casting_fwd failed', d_ad, fd
-       error stop 1
-    end if
-
-    inner1 = d_ad**2
-    i = 3
-    r = 4.5
-    c = 'A'
-    call casting_intrinsics(i, r, d, c, n)
-    call casting_intrinsics_rev_ad(i, r, r_ad, d_ad, c)
-    inner2 = r_ad
-    if (abs((inner2 - inner1) / inner1) > tol) then
-       print *, 'test_casting failed', inner1, inner2
-       error stop 1
-    end if
-
-    return
-  end subroutine test_casting
 
   subroutine test_math
     real, parameter :: tol = 2e-4
@@ -127,6 +95,38 @@ contains
 
     return
   end subroutine test_math
+
+  subroutine test_reduction
+    real :: x(4), a, b, c, d
+    real :: x_ad(4), a_ad, b_ad, c_ad, d_ad
+    real :: eps, fd(4), a_eps, b_eps, c_eps, d_eps
+    real :: inner1, inner2
+
+    eps = 1.0e-3
+    x(:) = (/1.0, 2.0, 3.0, 4.0/)
+    call reduction(x, a, b, c, d)
+    call reduction(x + eps, a_eps, b_eps, c_eps, d_eps)
+    fd(1) = (a_eps - a) / eps
+    fd(2) = (b_eps - b) / eps
+    fd(3) = (c_eps - c) / eps
+    fd(4) = (d_eps - d) / eps
+    x_ad(:) = 1.0
+    call reduction_fwd_ad(x, x_ad, a, a_ad, b, b_ad, c, c_ad, d, d_ad)
+    if (any(abs(((/a_ad, b_ad, c_ad, d_ad/) - fd) / fd) > tol)) then
+       print *, 'test_reduction_fwd faild', a_ad, b_ad, c_ad, d_ad, fd
+       error stop 1
+    end if
+
+    inner1 = a_ad**2 + b_ad**2 + c_ad**2 + d_ad**2
+    call reduction_rev_ad(x, x_ad, a_ad, b_ad, c_ad, d_ad)
+    inner2 = sum(x_ad(:))
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_reduction_rev failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_reduction
 
   subroutine test_non_diff
     character(len=4) :: str
@@ -204,5 +204,43 @@ contains
 
     return
   end subroutine test_special
+
+  subroutine test_casting
+    integer :: i, n
+    real :: r
+    real :: r_ad
+    real ::  r_eps, fd, eps
+    double precision :: d, d_eps, d_ad
+    character(len=1) :: c
+    double precision :: inner1, inner2
+
+    eps = 1.0e-3
+    i = 3
+    r = 4.5
+    c = 'A'
+    call casting_intrinsics(i, r, d, c, n)
+    call casting_intrinsics(i, r + eps, d_eps, c, n)
+    fd = (d_eps - d) / eps
+    r_ad = 1.0
+    call casting_intrinsics_fwd_ad(i, r, r_ad, d, d_ad, c, n)
+    if (abs((d_ad - fd) / fd) > tol) then
+       print *, 'test_casting_fwd failed', d_ad, fd
+       error stop 1
+    end if
+
+    inner1 = d_ad**2
+    i = 3
+    r = 4.5
+    c = 'A'
+    call casting_intrinsics(i, r, d, c, n)
+    call casting_intrinsics_rev_ad(i, r, r_ad, d_ad, c)
+    inner2 = r_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_casting failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_casting
 
 end program run_intrinsic_func

@@ -121,6 +121,50 @@ contains
     return
   end subroutine math_intrinsics_rev_ad
 
+  subroutine reduction_fwd_ad(x, x_ad, a, a_ad, b, b_ad, c, c_ad, d, d_ad)
+    real, intent(in)  :: x(:)
+    real, intent(in)  :: x_ad(:)
+    real, intent(out) :: a
+    real, intent(out) :: a_ad
+    real, intent(out) :: b
+    real, intent(out) :: b_ad
+    real, intent(out) :: c
+    real, intent(out) :: c_ad
+    real, intent(out) :: d
+    real, intent(out) :: d_ad
+
+    a_ad = sum(x_ad) ! a = sum(x)
+    a = sum(x)
+    b_ad = sum(x_ad(:)) ! b = sum(x(:))
+    b = sum(x(:))
+    c_ad = sum(x_ad * merge(1.0, 0.0, x == minval(x))) ! c = minval(x)
+    c = minval(x)
+    d_ad = sum(x_ad * merge(1.0, 0.0, x == maxval(x))) ! d = maxval(x)
+    d = maxval(x)
+
+    return
+  end subroutine reduction_fwd_ad
+
+  subroutine reduction_rev_ad(x, x_ad, a_ad, b_ad, c_ad, d_ad)
+    real, intent(in)  :: x(:)
+    real, intent(out) :: x_ad(:)
+    real, intent(inout) :: a_ad
+    real, intent(inout) :: b_ad
+    real, intent(inout) :: c_ad
+    real, intent(inout) :: d_ad
+
+    x_ad = d_ad * merge(1.0, 0.0, x == maxval(x)) ! d = maxval(x)
+    d_ad = 0.0 ! d = maxval(x)
+    x_ad = c_ad * merge(1.0, 0.0, x == minval(x)) + x_ad ! c = minval(x)
+    c_ad = 0.0 ! c = minval(x)
+    x_ad(:) = b_ad + x_ad(:) ! b = sum(x(:))
+    b_ad = 0.0 ! b = sum(x(:))
+    x_ad = a_ad + x_ad ! a = sum(x)
+    a_ad = 0.0 ! a = sum(x)
+
+    return
+  end subroutine reduction_rev_ad
+
   subroutine non_differentiable_intrinsics_fwd_ad(str, arr, arr_ad, idx, lb, ub, x, x_ad, y, y_ad)
     character(len=*), intent(in)  :: str
     real, intent(in)  :: arr(:)

@@ -471,6 +471,8 @@ class Node:
                 assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
                 assigned_advars.remove(grad_lhs)
             else:
+                if not grad_lhs.is_array() and expr.is_array():
+                    expr = OpFunc("sum", args=[expr])
                 assigns.append(Assignment(grad_lhs, expr, ad_info=ad_info))
                 assigned_advars.push(grad_lhs)
         return assigns

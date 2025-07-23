@@ -1028,25 +1028,18 @@ INTRINSIC_FUNCTIONS = {
     'erf', 'erfc', 'real', 'dble', 'mod', 'min', 'max', 'sign', 'atan2',
     'transpose', 'cshift', 'len', 'len_trim', 'adjustl', 'index', 'lbound',
     'ubound', 'size', 'epsilon', 'huge', 'tiny', 'ichar', 'achar', 'int',
-    'nint'
+    'nint',
+    'sum', 'product', 'minval', 'maxval',
 }
 
 NONDIFF_INTRINSICS = {
-    'len',
-    'len_trim',
-    'adjustl',
-    'index',
-    'lbound',
-    'ubound',
-    'size',
-    'epsilon',
-    'huge',
-    'tiny',
-    'ichar',
-    'achar',
-    'int',
-    'nint',
+    'len', 'len_trim', 'adjustl', 'index',
+    'lbound', 'ubound', 'size',
+    'epsilon', 'huge', 'tiny',
+    'ichar', 'achar',
+    'int', 'nint',
     'allocated',
+    'all', 'any', 'count'
 }
 
 @dataclass
@@ -1089,6 +1082,8 @@ class OpFunc(Operator):
         # One argument intrinsics map
         arg0 = self.args[0]
         dvar0 = arg0.derivative(var, target, info, warnings)
+        zero = OpReal("0.0", kind=kind)
+        one = OpReal("1.0", kind=kind)
 
         if self.name == "abs":
             return dvar0 * OpFunc("sign", args=[OpInt(1, target=var), arg0])
@@ -1121,7 +1116,6 @@ class OpFunc(Operator):
         if self.name == "asinh":
             return dvar0 / OpFunc("sqrt", args=[arg0**2 + OpReal(1.0, kind=kind)])
         if self.name == "acosh":
-            one = OpReal(1.0, kind=kind)
             return dvar0 / (OpFunc("sqrt", args=[arg0 - one]) * OpFunc("sqrt", args=[arg0 + one]))
         if self.name == "atanh":
             return dvar0 / (OpReal(1.0, kind=kind) - arg0**2)
@@ -1133,6 +1127,12 @@ class OpFunc(Operator):
             return dvar0
         if self.name == "dble":
             return dvar0
+        if self.name == "sum":
+            return dvar0
+        if self.name == "minval":
+            return dvar0 * OpFunc("merge", args=[one, zero, OpLogic("==", args=[arg0, self])])
+        if self.name == "maxval":
+            return dvar0 * OpFunc("merge", args=[one, zero, OpLogic("==", args=[arg0, self])])
 
         if len(self.args) < 2:
             raise ValueError(f"Function ({self.name}) is not supported")
@@ -1144,17 +1144,12 @@ class OpFunc(Operator):
         if self.name == "mod":
             return dvar0 - dvar1 * OpFunc("real", args=[OpFunc("int", args=[arg0 / arg1]), OpFunc("kind", args=[arg0])])
         if self.name == "min":
-            one = OpReal("1.0", kind=kind)
-            zero = OpReal("0.0", kind=kind)
             cond = arg0 >= arg1
             return dvar0 * OpFunc("merge", args=[one, zero, cond]) + dvar1 * OpFunc("merge", args=[zero, one, cond])
         if self.name == "max":
-            one = OpReal("1.0", kind=kind)
-            zero = OpReal("0.0", kind=kind)
             cond = arg0 <= arg1
             return dvar0 * OpFunc("merge", args=[one, zero, cond]) + dvar1 * OpFunc("merge", args=[zero, one, cond])
         if self.name == "sign":
-            one = OpReal("1.0", kind=kind)
             return dvar0 * OpFunc("sign", args=[one, arg0]) * OpFunc("sign", args=[one, arg1])
         if self.name == "atan2":
             return (dvar0 * arg1 - dvar1 * arg0) / (arg0**2 + arg1**2)
