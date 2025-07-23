@@ -1857,6 +1857,10 @@ class SaveAssignment(Node):
                 is_constant=self.var.is_constant,
                 reference=self.var,
             )
+            print(self.tmpvar)
+            print(self.var)
+            if str(self.var) == "arr(i)":
+                raise RuntimeError
         if self.load:
             self.lhs = self.var
             self.rhs = self.tmpvar

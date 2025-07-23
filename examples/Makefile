@@ -35,6 +35,7 @@ $(OUTDIR)/store_vars_ad.o: $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/module_vars_ad.o: $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/allocate_vars_ad.o: $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/exit_cycle_ad.o: $(OUTDIR)/fautodiff_stack.o
+$(OUTDIR)/derived_alloc_ad.o: $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/mpi_example_ad.o: $(OUTDIR)/mpi_ad.o
 
 clean:

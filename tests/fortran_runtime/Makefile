@@ -66,7 +66,7 @@ $(OUTDIR)/run_call_module_vars.o: $(OUTDIR)/call_module_vars.o $(OUTDIR)/call_mo
 $(OUTDIR)/run_allocate_vars.o: $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o
 $(OUTDIR)/run_exit_cycle.o: $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_pointer_arrays.o: $(OUTDIR)/pointer_arrays.o $(OUTDIR)/pointer_arrays_ad.o
-$(OUTDIR)/run_derived_alloc.o: $(OUTDIR)/derived_alloc.o $(OUTDIR)/derived_alloc_ad.o
+$(OUTDIR)/run_derived_alloc.o: $(OUTDIR)/derived_alloc.o $(OUTDIR)/derived_alloc_ad.o $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/run_mpi_example.o: $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
 
 $(OUTDIR)/run_simple_math.out: $(OUTDIR)/run_simple_math.o $(OUTDIR)/simple_math.o $(OUTDIR)/simple_math_ad.o
@@ -86,7 +86,7 @@ $(OUTDIR)/run_call_module_vars.out: $(OUTDIR)/run_call_module_vars.o $(OUTDIR)/c
 $(OUTDIR)/run_allocate_vars.out: $(OUTDIR)/run_allocate_vars.o $(OUTDIR)/allocate_vars.o $(OUTDIR)/allocate_vars_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_exit_cycle.out: $(OUTDIR)/run_exit_cycle.o $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_pointer_arrays.out: $(OUTDIR)/run_pointer_arrays.o $(OUTDIR)/pointer_arrays.o $(OUTDIR)/pointer_arrays_ad.o
-$(OUTDIR)/run_derived_alloc.out: $(OUTDIR)/run_derived_alloc.o $(OUTDIR)/derived_alloc.o $(OUTDIR)/derived_alloc_ad.o
+$(OUTDIR)/run_derived_alloc.out: $(OUTDIR)/run_derived_alloc.o $(OUTDIR)/derived_alloc.o $(OUTDIR)/derived_alloc_ad.o $(OUTDIR)/fautodiff_data_storage.o
 $(OUTDIR)/run_mpi_example.out: $(OUTDIR)/run_mpi_example.o $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
 
 

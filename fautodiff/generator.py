@@ -890,7 +890,9 @@ def _generate_ad_subroutine(
         elif var.ad_target:
             typename = "real"
         else:
-            raise RuntimeError("typename cannot be identified")
+            print([var])
+            print([var.reference])
+            raise RuntimeError(f"typename cannot be identified {var}")
         if v_org:
             kind = v_org.kind
         else:
