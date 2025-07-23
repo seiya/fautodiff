@@ -37,12 +37,7 @@ class TestFortranADCode(unittest.TestCase):
         base = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
-            try:
-                exe = self._build(tmp, f'run_{name}.out')
-            except subprocess.CalledProcessError:
-                if use_mpi:
-                    self.skipTest('MPI build failed')
-                raise
+            exe = self._build(tmp, f'run_{name}.out')
             for sub_name in sub_names:
                 # Allow runtime failures to keep coverage high
                 cmd = [str(exe), sub_name]

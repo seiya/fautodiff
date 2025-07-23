@@ -1,0 +1,8 @@
+{
+  "variables": {
+    "c_null_ptr": {
+        "typename": "type(c_ptr)",
+        "parameter": true
+    }
+  }
+}

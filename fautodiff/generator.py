@@ -9,7 +9,7 @@ REV_SUFFIX = "_rev_ad"
 import json
 import sys
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 
 # Ensure other modules use the same AD suffix
 from . import code_tree as code_tree
@@ -66,33 +66,40 @@ def _contains_pushpop(node) -> bool:
     return False
 
 
-def _add_fwd_rev_calls(node, routine_map):
+def _add_fwd_rev_calls(node, routine_map: dict, generic_map:dict, donot_prune: bool = False) -> None:
     """Add *_fwd_rev_ad wrapper routine before the call when available."""
     if isinstance(node, CallStatement):
-        info = routine_map.get(node.name)
-        if info is not None and info.get("name_fwd_rev_ad"):
-            node.parent.insert_before(node.get_id(), CallStatement(info["name_fwd_rev_ad"], node.args))
+        arg_info = Node.get_arg_info(node, routine_map, generic_map)
+        if arg_info is not None and arg_info.get("name_fwd_rev_ad"):
+            #print(node.name)
+            args = node.args
+            if node.result is not None:
+                args = args.copy()
+                args.append(node.result)
+            args = CallStatement.rename_args(args, arg_info["args"], arg_info["args_fwd_rev_ad"])
+            if node.associated_vars is None:
+                associated_vars = None
+            else:
+                associated_vars = []
+                for var in node.associated_vars:
+                    associated_vars.append(var.add_suffix(AD_SUFFIX))
+            call = CallStatement(
+                name=arg_info["name_fwd_rev_ad"],
+                args=args,
+                intents=arg_info["intents_fwd_rev_ad"],
+                associated_vars=associated_vars,
+                donot_prune=True)
+            node.parent.insert_before(node.get_id(), call)
+            #print(node.parent.get_id())
+            return
     for child in list(getattr(node, "iter_children", lambda: [])()):
-        _add_fwd_rev_calls(child, routine_map)
+        _add_fwd_rev_calls(child, routine_map, generic_map, donot_prune)
 
 
 def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str]) -> Subroutine:
     """Return a forward wrapper that saves module variables."""
-    sub = Subroutine(f"{routine_org.name}_fwd_rev_ad", list(routine_org.args))
-    for arg in routine_org.arg_vars():
-        sub.decls.append(
-            Declaration(
-                arg.name,
-                arg.typename,
-                arg.kind,
-                arg.dims,
-                arg.intent,
-                allocatable=arg.allocatable,
-                pointer=arg.pointer,
-                optional=arg.optional,
-                declared_in="routine",
-            )
-        )
+    args = []
+    sub = Subroutine(f"{routine_org.name}_fwd_rev_ad", args)
     for name in vars:
         sub.content.append(PushPop(OpVar(name), sub.get_id()))
     sub.ad_init = Block([])
@@ -100,10 +107,54 @@ def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str]) -> Subroutine:
     return sub
 
 
-def _set_call_intents(node, routine_map):
+def _parse_mpi_calls(node, calls: Optional[Dict[str, List[CallStatement]]] = None) -> None:
+    if calls is None:
+        top = True
+        calls = {}
+    else:
+        top = False
+    if isinstance(node, CallStatement):
+        name = node.name.lower()
+        if name.startswith("mpi"):
+            if name in {"mpi_send", "mpi_isend"}:
+                if not "send" in calls:
+                    calls["send"] = []
+                calls["send"].append(node)
+            if name in {"mpi_recv", "mpi_irecv"}:
+                if not "recv" in calls:
+                    calls["recv"] = []
+                calls["recv"].append(node)
+            if name in {"mpi_start", "mpi_startall"}:
+                if not "start" in calls:
+                    calls["start"] = []
+                calls["start"].append(node)
+            if name in {"mpi_wait", "mpi_waitall"}:
+                if not "wait" in calls:
+                    calls["wait"] = []
+                calls["wait"].append(node)
+    else:
+        for child in getattr(node, "iter_children", lambda: [])():
+            _parse_mpi_calls(child, calls)
+
+    if top:
+        if "start" in calls:
+            for key in ("start", "wait"):
+                if key in calls:
+                    for node in calls[key]:
+                        node.donot_prune = True
+        if "recv" in calls:
+            vars = [node.args[0] for node in calls["recv"]]
+            for key in ("send", "recv", "wait"):
+                if key in calls:
+                    for node in calls[key]:
+                        if node.associated_vars is None:
+                            node.associated_vars = vars
+
+
+def _set_call_intents(node, routine_map, generic_map):
     """Populate ``CallStatement.intents`` using ``routine_map`` recursively."""
     if isinstance(node, CallStatement):
-        arg_info = routine_map.get(node.name)
+        arg_info = Node.get_arg_info(node, routine_map, generic_map)
         if arg_info is not None and "intents" in arg_info:
             intents = list(arg_info["intents"])
             params = list(arg_info["args"])
@@ -135,25 +186,34 @@ def _set_call_intents(node, routine_map):
                 reordered.append(intents[-1])
             node.intents = reordered
     for child in getattr(node, "iter_children", lambda: [])():
-        _set_call_intents(child, routine_map)
+        _set_call_intents(child, routine_map, generic_map)
 
 
-def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, dict]:
-    """Load routine and variable maps from ``mod_names`` using ``search_dirs``."""
+def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, dict, dict]:
+    """Load routine, variable and generic maps from ``mod_names`` using ``search_dirs``."""
 
     routines = {}
     variables = {}
+    generics = {}
     for mod in mod_names:
         for d in search_dirs:
             path = Path(d) / f"{mod}.fadmod"
             if path.exists():
                 try:
                     data = json.loads(path.read_text())
+                    generics.update(data.pop("generics", {}))
+                    routines_data = data.get("routines", {})
+                    if routines_data:
+                        for name, info in routines_data.items():
+                            nargs = len(info["args"])
+                            for key in ["intents", "dims", "type", "kind"]:
+                                if key in info:
+                                    if len(info[key]) != nargs:
+                                        raise RuntimeError(f"invalid routine data: {name} {info}")
+                                else:
+                                    info[key] = [None] * nargs
+                    routines.update(routines_data)
                     vars_data = data.pop("variables", {})
-                    if "routines" in data:
-                        routines.update(data.get("routines", {}))
-                    else:
-                        routines.update(data)
                     if vars_data:
                         vars = []
                         for name, info in vars_data.items():
@@ -172,7 +232,7 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, d
                 except Exception:
                     pass
                 break
-    return routines, variables
+    return routines, variables, generics
 
 
 def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
@@ -192,10 +252,6 @@ def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
             continue
         info = dict(info)
         info["module"] = mod_name
-        if info.get("cross_mod_vars"):
-            info["cross_mod_vars"] = list(info["cross_mod_vars"])
-        if info.get("name_fwd_rev_ad"):
-            info["name_fwd_rev_ad"] = info["name_fwd_rev_ad"]
         routines_data[r.name] = info
 
     variables_data = {}
@@ -292,11 +348,12 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
     for var in args:
         subroutine.decls.append(
             Declaration(
-                var.name,
-                var.typename,
-                var.kind,
-                var.dims,
-                var.intent,
+                name=var.name,
+                typename=var.typename,
+                kind=var.kind,
+                char_len=var.char_len,
+                dims=var.dims,
+                intent=var.intent,
                 allocatable=var.allocatable,
                 pointer=var.pointer,
                 optional=var.optional,
@@ -407,11 +464,12 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
     for var in args:
         subroutine.decls.append(
             Declaration(
-                var.name,
-                var.typename,
-                var.kind,
-                var.dims,
-                var.intent,
+                name=var.name,
+                typename=var.typename,
+                kind=var.kind,
+                char_len=var.char_len,
+                dims=var.dims,
+                intent=var.intent,
                 allocatable=var.allocatable,
                 pointer=var.pointer,
                 optional=var.optional,
@@ -466,6 +524,7 @@ def _generate_ad_subroutine(
     mod_org: Module,
     routine_org: Routine,
     routine_map: dict,
+    generic_map: dict,
     mod_vars: List[OpVar],
     routine_info: dict,
     warnings: List[str],
@@ -499,7 +558,8 @@ def _generate_ad_subroutine(
         subroutine.ad_content = ad_block
         return subroutine, False, set()
 
-    _set_call_intents(routine_org.content, routine_map)
+    _parse_mpi_calls(routine_org.content)
+    _set_call_intents(routine_org.content, routine_map, generic_map)
 
     saved_vars: List[OpVar] = []
     if reverse:
@@ -511,6 +571,7 @@ def _generate_ad_subroutine(
         reverse=reverse,
         assigned_advars=assigned_advars,
         routine_map=routine_map,
+        generic_map=generic_map,
         mod_vars=mod_vars,
         warnings=warnings,
     )
@@ -536,12 +597,11 @@ def _generate_ad_subroutine(
                 if v_org is not None and not subroutine.is_declared(name):
                     subroutine.decls.append(
                         Declaration(
-                            name,
-                            v_org.typename,
-                            v_org.kind,
-                            v_org.dims,
-                            None,
-                            base_decl.parameter if base_decl else False,
+                            name=name,
+                            typename=v_org.typename,
+                            kind=v_org.kind,
+                            dims=v_org.dims,
+                            parameter=base_decl.parameter if base_decl else False,
                             init_val=base_decl.init_val if base_decl else None,
                             allocatable=base_decl.allocatable if base_decl else False,
                             pointer=base_decl.pointer if base_decl else False,
@@ -563,33 +623,33 @@ def _generate_ad_subroutine(
         ad_code = ad_code.prune_for(targets, mod_vars)
         #print(render_program(ad_code)) # for debugging
 
-    if (ad_code is not None) and (not ad_code.is_effectively_empty()):
-        vars = ad_code.required_vars(
-            VarList([OpVar(var.name) for var in out_grad_args]),
-            without_savevar=True
-        )
-        for name in vars.names():
-            if not name.endswith(AD_SUFFIX):
-                continue
-            if any(v for v in mod_ad_vars if v.name == name):
-                continue
-            if not any(v for v in grad_args if v.name == name):
-                if subroutine.is_declared(name):
-                    var = subroutine.get_var(name)
-                else:
-                    var = None
-            else:
-                if any(v for v in in_grad_args if v.name == name):
-                    continue
-                var = next(v for v in out_grad_args if v.name == name)
-            if var is not None:
-                if var.dims is not None and len(var.dims) > 0:
-                    index = AryIndex((None,) * len(var.dims))
-                else:
-                    index = None
-                subroutine.ad_init.append(
-                    Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind))
-                )
+    # if (ad_code is not None) and (not ad_code.is_effectively_empty()):
+    #     vars = ad_code.required_vars(
+    #         VarList([OpVar(var.name) for var in out_grad_args]),
+    #         without_savevar=True
+    #     )
+    #     for name in vars.names():
+    #         if not name.endswith(AD_SUFFIX):
+    #             continue
+    #         if any(v for v in mod_ad_vars if v.name == name):
+    #             continue
+    #         if not any(v for v in grad_args if v.name == name):
+    #             if subroutine.is_declared(name):
+    #                 var = subroutine.get_var(name)
+    #             else:
+    #                 var = None
+    #         else:
+    #             if any(v for v in in_grad_args if v.name == name):
+    #                 continue
+    #             var = next(v for v in out_grad_args if v.name == name)
+    #         if var is not None:
+    #             if var.dims is not None and len(var.dims) > 0:
+    #                 index = AryIndex((None,) * len(var.dims))
+    #             else:
+    #                 index = None
+    #             subroutine.ad_init.append(
+    #                 Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind))
+    #             )
 
     for node in ad_code:
         if not node.is_effectively_empty():
@@ -600,8 +660,11 @@ def _generate_ad_subroutine(
         #print(render_program(ad_code))
         #print("Targets:", targets)
         fw_block = Block(routine_org.content.set_for_exitcycle(None))
+        fw_block.build_parent()
+
+        _add_fwd_rev_calls(fw_block, routine_map, generic_map)
+
         fw_block = fw_block.prune_for(targets, mod_vars)
-        #print(render_program(fw_block))
 
         assigned = fw_block.assigned_vars(without_savevar=True)
         assigned = ad_code.assigned_vars(assigned, without_savevar=True)
@@ -610,19 +673,28 @@ def _generate_ad_subroutine(
         common = assigned & required
         mod_names = [v.name for v in mod_vars]
         cross_vars = sorted([v.name for v in common if v.name in mod_names and not v.name.endswith(AD_SUFFIX)])
-        routine_info["cross_mod_vars"] = cross_vars
-        routine_info["arg_info"]["cross_mod_vars"] = cross_vars
         if cross_vars:
-            name_fwd_rev = f"{routine_org.name}_fwd_rev_ad"
-            routine_info["arg_info"]["name_fwd_rev_ad"] = name_fwd_rev
-            routine_map[routine_org.name]["cross_mod_vars"] = cross_vars
-            routine_map[routine_org.name]["name_fwd_rev_ad"] = name_fwd_rev
+            name_org = routine_org.name
+            name_fwd_rev = f"{name_org}_fwd_rev_ad"
             pops = [PushPop(OpVar(n), subroutine.get_id()).to_load() for n in cross_vars]
             for pop in reversed(pops):
                 subroutine.content.insert_begin(pop)
-            routine_info["fwd_rev_subroutine"] = _make_fwd_rev_wrapper(routine_org, cross_vars)
+            sub = _make_fwd_rev_wrapper(routine_org, cross_vars)
+            intents = [v.intent for v in sub.arg_vars()]
+            routine_info["fwd_rev_subroutine"] = sub # save to output this subroutine later
+            routine_map_new = {
+                name_org: {
+                    "args": routine_map[name_org]["args"],
+                    "name_fwd_rev_ad": name_fwd_rev,
+                    "args_fwd_rev_ad": sub.args,
+                    "intents_fwd_rev_ad": intents,
+                }
+            }
+            routine_map[name_org]["name_fwd_rev_ad"] = name_fwd_rev
+            routine_map[name_org]["args_fwd_rev_ad"] = sub.args
+            routine_map[name_org]["intents_fwd_rev_ad"] = intents
 
-        _add_fwd_rev_calls(fw_block, routine_map)
+            _add_fwd_rev_calls(fw_block, routine_map_new, None, donot_prune=True)
 
         flag = True
         while flag:
@@ -657,6 +729,37 @@ def _generate_ad_subroutine(
         if not fw_block.is_effectively_empty():
             subroutine.content.extend(fw_block)
 
+    if (ad_code is not None) and (not ad_code.is_effectively_empty()):
+        vars = ad_code.required_vars(
+            VarList([OpVar(var.name) for var in out_grad_args]),
+            without_savevar=True
+        )
+        if reverse and not fw_block.is_effectively_empty():
+            vars = fw_block.required_vars(vars)
+        for name in vars.names():
+            if not name.endswith(AD_SUFFIX):
+                continue
+            if any(v for v in mod_ad_vars if v.name == name):
+                continue
+            if not any(v for v in grad_args if v.name == name):
+                if subroutine.is_declared(name):
+                    var = subroutine.get_var(name)
+                else:
+                    var = None
+            else:
+                if any(v for v in in_grad_args if v.name == name):
+                    continue
+                var = next(v for v in out_grad_args if v.name == name)
+            if var is not None:
+                if var.dims is not None and len(var.dims) > 0:
+                    index = AryIndex((None,) * len(var.dims))
+                else:
+                    index = None
+                subroutine.ad_init.append(
+                    Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind))
+                )
+
+
     var_names = []
     for var in subroutine.collect_vars():
         if var.name not in var_names:
@@ -672,12 +775,11 @@ def _generate_ad_subroutine(
                 if base_decl is not None:
                     subroutine.decls.append(
                         Declaration(
-                            name,
-                            base_decl.typename,
-                            base_decl.kind,
-                            base_decl.dims,
-                            None,
-                            base_decl.parameter,
+                            name=name,
+                            typename=base_decl.typename,
+                            kind=base_decl.kind,
+                            dims=base_decl.dims,
+                            parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
                             allocatable=base_decl.allocatable,
                             pointer=base_decl.pointer,
@@ -792,12 +894,11 @@ def _generate_ad_subroutine(
             kind = var.kind
         subroutine.decls.append(
             Declaration(
-                var.name,
-                typename,
-                kind,
-                dims,
-                None,
-                base_decl.parameter if base_decl else False,
+                name=var.name,
+                typename=typename,
+                kind=kind,
+                dims=dims,
+                parameter=base_decl.parameter if base_decl else False,
                 init_val=base_decl.init_val if base_decl else None,
                 allocatable=base_decl.allocatable if base_decl else False,
                 pointer=base_decl.pointer if base_decl else False,
@@ -865,6 +966,7 @@ def generate_ad(
         fadmod_dir = Path(fadmod_dir)
 
     routine_map = {}
+    generic_routines = {}
     for mod_org in modules_org:
         name = mod_org.name
         mod = Module(f"{name}{AD_SUFFIX}")
@@ -874,7 +976,7 @@ def generate_ad(
             if not isinstance(child, Use):
                 mod.body.append(child)
 
-        mod_vars = mod_org.decls.collect_vars() if mod_org.decls is not None else []
+        mod_vars = [var for var in mod_org.decls.collect_vars() if not var.is_constant] if mod_org.decls is not None else []
         has_mod_grad_var = False
         for var in mod_vars:
             if var.ad_target:
@@ -890,6 +992,7 @@ def generate_ad(
                 mod.decls.append(Declaration(f"{var.name}{AD_SUFFIX}",
                                              typename = decl.typename,
                                              kind = decl.kind,
+                                             char_len=decl.char_len,
                                              dims = decl.dims,
                                              init_val = init_val,
                                              #access = decl.access,
@@ -916,10 +1019,13 @@ def generate_ad(
                     routine_map[r.name] = routine_info["arg_info"]
 
         used_mods = mod_org.find_use_modules()
-        loaded, vars_info = _load_fadmods(used_mods, search_dirs)
+        loaded, vars_info, generic_map = _load_fadmods(used_mods, search_dirs)
         routine_map.update(loaded)
+        generic_routines.update(generic_map)
         for name, vars in vars_info.items():
-            mod_vars.extend(vars)
+            vars = [v for v in vars if not v.is_constant]
+            if vars:
+                mod_vars.extend(vars)
 
         # Generate AD subroutines
         ad_modules_used = set()
@@ -930,6 +1036,7 @@ def generate_ad(
                     mod_org,
                     routine,
                     routine_map,
+                    generic_routines,
                     mod_vars,
                     routine_info_fwd[routine.name],
                     warnings,
@@ -943,6 +1050,7 @@ def generate_ad(
                     mod_org,
                     routine,
                     routine_map,
+                    generic_routines,
                     mod_vars,
                     routine_info_rev[routine.name],
                     warnings,

@@ -268,7 +268,8 @@ class Operator:
         if self.args is None:
             return funcs
         for arg in self.args:
-            funcs.extend(arg.find_userfunc())
+            if arg is not None:
+                funcs.extend(arg.find_userfunc())
         return funcs
 
     def replace_with(self, src: Operator, dest: Operator) -> Operator:
@@ -573,6 +574,8 @@ class OpInt(OpNum):
 
     val: int = field(default=-999)
     target: Optional[OpVar] = None
+    typename: ClassVar[Optional[str]] = "integer"
+    dims: ClassVar[Optional[Tuple[str]]] = None
 
     def __init__(self, val: int, kind: Optional[str] = None, target: Optional[OpVar] = None):
         super().__init__(args=[], kind=kind)
@@ -611,7 +614,13 @@ class OpInt(OpNum):
         return str(self.val)
 
 @dataclass
-class OpChr(OpLeaf):
+class OpAry(OpLeaf):
+
+    def __str__(self) -> str:
+        return f"[{', '.join(self.args)}]"
+
+@dataclass
+class OpChar(OpLeaf):
 
     name: str = field(default="")
 
@@ -669,6 +678,7 @@ class OpVar(OpLeaf):
     name: str = field(default="")
     index: Optional[AryIndex] = None
     kind: Optional[str] = None
+    char_len: Optional[str] = None
     typename: Optional[str] = field(default=None)
     dims: Optional[Tuple[str]] = field(repr=False, default=None)
     intent: Optional[str] = field(default=None, repr=False)
@@ -679,6 +689,7 @@ class OpVar(OpLeaf):
     pointer: Optional[bool] = field(default=None, repr=False)
     optional: Optional[bool] = field(default=None, repr=False)
     declared_in: Optional[str] = field(default=None, repr=False)
+    ref_var: Optional["OpVar"] = field(default=None)
     reduced_dims: Optional[List[int]] = field(init=False, repr=False, default=None)
 
     def __init__(
@@ -686,6 +697,7 @@ class OpVar(OpLeaf):
         name: str,
         index: Optional[AryIndex] = None,
         kind: Optional[str] = None,
+        char_len: Optional[str] = None,
         dims: Optional[Tuple[str]] = None,
         reference: Optional[OpVar] = None,
         typename: Optional[str] = None,
@@ -696,6 +708,7 @@ class OpVar(OpLeaf):
         pointer: Optional[bool] = None,
         optional: Optional[bool] = None,
         declared_in: Optional[str] = None,
+        ref_var: Optional[OpVar] = None,
     ):
         super().__init__(args=[])
         if not isinstance(name, str):
@@ -707,6 +720,7 @@ class OpVar(OpLeaf):
             index = AryIndex(index)
         self.index = index
         self.kind = kind
+        self.char_len = char_len
         self.dims = dims
         self.reference = reference
         self.typename = typename
@@ -717,6 +731,7 @@ class OpVar(OpLeaf):
         self.pointer = pointer
         self.optional = optional
         self.declared_in = declared_in
+        self.ref_var = ref_var
         if self.ad_target is None and self.typename is not None:
             typename = self.typename.lower()
             is_real_type = typename.startswith("real") or typename.startswith("double")
@@ -745,6 +760,7 @@ class OpVar(OpLeaf):
             name=self.name,
             index=index,
             kind=self.kind,
+            char_len=self.char_len,
             dims=self.dims,
             reference=self.reference,
             typename=self.typename,
@@ -755,19 +771,25 @@ class OpVar(OpLeaf):
             pointer=self.pointer,
             optional=self.optional,
             declared_in=self.declared_in,
+            ref_var=self.ref_var,
         )
 
     def add_suffix(self, suffix: Optional[str] = None) -> "OpVar":
         if suffix is None:
             return self
-        name = f"{self.name}{suffix}"
-        index = self.index
-        if index is not None:
-            index = AryIndex(list(index.dims) if index.dims is not None else None)
+        if self.ref_var is None:
+            name = f"{self.name}{suffix}"
+            index = self.index
+            if index is not None:
+                index = AryIndex(list(index.dims) if index.dims is not None else None)
+            ref_var = None
+        else:
+            ref_var = self.ref_var.add_suffix(suffix)
         return OpVar(
             name,
             index=index,
             kind=self.kind,
+            char_len=self.char_len,
             dims=self.dims,
             reference=self.reference,
             typename=self.typename,
@@ -778,6 +800,7 @@ class OpVar(OpLeaf):
             pointer=self.pointer,
             optional=self.optional,
             declared_in=self.declared_in,
+            ref_var=ref_var
         )
 
     def deep_clone(self) -> "OpVar":
@@ -786,12 +809,14 @@ class OpVar(OpLeaf):
             clone.index = self.index.deep_clone()
         return clone
 
-    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
+    def collect_vars(self, without_index: bool = False) -> List["OpVar"]:
         vars = [self]
         if (not without_index) and self.index is not None:
             for v in self.index.collect_vars():
                 if not v in vars:
                     vars.append(v)
+        if self.ref_var is not None:
+            vars.extend(self.ref_var.collect_vars())
         return vars
 
     def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
@@ -818,11 +843,15 @@ class OpVar(OpLeaf):
         return ",".join(index_list)
 
     def __str__(self) -> str:
+        if self.ref_var is not None:
+            ref_var = f"{self.ref_var}%"
+        else:
+            ref_var = ""
         index_str = self.index_str()
         if not index_str:
-            return self.name
+            return f"{ref_var}{self.name}"
         else:
-            return f"{self.name}({index_str})"
+            return f"{ref_var}{self.name}({index_str})"
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, type(self)):
@@ -1263,3 +1292,16 @@ class OpRange(Operator):
         if isinstance(v, OpNeg) and isinstance(v.args[0], OpInt):
             return False
         return True
+
+@dataclass
+class OpType(Operator):
+
+    name: str = field(default="")
+    PRIORITY: ClassVar[int] = 1
+
+    def __init__(self, name: str):
+        self.name = name
+        self.args = None
+
+    def __str__(self) -> str:
+        return self.name

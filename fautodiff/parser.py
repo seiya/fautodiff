@@ -14,7 +14,7 @@ from fparser.two import Fortran2003, Fortran2008
 from fparser.two.parser import ParserFactory
 from fparser.two.utils import walk
 from packaging.version import Version, parse
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Dict, Optional
 
 from .code_tree import (
     Assignment,
@@ -22,6 +22,8 @@ from .code_tree import (
     Block,
     CallStatement,
     Declaration,
+    Interface,
+    TypeDef,
     DoLoop,
     DoWhile,
     Function,
@@ -41,12 +43,13 @@ from .operators import (
     INTRINSIC_FUNCTIONS,
     AryIndex,
     OpAdd,
-    OpChr,
+    OpChar,
     OpDiv,
     Operator,
     OpFunc,
     OpFuncUser,
     OpInt,
+    OpAry,
     OpFalse,
     OpTrue,
     OpLogic,
@@ -57,6 +60,7 @@ from .operators import (
     OpReal,
     OpSub,
     OpVar,
+    OpType,
 )
 
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
@@ -82,11 +86,11 @@ def _stmt_name(stmt):
     raise AttributeError("Could not determine statement name")
 
 
-def _stmt2op(stmt, decl_map:dict) -> Operator:
+def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
     """Return Operator from statement."""
 
     if isinstance(stmt, Fortran2003.Actual_Arg_Spec):
-        return _stmt2op(stmt.items[1], decl_map)
+        return _stmt2op(stmt.items[1], decl_map, type_map)
 
     if isinstance(stmt, Fortran2003.Int_Literal_Constant):
         return OpInt(val=int(stmt.items[0]), kind=stmt.items[1])
@@ -111,24 +115,27 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
             raise ValueError(f"Failed to convert real number: {stmt}")
 
     if isinstance(stmt, Fortran2003.Name):
-        name = stmt.tofortran()
+        name = stmt.string
         if name in decl_map:
             decl = decl_map[name]
-            kind = decl.kind
-            if (
-                kind is None
-                and decl.is_real()
-                and decl.typename.lower().startswith("double")
-            ):
-                kind = "8"
+        elif name in type_map:
+            decl = type_map[name]
         else:
             raise ValueError(f"Not found in the declaration section: {name}")
-            # is_real = True
-            # kind = None
+
+        kind = decl.kind
+        if (
+            kind is None
+            and decl.is_real()
+            and decl.typename.lower().startswith("double")
+        ):
+            kind = "8"
+
         return OpVar(
             name=name,
             typename=decl.typename,
             kind=kind,
+            char_len=decl.char_len,
             dims=decl.dims,
             is_constant=decl.parameter or getattr(decl, "constant", False),
             allocatable=getattr(decl, "allocatable", False),
@@ -139,7 +146,7 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Part_Ref):
         name = stmt.items[0].tofortran()
-        index = AryIndex([_stmt2op(x, decl_map) for x in stmt.items[1].items])
+        index = AryIndex([_stmt2op(x, decl_map, type_map) for x in stmt.items[1].items])
         if name in decl_map: # must be array
             decl = decl_map[name]
             return OpVar(
@@ -147,6 +154,7 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
                 index=index,
                 typename=decl.typename,
                 kind=decl.kind,
+                char_len=decl.char_len,
                 dims=decl.dims,
                 is_constant=decl.parameter or getattr(decl, "constant", False),
                 allocatable=getattr(decl, "allocatable", False),
@@ -157,7 +165,7 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
         else:  # must be function
             name_l = name.lower()
             args = [
-                _stmt2op(arg, decl_map)
+                _stmt2op(arg, decl_map, type_map)
                 for arg in getattr(stmt.items[1], "items", [])
                 if not isinstance(arg, str)
             ]
@@ -166,13 +174,13 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
             return OpFuncUser(name_l, args)
 
     if isinstance(stmt, Fortran2003.Subscript_Triplet):
-        args = [(x and _stmt2op(x, decl_map)) for x in stmt.items]
+        args = [(x and _stmt2op(x, decl_map, type_map)) for x in stmt.items]
         return OpRange(args)
 
     if isinstance(stmt, Fortran2003.Intrinsic_Function_Reference):
         name = stmt.items[0].tofortran().lower()
         args = [
-            _stmt2op(arg, decl_map)
+            _stmt2op(arg, decl_map, type_map)
             for arg in getattr(stmt.items[1], "items", [])
             if not isinstance(arg, str)
         ]
@@ -180,7 +188,7 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Char_Literal_Constant):
         name = stmt.items[0]
-        return OpChr(name=name)
+        return OpChar(name=name)
 
     if isinstance(stmt, Fortran2003.Logical_Literal_Constant):
         const = stmt.string.lower()
@@ -192,14 +200,14 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Mult_Operand):
         if stmt.items[1] == "**":
-            args = [_stmt2op(stmt.items[0], decl_map), _stmt2op(stmt.items[2], decl_map)]
+            args = [_stmt2op(stmt.items[0], decl_map, type_map), _stmt2op(stmt.items[2], decl_map, type_map)]
             return OpPow(args)
         else:
             raise ValueError(f"Unsupported Mult_operand type: {stmt}")
 
     if isinstance(stmt, Fortran2003.Level_2_Unary_Expr):
         op = stmt.items[0]
-        args = [_stmt2op(stmt.items[1], decl_map)]
+        args = [_stmt2op(stmt.items[1], decl_map, type_map)]
         if op == "-":
             return OpNeg(args)
         else:
@@ -207,7 +215,7 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Level_2_Expr):
         op = stmt.items[1]
-        args = [_stmt2op(stmt.items[0], decl_map), _stmt2op(stmt.items[2], decl_map)]
+        args = [_stmt2op(stmt.items[0], decl_map, type_map), _stmt2op(stmt.items[2], decl_map, type_map)]
         if op == "+":
             return OpAdd(args)
         elif op == "-":
@@ -217,7 +225,7 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Add_Operand):
         op = stmt.items[1]
-        args = [_stmt2op(stmt.items[0], decl_map), _stmt2op(stmt.items[2], decl_map)]
+        args = [_stmt2op(stmt.items[0], decl_map, type_map), _stmt2op(stmt.items[2], decl_map, type_map)]
         if op == "*":
             return OpMul(args)
         elif op == "/":
@@ -225,13 +233,36 @@ def _stmt2op(stmt, decl_map:dict) -> Operator:
         else:
             raise ValueError(f"Unsupported Add_Operand type: {stmt}")
 
+    if isinstance(stmt, (Fortran2003.Equiv_Operand, Fortran2003.Or_Operand)):
+        op = stmt.items[1].lower()
+        args = [_stmt2op(stmt.items[0], decl_map, type_map), _stmt2op(stmt.items[2], decl_map, type_map)]
+        if op == ".and." or op == ".or.":
+            return OpLogic(op, args)
+
+        else:
+            raise ValueError(f"Unsupported Equiv_Operand type: {stmt}")
+
     if isinstance(stmt, Fortran2003.Parenthesis):
-        return _stmt2op(stmt.items[1], decl_map)
+        return _stmt2op(stmt.items[1], decl_map, type_map)
 
     if isinstance(stmt, Fortran2003.Level_4_Expr):
         op = stmt.items[1]
-        args = [_stmt2op(stmt.items[0], decl_map), _stmt2op(stmt.items[2], decl_map)]
+        args = [_stmt2op(stmt.items[0], decl_map, type_map), _stmt2op(stmt.items[2], decl_map, type_map)]
         return OpLogic(op=op, args=args)
+
+    if isinstance(stmt, Fortran2003.Array_Constructor):
+        elms = [_stmt2op(elm, decl_map, type_map) for elm in stmt.items[1].items]
+        return OpAry(elms)
+
+    if isinstance(stmt, Fortran2003.Data_Ref):
+        ref = _stmt2op(stmt.items[0], decl_map, type_map)
+        ref_name = ref.name
+        if decl_map[ref_name].type_def is not None:
+            comp = _stmt2op(stmt.items[1], decl_map, decl_map[ref_name].type_def.map)
+            comp.ref_var = ref
+            return comp
+        else:
+            raise RuntimeError(f"definition not found: {stmt}, {name}, {comp}")
 
     print("other")
     print(type(stmt))
@@ -252,21 +283,20 @@ __all__ = [
 ]
 
 
-def parse_file(path, *, search_dirs=None):
+def parse_file(path, *, search_dirs=None, decl_map=None, type_map=None):
     """Parse ``path`` and return a list of :class:`Module` nodes."""
     reader = FortranFileReader(path, ignore_comments=False)
-    return _parse_from_reader(reader, path, search_dirs=search_dirs)
+    return _parse_from_reader(reader, path, search_dirs=search_dirs, decl_map=decl_map, type_map=type_map)
 
 
-def parse_src(src, *, search_dirs=None):
+def parse_src(src, *, search_dirs=None, decl_map=None, type_map=None):
     """Parse ``src`` and return a list of :class:`Module` nodes."""
     reader = FortranStringReader(src, ignore_comments=False)
-    return _parse_from_reader(reader, "<string>", search_dirs=search_dirs)
+    return _parse_from_reader(reader, "<string>", search_dirs=search_dirs, decl_map=decl_map, type_map=type_map)
 
 
 def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
     """Return variable declaration info from ``mod_name`` fadmod file."""
-
     for d in search_dirs:
         path = Path(d) / f"{mod_name}.fadmod"
         if path.exists():
@@ -279,27 +309,10 @@ def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
     return {}
 
 
-def _clone_decl(decl: Declaration, declared_in: str) -> Declaration:
-    return Declaration(
-        decl.name,
-        decl.typename,
-        decl.kind,
-        decl.dims,
-        decl.intent,
-        decl.parameter,
-        decl.constant,
-        init_val=decl.init_val,
-        access=decl.access,
-        allocatable=decl.allocatable,
-        pointer=decl.pointer,
-        optional=decl.optional,
-        declared_in=declared_in,
-    )
-
-
 def _parse_decl_stmt(
     stmt,
     constant_vars=None,
+    type_map=None,
     *,
     allow_intent=True,
     allow_access=False,
@@ -312,73 +325,121 @@ def _parse_decl_stmt(
         (
             Fortran2003.Type_Declaration_Stmt,
             Fortran2008.type_declaration_stmt_r501.Type_Declaration_Stmt,
+            Fortran2008.data_component_def_stmt_r436.Data_Component_Def_Stmt,
         ),
     ):
         raise RuntimeError(f"Unsupported statement: {type(stmt)} {stmt}")
 
-    base_type = stmt.items[0].string
+    type_spec = stmt.items[0]
     kind = None
-    base_lower = base_type.lower()
-    if base_lower.startswith("real"):
-        base_type = "real"
-        type_spec = stmt.items[0]
-        if getattr(type_spec, "items", None) is not None and len(type_spec.items) > 1:
-            selector = type_spec.items[1]
-            if isinstance(selector, Fortran2003.Kind_Selector):
-                kind_item = selector.items[1]
-                kind = kind_item.tofortran()
-
-    text = stmt.tofortran().lower()
-    if "intent(inout)" in text:
-        intent = "inout"
-    elif "intent(out)" in text:
-        intent = "out"
-    elif "intent(in)" in text:
-        intent = "in"
+    char_len = None
+    type_def = None
+    if isinstance(type_spec, Fortran2003.Intrinsic_Type_Spec):
+        base_type = type_spec.items[0]
+        selector = type_spec.items[1]
+        if selector is None:
+            pass
+        elif isinstance(selector, Fortran2003.Kind_Selector):
+            if selector.items[1]:
+                kind = selector.items[1].string
+        elif isinstance(selector, Fortran2003.Length_Selector):
+            char_len = selector.items[1].string
+        else:
+            raise RuntimeError(f"selector is not supported: {type(selector)} {selector}")
+    elif isinstance(type_spec, Fortran2003.Declaration_Type_Spec):
+        name = type_spec.items[1].string
+        base_type = type_spec.string
+        if type_map is not None and name in type_map:
+            type_def = type_map[name]
+        elif name == "c_ptr": # tentative
+            type_def = TypeDef(name=name, components=[])
+        else:
+            raise RuntimeError(f"type definition not found: {name}")
     else:
-        intent = None
+        raise RuntimeError(f"base_type is not found: {type(type_spec)} {type_spec}")
 
-    if intent is not None and not allow_intent:
-        raise RuntimeError("Module variables must not specify INTENT")
-
+    intent = None
     dim_attr = None
     parameter = False
     access = None
     allocatable = False
     pointer = False
     optional = False
+    target = False
     attrs = stmt.items[1]
     if attrs is not None:
         for attr in attrs.items:
-            name = getattr(
-                attr, "string", str(getattr(attr, "items", [None])[0])
-            ).lower()
-            if name.startswith("dimension"):
-                dim_attr = tuple(v.tofortran() for v in attr.items[1].items)
-                break
-            if name == "parameter":
-                parameter = True
-            if name == "allocatable":
+            if isinstance(attr, Fortran2003.Intent_Attr_Spec):
+                if not allow_intent:
+                    raise RuntimeError("Module variables must not specify INTENT")
+                intent = attr.items[1].string.lower()
+                continue
+            if isinstance(attr, Fortran2008.attr_spec_r502.Attr_Spec):
+                attr_name = attr.string
+                if attr_name == "PARAMETER":
+                    parameter = True
+                    continue
+                if attr_name == "POINTER":
+                    pointer = True
+                    continue
+                if attr_name == "OPTIONAL":
+                    optional = True
+                    continue
+                if attr_name == "ALLOCATABLE":
+                    allocatable = True
+                    continue
+                if attr_name == "TARGET":
+                    target = True
+                    continue
+                raise RuntimeError(f"Unsupported attribute: {type(attr)} {attr}")
+            if isinstance(attr, Fortran2008.component_attr_spec_r437.Component_Attr_Spec):
                 allocatable = True
-            if name == "pointer":
-                pointer = True
-            if name == "optional":
-                optional = True
-            if allow_access and name in ("public", "private"):
-                access = name
+                continue
+            if isinstance(attr, Fortran2003.Dimension_Attr_Spec):
+                dim_attr = tuple(v.string for v in attr.items[1].items)
+                continue
+            if isinstance(attr, Fortran2003.Access_Spec):
+                attr_name = attr.string.lower()
+                if attr_name == "public":
+                    if not allow_access:
+                        raise RuntimeError("Routine variables must not specify PUBLIC")
+                    access = "public"
+                    continue
+                if attr_name == "private":
+                    if not allow_access:
+                        raise RuntimeError("Routine variables must not specify PRIVATE")
+                    access = "private"
+                    continue
+
+            print(attr.__dict__)
+            raise RuntimeError(f"Unsupported attribute: {type(attr)} {attr}")
+
+            # print(type(attr))
+            # name = getattr(
+            #     attr, "string", str(getattr(attr, "items", [None])[0])
+            # ).lower()
+            # if allow_access and name in ("public", "private"):
+            #     access = name
 
     decls = []
     for entity in stmt.items[2].items:
-        name = entity.items[0].tofortran()
-        arrspec = entity.items[1]
         dims = None
-        if arrspec is not None:
-            dims = tuple(v.tofortran() for v in arrspec.items)
-        elif dim_attr is not None:
-            dims = dim_attr
         init_val = None
-        if len(entity.items) > 3 and entity.items[3] is not None:
-            init_val = entity.items[3].items[1].string
+        if isinstance(entity, (Fortran2003.Entity_Decl, Fortran2003.Component_Decl)):
+            name = entity.items[0].string
+            dim_spec = entity.items[1]
+            if isinstance(dim_spec, Fortran2003.Explicit_Shape_Spec_List):
+                dims = tuple(v.string for v in entity.items[1].items)
+            elif isinstance(dim_spec, Fortran2003.Assumed_Shape_Spec_List):
+                dims = tuple(v.string for v in entity.items[1].items)
+            elif isinstance(dim_spec, Fortran2003.Assumed_Size_Spec):
+                dims = "*"
+            else:
+                dims = dim_attr
+            if entity.items[3] is not None:
+                init_val = entity.items[3].items[1].string
+        else:
+            raise RuntimeError(f"Unsupported statement: {type(entity)} {entity}")
 
         constant = False
         if constant_vars and name in constant_vars:
@@ -386,18 +447,21 @@ def _parse_decl_stmt(
 
         decls.append(
             Declaration(
-                name,
-                base_type,
-                kind,
-                dims,
-                intent,
-                parameter,
-                constant,
+                name=name,
+                typename=base_type.lower(),
+                kind=kind,
+                char_len=char_len,
+                dims=dims,
+                intent=intent,
+                parameter=parameter,
+                constant=constant,
                 init_val=init_val,
                 access=access,
                 allocatable=allocatable,
                 pointer=pointer,
                 optional=optional,
+                target=target,
+                type_def=type_def,
                 declared_in=declared_in,
             )
         )
@@ -420,6 +484,7 @@ def _parse_decls(
     *,
     directives: dict,
     decl_map: dict,
+    type_map: Dict[str, TypeDef],
     declared_in: str ="routine",
     allow_intent: bool = True,
     allow_access: bool = False,
@@ -470,15 +535,6 @@ def _parse_decls(
                     else:
                         access_map[name_n] = access_spec
             continue
-        # if isinstance(item, Fortran2003.Comment):
-        #     text = item.items[0].strip()
-        #     if text.startswith("!$FAD"):
-        #         _parse_directive(text, directives)
-        #         continue
-        #     print(text)
-        #     if item.items[0] != "":
-        #         decls.append(Statement(text))
-        #     continue
         if isinstance(
             item,
             (
@@ -490,6 +546,7 @@ def _parse_decls(
             for decl in _parse_decl_stmt(
                 item,
                 constant_vars,
+                type_map,
                 allow_intent=allow_intent,
                 allow_access=allow_access,
                 declared_in=declared_in,
@@ -502,6 +559,55 @@ def _parse_decls(
                 decl_map[decl.name] = decl
                 decls.append(decl)
             continue
+        if isinstance(item, Fortran2003.Interface_Block):
+            name = None
+            procs = []
+            for cnt in item.content:
+                if isinstance(cnt, Fortran2003.Interface_Stmt):
+                    name = cnt.items[0].string
+                    continue
+                if isinstance(cnt, Fortran2008.procedure_stmt_r1206.Procedure_Stmt):
+                    if isinstance(cnt.items[0], Fortran2008.Procedure_Name_List):
+                        for proc in cnt.items[0].items:
+                            procs.append(proc.string)
+                        continue
+                    raise RuntimeError(f"Unsupported statement: {type(cnt.items[0])} {cnt.items}")
+                if isinstance(cnt, Fortran2003.End_Interface_Stmt):
+                    if name is not None and procs:
+                        nodes.append(Interface(name, module_procs=procs))
+                        continue
+                raise RuntimeError(f"Unsupported statement: {type(cnt)} {cnt}")
+            continue
+        if isinstance(item, Fortran2003.Derived_Type_Def):
+            type_name = None
+            components: List[Declaration] = []
+            for cnt in item.content:
+                if isinstance(cnt, Fortran2003.Derived_Type_Stmt):
+                    if isinstance(cnt.items[0], Fortran2003.Type_Attr_Spec_List):
+                        for spec in cnt.items[0].items:
+                            if isinstance(spec, Fortran2003.Type_Attr_Spec):
+                                parent = spec.items[1].string
+                                if not parent in type_map:
+                                    raise RuntimeError(f"Type definition not found: {parent}")
+                                for decl in type_map[parent].iter_children():
+                                    components.append(decl)
+                            else:
+                                raise RuntimeError(f"Unsupported spec: {type(spec)} {spec}")
+                    type_name = cnt.items[1].string
+                    continue
+                if isinstance(cnt, Fortran2003.Component_Part):
+                    for c in cnt.content:
+                        components.extend(_parse_decl_stmt(c, allow_intent=False, allow_access=False, declared_in="type"))
+                    continue
+                if isinstance(cnt, Fortran2003.End_Type_Stmt):
+                    if type_name is not None and components:
+                        type_def = TypeDef(type_name, components)
+                        nodes.append(type_def)
+                        type_map[type_name] = type_def
+                        continue
+                raise RuntimeError(f"Unsupported statement: {type(cnt)} {cnt}")
+            continue
+
         raise RuntimeError(f"Unsupported statement: {type(item)} {item}")
     return (nodes, decls)
 
@@ -510,7 +616,9 @@ def _search_use(name: str, only: Optional[List[str]], decl_map: dict, module_map
     if used and used.decls is not None:
         for d in used.decls:
             if only is None or (d.name in only):
-                decl_map[d.name] = _clone_decl(d, declared_in="use")
+                d = d.copy()
+                d.declared_in = "use"
+                decl_map[d.name] = d
     elif search_dirs:
         vars_map = _load_fadmod_decls(name, search_dirs)
         for vname, info in vars_map.items():
@@ -534,7 +642,7 @@ def _search_use(name: str, only: Optional[List[str]], decl_map: dict, module_map
                         declared_in="use",
                     )
 
-def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
+def _parse_from_reader(reader, src_name, *, search_dirs=None, decl_map=None, type_map=None) -> List[Module]:
     factory = ParserFactory().create(std="f2008")
     ast = factory(reader)
     output = []
@@ -546,7 +654,14 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
         output.append(mod_node)
         module_map[name] = mod_node
 
-        decl_map = {}
+        if decl_map is not None:
+            decl_map_new = decl_map.copy()
+        else:
+            decl_map_new = {}
+        if type_map is not None:
+            type_map_new = type_map.copy()
+        else:
+            type_map_new = {}
         module_directives = {}
         allocate_vars: List[OpVar] = []
 
@@ -561,7 +676,8 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
                 nodes, decls = _parse_decls(
                             part,
                             directives=module_directives,
-                            decl_map=decl_map,
+                            decl_map=decl_map_new,
+                            type_map=type_map_new,
                             declared_in="module",
                             allow_intent=False,
                             allow_access=True,
@@ -571,8 +687,8 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
                         )
                 if "CONSTANT_VARS" in module_directives:
                     for n in module_directives["CONSTANT_VARS"]:
-                        if n in decl_map:
-                            decl_map[n].constant = True
+                        if n in decl_map_new:
+                            decl_map_new[n].constant = True
                 mod_node.decls = Block(decls)
                 mod_node.body.extend(nodes)
                 continue
@@ -591,7 +707,13 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None) -> List[Module]:
                     ):
                         mod_node.routines.append(
                             _parse_routine(
-                                c, src_name, allocate_vars, decl_map, module_map, search_dirs,
+                                content=c,
+                                src_name=src_name,
+                                allocate_vars=allocate_vars,
+                                decl_map_mod=decl_map_new,
+                                type_map_mod=type_map_new,
+                                module_map=module_map,
+                                search_dirs=search_dirs,
                             )
                         )
                     else:
@@ -626,12 +748,13 @@ def _parse_routine(content,
                    src_name: str,
                    allocate_vars: List[OpVar],
                    decl_map_mod: dict,
-                   module_map, dict,
+                   type_map_mod: dict,
+                   module_map: dict,
                    search_dirs: Optional[List[str]]=None
                    ):
     """Return node tree correspoinding to the input AST"""
 
-    def _parse_stmt(stmt, decl_map: dict) -> Optional[Node]:
+    def _parse_stmt(stmt, decl_map: dict, type_map: dict) -> Optional[Node]:
         if isinstance(stmt, Fortran2003.Comment):
             return None
         line_no = None
@@ -643,14 +766,16 @@ def _parse_routine(content,
             "code": stmt.string,
         }
         if isinstance(stmt, Fortran2003.Assignment_Stmt):
-            lhs = _stmt2op(stmt.items[0], decl_map)
-            rhs = _stmt2op(stmt.items[2], decl_map)
+            lhs = _stmt2op(stmt.items[0], decl_map, type_map)
+            rhs = _stmt2op(stmt.items[2], decl_map, type_map)
             return Assignment(lhs, rhs, False, info)
         if isinstance(stmt, Fortran2003.Pointer_Assignment_Stmt):
-            lhs = _stmt2op(stmt.items[0], decl_map)
-            rhs = _stmt2op(stmt.items[2], decl_map)
+            lhs = _stmt2op(stmt.items[0], decl_map, type_map)
+            rhs = _stmt2op(stmt.items[2], decl_map, type_map)
             return PointerAssignment(lhs, rhs, info=info)
         if isinstance(stmt, Fortran2003.Write_Stmt):
+            return None
+        if isinstance(stmt, Fortran2003.Print_Stmt):
             return None
         if isinstance(stmt, Fortran2003.Call_Stmt):
             name = stmt.items[0].tofortran()
@@ -666,7 +791,7 @@ def _parse_routine(content,
                         if arg.items[0] is not None:
                             key = str(arg.items[0])
                         val = arg.items[1]
-                    args.append(_stmt2op(val, decl_map))
+                    args.append(_stmt2op(val, decl_map, type_map))
                     arg_keys.append(key)
             return CallStatement(name, args, arg_keys=arg_keys, info=info)
         if isinstance(stmt, Fortran2003.Allocate_Stmt):
@@ -678,7 +803,7 @@ def _parse_routine(content,
             vars = []
             if alloc_list is not None:
                 for alloc in alloc_list.items:
-                    var = _stmt2op(alloc.items[0], decl_map)
+                    var = _stmt2op(alloc.items[0], decl_map, type_map)
                     shape = alloc.items[1]
                     if shape is not None:
                         dims = []
@@ -689,12 +814,12 @@ def _parse_routine(content,
                                 if lb is None and ub is None:
                                     dims.append(None)
                                 elif lb is None:
-                                    dims.append(_stmt2op(ub, decl_map))
+                                    dims.append(_stmt2op(ub, decl_map, type_map))
                                 else:
                                     dims.append(
                                         OpRange([
-                                            _stmt2op(lb, decl_map),
-                                            _stmt2op(ub, decl_map),
+                                            _stmt2op(lb, decl_map, type_map),
+                                            _stmt2op(ub, decl_map, type_map),
                                             None,
                                         ])
                                     )
@@ -702,7 +827,7 @@ def _parse_routine(content,
                             for spec in shape.items:
                                 if isinstance(spec, str):
                                     continue
-                                dims.append(_stmt2op(spec, decl_map))
+                                dims.append(_stmt2op(spec, decl_map, type_map))
                         if dims:
                             var = var.change_index(AryIndex(dims))
                     vars.append(var)
@@ -719,7 +844,7 @@ def _parse_routine(content,
                 for obj in obj_list.items:
                     if isinstance(obj, str):
                         continue
-                    v = _stmt2op(obj, decl_map)
+                    v = _stmt2op(obj, decl_map, type_map)
                     var = next((v2 for v2 in allocate_vars if v2.name == v.name), None)
                     if var is None:
                         raise ValueError(
@@ -732,7 +857,7 @@ def _parse_routine(content,
             if isinstance(stmt.content[0], Fortran2003.Comment):
                 # skip comment
                 stmt.content.pop(0)
-            cond = _stmt2op(stmt.content[0].items[0], decl_map)
+            cond = _stmt2op(stmt.content[0].items[0], decl_map, type_map)
             i = 1
             seg = []
             while i < len(stmt.content):
@@ -748,12 +873,12 @@ def _parse_routine(content,
                     break
                 seg.append(itm)
                 i += 1
-            body = _block(seg, decl_map)
+            body = _block(seg, decl_map, type_map)
             cond_blocks.append((cond, body))
             while i < len(stmt.content):
                 itm = stmt.content[i]
                 if isinstance(itm, Fortran2003.Else_If_Stmt):
-                    cond2 = _stmt2op(itm.items[0], decl_map)
+                    cond2 = _stmt2op(itm.items[0], decl_map, type_map)
                     i += 1
                     seg = []
                     while i < len(stmt.content):
@@ -769,7 +894,7 @@ def _parse_routine(content,
                             break
                         seg.append(j)
                         i += 1
-                    blk = _block(seg, decl_map)
+                    blk = _block(seg, decl_map, type_map)
                     cond_blocks.append((cond2, blk))
                 elif isinstance(itm, Fortran2003.Else_Stmt):
                     i += 1
@@ -780,20 +905,20 @@ def _parse_routine(content,
                             break
                         seg.append(j)
                         i += 1
-                    cond_blocks.append((None, _block(seg, decl_map)))
+                    cond_blocks.append((None, _block(seg, decl_map, type_map)))
                 elif isinstance(itm, Fortran2003.End_If_Stmt):
                     i += 1
                 else:
                     i += 1
             return IfBlock(cond_blocks)
         if isinstance(stmt, Fortran2008.if_stmt_r837.If_Stmt):
-            cond = _stmt2op(stmt.items[0], decl_map)
-            body = _block([stmt.items[1]], decl_map)
+            cond = _stmt2op(stmt.items[0], decl_map, type_map)
+            body = _block([stmt.items[1]], decl_map, type_map)
             if body is None:
                 return None
             return IfBlock([(cond, body)])
         if isinstance(stmt, Fortran2003.Case_Construct):
-            expr = _stmt2op(stmt.content[0].items[0], decl_map)
+            expr = _stmt2op(stmt.content[0].items[0], decl_map, type_map)
             cond_blocks = []
             default = None
             i = 1
@@ -806,16 +931,42 @@ def _parse_routine(content,
                 ):
                     seg.append(stmt.content[i])
                     i += 1
-                blk = _block(seg, decl_map)
+                blk = _block(seg, decl_map, type_map)
                 if stmt_cond.tofortran() == "CASE DEFAULT":
                     conds = None
                 else:
                     conds = tuple(
-                        _stmt2op(cond, decl_map)
+                        _stmt2op(cond, decl_map, type_map)
                         for cond in stmt_cond.items[0].items[0].items
                     )
                 cond_blocks.append((conds, blk))
             return SelectBlock(cond_blocks, expr)
+        if isinstance(stmt, Fortran2003.Select_Type_Construct):
+            expr = _stmt2op(stmt.content[0].items[1], decl_map, type_map)
+            cond_blocks = []
+            default = None
+            i = 1
+            while i < len(stmt.content) - 1:
+                stmt_cond = stmt.content[i]
+                i += 1
+                seg = []
+                while i < len(stmt.content) - 1 and not isinstance(
+                    stmt.content[i], Fortran2003.Type_Guard_Stmt
+                ):
+                    seg.append(stmt.content[i])
+                    i += 1
+                cond = stmt_cond.items[1].string
+                decl_map_new = decl_map.copy()
+                decl = decl_map[expr.name].copy()
+                if cond in type_map:
+                    decl.typename = f"type({cond})"
+                    decl.type_def = type_map[cond]
+                else:
+                    decl.typename = cond
+                decl_map_new[expr.name] = decl
+                blk = _block(seg, decl_map_new, type_map)
+                cond_blocks.append(((OpType(cond),), blk))
+            return SelectBlock(cond_blocks, expr, select_type=True)
         if isinstance(stmt, Fortran2008.Block_Nonlabel_Do_Construct):
             idx = 0
             while idx < len(stmt.content) and isinstance(
@@ -823,22 +974,22 @@ def _parse_routine(content,
             ):
                 idx += 1
             idx += 1
-            body = _block(stmt.content[idx:-1], decl_map)
+            body = _block(stmt.content[idx:-1], decl_map, type_map)
             if not isinstance(stmt.content[-1], Fortran2003.End_Do_Stmt):
                 raise ValueError("Unexpected error")
             label = stmt.content[-1].items[1].string if stmt.content[-1].items[1] is not None else None
             if stmt.content[idx-1].items[1].items[0] is not None:
-                cond = _stmt2op(stmt.content[idx - 1].items[1].items[0], decl_map)
+                cond = _stmt2op(stmt.content[idx - 1].items[1].items[0], decl_map, type_map)
                 return DoWhile(body, cond, label=label)
             else:
                 itm = stmt.content[idx - 1].items[1].items[1]
-                index = _stmt2op(itm[0], decl_map)
-                start_val = _stmt2op(itm[1][0], decl_map)
-                end_val = _stmt2op(itm[1][1], decl_map)
+                index = _stmt2op(itm[0], decl_map, type_map)
+                start_val = _stmt2op(itm[1][0], decl_map, type_map)
+                end_val = _stmt2op(itm[1][1], decl_map, type_map)
                 if len(itm[1]) == 2:
                     step = None
                 else:
-                    step = _stmt2op(itm[1][2], decl_map)
+                    step = _stmt2op(itm[1][2], decl_map, type_map)
                 return DoLoop(body, index, OpRange([start_val, end_val, step]), label=label)
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return Statement("return")
@@ -853,10 +1004,10 @@ def _parse_routine(content,
         print(stmt.items)
         raise ValueError(f"stmt is not supported: {stmt}")
 
-    def _block(body_list, decl_map: dict) -> Block:
+    def _block(body_list, decl_map: dict, type_map: dict) -> Block:
         blk = Block([])
         for st in body_list:
-            node = _parse_stmt(st, decl_map)
+            node = _parse_stmt(st, decl_map, type_map)
             if node is not None:
                 blk.append(node)
         return blk
@@ -864,6 +1015,7 @@ def _parse_routine(content,
     stmt = None
     directives = {}
     decl_map = decl_map_mod.copy()
+    type_map = type_map_mod.copy()
     for item in content.content:
         if isinstance(item, Fortran2003.Comment):
             text = item.items[0].strip()
@@ -888,6 +1040,7 @@ def _parse_routine(content,
                 item,
                 directives=directives,
                 decl_map=decl_map,
+                type_map=type_map,
                 declared_in="routine",
                 allow_intent=True,
                 allow_access=False,
@@ -899,7 +1052,7 @@ def _parse_routine(content,
             continue
         if isinstance(item, Fortran2003.Execution_Part):
             for stmt in item.content:
-                node = _parse_stmt(stmt, routine.decl_map)
+                node = _parse_stmt(stmt, routine.decl_map, type_map)
                 if node is not None:
                     routine.content.append(node)
             continue

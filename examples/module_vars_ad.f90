@@ -46,9 +46,7 @@ contains
     return
   end subroutine inc_and_use_rev_ad
 
-  subroutine inc_and_use_fwd_rev_ad(x, y)
-    real, intent(in)  :: x
-    real, intent(out) :: y
+  subroutine inc_and_use_fwd_rev_ad()
 
     call fautodiff_data_storage_push(a)
 
