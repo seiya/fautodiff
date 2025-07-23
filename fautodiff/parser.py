@@ -55,6 +55,7 @@ from .operators import (
     OpLogic,
     OpMul,
     OpNeg,
+    OpNot,
     OpPow,
     OpRange,
     OpReal,
@@ -145,10 +146,15 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
         )
 
     if isinstance(stmt, Fortran2003.Part_Ref):
-        name = stmt.items[0].tofortran()
+        name = stmt.items[0].string
         index = AryIndex([_stmt2op(x, decl_map, type_map) for x in stmt.items[1].items])
-        if name in decl_map: # must be array
+        # check it is array or not
+        decl = None
+        if type_map is not None and name in type_map:
+            decl = type_map[name]
+        elif name in decl_map:
             decl = decl_map[name]
+        if decl is not None:
             return OpVar(
                 name=name,
                 index=index,
@@ -241,6 +247,12 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
 
         else:
             raise ValueError(f"Unsupported Equiv_Operand type: {stmt}")
+
+    if isinstance(stmt, Fortran2003.And_Operand):
+        if stmt.items[0] == ".NOT.":
+            return OpNot([_stmt2op(stmt.items[1], decl_map, type_map)])
+        else:
+            raise ValueError(f"Unsupported And_Operand: {stmt}")
 
     if isinstance(stmt, Fortran2003.Parenthesis):
         return _stmt2op(stmt.items[1], decl_map, type_map)
@@ -581,6 +593,8 @@ def _parse_decls(
         if isinstance(item, Fortran2003.Derived_Type_Def):
             type_name = None
             components: List[Declaration] = []
+            procs: List[list] = []
+            access = None
             for cnt in item.content:
                 if isinstance(cnt, Fortran2003.Derived_Type_Stmt):
                     if isinstance(cnt.items[0], Fortran2003.Type_Attr_Spec_List):
@@ -591,17 +605,37 @@ def _parse_decls(
                                     raise RuntimeError(f"Type definition not found: {parent}")
                                 for decl in type_map[parent].iter_children():
                                     components.append(decl)
-                            else:
-                                raise RuntimeError(f"Unsupported spec: {type(spec)} {spec}")
+                                continue
+                            if isinstance(spec, Fortran2003.Access_Spec):
+                                if spec.string ==  "PUBLIC":
+                                    access = "public"
+                                elif spec.string == "PRIVATE":
+                                    access = "private"
+                                continue
+                            print(cnt)
+                            raise RuntimeError(f"Unsupported spec: {type(spec)} {spec}")
                     type_name = cnt.items[1].string
                     continue
                 if isinstance(cnt, Fortran2003.Component_Part):
                     for c in cnt.content:
                         components.extend(_parse_decl_stmt(c, allow_intent=False, allow_access=False, declared_in="type"))
                     continue
+                if isinstance(cnt, Fortran2003.Type_Bound_Procedure_Part):
+                    for c in cnt.content:
+                        if isinstance(c, Fortran2003.Contains_Stmt):
+                            continue
+                        if isinstance(c, Fortran2003.Specific_Binding):
+                            attrs = None
+                            if isinstance(c.items[1], Fortran2003.Binding_Attr_List):
+                                attrs = [item.string for item in c.items[1].items]
+                            name = c.items[3].string
+                            init = c.items[4].string
+                            procs.append([name, attrs, init])
+                    continue
+
                 if isinstance(cnt, Fortran2003.End_Type_Stmt):
                     if type_name is not None and components:
-                        type_def = TypeDef(type_name, components)
+                        type_def = TypeDef(name=type_name, components=components, procs=procs, access=access)
                         nodes.append(type_def)
                         type_map[type_name] = type_def
                         continue
@@ -854,7 +888,7 @@ def _parse_routine(content,
             return Deallocate(vars)
         if isinstance(stmt, Fortran2003.If_Construct):
             cond_blocks = []
-            if isinstance(stmt.content[0], Fortran2003.Comment):
+            while isinstance(stmt.content[0], Fortran2003.Comment):
                 # skip comment
                 stmt.content.pop(0)
             cond = _stmt2op(stmt.content[0].items[0], decl_map, type_map)
