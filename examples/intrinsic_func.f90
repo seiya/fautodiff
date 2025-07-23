@@ -28,6 +28,18 @@ contains
     return
   end subroutine math_intrinsics
 
+  subroutine reduction(x, a, b, c, d)
+    real, intent(in) :: x(:)
+    real, intent(out) :: a, b, c, d
+
+    a = sum(x)
+    b = sum(x(:))
+    c = minval(x)
+    d = maxval(x)
+
+    return
+  end subroutine reduction
+
   subroutine non_differentiable_intrinsics(str, arr, idx, lb, ub, x, y)
     character(len=*), intent(in) :: str
     real, intent(in) :: arr(:)
