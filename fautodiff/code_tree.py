@@ -67,11 +67,11 @@ class Node:
 
     def copy(self) -> "Node":
         """Return a shallow copy of this node."""
-        raise NotImplementedError
+        raise NotImplementedError(f"class: {type(self)}")
 
     def render(self, indent: int = 0) -> List[str]:
         """Return the formatted Fortran code lines for this node."""
-        raise NotImplementedError
+        raise NotImplementedError(f"class: {type(self)}")
 
     def is_effectively_empty(self) -> bool:
         """Return ``True`` if removing this node does not change execution."""
@@ -160,7 +160,7 @@ class Node:
 
     def deep_clone(self) -> "Node":
         """Return a deep clone of this node tree with new ids."""
-        raise NotImplementedError
+        raise NotImplementedError(f"class: {type(self)}")
 
     @classmethod
     def reset(cls) -> None:
@@ -213,11 +213,11 @@ class Node:
 
     def insert_before(self, id: int, node: "Node"):
         """Insert node to the before of node with id"""
-        raise NotImplementedError
+        raise NotImplementedError(f"class: {type(self)}")
 
     def insert_begin(self, node: "Node"):
         """Insert node to the before of node with id"""
-        raise NotImplementedError
+        raise NotImplementedError(f"class: {type(self)}")
 
     def remove_by_id(self, node_id: int) -> bool:
         """Remove the node with ``node_id`` from this subtree.
@@ -2386,7 +2386,9 @@ class TypeDef(Node):
 
     name: str
     components: List[Declaration]
-    map: Dict[str, Declaration] = field(init=False, repr=False, default=None)
+    procs: List[list]
+    access: Optional[str] = None
+    map: Dict[str, Declaration] = field(init=False, repr=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -2401,6 +2403,9 @@ class TypeDef(Node):
 
     def iter_children(self) -> Iterator[Node]:
         return iter(self.components)
+
+    def copy(self) -> "TypeDef":
+        return TypeDef(self.name, self.components, self.procs, self.access)
 
 @dataclass
 class BranchBlock(Node):
