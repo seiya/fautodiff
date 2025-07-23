@@ -777,13 +777,14 @@ class OpVar(OpLeaf):
     def add_suffix(self, suffix: Optional[str] = None) -> "OpVar":
         if suffix is None:
             return self
+        index = self.index
         if self.ref_var is None:
             name = f"{self.name}{suffix}"
-            index = self.index
             if index is not None:
                 index = AryIndex(list(index.dims) if index.dims is not None else None)
             ref_var = None
         else:
+            name = self.name
             ref_var = self.ref_var.add_suffix(suffix)
         return OpVar(
             name,
