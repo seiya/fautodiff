@@ -307,39 +307,49 @@ class VarList:
                 j1 = self._get_int(dim2[1])
 
             if isinstance(dim1, OpRange) and isinstance(dim2, OpRange): # both are range
-                if i0 is None or i1 is None or j0 is None or j1 is None: # either is non-integer
+                if ((dim1[0] is not None and i0 is None) or
+                    (dim1[1] is not None and i1 is None) or
+                    (dim2[0] is not None and j0 is None) or
+                    (dim2[1] is not None and j1 is None)
+                ): # either is variable
                     continue # do nothing (overlap cannot be judged)
-
-                if (isinstance(i1, int) and isinstance(j0, int) and i1 < j0) or (isinstance(j1, int) and isinstance(j1, int) and j1 < i0): # no overlap
+                # dim1[0,1] and dim2[0,1] are integer or None
+                if (i1 is not None and j0 is not None and i1 < j0) or (j1 is not None and i0 is not None and j1 < i0): # no overlap
                     continue
-                if (j0 is None or (isinstance(i0, int) and j0 <= i0)) and (j1 is None or (isinstance(i1, int) and i1 <= j1)): # dim2 covers entire dim1
+                if (j0 is None or (i0 is not None and j0 <= i0)) and (j1 is None or (i1 is not None and i1 <= j1)): # dim2 covers entire dim1
                     self.vars[name].remove(index)
                     continue
-                if ((i0 is None and j0 is not None) or (isinstance(i0, int) and isinstance(j0, int) and i0 < j0)) and ((i1 is None and j1 is not None) or (isinstance(j1, int) and isinstance(i1, int) and j1 < i1)): # dim2 is sub of dim1
+                if (j0 is not None and j1 is not None and
+                    (i0 is None or (i0 is not None and i0 < j0)) and
+                    (i1 is None or (i1 is not None and j1 < i1))): # dim2 is sub of dim1
                     if i0 is not None and i0 == j0-1:
                         index[i] = OpInt(i0) # replaced
                     else:
-                        index[i] = OpRange([i0, j0-1]) # replaced
+                        index[i] = OpRange([dim1[0], j0-1]) # replaced
                     if i1 is not None and j1+1 == i1:
                         index_new = index.copy()
                         index_new[i] = OpInt(i1)
                         self.vars[name].append(index_new) # added
                     else:
                         index_new = index.copy()
-                        index_new[i] = OpRange([j1+1, i1])
+                        index_new[i] = OpRange([j1+1, dim1[1]])
                         self.vars[name].append(index_new) # added
                     continue
-                if (j0 is None or (isinstance(i0, int) and j0 <= i0)) and ((i1 is None and j1 is not None) or (isinstance(j1, int) and isinstance(i1, int) and j1 < i1)):
+                if ((j0 is None or (i0 is not None and j0 <= i0)) and
+                    (j1 is not None and ((i1 is None) or (i1 is not None and j1 < i1)))
+                ):
                     if i1 is not None and j1 + 1 == i1:
                         index[i] = OpInt(i1) # replaced
                     else:
-                        index[i] = OpRange([j1+1, i1]) # replaced
+                        index[i] = OpRange([j1+1, dim1[1]]) # replaced
                     continue
-                if ((i0 is None and j0 is not None) or (isinstance(i0, int) and isinstance(j0, int) and i0 < j0)) and (j1 is None or (isinstance(i1, int) and i1 <= j1)):
+                if (j0 is not None and ((i0 is None) or (i0 is not None and i0 < j0)) and
+                    (j1 is None or (i1 is not None and i1 <= j1))
+                ):
                     if i0 is not None and i0 == j0 - 1:
                         index[i] = OpInt(i0) # replaced
                     else:
-                        index[i] = OpRange([i0, j0-1]) # replaced
+                        index[i] = OpRange([dim1[0], j0-1]) # replaced
                     continue
                 raise RuntimeError(f"Unexpected: {dim1} {dim2}")
                 continue
@@ -367,25 +377,25 @@ class VarList:
                     if i1 is not None and v2 + 1 == i1:
                         index[i] = OpInt(i1) # replaced
                     else:
-                        index[i] = OpRange([v2+1, i1]) # replaced
+                        index[i] = OpRange([v2+1, dim1[1]]) # replaced
                     continue
                 if i1 is not None and v2 == i1:
                     if i0 is not None and i0 == v2 - 1:
                         index[i] = OpInt(i0) # replaced
                     else:
-                        index[i] = OpRange([i0, v2-1]) # replaced
+                        index[i] = OpRange([dim1[0], v2-1]) # replaced
                     continue
                 if i0 is not None and i0  == v2 - 1:
                     index[i] = OpInt(i0) # replaced
                 else:
-                    index[i] = OpRange([i0, v2-1]) # replaced
+                    index[i] = OpRange([dim1[0], v2-1]) # replaced
                 if i1 is not None and v2 + 1 == i1:
                     index_new = index.copy()
                     index_new[i] = OpInt(i1)
                     self.vars[name].append(index_new) # added
                 else:
                     index_new = index.copy()
-                    index_new[i] = OpRange([v2+1, i1])
+                    index_new[i] = OpRange([v2+1, dim1[1]])
                     self.vars[name].append(index_new) # added
                 continue
 
