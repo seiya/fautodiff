@@ -116,7 +116,7 @@ class TestFortranADCode(unittest.TestCase):
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_derived_alloc(self):
-        self._run_test('derived_alloc', ['derived_alloc_example'])
+        self._run_test('derived_alloc', ['derived_alloc'])
 
     mpifort = shutil.which('mpifort')
 

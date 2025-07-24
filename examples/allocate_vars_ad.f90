@@ -76,6 +76,7 @@ contains
     end if
     do i = 1, n
       mod_arr_diff_ad(i) = x_ad * i ! mod_arr_diff(i) = i * x
+      mod_arr_diff(i) = i * x
     end do
 
     return
@@ -91,7 +92,6 @@ contains
 
     do i = n, 1, - 1
       x_ad = mod_arr_diff_ad(i) * i + x_ad ! mod_arr_diff(i) = i * x
-      mod_arr_diff_ad(i) = 0.0 ! mod_arr_diff(i) = i * x
     end do
     if (allocated(mod_arr_diff_ad)) then
       deallocate(mod_arr_diff_ad)

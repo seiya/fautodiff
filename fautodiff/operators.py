@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar
+from typing import Iterable, List, Tuple, Optional, Iterator, Union, ClassVar
 from fractions import Fraction
 import re
 import copy
@@ -51,8 +51,8 @@ class AryIndex:
     def __len__(self) -> int:
         return len(self.dims) if self.dims is not None else 0
 
-    def __getitem__(self, index: int) -> Optional["Operator"]:
-        return self.dims[index] if self.dims is not None and index < len(self.dims) else None
+    def __getitem__(self, index: Union[int, slice]) -> Optional[Union["Operator", List[Optional["Operator"]]]]:
+        return self.dims[index] if self.dims is not None else None
 
     def __setitem__(self, index: int, var: Operator) -> None:
         if self.dims is None:
@@ -75,7 +75,9 @@ class AryIndex:
         if self.dims is None:
             return not other.is_partial_access()
         if len(self.dims) != len(other.dims):
-            raise ValueError("Different number of dimensions")
+            print([self])
+            print([other])
+            raise ValueError(f"Different number of dimensions: {self} {other}")
         for i, dim1 in enumerate(self.dims):
             dim2 = other.dims[i]
             if dim1 == dim2:
@@ -121,7 +123,7 @@ class AryIndex:
     def _check_cover(index1, index2) -> bool:
         """Return true if index1 >= index2"""
         if len(index1.dims) != len(index2.dims):
-            raise ValueError("Different number of dimensions")
+            raise ValueError(f"Different number of dimensions: {index1} {index2}")
         if index1 == index2:
             return True
         for i, dim1 in enumerate(index1):
@@ -249,12 +251,12 @@ class Operator:
             ]
         return clone
 
-    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
+    def collect_vars(self, without_index: bool = False, without_refvar: bool = False, without_checkfunc: bool = False) -> List[OpVar]:
         vars = []
         if self.args is None:
             return vars
         for arg in self.args:
-            for var in arg.collect_vars(without_index):
+            for var in arg.collect_vars(without_index, without_refvar, without_checkfunc):
                 if var not in vars:
                     vars.append(var)
         return vars
@@ -548,7 +550,7 @@ class OpLeaf(Operator):
     kind: Optional[str] = None
     PRIORITY: ClassVar[int] = 0
 
-    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
+    def collect_vars(self, without_index: bool = False, without_refvar: bool = False, without_checkfunc: bool = False) -> List[OpVar]:
         return []
 
     def is_array(self) -> bool:
@@ -563,7 +565,7 @@ class OpLeaf(Operator):
 @dataclass
 class OpNum(OpLeaf):
 
-    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
+    def collect_vars(self, without_index: bool = False, without_refvar: bool = False, without_checkfunc: bool = False) -> List[OpVar]:
         return []
 
     def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
@@ -734,10 +736,77 @@ class OpVar(OpLeaf):
         self.ref_var = ref_var
         if self.ad_target is None and self.typename is not None:
             typename = self.typename.lower()
+            if typename.startswith(("type", "class")):
+                raise ValueError("ad_target must be set for type or class variable")
             is_real_type = typename.startswith("real") or typename.startswith("double")
             self.ad_target = is_real_type and not self.is_constant
         elif self.ad_target is None:
             self.ad_target = False
+
+    def name_ext(self) -> str:
+        name = self.name
+        if self.ref_var is not None:
+            name = f"{self.ref_var.name_ext()}%{name}"
+        return name
+
+    def get_dims(self) -> Optional[List[str]]:
+        if self.index is None and self.dims is None:
+            return None
+        if self.dims is None:
+            ndims = len(self.index)
+            if self.reduced_dims:
+                ndims -= len(self.reduced_dims)
+            return [":"] * ndims
+        if self.reduced_dims is None:
+            return self.dims
+        return [dim for i, dim in enumerate(self.dims) if i not in self.reduced_dims]
+
+    def ndims_ext(self) -> List[int]:
+        ndims: List[int] = []
+        if self.ref_var is not None:
+            ndims.extend(self.ref_var.ndims_ext())
+        if self.dims is not None or self.index is not None:
+            ld = len(self.dims) if self.dims is not None else None
+            li = len(self.index) if self.index is not None else None
+            if ld is not None and li is not None:
+                if ld != li:
+                    raise RuntimeError(f"dims and index is inconsistent: {self.name} {self.dims} {self.index}")
+            lr = len(self.reduced_dims) if self.reduced_dims is not None else 0
+            if ld is not None:
+                ndims.append(ld - lr)
+            else:
+                ndims.append(li - lr)
+        else:
+            ndims.append(0)
+        return ndims
+
+    def get_index(self, ignore_dims: bool = False) -> Optional[AryIndex]:
+        index = self.index
+        if ignore_dims:
+            if index is None:
+                return None
+        else:
+            if index is None and self.dims is None:
+                return None
+            if index is None:
+                index = AryIndex([None] * len(self.dims))
+        if self.reduced_dims is None:
+            return index
+        return AryIndex([idx for i, idx in enumerate(index) if i not in self.reduced_dims])
+
+    def concat_index(self, ignore_dims: bool = False) -> Optional[AryIndex]:
+        index: List[Optional[Operator]] = []
+        if self.ref_var is not None:
+            index_ref = self.ref_var.concat_index()
+            if index_ref is not None:
+                index.extend(index_ref)
+        index_self = self.get_index(ignore_dims)
+        if index_self:
+            for idx in index_self:
+                index.append(idx)
+        if index:
+            return AryIndex(index)
+        return None
 
     @property
     def is_real_type(self) -> bool:
@@ -753,8 +822,10 @@ class OpVar(OpLeaf):
             return True
         return False
 
-    def change_index(self, index) -> OpVar:
-        if index == self.index:
+    def change_index(self, index: Optional[AryIndex]) -> OpVar:
+        if ((index is None and self.index is None) or
+            (isinstance(index, AryIndex) and isinstance(self.index, AryIndex) and index == self.index)
+            ):
             return self
         return OpVar(
             name=self.name,
@@ -778,13 +849,12 @@ class OpVar(OpLeaf):
         if suffix is None:
             return self
         index = self.index
+        name = f"{self.name}{suffix}"
         if self.ref_var is None:
-            name = f"{self.name}{suffix}"
             if index is not None:
                 index = AryIndex(list(index.dims) if index.dims is not None else None)
             ref_var = None
         else:
-            name = self.name
             ref_var = self.ref_var.add_suffix(suffix)
         return OpVar(
             name,
@@ -810,14 +880,16 @@ class OpVar(OpLeaf):
             clone.index = self.index.deep_clone()
         return clone
 
-    def collect_vars(self, without_index: bool = False) -> List["OpVar"]:
+    def collect_vars(self, without_index: bool = False, without_refvar: bool = False, without_checkfunc: bool = False) -> List["OpVar"]:
         vars = [self]
         if (not without_index) and self.index is not None:
-            for v in self.index.collect_vars():
-                if not v in vars:
-                    vars.append(v)
-        if self.ref_var is not None:
-            vars.extend(self.ref_var.collect_vars())
+            for i, idx in enumerate(self.index):
+                if idx is not None and (not self.reduced_dims or i not in self.reduced_dims):
+                    for var in idx.collect_vars():
+                        if not var in vars:
+                            vars.append(var)
+        if not without_refvar and self.ref_var is not None:
+            vars.extend(self.ref_var.collect_vars(without_index))
         return vars
 
     def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
@@ -828,27 +900,23 @@ class OpVar(OpLeaf):
     def is_partial_access(self) -> bool:
         if self.index is None:
             return False
-        return self.index.is_partial_access()
+        return self.get_index().is_partial_access()
 
-    def index_list(self) -> List[str]:
-        if self.index is None:
+    def index_list(self, without_refvar: bool = False) -> List[str]:
+        if without_refvar:
+            index = self.get_index(ignore_dims=True)
+        else:
+            index = self.concat_index(ignore_dims=True)
+        if index is None:
             return []
-        return self.index.list()
-
-    def index_str(self) -> str:
-        index_list = self.index_list()
-        if self.index is not None and self.reduced_dims is not None:
-            for i in reversed(self.reduced_dims) or []:
-                if i < len(index_list):
-                    del index_list[i]
-        return ",".join(index_list)
+        return index.list()
 
     def __str__(self) -> str:
         if self.ref_var is not None:
             ref_var = f"{self.ref_var}%"
         else:
             ref_var = ""
-        index_str = self.index_str()
+        index_str = ",".join(self.index_list(without_refvar=True))
         if not index_str:
             return f"{ref_var}{self.name}"
         else:
@@ -1066,6 +1134,19 @@ class OpFunc(Operator):
     def is_array(self) -> bool:
         return any([arg.is_array() for arg in self.args])
 
+    def collect_vars(self, without_index: bool = False, without_refvar: bool = False, without_checkfunc: bool = False) -> List[OpVar]:
+        vars = []
+        if without_checkfunc and self.name in ("allocated", "associated"):
+            return vars
+        if self.args is None:
+            return vars
+        for arg in self.args:
+            for var in arg.collect_vars(without_index, without_refvar, without_checkfunc):
+                if var not in vars:
+                    vars.append(var)
+        return vars
+
+
     def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
 
         if self.name in NONDIFF_INTRINSICS:
@@ -1223,7 +1304,7 @@ class OpRange(Operator):
             if isinstance(val, int):
                 self.args[i] = OpInt(val)
 
-    def collect_vars(self, without_index: bool = False) -> List[OpVar]:
+    def collect_vars(self, without_index: bool = False, without_refvar: bool = False, without_checkfunc: bool = False) -> List[OpVar]:
         """Collect variables from the range operator."""
         vars = []
         if not without_index:
