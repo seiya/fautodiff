@@ -135,6 +135,7 @@ class Node:
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
         """Return AD converted nodes."""
@@ -200,6 +201,23 @@ class Node:
                 return node
             node = node.parent
         return None
+
+    def find_decl(self, var: OpVar) -> Optional[Declaration]:
+        if not(isinstance(self, Module) or isinstance(self, Routine)):
+            raise NotImplementedError(f"class: {type(self)}")
+        name = var.name
+        if var.ref_var is not None:
+            decl = self.find_decl(var.ref_var)
+            if decl is None or decl.type_def is None:
+                raise RuntimeError(f"type_def not found: {decl}")
+            for decl in decl.type_def.iter_children():
+                if decl.name == name:
+                    return decl
+            raise ValueError(f"name not found: {name} {decl.type_def}")
+        decl = self.decls.find_by_name(name)
+        if decl is None and getattr(self, "decl_map", None) is not None:
+            decl = self.decl_map.get(name)
+        return decl
 
     def find_by_id(self, node_id: int) -> Optional["Node"]:
         """Return the node with ``node_id`` from this subtree or ``None``."""
@@ -343,6 +361,7 @@ class Node:
             ext = "_pushpop"
         else:
             ext = ""
+        name = name.replace("%", "_")
         if no_suffix:
             return f"{name}_save_{id}{ext}"
         else:
@@ -550,7 +569,7 @@ class Node:
                     assigns.extend(extras)
                     return assigns
 
-            vars = rhs.collect_vars()
+            vars = rhs.collect_vars(without_index=True, without_refvar=True)
             if lhs in vars:
                 # move lhs to the last of vars
                 vars.remove(lhs)
@@ -614,6 +633,7 @@ class Block(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[List[str]] = None,
     ) -> List[Node]:
         ad_code: List[Node] = []
@@ -896,6 +916,7 @@ class ExitCycle(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         if reverse:
@@ -1120,6 +1141,7 @@ class CallStatement(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         if routine_map is None:
@@ -1340,8 +1362,8 @@ class CallStatement(Node):
 class Module(Node):
     """Representation of a Fortran module."""
     name: str
-    uses: Block = field(default_factory=Block)
-    body: Block = field(default_factory=Block)
+    uses: Optional[Block] = None
+    body: Optional[Block] = None
     decls: Optional[Block] = None
     routines: Block = field(default_factory=Block)
     directives: dict = field(default_factory=dict)
@@ -1359,11 +1381,15 @@ class Module(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         lines = [f"{space}module {self.name}\n"]
-        lines.extend(self.uses.render(indent+1))
-        lines.extend(self.body.render(indent+1))
+        if self.uses is not None:
+            lines.extend(self.uses.render(indent+1))
+        lines.extend(f"{space}  implicit none\n")
         if self.decls is not None:
             lines.append("\n")
             lines.extend(self.decls.render(indent+1))
+        if self.body is not None:
+            lines.append("\n")
+            lines.extend(self.body.render(indent+1))
         lines.append("\n")
         lines.append(f"{space}contains\n")
         lines.append("\n")
@@ -1373,12 +1399,12 @@ class Module(Node):
         lines.append(f"{space}end module {self.name}\n")
         return lines
 
-
     def find_use_modules(self) -> List[str]:
         mods = []
-        for child in self.body.iter_children():
-            if isinstance(child, Use):
-                mods.append(child.name)
+        if self.uses is not None:
+            for child in self.uses.iter_children():
+                if isinstance(child, Use):
+                    mods.append(child.name)
         return mods
 
 @dataclass
@@ -1421,6 +1447,7 @@ class Routine(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Routine]:
         raise RuntimeError("generate_ad for Routine is not allowed")
@@ -1546,9 +1573,7 @@ class Assignment(Node):
             raise ValueError(f"lhs must be OpVar: {type(self.lhs)}")
         if not isinstance(self.rhs, Operator):
             raise ValueError(f"rhs must be Operator: {type(self.rhs)}")
-        self._rhs_vars = []
-        for var in self.rhs.collect_vars():
-            self._rhs_vars.append(var)
+        self._rhs_vars = list(self.rhs.collect_vars(without_refvar=True))
         self._ufuncs = self.rhs.find_userfunc()
 
     def copy(self) -> "Assignment":
@@ -1581,6 +1606,7 @@ class Assignment(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Assignment]:
         if reverse:
@@ -1637,7 +1663,7 @@ class Assignment(Node):
                 raise ValueError(f"Must be VarList: {type(vars)}")
             vars = vars.copy()
             vars.remove(lhs)
-        for var in lhs.collect_vars(): # variables in indexes
+        for var in lhs.collect_vars(without_refvar=True): # variables in indexes
             if var != lhs:
                 vars.push(var)
         for var in self._rhs_vars:
@@ -1675,7 +1701,7 @@ class PointerAssignment(Node):
             raise ValueError(f"lhs must be OpVar: {type(self.lhs)}")
         if not isinstance(self.rhs, Operator):
             raise ValueError(f"rhs must be Operator: {type(self.rhs)}")
-        self._rhs_vars = list(self.rhs.collect_vars())
+        self._rhs_vars = list(self.rhs.collect_vars(without_refvar=True))
         self._ufuncs = self.rhs.find_userfunc()
 
     def copy(self) -> "PointerAssignment":
@@ -1708,6 +1734,7 @@ class PointerAssignment(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         return [self]
@@ -1783,6 +1810,7 @@ class ClearAssignment(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Assignment]:
         raise RuntimeError("This is AD code")
@@ -1843,24 +1871,32 @@ class SaveAssignment(Node):
 
     def __post_init__(self):
         super().__post_init__()
-        name = self.var.name
+        name = self.var.name_ext()
         if re.search(rf"save_\d+{AD_SUFFIX}", name):
             raise RuntimeError(f"Variable has aleady saved: {name}")
         if self.tmpvar is None:
             self.var = self.var.deep_clone()
+            dims = []
+            v = self.var
+            while v:
+                d = v.dims
+                if d:
+                    dims.extend(d)
+                v = v.ref_var
+            if dims:
+                dims = tuple(dims)
+            else:
+                dims = None
             self.tmpvar = OpVar(
                 self._save_var_name(name, self.id, pushpop=self.pushpop),
-                index=self.var.index,
-                kind=self.var.kind,
+                index=self.var.concat_index(),
+                dims=dims,
                 typename=self.var.typename,
+                kind=self.var.kind,
                 ad_target=self.var.ad_target,
                 is_constant=self.var.is_constant,
                 reference=self.var,
             )
-            print(self.tmpvar)
-            print(self.var)
-            if str(self.var) == "arr(i)":
-                raise RuntimeError
         if self.load:
             self.lhs = self.var
             self.rhs = self.tmpvar
@@ -1923,10 +1959,12 @@ class SaveAssignment(Node):
                 break
         if not found:
             return None
-        if self.load:
-            name = self.var.name
-            index = self.var.index
-            if not self.var.name in targets.names():
+        if self.load and self.var.ref_var is None:
+            name = self.var.name_ext()
+            index = self.var.concat_index()
+            if not name in targets.names():
+                print(targets)
+                print(self.var)
                 raise RuntimeError
             index_target = None
             flag = True
@@ -2094,6 +2132,7 @@ class Allocate(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         nodes: List[Node] = []
@@ -2103,9 +2142,9 @@ class Allocate(Node):
             ad_var = var.add_suffix(AD_SUFFIX)
             if reverse:
                 if var.ad_target:
-                    nodes.append(Allocate._add_if(Deallocate([ad_var], ad_code=True), ad_var, is_mod_var))
+                    nodes.append(Allocate._add_if(Deallocate([ad_var.change_index(None)], ad_code=True), ad_var, is_mod_var))
                 if not is_mod_var:
-                    nodes.append(Deallocate([var], ad_code=True))
+                    nodes.append(Deallocate([var.change_index(None)], ad_code=True))
             else:
                 if not is_mod_var:
                     nodes.append(Allocate([var]))
@@ -2115,6 +2154,15 @@ class Allocate(Node):
 
     def is_effectively_empty(self) -> bool:
         return not self.vars
+
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.copy()
+        for var in self.vars:
+            vars.remove(var)
+        return vars
 
     def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[Allocate]:
         mod_var_names = [var.name for var in mod_vars] if mod_vars is not None else []
@@ -2142,7 +2190,12 @@ class Allocate(Node):
             if isinstance(node, Allocate):
                 cond = OpNot([cond])
                 if var.name.endswith(AD_SUFFIX):
-                    body.append(ClearAssignment(var.change_index(None)))
+                    index = AryIndex([None] * len(var.index))
+                    if not var.typename.startswith(("type", "class")):
+                        body.append(ClearAssignment(var.change_index(index)))
+            else:
+                if var.ref_var is not None and var.ref_var.allocatable:
+                    cond = OpLogic(".and.", args=[OpFunc(func, args=[var.ref_var.change_index(None)]), cond])
             return IfBlock([(cond, body)])
         return node
 
@@ -2174,7 +2227,7 @@ class Deallocate(Node):
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        names = ", ".join(v.name for v in self.vars)
+        names = ", ".join(str(v) for v in self.vars)
         return [f"{space}deallocate({names})\n"]
 
     def generate_ad(
@@ -2186,6 +2239,7 @@ class Deallocate(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         nodes: List[Node] = []
@@ -2198,12 +2252,21 @@ class Deallocate(Node):
                     nodes.append(Allocate._add_if(Allocate([ad_var]), ad_var, is_mod_var))
             else:
                 if var.ad_target:
-                    nodes.append(Deallocate([ad_var], ad_code=True))
-                nodes.append(Deallocate([var], ad_code=True))
+                    nodes.append(Deallocate([ad_var.change_index(None)], ad_code=True))
+                nodes.append(Deallocate([var.change_index(None)], ad_code=True))
         return nodes
 
     def is_effectively_empty(self) -> bool:
         return not self.vars
+
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.copy()
+        for var in self.vars:
+            vars.remove(var.change_index(AryIndex([None])))
+        return vars
 
     def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional["Deallocate"]:
         if not self.ad_code:
@@ -2309,8 +2372,8 @@ class Declaration(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
-    def collect_vars(self):
-        return[OpVar(
+    def collect_vars(self) -> List[OpVar]:
+        var = OpVar(
             name=self.name,
             typename=self.typename,
             kind=self.kind,
@@ -2319,9 +2382,17 @@ class Declaration(Node):
             pointer=self.pointer,
             optional=self.optional,
             dims=self.dims,
+            ad_target=self.ad_target(),
             intent=self.intent,
             declared_in=self.declared_in,
-        )]
+        )
+        vars = [var]
+        if self.type_def is not None:
+            for decl in self.type_def.iter_children():
+                for v in decl.collect_vars():
+                    v.ref_var = var
+                    vars.append(v)
+        return vars
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -2355,9 +2426,18 @@ class Declaration(Node):
         line += "\n"
         return [line]
 
-    def is_real(self) -> bool:
+    def ad_target(self) -> bool:
+        if self.constant or self.parameter:
+            return False
         typename = self.typename.lower()
-        return typename.startswith("real") or typename.startswith("double")
+        if typename.startswith("real") or typename.startswith("double"):
+            return True
+        if self.type_def is not None:
+            for decl in self.type_def.iter_children():
+                if decl.ad_target():
+                    return True
+        return False
+
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         if vars is None:
@@ -2386,6 +2466,41 @@ class Declaration(Node):
                     )
                 )
         return vars
+
+    def generate_ad(self,
+                    saved_vars: List[OpVar],
+                    reverse: bool = False,
+                    assigned_advars: Optional[VarList] = None,
+                    routine_map: Optional[Dict] = None,
+                    generic_map: Optional[Dict] = None,
+                    mod_vars: Optional[List[OpVar]] = None,
+                    exitcycle_flags: Optional[List[OpVar]] = None,
+                    type_map: Optional[dict] = None,
+                    warnings: Optional[List[str]] = None) -> List[Node]:
+        if self.constant or self.parameter or not self.ad_target():
+            return []
+        name = f"{self.name}{AD_SUFFIX}"
+        if self.type_def is None:
+            typename = self.typename
+            type_def = None
+        else:
+            type_def = type_map[self.type_def.name]
+            typename = f"type({type_def.name})"
+        init_val = str(OpReal("0.0", kind=self.kind)) if not (self.allocatable or self.pointer) else None
+        decl = Declaration(
+            name=name,
+            typename=typename,
+            kind=self.kind,
+            dims=self.dims,
+            init_val=init_val,
+            allocatable=self.allocatable,
+            pointer=self.pointer,
+            target=self.target,
+            type_def=self.type_def,
+            declared_in=self.declared_in,
+        )
+        return [decl]
+
 
     def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional["Declaration"]:
         target_names = targets.names()
@@ -2430,11 +2545,48 @@ class TypeDef(Node):
     def __getitem__(self, name: str) -> Optional[Declaration]:
         return self.map.get(name)
 
-    def iter_children(self) -> Iterator[Node]:
+    def iter_children(self) -> Iterator[Declaration]:
         return iter(self.components)
 
     def copy(self) -> "TypeDef":
         return TypeDef(self.name, self.components, self.procs, self.access)
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        lines: List[str] = []
+        lines.append(f"{space}type :: {self.name}\n")
+        for decl in self.components:
+            lines.extend(decl.render(indent+1))
+        lines.append(f"{space}end type {self.name}\n")
+        return lines
+
+    def collect_vars(self) -> List[OpVar]:
+        return []
+
+    def generate_ad(self,
+                    saved_vars: List[OpVar],
+                    reverse: bool = False,
+                    assigned_advars: Optional[VarList] = None,
+                    routine_map: Optional[Dict] = None,
+                    generic_map: Optional[Dict] = None,
+                    mod_vars: Optional[List[OpVar]] = None,
+                    exitcycle_flags: Optional[List[OpVar]] = None,
+                    type_map: Optional[dict] = None,
+                    warnings: Optional[List[str]] = None) -> List[Node]:
+        if self.name.endswith("_t"):
+            name = f"{self.name.removesuffix('_t')}{AD_SUFFIX}_t"
+        else:
+            name = f"{self.name}{AD_SUFFIX}"
+        components = []
+        for decl in self.components:
+            decl = decl.copy()
+            decl.name = f"{decl.name}{AD_SUFFIX}"
+            components.append(decl)
+        procs = []
+        for proc in self.procs:
+            procs.append(list(proc))
+        access = self.access
+        return [TypeDef(name=name, components=components, procs=procs, access=access)]
 
 @dataclass
 class BranchBlock(Node):
@@ -2477,6 +2629,7 @@ class BranchBlock(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         cond_blocks = []
@@ -2540,11 +2693,20 @@ class BranchBlock(Node):
         cover_all = False # if else or case default exists
         to_remove = set()
         origin_savevars = {name for name in vars.names() if Node.is_savevar(name)}
+        def _check(cond: Operator) -> bool:
+            if isinstance(cond, OpLogic):
+                return _check(cond.args[0]) and _check(cond.args[1])
+            if isinstance(cond, OpFunc) and cond.name in ("allocated", "associated"):
+                return True
+            return False
         for cond, block in self.cond_blocks:
             vs = block.required_vars(vars, no_accumulate, without_savevar)
             vars_new.merge(vs)
             advars = {name for name in vs.names() if Node.is_savevar(name)}
             to_remove = to_remove | (origin_savevars - advars)
+            if isinstance(self, IfBlock) and isinstance(block[0], Deallocate):
+                if cond is not None and _check(cond):
+                    to_remove = to_remove | {v.name_ext() for v in block[0].vars}
             if cond is None:
                 cover_all = True
         if not cover_all:
@@ -2552,8 +2714,18 @@ class BranchBlock(Node):
         for name in to_remove:
             if vars_new.vars and name in vars_new.vars:
                 del vars_new.vars[name]
-        for var in self.iter_ref_vars():
-            vars_new.push(var)
+        for cond, _ in self.cond_blocks:
+            if cond is not None:
+                if isinstance(self, IfBlock):
+                    if not _check(cond):
+                        for var in cond.collect_vars(without_checkfunc=True):
+                            vars_new.push(var)
+                elif isinstance(self, SelectBlock):
+                    for co in cond:
+                        for var in co.collect_vars(without_checkfunc=True):
+                            vars_new.push(var)
+                else:
+                    raise ValueError
         return vars_new
 
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
@@ -2705,6 +2877,7 @@ class DoAbst(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
 
@@ -2858,11 +3031,12 @@ class DoLoop(DoAbst):
     def _build_index_map(self) -> dict:
         # build index map: variable name -> position of the loop index in the array index
         index_map = {}
-        for var in self.collect_vars():
-            if var.index is not None:
-                for i, idx in enumerate(var.index):
+        for var in self._body.collect_vars():
+            index = var.concat_index()
+            if index is not None:
+                for i, idx in enumerate(index):
                     if isinstance(idx, OpVar) and idx == self.index:
-                        index_map[var.name] = (i, len(var.index))
+                        index_map[var.name_ext()] = (i, len(index))
         return index_map
 
     def find_index(self, var: OpVar, name: str) -> Optional[int]:

@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff.var_list import VarList
 from fautodiff.operators import (
+    AryIndex,
     OpInt,
     OpVar,
     OpRange
@@ -79,6 +80,19 @@ class TestVarList(unittest.TestCase):
         self.assertTrue(vi in vl)
         vl.remove(vi)
         self.assertFalse(vi in vl)
+
+    def test_derived(self):
+        n = OpVar("n")
+        m = OpVar("m")
+        vref = OpVar("vref", index=[n])
+        var = OpVar("ary", index=[m], ref_var=vref)
+        vl = VarList([var])
+        self.assertIn("vref%ary", vl.names())
+        self.assertIn(var, vl)
+        self.assertEqual(str(vl), "vref(n)%ary(m)")
+        self.assertEqual(AryIndex([n,m]), vl.vars["vref%ary"][0])
+        self.assertEqual([var], list(v for v in vl))
+
 
 
 if __name__ == '__main__':

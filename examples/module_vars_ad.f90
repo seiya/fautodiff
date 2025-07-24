@@ -28,16 +28,16 @@ contains
     real, intent(out) :: x_ad
     real, intent(inout) :: y_ad
     real :: y
-    real :: a_save_15_ad
+    real :: a_save_12_ad
 
     call fautodiff_stack_r4%pop(a)
     y = (c + x) * a
-    a_save_15_ad = a
+    a_save_12_ad = a
     a = a + x
 
     a_ad = y_ad * y + a_ad ! y = y * a
     y_ad = y_ad * a ! y = y * a
-    a = a_save_15_ad
+    a = a_save_12_ad
     x_ad = a_ad ! a = a + x
     x_ad = y_ad * a + x_ad ! y = (c + x) * a
     a_ad = y_ad * (c + x) + a_ad ! y = (c + x) * a

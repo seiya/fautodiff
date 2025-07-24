@@ -61,7 +61,6 @@ contains
     res_ad = 0.0 ! res = 0.0
     do i = n, 1, - 1
       x_ad = mod_p_ad(i) + x_ad ! mod_p(i) = x
-      mod_p_ad(i) = 0.0 ! mod_p(i) = x
       x_ad = p_ad(i) + x_ad ! p(i) = x
     end do
     if (associated(mod_p_ad)) then

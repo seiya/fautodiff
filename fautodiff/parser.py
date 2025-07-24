@@ -14,7 +14,7 @@ from fparser.two import Fortran2003, Fortran2008
 from fparser.two.parser import ParserFactory
 from fparser.two.utils import walk
 from packaging.version import Version, parse
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Union
 
 from .code_tree import (
     Assignment,
@@ -125,11 +125,7 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
             raise ValueError(f"Not found in the declaration section: {name}")
 
         kind = decl.kind
-        if (
-            kind is None
-            and decl.is_real()
-            and decl.typename.lower().startswith("double")
-        ):
+        if kind is None and decl.typename.lower().startswith("double"):
             kind = "8"
 
         return OpVar(
@@ -138,6 +134,7 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
             kind=kind,
             char_len=decl.char_len,
             dims=decl.dims,
+            ad_target=decl.ad_target(),
             is_constant=decl.parameter or getattr(decl, "constant", False),
             allocatable=getattr(decl, "allocatable", False),
             pointer=getattr(decl, "pointer", False),
@@ -162,6 +159,7 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
                 kind=decl.kind,
                 char_len=decl.char_len,
                 dims=decl.dims,
+                ad_target=decl.ad_target(),
                 is_constant=decl.parameter or getattr(decl, "constant", False),
                 allocatable=getattr(decl, "allocatable", False),
                 pointer=getattr(decl, "pointer", False),
@@ -440,14 +438,14 @@ def _parse_decl_stmt(
         if isinstance(entity, (Fortran2003.Entity_Decl, Fortran2003.Component_Decl)):
             name = entity.items[0].string
             dim_spec = entity.items[1]
-            if isinstance(dim_spec, Fortran2003.Explicit_Shape_Spec_List):
-                dims = tuple(v.string for v in entity.items[1].items)
-            elif isinstance(dim_spec, Fortran2003.Assumed_Shape_Spec_List):
-                dims = tuple(v.string for v in entity.items[1].items)
+            if isinstance(dim_spec, (Fortran2003.Explicit_Shape_Spec_List, Fortran2003.Assumed_Shape_Spec_List, Fortran2003.Deferred_Shape_Spec_List)):
+                dims = tuple(v.string for v in dim_spec.items)
             elif isinstance(dim_spec, Fortran2003.Assumed_Size_Spec):
                 dims = "*"
-            else:
+            elif dim_spec is None:
                 dims = dim_attr
+            else:
+                raise RuntimeError(f"Unsupported dimension spec: {type(dim_spec)} {dim_spec}")
             if entity.items[3] is not None:
                 init_val = entity.items[3].items[1].string
         else:
@@ -503,11 +501,12 @@ def _parse_decls(
     default_access: Optional[str] = None,
     module_map: Optional[dict] = None,
     search_dirs: Optional[List[str]] = None,
-) -> Tuple[List[Node],List[Declaration]]:
+) -> Tuple[List[Use], List[Node], List[Node]]:
     """Return declarations parsed from a specification part."""
 
+    uses: List[Use] = []
+    decls: List[Node] = []
     nodes: List[Node] = []
-    decls: List[Declaration] = []
     access_map = {}
 
     for item in spec.content:
@@ -519,17 +518,17 @@ def _parse_decls(
                         _parse_directive(text, directives)
                         continue
                     if text != "":
-                        nodes.append(Statement(text))
+                        decls.append(Statement(text))
                     continue
-                if isinstance(cnt, Fortran2003.Implicit_Stmt):
-                    nodes.append(Statement(cnt.string))
+                # if isinstance(cnt, Fortran2003.Implicit_Stmt):
+                #     decls.append(Statement(cnt.string))
             continue
         if isinstance(item, Fortran2003.Use_Stmt):
             only = None
             if item.items[4] is not None:
                 only = [s.string for s in item.items[4].items]
             mod_name = item.items[2].string
-            nodes.append(Use(mod_name, only=only))
+            uses.append(Use(mod_name, only=only))
             _search_use(mod_name, only, decl_map, module_map, search_dirs)
             continue
         if isinstance(item, Fortran2003.Access_Stmt):
@@ -586,7 +585,7 @@ def _parse_decls(
                     raise RuntimeError(f"Unsupported statement: {type(cnt.items[0])} {cnt.items}")
                 if isinstance(cnt, Fortran2003.End_Interface_Stmt):
                     if name is not None and procs:
-                        nodes.append(Interface(name, module_procs=procs))
+                        decls.append(Interface(name, module_procs=procs))
                         continue
                 raise RuntimeError(f"Unsupported statement: {type(cnt)} {cnt}")
             continue
@@ -618,7 +617,7 @@ def _parse_decls(
                     continue
                 if isinstance(cnt, Fortran2003.Component_Part):
                     for c in cnt.content:
-                        components.extend(_parse_decl_stmt(c, allow_intent=False, allow_access=False, declared_in="type"))
+                        components.extend(_parse_decl_stmt(c, allow_intent=False, allow_access=False, declared_in=declared_in))
                     continue
                 if isinstance(cnt, Fortran2003.Type_Bound_Procedure_Part):
                     for c in cnt.content:
@@ -636,14 +635,14 @@ def _parse_decls(
                 if isinstance(cnt, Fortran2003.End_Type_Stmt):
                     if type_name is not None and components:
                         type_def = TypeDef(name=type_name, components=components, procs=procs, access=access)
-                        nodes.append(type_def)
+                        decls.append(type_def)
                         type_map[type_name] = type_def
                         continue
                 raise RuntimeError(f"Unsupported statement: {type(cnt)} {cnt}")
             continue
 
         raise RuntimeError(f"Unsupported statement: {type(item)} {item}")
-    return (nodes, decls)
+    return (uses, decls, nodes)
 
 def _search_use(name: str, only: Optional[List[str]], decl_map: dict, module_map: dict, search_dirs: Optional[List[str]]):
     used = module_map.get(name) if module_map else None
@@ -707,7 +706,7 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None, decl_map=None, typ
             if isinstance(part, Fortran2003.Comment):
                 continue
             if isinstance(part, Fortran2003.Specification_Part):
-                nodes, decls = _parse_decls(
+                uses, decls, nodes = _parse_decls(
                             part,
                             directives=module_directives,
                             decl_map=decl_map_new,
@@ -723,8 +722,12 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None, decl_map=None, typ
                     for n in module_directives["CONSTANT_VARS"]:
                         if n in decl_map_new:
                             decl_map_new[n].constant = True
-                mod_node.decls = Block(decls)
-                mod_node.body.extend(nodes)
+                if uses:
+                    mod_node.uses = Block(uses)
+                if decls:
+                    mod_node.decls = Block(decls)
+                if nodes:
+                    mod_node.body = Block(nodes)
                 continue
             if isinstance(part, Fortran2003.Module_Subprogram_Part):
                 for c in part.content:
@@ -1070,7 +1073,7 @@ def _parse_routine(content,
             routine.directives = directives
             continue
         if isinstance(item, Fortran2003.Specification_Part):
-            nodes, decls = _parse_decls(
+            uses, decls, nodes = _parse_decls(
                 item,
                 directives=directives,
                 decl_map=decl_map,
@@ -1081,7 +1084,7 @@ def _parse_routine(content,
                 module_map=module_map,
                 search_dirs=search_dirs,
             )
-            routine.decls = Block(nodes + decls)
+            routine.decls = Block(uses + decls + nodes)
             routine.decl_map = decl_map
             continue
         if isinstance(item, Fortran2003.Execution_Part):
