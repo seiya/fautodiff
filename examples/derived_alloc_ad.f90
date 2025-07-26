@@ -1,6 +1,6 @@
 module derived_alloc_ad
   use derived_alloc
-  use fautodiff_data_storage
+  use fautodiff_stack
   implicit none
 
   type :: derived_ad_t
@@ -46,24 +46,6 @@ contains
     return
   end subroutine derived_alloc_init_rev_ad
 
-  subroutine derived_alloc_init_fwd_rev_ad(n, m)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer :: j
-
-    if (.not. allocated(obj_ad)) then
-      allocate(obj_ad(m))
-    end if
-    do j = 1, m
-      if (.not. allocated(obj_ad(j)%arr_ad)) then
-        allocate(obj_ad(j)%arr_ad(n))
-        obj_ad(j)%arr_ad(:) = 0.0
-      end if
-    end do
-
-    return
-  end subroutine derived_alloc_init_fwd_rev_ad
-
   subroutine derived_alloc_finalize_fwd_ad(m)
     integer, intent(in)  :: m
     integer :: j
@@ -78,6 +60,17 @@ contains
 
   subroutine derived_alloc_finalize_rev_ad(m)
     integer, intent(in)  :: m
+    integer :: j
+
+    if (.not. allocated(obj_ad)) then
+      allocate(obj_ad(size(obj, 1)))
+    end if
+    do j = m, 1, - 1
+      if (.not. allocated(obj_ad(j)%arr_ad)) then
+        allocate(obj_ad(j)%arr_ad, mold=obj(j)%arr)
+        obj_ad(j)%arr_ad = 0.0
+      end if
+    end do
 
     return
   end subroutine derived_alloc_finalize_rev_ad
@@ -122,7 +115,7 @@ contains
     real :: obj_arr_save_40_ad(m,n)
 
     do n0_ad = ubound(obj, 1), lbound(obj, 1), - 1
-      call fautodiff_data_storage_pop(obj(n0_ad)%arr)
+      call fautodiff_stack_r4%pop(obj(n0_ad)%arr)
     end do
     do j = 1, m
       obj_arr_save_40_ad(j,1:n) = obj(j)%arr(1:n)
@@ -155,7 +148,7 @@ contains
     integer :: n0_ad
 
     do n0_ad = lbound(obj, 1), ubound(obj, 1)
-      call fautodiff_data_storage_push(obj(n0_ad)%arr)
+      call fautodiff_stack_r4%push(obj(n0_ad)%arr)
     end do
 
     return

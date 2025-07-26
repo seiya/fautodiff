@@ -49,7 +49,6 @@ contains
 
     eps = 1.0e-3
     x = 2.0
-    call derived_alloc_init_fwd_rev_ad(n, m)
     call derived_alloc_init(n, m)
     call derived_alloc_run_fwd_rev_ad()
     call derived_alloc_run(n, m, x, res)

@@ -299,7 +299,7 @@ contains
       cycle_flag_48_ad = .true.
       cycle_flag_58_ad = .true.
       call fautodiff_stack_r4%pop(res)
-      call fautodiff_stack_r4%pop(i)
+      call fautodiff_stack_i%pop(i)
       if (cycle_flag_48_ad .and. exit_flag_52_ad .and. cycle_flag_58_ad .and. exit_flag_63_ad) then
         res_save_45_ad = res
         res = res * x

@@ -51,7 +51,7 @@ contains
     x_ad = 0.0
 
     if (.not. associated(mod_p_ad)) then
-      allocate(mod_p_ad(n))
+      allocate(mod_p_ad, mold=mod_p)
     end if
     allocate(p_ad(n))
     do i = n, 1, - 1

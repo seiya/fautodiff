@@ -34,10 +34,10 @@ class TestFortranRuntime(unittest.TestCase):
     def test_stack_push_pop(self):
         base = Path(__file__).resolve().parents[1]
         src = base / 'fortran_modules' / 'fautodiff_stack.f90'
-        driver = Path(__file__).resolve().parent / 'fortran_runtime' / 'run_data_storage.f90'
+        driver = Path(__file__).resolve().parent / 'fortran_runtime' / 'run_fautodiff_stack.f90'
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
-            exe = self._build(tmp, 'run_data_storage')
+            exe = self._build(tmp, 'run_fautodiff_stack')
             try:
                 run = subprocess.run([str(exe)], stdout=subprocess.PIPE, text=True, check=True)
             except subprocess.CalledProcessError as e:

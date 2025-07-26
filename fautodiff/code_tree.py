@@ -1005,8 +1005,8 @@ class CallStatement(Node):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if not _NAME_RE.fullmatch(self.name):
-            raise ValueError(f"invalid Fortran routine name: {self.name}")
+        #if not _NAME_RE.fullmatch(self.name):
+        #    raise ValueError(f"invalid Fortran routine name: {self.name}")
         if not isinstance(self.args, list):
             raise ValueError(f"args must be a list: {type(self.args)}")
         for i, arg in enumerate(self.args):
@@ -2096,6 +2096,7 @@ class Allocate(Node):
     """An ``allocate`` statement."""
 
     vars: List[OpVar] = field(default_factory=list)
+    mold: Optional[OpVar] = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -2104,10 +2105,10 @@ class Allocate(Node):
                 raise ValueError(f"vars must be OpVar: {type(v)}")
 
     def copy(self) -> "Allocate":
-        return Allocate(self.vars)
+        return Allocate(self.vars, mold=self.mold)
 
     def deep_clone(self) -> "Allocate":
-        return Allocate(self.vars.deep_clone())
+        return Allocate(self.vars.deep_clone(), mold=self.mold.deep_clone())
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.vars:
@@ -2121,7 +2122,11 @@ class Allocate(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         names = ", ".join(str(v) for v in self.vars)
-        return [f"{space}allocate({names})\n"]
+        if self.mold is not None:
+            opts = f", mold={self.mold.change_index(None)}"
+        else:
+            opts = ""
+        return [f"{space}allocate({names}{opts})\n"]
 
     def generate_ad(
         self,
@@ -2162,6 +2167,10 @@ class Allocate(Node):
             vars = vars.copy()
         for var in self.vars:
             vars.remove(var)
+            index = var.concat_index()
+            if index:
+                for idx in index.collect_vars():
+                    vars.push(idx)
         return vars
 
     def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[Allocate]:
@@ -2171,7 +2180,7 @@ class Allocate(Node):
             if not var.name in mod_var_names and (any(var.name == f"{name}{AD_SUFFIX}" for name in mod_var_names) or (decl_map is None or var.name in decl_map)):
                 vars.append(var)
         if vars:
-            return Allocate(vars)
+            return Allocate(vars, mold=self.mold)
         return None
 
     @classmethod
@@ -2190,9 +2199,8 @@ class Allocate(Node):
             if isinstance(node, Allocate):
                 cond = OpNot([cond])
                 if var.name.endswith(AD_SUFFIX):
-                    index = AryIndex([None] * len(var.index))
                     if not var.typename.startswith(("type", "class")):
-                        body.append(ClearAssignment(var.change_index(index)))
+                        body.append(ClearAssignment(var.change_index(None)))
             else:
                 if var.ref_var is not None and var.ref_var.allocatable:
                     cond = OpLogic(".and.", args=[OpFunc(func, args=[var.ref_var.change_index(None)]), cond])
@@ -2204,6 +2212,7 @@ class Deallocate(Node):
     """A ``deallocate`` statement."""
 
     vars: List[OpVar] = field(default_factory=list)
+    index: Optional[List[str]] = field(default=None)
     ad_code: bool = field(default=False)
 
     def __post_init__(self):
@@ -2249,7 +2258,22 @@ class Deallocate(Node):
             ad_var = var.add_suffix(AD_SUFFIX)
             if reverse:
                 if var.ad_target:
-                    nodes.append(Allocate._add_if(Allocate([ad_var]), ad_var, is_mod_var))
+                    mold = None
+                    if is_mod_var:
+                        if var.typename.startswith(("type", "class")):
+                            index = []
+                            ndim = len(var.index)
+                            var = var.change_index(None)
+                            for n in range(ndim):
+                                index.append(OpFunc("size", args=[var, OpInt(n+1)]))
+                            index = AryIndex(index)
+                        else:
+                            mold = var
+                            index = None
+                        ad_var = ad_var.change_index(index)
+                    elif self.index is not None:
+                        ad_var = ad_var.change_index(self.index)
+                    nodes.append(Allocate._add_if(Allocate([ad_var], mold=mold), ad_var, is_mod_var))
             else:
                 if var.ad_target:
                     nodes.append(Deallocate([ad_var.change_index(None)], ad_code=True))

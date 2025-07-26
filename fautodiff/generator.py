@@ -15,23 +15,25 @@ from typing import Optional, List, Tuple, Dict
 from . import code_tree as code_tree
 from .code_tree import (
     Node,
-    Assignment,
-    Block,
-    CallStatement,
-    ClearAssignment,
+    Module,
+    Routine,
+    Subroutine,
+    Function,
+    Use,
     Declaration,
     TypeDef,
-    DoLoop,
-    Routine,
-    Function,
-    IfBlock,
-    Module,
-    PushPop,
+    Block,
+    CallStatement,
+    Assignment,
     SaveAssignment,
+    PushPop,
+    ClearAssignment,
+    DoLoop,
+    IfBlock,
     SelectBlock,
+    Allocate,
+    Deallocate,
     Statement,
-    Subroutine,
-    Use,
     render_program,
 )
 from .operators import (
@@ -100,10 +102,13 @@ def _add_fwd_rev_calls(node, routine_map: dict, generic_map:dict, donot_prune: b
         _add_fwd_rev_calls(child, routine_map, generic_map, donot_prune)
 
 
-def _make_fwd_rev_wrapper(routine_org: Routine, subroutine: Subroutine, vars: list[OpVar]) -> Subroutine:
-    """Return a forward wrapper that saves module variables."""
+def _module_var_fwd_rev(routine_org: Routine,
+                        subroutine: Subroutine,
+                        vars: list[OpVar],
+                        ) -> Subroutine:
+    """Return a forward wrapper that saves variables."""
     args = []
-    sub = Subroutine(f"{routine_org.name}_fwd_rev_ad", args)
+    sub_fwd_rev = Subroutine(f"{routine_org.name}_fwd_rev_ad", args)
     index = []
     for var in vars:
         block_fwd = Block([])
@@ -151,18 +156,51 @@ def _make_fwd_rev_wrapper(routine_org: Routine, subroutine: Subroutine, vars: li
             node_fwd = block_fwd[0]
         if node_rev is block_rev:
             node_rev = block_rev[0]
-        sub.content.append(node_fwd)
+        sub_fwd_rev.content.append(node_fwd)
         subroutine.content.insert_begin(node_rev)
-    sub.ad_init = Block([])
-    sub.ad_content = Block([])
+    sub_fwd_rev.ad_init = Block([])
+    sub_fwd_rev.ad_content = Block([])
     for idx in index:
         decl = Declaration(name=idx.name, typename="integer")
-        sub.decls.append(decl)
+        if decl.name not in sub_fwd_rev.args:
+            sub_fwd_rev.decls.append(decl)
         subroutine.decls.append(decl)
-    return sub
 
+    return sub_fwd_rev
 
-def _parse_mpi_calls(node, calls: Optional[Dict[str, List[CallStatement]]] = None) -> None:
+def _parse_allocate(node: Node,
+                    mod_vars: List[OpVar],
+                    map: Optional[Dict[str, List[AryIndex]]] = None
+                    ) -> None:
+    if map is None:
+        map = {}
+        top = True
+    else:
+        top = False
+    for child in node.iter_children():
+        _parse_allocate(child, mod_vars, map)
+    if isinstance(node, Allocate):
+        for var in node.vars:
+            if var.is_constant:
+                continue
+            name = var.name_ext()
+            if name not in map:
+                map[name] = []
+            map[name].append(var.index)
+    if isinstance(node, Deallocate):
+        for var in node.vars:
+            name = var.name_ext()
+            if name in map and map[name]:
+                node.index = map[name].pop()
+    if top:
+        mod_var_names = [v.name_ext() for v in mod_vars]
+        for name in map:
+            if map[name]:
+                if name not in mod_var_names:
+                    var = OpVar(name, index=map[name][0])
+                    node.append(Declaration(vars=[OpVar]))
+
+def _parse_mpi_calls(node: Node, calls: Optional[Dict[str, List[CallStatement]]] = None) -> None:
     if calls is None:
         top = True
         calls = {}
@@ -188,7 +226,7 @@ def _parse_mpi_calls(node, calls: Optional[Dict[str, List[CallStatement]]] = Non
                     calls["wait"] = []
                 calls["wait"].append(node)
     else:
-        for child in getattr(node, "iter_children", lambda: [])():
+        for child in node.iter_children():
             _parse_mpi_calls(child, calls)
 
     if top:
@@ -600,6 +638,8 @@ def _generate_ad_subroutine(
     out_args = [var for var in routine_org.arg_vars() if (var.intent is None or var.intent in ("out", "inout"))]
     ad_block = subroutine.ad_content
 
+    sub_fwd_rev: Optional[Subroutine] = None
+
     has_mod_grad_input = False
     mod_ad_vars = []
     for var in mod_vars:
@@ -613,6 +653,7 @@ def _generate_ad_subroutine(
         subroutine.ad_content = ad_block
         return subroutine, False, set()
 
+    _parse_allocate(routine_org.content, mod_vars)
     _parse_mpi_calls(routine_org.content)
     _set_call_intents(routine_org.content, routine_map, generic_map)
 
@@ -707,19 +748,18 @@ def _generate_ad_subroutine(
         if cross_vars:
             name_org = routine_org.name
             name_fwd_rev = f"{name_org}_fwd_rev_ad"
-            sub = _make_fwd_rev_wrapper(routine_org, subroutine, cross_vars)
-            intents = [v.intent for v in sub.arg_vars()]
-            routine_info["fwd_rev_subroutine"] = sub # save to output this subroutine later
+            sub_fwd_rev = _module_var_fwd_rev(routine_org, subroutine, cross_vars)
+            intents = [v.intent for v in sub_fwd_rev.arg_vars()]
             routine_map_new = {
                 name_org: {
                     "args": routine_map[name_org]["args"],
                     "name_fwd_rev_ad": name_fwd_rev,
-                    "args_fwd_rev_ad": sub.args,
+                    "args_fwd_rev_ad": sub_fwd_rev.args,
                     "intents_fwd_rev_ad": intents,
                 }
             }
             routine_map[name_org]["name_fwd_rev_ad"] = name_fwd_rev
-            routine_map[name_org]["args_fwd_rev_ad"] = sub.args
+            routine_map[name_org]["args_fwd_rev_ad"] = sub_fwd_rev.args
             routine_map[name_org]["intents_fwd_rev_ad"] = intents
 
             _add_fwd_rev_calls(fw_block, routine_map_new, None, donot_prune=True)
@@ -988,6 +1028,9 @@ def _generate_ad_subroutine(
 
     uses_pushpop = _contains_pushpop(subroutine) if reverse else False
 
+    if sub_fwd_rev is not None:
+        routine_info["fwd_rev_subroutine"] = sub_fwd_rev # save to output this subroutine later
+
     called_mods = _collect_called_ad_modules(
         [subroutine.content, subroutine.ad_init, subroutine.ad_content],
         routine_map,
@@ -995,8 +1038,6 @@ def _generate_ad_subroutine(
     )
 
     return subroutine, uses_pushpop, called_mods
-
-
 
 def generate_ad(
     in_file,
@@ -1039,14 +1080,15 @@ def generate_ad(
             type_map = {}
             for child in mod_org.decls.iter_children():
                 ad_code = child.generate_ad([], type_map=type_map)
-                if isinstance(child, TypeDef):
-                    type_map[child.name] = ad_code[0]
                 if ad_code:
+                    if isinstance(child, TypeDef):
+                        type_map[child.name] = ad_code[0]
                     if mod.decls is None:
                         mod.decls = Block([])
-                    mod.decls.extend(ad_code)
+                    for node in ad_code:
+                        mod.decls.append(node)
 
-        mod_vars = [var for var in mod_org.decls.collect_vars() if not var.is_constant] if mod_org.decls is not None else []
+        mod_vars = [var for var in mod_org.decls.collect_vars()] if mod_org.decls is not None else []
         has_mod_grad_var = any(var.ad_target for var in mod_vars)
 
         routine_info_fwd = {}
