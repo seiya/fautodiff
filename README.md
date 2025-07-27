@@ -107,6 +107,15 @@ x_ad = 1.0
 call foo_fwd_ad(x, x_ad, y, y_ad)
 ```
 
+## Runtime stack module
+
+The helper module `fautodiff_stack` stores data that must persist between the
+forward and reverse sweeps.  It defines stack types for real, double precision,
+logical and integer values.  Four default stacks (`fautodiff_stack_r4`,
+`fautodiff_stack_r8`, `fautodiff_stack_l` and `fautodiff_stack_i`) are provided
+for convenience.  Each stack allocates memory in pages and the size of a page
+can be changed by modifying the `page_size` component before the first push.
+
 
 See ``doc/directives.md`` for a description of optional directives that can
 control how AD code is generated. Details on how module variable assignments are

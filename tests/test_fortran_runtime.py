@@ -38,7 +38,12 @@ class TestFortranRuntime(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             exe = self._build(tmp, 'run_data_storage')
-            run = subprocess.run([str(exe)], stdout=subprocess.PIPE, text=True, check=True)
+            try:
+                run = subprocess.run([str(exe)], stdout=subprocess.PIPE, text=True, check=True)
+            except subprocess.CalledProcessError as e:
+                if e.stdout:
+                    print(e.stdout)
+                raise
             self.assertEqual(run.stdout.strip(), 'OK')
 
 
