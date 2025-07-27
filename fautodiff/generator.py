@@ -96,12 +96,14 @@ def _add_fwd_rev_calls(node, routine_map: dict, generic_map:dict, donot_prune: b
         _add_fwd_rev_calls(child, routine_map, generic_map, donot_prune)
 
 
-def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str]) -> Subroutine:
+def _make_fwd_rev_wrapper(routine_org: Routine, vars: list[str], mod_vars: list[OpVar]) -> Subroutine:
     """Return a forward wrapper that saves module variables."""
     args = []
     sub = Subroutine(f"{routine_org.name}_fwd_rev_ad", args)
+    var_map = {v.name: v for v in mod_vars}
     for name in vars:
-        sub.content.append(PushPop(OpVar(name), sub.get_id()))
+        var = var_map.get(name, OpVar(name))
+        sub.content.append(PushPop(var, sub.get_id()))
     sub.ad_init = Block([])
     sub.ad_content = Block([])
     return sub
@@ -676,10 +678,11 @@ def _generate_ad_subroutine(
         if cross_vars:
             name_org = routine_org.name
             name_fwd_rev = f"{name_org}_fwd_rev_ad"
-            pops = [PushPop(OpVar(n), subroutine.get_id()).to_load() for n in cross_vars]
+            var_map = {v.name: v for v in mod_vars}
+            pops = [PushPop(var_map.get(n, OpVar(n)), subroutine.get_id()).to_load() for n in cross_vars]
             for pop in reversed(pops):
                 subroutine.content.insert_begin(pop)
-            sub = _make_fwd_rev_wrapper(routine_org, cross_vars)
+            sub = _make_fwd_rev_wrapper(routine_org, cross_vars, mod_vars)
             intents = [v.intent for v in sub.arg_vars()]
             routine_info["fwd_rev_subroutine"] = sub # save to output this subroutine later
             routine_map_new = {
@@ -1072,7 +1075,7 @@ def generate_ad(
                 mod.uses.append(Use(m))
                 mod.uses.append(Use(f"{m}{AD_SUFFIX}"))
         if pushpop_used:
-            mod.uses.append(Use("fautodiff_data_storage"))
+            mod.uses.append(Use("fautodiff_stack"))
 
         modules.append(render_program(mod))
 

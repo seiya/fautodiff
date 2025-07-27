@@ -1968,8 +1968,31 @@ class PushPop(SaveAssignment):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         op = "pop" if self.load else "push"
-        op_name = f"fautodiff_data_storage_{op}"
-        return [f"{space}call {op_name}({self.var})\n"]
+        stack = self._stack_name()
+        return [f"{space}call {stack}%{op}({self.var})\n"]
+
+    def _stack_name(self) -> str:
+        typ = self.var.typename
+        kind = self.var.kind
+        if typ is None:
+            p = self.parent
+            while p is not None and not isinstance(p, Routine):
+                p = p.parent
+            if p is not None:
+                v = p.get_var(self.var.name)
+                if v is not None:
+                    typ = v.typename
+                    kind = v.kind
+        typ = typ.lower() if typ else ""
+        if typ.startswith("logical"):
+            return "fautodiff_stack_l"
+        if typ.startswith("integer"):
+            return "fautodiff_stack_i"
+        if typ.startswith("real") or typ.startswith("double"):
+            if kind == "8" or "(8" in typ or "double" in typ:
+                return "fautodiff_stack_r8"
+            return "fautodiff_stack_r4"
+        return "fautodiff_stack_r4"
 
     # def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
     #     if vars is None:
@@ -2004,7 +2027,7 @@ class PushPopL(PushPop):
         if self.load:
             raise RuntimeError
         else:
-            return [f"{space}call fautodiff_data_storage_push({self.flag})\n"]
+            return [f"{space}call fautodiff_stack_l%push({self.flag})\n"]
 
     def iter_assign_vars(self, without_savevar=False):
         return iter(())
@@ -2770,7 +2793,7 @@ class DoAbst(Node):
                 self.parent.insert_before(self.get_id(), save_false)
                 save_true = PushPopL(".true.")
                 self._body.insert_begin(save_true)
-                cond = OpFuncUser("fautodiff_data_storage_get", [])
+                cond = OpFuncUser("fautodiff_stack_l%get", [])
 
         body = Block(nodes)
         if self.do:
