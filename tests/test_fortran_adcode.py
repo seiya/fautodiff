@@ -116,7 +116,7 @@ class TestFortranADCode(unittest.TestCase):
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_pointer_arrays(self):
-        self._run_test('pointer_arrays', ['pointer_example'])
+        self._run_test('pointer_arrays', ['pointer_allocate', 'pointer_subarray', 'pointer_allsub', 'pointer_swap'])
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_derived_alloc(self):
