@@ -75,7 +75,9 @@ contains
       allocate(mod_arr_diff_ad(n))
     end if
     do i = 1, n
+      mod_arr(i) = i * 2.0
       mod_arr_diff_ad(i) = x_ad * i ! mod_arr_diff(i) = i * x
+      mod_arr_diff(i) = i * x
     end do
 
     return
@@ -91,7 +93,6 @@ contains
 
     do i = n, 1, - 1
       x_ad = mod_arr_diff_ad(i) * i + x_ad ! mod_arr_diff(i) = i * x
-      mod_arr_diff_ad(i) = 0.0 ! mod_arr_diff(i) = i * x
     end do
     if (allocated(mod_arr_diff_ad)) then
       deallocate(mod_arr_diff_ad)
@@ -155,7 +156,7 @@ contains
     integer :: i
 
     if (.not. allocated(mod_arr_diff_ad)) then
-      allocate(mod_arr_diff_ad(n))
+      allocate(mod_arr_diff_ad, mold=mod_arr_diff)
     end if
     do i = n, 1, - 1
       mod_arr_diff_ad(i) = x_ad * mod_arr(i) ! x = x + mod_arr(i) * mod_arr_diff(i)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Tuple, Optional, Iterator, ClassVar
+from typing import Iterable, List, Tuple, Optional, Union, Iterator, ClassVar
 
 from .operators import (
     AryIndex,
@@ -19,23 +19,18 @@ from .operators import (
 class VarList:
     """List of variable."""
 
-    vars: Optional[dict[str, List]] = field(init=False, default=None)
-    exclude: Optional[dict[str, List]] = field(init=False, default=None)
+    vars: Optional[dict[str, List[AryIndex]]] = field(default_factory=dict)
+    dims: Optional[dict[str, List[int]]] = field(default_factory=dict)
+    exclude: Optional[dict[str, List[AryIndex]]] = field(default_factory=dict)
 
     def __init__(self, vars: Optional[List[OpVar]] = None):
         super().__init__()
         self.vars = {}
+        self.dims = {}
         self.exclude = {}
         if vars is not None:
             for var in vars:
                 self.push(var, not_reorganize=True)
-
-    def add_exclude(self, var: OpVar):
-        name = var.name
-        if not name in self.exclude:
-            self.exclude[name] = []
-        if not var.index in self.exclude[name]:
-            self.exclude[name].append(var.index)
 
     def copy(self) -> VarList:
         var_list = VarList()
@@ -44,6 +39,8 @@ class VarList:
             for index in self.vars[name]:
                 list.append(index)
             var_list.vars[name] = list
+        for name in self.dims:
+            var_list.dims[name] = self.dims[name]
         for name in self.exclude:
             list = []
             for index in self.exclude[name]:
@@ -51,35 +48,33 @@ class VarList:
             var_list.exclude[name] = list
         return var_list
 
-    def __contains__(self, item: OpVar):
+    def __contains__(self, item: OpVar) -> bool:
         if not isinstance(item, OpVar):
             raise ValueError(f"Must be OpVar: {type(item)}")
-        name = item.name
+        name = item.name_ext()
+        index_item = item.concat_index()
         if not name in self.vars:
             return False
-        if name in self.exclude and item.index in self.exclude[name]:
+        if name in self.exclude and index_item in self.exclude[name]:
             return False
         index_list = self.vars[name]
         for index in index_list:
             if index is None:
                 return True
-            if index <= item.index or index >= item.index:
+            if index <= index_item or index >= index_item:
                 return True
         return False
 
     def __str__(self) -> str:
         ary = []
-        for name, index_list in sorted(self.vars.items()):
-            for index in index_list:
-                ary.append(str(OpVar(name, index=index)))
+        for var in self:
+            ary.append(str(var))
         res = ", ".join(ary)
-        if self.exclude:
-            ary = []
-            for name, index_list in sorted(self.exclude.items()):
-                for index in index_list:
-                    ary.append(str(OpVar(name, index=index)))
-            if len(ary) > 0:
-                res = f"{res}, exclude: {', '.join(ary)}"
+        ary = []
+        for var in self.iter_exclude():
+            ary.append(str(var))
+        if ary:
+            res = f"{res}, exclude: {', '.join(ary)}"
         return res
 
     def __len__(self) -> int:
@@ -88,10 +83,34 @@ class VarList:
     def __getitem__(self, key: str):
         return self.vars[key]
 
+    def _get_var(self, name: str, index: Optional[AryIndex], dims: List[int]) -> OpVar:
+        pos = name.rfind("%")
+        if pos >= 0:
+            name_ref = name[:pos]
+            index_ref = index[:-dims[-1]] if index is not None else None
+            var_ref = self._get_var(name_ref, index_ref, dims[:-1])
+            name = name[pos+1:]
+            index = index[-dims[-1]:] if index is not None else None
+        else:
+            var_ref = None
+        if len(dims) > 0 and dims[-1] > 0:
+            dims = tuple([":"]*dims[-1])
+        else:
+            dims = tuple()
+        var = OpVar(name=name, index=index, dims=dims, ref_var=var_ref)
+        return var
+
     def __iter__(self) -> Iterator[OpVar]:
         for name in self.names():
+            dims = self.dims[name]
             for index in self.vars[name]:
-                yield OpVar(name, index=index)
+                yield self._get_var(name, index, dims)
+
+    def iter_exclude(self) -> Iterator[OpVar]:
+        for name in sorted(self.exclude.keys()):
+            dims = self.dims[name]
+            for index in self.exclude[name]:
+                yield self._get_var(name, index, dims)
 
     def names(self) -> List[str]:
         names = []
@@ -108,13 +127,27 @@ class VarList:
             return - op.args[0].val
         return None
 
+    def _update_dims(self, name: str, ndims: List[int]):
+        if not name in self.dims:
+            self.dims[name] = ndims
+        else:
+            ndims_self = self.dims[name]
+            if len(ndims_self) != len(ndims):
+                raise ValueError(f"Different number of dimensions: {name} {ndims_self} {ndims}")
+            for i in range(len(ndims_self)):
+                if ndims_self[i] != ndims[i]:
+                    if ndims_self[i] > 0 and ndims[i] > 0:
+                        raise ValueError(f"Different number of dimensions: {name} {i} {ndims_self} {ndims}")
+                    if ndims_self[i] == 0:
+                        self.dims[name][i] = ndims[i]
+
     def merge(self, other) -> None:
         if not isinstance(other, VarList):
             raise ValueError("Must be VarList: {type(other)}")
         processed: set[str] = set()
         for var in other:
             self.push(var, not_reorganize=True)
-            processed.add(var.name)
+            processed.add(var.name_ext())
         for name in other.exclude:
             if not name in self.exclude:
                 self.exclude[name] = []
@@ -124,12 +157,14 @@ class VarList:
         for name in processed:
             if name in self.vars:
                 self._reorganize(name)
+            self._update_dims(name, other.dims[name])
 
     @staticmethod
     def _force_stride_one(var) -> OpVar:
         # force stride value of -1 to 1
+        index = var.index
+        replaced = False
         if isinstance(var.index, AryIndex):
-            replaced = False
             index_new = []
             for idx in var.index:
                 if isinstance(idx, OpRange) and VarList._get_int(idx[2]) == -1:
@@ -138,42 +173,54 @@ class VarList:
                 else:
                     index_new.append(idx)
             if replaced:
-                return OpVar(
-                    var.name,
-                    index=AryIndex(index_new),
-                    kind=var.kind,
-                    typename=var.typename,
-                    ad_target=var.ad_target,
-                    is_constant=var.is_constant,
-                )
+                index = AryIndex(index_new)
+        ref_var = var.ref_var
+        if ref_var is not None:
+            ref_var = VarList._force_stride_one(ref_var)
+        if replaced or not ref_var is var.ref_var:
+            return OpVar(
+                var.name,
+                index=index,
+                kind=var.kind,
+                typename=var.typename,
+                ad_target=var.ad_target,
+                is_constant=var.is_constant,
+                ref_var=ref_var
+            )
         return var
 
     def push(self, var: OpVar, not_reorganize: bool = False) -> None:
         if not isinstance(var, OpVar):
             raise ValueError(f"Must be OpVar: {type(var)}")
 
-        name = var.name
+        name = var.name_ext()
+        var_index = var.concat_index()
+
+        if not name in self.vars:
+            self.dims[name] = var.ndims_ext()
+        else:
+            self._update_dims(name, var.ndims_ext())
 
         if name in self.exclude:
             for index in self.exclude[name]:
-                if var.index >= index:
+                if var_index >= index:
                     self.exclude[name].remove(index)
 
         if not name in self.vars:
-            self.vars[name] = [var.index]
+            self.vars[name] = [var_index]
             return
 
         var = self._force_stride_one(var)
 
         found = False
         for pos, index in enumerate(self.vars[name]):
-            if index is None or index == var.index:
+            if index is None or index == var_index:
                 return
-            if var.index is None:
+            if var_index is None:
                 self.vars[name] = [None]
                 return
 
-            i = AryIndex.get_diff_dim(index, var.index)
+            i = AryIndex.get_diff_dim(index, var_index)
             if i < 0:
                 continue
 
@@ -181,7 +228,7 @@ class VarList:
             self.vars[name][pos] = index
 
             dim1 = index[i]
-            dim2 = var.index[i]
+            dim2 = var_index[i]
 
             if AryIndex.dim_is_entire(dim1) or AryIndex.dim_is_entire(dim2):
                 index[i] = None # replaced
@@ -249,18 +296,19 @@ class VarList:
             if not not_reorganize:
                 self._reorganize(name)
         else:
-            self.vars[name].append(var.index) # added
+            self.vars[name].append(var_index) # added
 
     def remove(self, var) -> None:
         if not isinstance(var, OpVar):
             raise ValueError("Must be OpVar")
 
-        name = var.name
+        name = var.name_ext()
+        var_index = var.concat_index()
 
         if not name in self.vars:
             return
 
-        if var.index is None:
+        if var_index is None:
             del self.vars[name]
             return
 
@@ -268,7 +316,7 @@ class VarList:
 
         for pos, index in enumerate(self.vars[name]):
 
-            if index == var.index:
+            if index == var_index:
                 self.vars[name].remove(index)
                 continue
 
@@ -276,7 +324,7 @@ class VarList:
                 self.add_exclude(var)
                 continue
 
-            i = AryIndex.get_diff_dim(index, var.index) # index and var.index is either OpInt or OpRange
+            i = AryIndex.get_diff_dim(index, var_index) # index and var_index is either OpInt or OpRange
             if i is None:
                 raise RuntimeError(f"Unexpected: {var} {self}")
 
@@ -284,7 +332,7 @@ class VarList:
             self.vars[name][pos] = index
 
             dim1 = index[i]
-            dim2 = var.index[i] if var.index is not None else None
+            dim2 = var_index[i] if var_index is not None else None
 
             if AryIndex.dim_is_entire(dim1):
                 self.add_exclude(var)
@@ -409,6 +457,14 @@ class VarList:
         if not self[name]:
             del self.vars[name]
 
+    def add_exclude(self, var: OpVar):
+        name = var.name_ext()
+        var_index = var.concat_index()
+        self._update_dims(name, var.ndims_ext())
+        if not name in self.exclude:
+            self.exclude[name] = []
+        if not var_index in self.exclude[name]:
+            self.exclude[name].append(var_index)
 
     def __and__(self, other) -> VarList:
         if not isinstance(other, VarList):
@@ -419,6 +475,9 @@ class VarList:
         for name in other.names():
             if not name in self.vars:
                 continue
+
+            var_list.dims[name] = self.dims[name]
+            var_list._update_dims(name, other.dims[name])
 
             index_list = []
             for index2 in other[name]:
@@ -545,7 +604,8 @@ class VarList:
             if index in exclude:
                 exclude.remove(index)
             else:
-                self.push(OpVar(name, index=index), not_reorganize=True)
+                var = self._get_var(name, index, self.dims[name])
+                self.push(var, not_reorganize=True)
         if exclude:
             self.exclude[name] = exclude
         elif name in self.exclude:

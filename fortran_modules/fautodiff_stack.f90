@@ -15,19 +15,19 @@ module fautodiff_stack
   integer, parameter :: i_type_l  = 4
 
   type :: ptr_r4_t
-    real, pointer, contiguous :: ptr(:)
+    real, pointer, contiguous :: ptr(:) => null()
   end type ptr_r4_t
 
   type :: ptr_r8_t
-    real(8), pointer, contiguous :: ptr(:)
+    real(8), pointer, contiguous :: ptr(:) => null()
   end type ptr_r8_t
 
   type :: ptr_i_t
-    integer, pointer, contiguous :: ptr(:)
+    integer, pointer, contiguous :: ptr(:) => null()
   end type ptr_i_t
 
   type :: ptr_l_t
-    logical, pointer, contiguous :: ptr(:)
+    logical, pointer, contiguous :: ptr(:) => null()
   end type ptr_l_t
 
   type, abstract :: fautodiff_stack_t
