@@ -82,6 +82,15 @@ bin/fautodiff -M examples examples/cross_mod_a.f90
 bin/fautodiff -I examples examples/cross_mod_b.f90
 ```
 
+Generate code programmatically from Python:
+
+```python
+from fautodiff.generator import generate_ad
+
+ad_code = generate_ad("examples/simple_math.f90")
+print(ad_code)
+```
+
 Generate forward mode only:
 
 ```bash
