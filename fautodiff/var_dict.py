@@ -1,54 +1,58 @@
-class Vardict:
-    def __init__(self):
-        self._data = []
+"""Simple ordered dictionary used by the tests."""
 
-    def __setitem__(self, key, value):
-        for i, (k, _) in enumerate(self._data):
-            if k == key:
-                self._data[i] = (key, value)
-                return
-        self._data.append((key, value))
+from __future__ import annotations
+
+class VarDict:
+    """Ordered dictionary with a minimal API.
+
+    This class mimics part of :class:`dict` while preserving insertion order.
+    The previous implementation stored key/value pairs in a list which was
+    inefficient for lookups.  Using a real dictionary keeps the behaviour
+    unchanged but improves performance.
+    """
+
+    def __init__(self) -> None:
+        self._data: dict = {}
+
+    def __setitem__(self, key, value) -> None:
+        """Set ``key`` to ``value`` preserving insertion order."""
+        self._data[key] = value
 
     def __getitem__(self, key):
-        for k, v in self._data:
-            if k == key:
-                return v
-        raise KeyError(key)
+        return self._data[key]
 
-    def __contains__(self, key):
-        return any(k == key for k, _ in self._data)
+    def __contains__(self, key) -> bool:
+        return key in self._data
 
-    def __delitem__(self, key):
-        for i, (k, _) in enumerate(self._data):
-            if k == key:
-                del self._data[i]
-                return
-        raise KeyError(key)
+    def __delitem__(self, key) -> None:
+        del self._data[key]
 
     def keys(self):
-        return [k for k, _ in self._data]
+        return list(self._data.keys())
 
     def values(self):
-        return [v for _, v in self._data]
+        return list(self._data.values())
 
     def items(self):
-        return list(self._data)
+        return list(self._data.items())
 
     def __len__(self):
         return len(self._data)
 
     def __iter__(self):
-        for k, _ in self._data:
-            yield k
+        return iter(self._data)
 
     def __str__(self):
-        return ", ".join([f"{k}=>{v}" for k,v in self._data])
+        return ", ".join(f"{k}=>{v}" for k, v in self._data.items())
 
-    def remove(self, key):
-        del self[key]
+    def remove(self, key) -> None:
+        self._data.pop(key)
 
-    def copy(self) -> "Vardict":
+    def copy(self) -> "VarDict":
         obj = type(self)()
-        for k, v in self._data:
-            obj[k] = v
+        obj._data = self._data.copy()
         return obj
+
+
+# Backwards compatibility: old class name
+Vardict = VarDict

@@ -4,12 +4,12 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff.var_dict import Vardict
+from fautodiff.var_dict import VarDict
 
 
-class TestVardict(unittest.TestCase):
+class TestVarDict(unittest.TestCase):
     def test_basic_operations(self):
-        vd = Vardict()
+        vd = VarDict()
         vd['a'] = 1
         vd['b'] = 2
         self.assertEqual(vd['a'], 1)

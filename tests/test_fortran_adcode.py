@@ -40,9 +40,13 @@ class TestFortranADCode(unittest.TestCase):
             exe = self._build(tmp, f'run_{name}.out')
             for sub_name in sub_names:
                 # Allow runtime failures to keep coverage high
-                cmd = [str(exe), sub_name]
                 if use_mpi:
-                    cmd = [self.mpirun or 'mpirun', '-np', '2'] + cmd
+                    cmd = [self.mpirun or 'mpirun', '-np', '2']
+                    if os.geteuid() == 0:
+                        cmd.append('--allow-run-as-root')
+                    cmd += [str(exe), sub_name]
+                else:
+                    cmd = [str(exe), sub_name]
                 subprocess.run(cmd, check=True)
 
 
