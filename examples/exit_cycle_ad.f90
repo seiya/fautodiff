@@ -1,6 +1,6 @@
 module exit_cycle_ad
   use exit_cycle
-  use fautodiff_data_storage
+  use fautodiff_stack
   implicit none
 
 contains
@@ -71,7 +71,7 @@ contains
     res = x**2
     exit_do_start_35_ad = n
     do i = 1, n
-      call fautodiff_data_storage_push(res)
+      call fautodiff_stack_r4%push(res)
       res = res * x
       if (i == 2) then
         cycle
@@ -102,7 +102,7 @@ contains
     label_35_0_ad: do i = exit_do_start_35_ad, 1, - 1
       cycle_flag_18_ad = .true.
       cycle_flag_27_ad = .true.
-      call fautodiff_data_storage_pop(res)
+      call fautodiff_stack_r4%pop(res)
       if (cycle_flag_18_ad .and. exit_flag_22_ad .and. cycle_flag_27_ad .and. exit_flag_32_ad) then
         res_save_16_ad = res
         res = res * x
@@ -262,11 +262,11 @@ contains
 
     res = x**2
     i = 1
-    call fautodiff_data_storage_push(.false.)
+    call fautodiff_stack_l%push(.false.)
     do while (i <= n)
-      call fautodiff_data_storage_push(.true.)
-      call fautodiff_data_storage_push(i)
-      call fautodiff_data_storage_push(res)
+      call fautodiff_stack_l%push(.true.)
+      call fautodiff_stack_i%push(i)
+      call fautodiff_stack_r4%push(res)
       res = res * x
       if (i == 2) then
         i = i + 1
@@ -295,11 +295,11 @@ contains
     res_ad = res_ad * x ! res = res * x
     exit_flag_56_ad = .true.
     exit_flag_67_ad = .true.
-    label_71_0_ad: do while (fautodiff_data_storage_get())
+    label_71_0_ad: do while (fautodiff_stack_l%get())
       cycle_flag_52_ad = .true.
       cycle_flag_62_ad = .true.
-      call fautodiff_data_storage_pop(res)
-      call fautodiff_data_storage_pop(i)
+      call fautodiff_stack_r4%pop(res)
+      call fautodiff_stack_i%pop(i)
       if (cycle_flag_52_ad .and. exit_flag_56_ad .and. cycle_flag_62_ad .and. exit_flag_67_ad) then
         res_save_49_ad = res
         res = res * x
@@ -466,10 +466,10 @@ contains
 
     res = x
     i = 0
-    call fautodiff_data_storage_push(.false.)
+    call fautodiff_stack_l%push(.false.)
     outer: do while (i <= n)
-      call fautodiff_data_storage_push(.true.)
-      call fautodiff_data_storage_push(res)
+      call fautodiff_stack_l%push(.true.)
+      call fautodiff_stack_r4%push(res)
       i = i + 1
       res = res + 1.0
       middle: do j = 1, n
@@ -503,14 +503,14 @@ contains
 
     exit_flag_91_ad = .true.
     exit_flag_95_ad = .true.
-    label_113_0_ad: do while (fautodiff_data_storage_get())
+    label_113_0_ad: do while (fautodiff_stack_l%get())
       cycle_flag_107_ad = .true.
-      call fautodiff_data_storage_pop(res)
+      call fautodiff_stack_r4%pop(res)
       if (exit_flag_91_ad .and. exit_flag_95_ad .and. cycle_flag_107_ad) then
         res = res + 1.0
         exit_do_start_111_ad = n
         label_111_1_ad: do j = 1, n
-          call fautodiff_data_storage_push(res)
+          call fautodiff_stack_r4%push(res)
           res = res + 10.0
           if (res > 5000.0) then
             exit_do_start_111_ad = j
@@ -551,7 +551,7 @@ contains
       label_111_0_ad: do j = exit_do_start_111_ad, 1, - 1
         cycle_flag_103_ad = .true.
         cycle_flag_107_ad = .true.
-        call fautodiff_data_storage_pop(res)
+        call fautodiff_stack_r4%pop(res)
         if (exit_flag_91_ad .and. exit_flag_95_ad .and. exit_flag_99_ad .and. cycle_flag_103_ad .and. cycle_flag_107_ad) then
           res = res + 10.0
           if (res > 5000.0) then
@@ -562,7 +562,7 @@ contains
           res_save_110_ad = res
           exit_do_start_110_ad = n
           label_110_1_ad: do k = 1, n
-            call fautodiff_data_storage_push(res)
+            call fautodiff_stack_r4%push(res)
             if (res > 4000.0) then
               exit_do_start_110_ad = k
               exit_flag_95_ad = .false.
@@ -593,7 +593,7 @@ contains
           label_110_0_ad: do k = exit_do_start_110_ad, 1, - 1
             cycle_flag_103_ad = .true.
             cycle_flag_107_ad = .true.
-            call fautodiff_data_storage_pop(res)
+            call fautodiff_stack_r4%pop(res)
             if (exit_flag_95_ad .and. exit_flag_99_ad .and. cycle_flag_103_ad .and. cycle_flag_107_ad) then
               if (res > 4000.0) then
                 exit_flag_95_ad = .false.

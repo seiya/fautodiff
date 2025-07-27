@@ -74,11 +74,11 @@ This file provides guidelines for contributors about the repository and develop 
   Wrappers for external modules (e.g. MPI) are an exception: these use
   ``<module>_ad`` as the module name without the ``fautodiff_`` prefix.
 - Each module should be placed in a file named after the module itself.
-  For example, ``fautodiff_data_storage`` lives in ``fautodiff_data_storage.f90``.
+  For example, ``fautodiff_stack`` lives in ``fautodiff_stack.f90``.
 - Public subroutines provided by these modules must also start with the module
-  name followed by an underscore.  For example, ``data_storage`` becomes
-  ``fautodiff_data_storage`` and its public routine ``push`` is renamed to
-  ``fautodiff_data_storage_push``.
+  name followed by an underscore.  For example, ``stack`` becomes
+  ``fautodiff_stack`` and its public routine ``push`` is renamed to
+  ``fautodiff_stack_push``.
 - For AD wrappers of external modules such as MPI, use ``<module>_ad.f90`` as the
   file name and name the module ``<module>_ad``.
 

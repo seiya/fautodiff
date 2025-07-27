@@ -31,14 +31,19 @@ class TestFortranRuntime(unittest.TestCase):
         return exe
 
     @unittest.skipIf(compiler is None, 'gfortran compiler not available')
-    def test_data_storage_push_pop(self):
+    def test_stack_push_pop(self):
         base = Path(__file__).resolve().parents[1]
-        src = base / 'fortran_modules' / 'fautodiff_data_storage.f90'
+        src = base / 'fortran_modules' / 'fautodiff_stack.f90'
         driver = Path(__file__).resolve().parent / 'fortran_runtime' / 'run_data_storage.f90'
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             exe = self._build(tmp, 'run_data_storage')
-            run = subprocess.run([str(exe)], stdout=subprocess.PIPE, text=True, check=True)
+            try:
+                run = subprocess.run([str(exe)], stdout=subprocess.PIPE, text=True, check=True)
+            except subprocess.CalledProcessError as e:
+                if e.stdout:
+                    print(e.stdout)
+                raise
             self.assertEqual(run.stdout.strip(), 'OK')
 
 

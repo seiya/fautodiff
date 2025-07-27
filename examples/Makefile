@@ -31,10 +31,10 @@ $(OUTDIR)/cross_mod_b.o: $(OUTDIR)/cross_mod_a.o
 $(OUTDIR)/cross_mod_b_ad.o: $(OUTDIR)/cross_mod_b.mod $(OUTDIR)/cross_mod_a_ad.o
 $(OUTDIR)/call_module_vars.o: $(OUTDIR)/module_vars.o
 $(OUTDIR)/call_module_vars_ad.o: $(OUTDIR)/module_vars.o $(OUTDIR)/module_vars_ad.o
-$(OUTDIR)/store_vars_ad.o: $(OUTDIR)/fautodiff_data_storage.o
-$(OUTDIR)/module_vars_ad.o: $(OUTDIR)/fautodiff_data_storage.o
-$(OUTDIR)/allocate_vars_ad.o: $(OUTDIR)/fautodiff_data_storage.o
-$(OUTDIR)/exit_cycle_ad.o: $(OUTDIR)/fautodiff_data_storage.o
+$(OUTDIR)/store_vars_ad.o: $(OUTDIR)/fautodiff_stack.o
+$(OUTDIR)/module_vars_ad.o: $(OUTDIR)/fautodiff_stack.o
+$(OUTDIR)/allocate_vars_ad.o: $(OUTDIR)/fautodiff_stack.o
+$(OUTDIR)/exit_cycle_ad.o: $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/mpi_example_ad.o: $(OUTDIR)/mpi_ad.o
 
 clean:
