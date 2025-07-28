@@ -153,6 +153,9 @@ contains
     end if
 
     inner1 = res_ad**2 + sum(sub1_p_ad(:)**2) + sum(sub2_p_ad(:)**2)
+    deallocate(all_p)
+    call pointer_allsub_init(n)
+    call pointer_allsub_main_fwd_rev_ad()
     call pointer_allsub_main_rev_ad(n, x, x_ad, res_ad)
     inner2 = sum(x_ad)
     if (abs((inner2 - inner1) / inner1) > tol) then

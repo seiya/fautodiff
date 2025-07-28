@@ -80,7 +80,7 @@ contains
     end do
     res = 0.0
     do i = 1, n
-      res = res + sub1_p(i) + sub2_p(i)
+      res = res + sub1_p(i) * sub2_p(i)
     end do
 
     return

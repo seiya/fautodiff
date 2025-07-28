@@ -1,18 +1,21 @@
 module fautodiff_stack
+  use iso_c_binding
   implicit none
   private
 
   public :: fautodiff_stack_t
-  public :: fautodiff_stack_r4_t, fautodiff_stack_r8_t, fautodiff_stack_i_t, fautodiff_stack_l_t
-  public :: fautodiff_stack_r4, fautodiff_stack_r8, fautodiff_stack_i, fautodiff_stack_l
+  public :: fautodiff_stack_r4_t, fautodiff_stack_r8_t, fautodiff_stack_i_t, fautodiff_stack_l_t, fautodiff_stack_p_t
+  public :: fautodiff_stack_r4, fautodiff_stack_r8, fautodiff_stack_i, fautodiff_stack_l, fautodiff_stack_p
 
   integer, parameter :: DEFAULT_PAGE_SIZE = 1024 * 1024
-  integer, parameter :: MAX_PAGE_NUM = 1024 * 1024
+  integer, parameter :: MAX_PAGE_NUM_LARGE = 1024 * 1024
+  integer, parameter :: MAX_PAGE_NUM_SMALL = 1
 
   integer, parameter :: i_type_r4 = 1
   integer, parameter :: i_type_r8 = 2
   integer, parameter :: i_type_i  = 3
   integer, parameter :: i_type_l  = 4
+  integer, parameter :: i_type_p  = 5
 
   type :: ptr_r4_t
     real, pointer, contiguous :: ptr(:) => null()
@@ -42,30 +45,46 @@ module fautodiff_stack
 
   ! stack types
   type, extends(fautodiff_stack_t) :: fautodiff_stack_r4_t
-    type(ptr_r4_t) :: ary(MAX_PAGE_NUM)
+    type(ptr_r4_t) :: ary(MAX_PAGE_NUM_LARGE)
   end type fautodiff_stack_r4_t
 
   type, extends(fautodiff_stack_t) :: fautodiff_stack_r8_t
-    type(ptr_r8_t) :: ary(MAX_PAGE_NUM)
+    type(ptr_r8_t) :: ary(MAX_PAGE_NUM_LARGE)
   end type fautodiff_stack_r8_t
 
   type, extends(fautodiff_stack_t) :: fautodiff_stack_i_t
-    type(ptr_i_t) :: ary(MAX_PAGE_NUM)
+    type(ptr_i_t) :: ary(MAX_PAGE_NUM_SMALL)
   contains
     procedure :: get => get_i
   end type fautodiff_stack_i_t
 
   type, extends(fautodiff_stack_t) :: fautodiff_stack_l_t
-    type(ptr_l_t) :: ary(MAX_PAGE_NUM)
+    type(ptr_l_t) :: ary(MAX_PAGE_NUM_SMALL)
   contains
     procedure :: get => get_l
   end type fautodiff_stack_l_t
+
+  type :: fautodiff_stack_p_t
+    type(c_ptr) :: ary(DEFAULT_PAGE_SIZE)
+    integer :: dims(3, DEFAULT_PAGE_SIZE) ! shape1, shape2, shape3
+    integer :: pos = 1
+  contains
+    procedure :: push_p_r4
+    procedure :: push_p_r8
+    generic :: push => push_p_r4, push_p_r8
+    procedure :: pop_p_r4
+    procedure :: pop_p_r8
+    generic :: pop => pop_p_r4, pop_p_r8
+  end type fautodiff_stack_p_t
+
+
 
   ! default stacks used by wrapper procedures
   type(fautodiff_stack_r4_t), save :: fautodiff_stack_r4
   type(fautodiff_stack_r8_t), save :: fautodiff_stack_r8
   type(fautodiff_stack_i_t),  save :: fautodiff_stack_i
   type(fautodiff_stack_l_t),  save :: fautodiff_stack_l
+  type(fautodiff_stack_p_t),  save :: fautodiff_stack_p
 
 contains
 
@@ -76,10 +95,8 @@ contains
   end function data_size
 
   subroutine push(self, data)
-    use iso_c_binding
     class(fautodiff_stack_t), intent(inout) :: self
-    class(*), dimension(..), intent(in), target :: data
-    type(c_ptr) :: ptr
+    class(*), intent(in), target :: data(..)
     real,    pointer, contiguous :: ptr_r4(:)
     real(8), pointer, contiguous :: ptr_r8(:)
     integer, pointer, contiguous :: ptr_i(:)
@@ -99,21 +116,25 @@ contains
       select type (self)
       type is (fautodiff_stack_r4_t)
         if (.not. associated(self%ary(self%page_num)%ptr)) then
+          call check(self%page_num, size(self%ary))
           allocate(self%ary(self%page_num)%ptr(self%page_size))
         end if
         self%ary(self%page_num)%ptr(j0:j1) = ptr_r4(i0:i1)
       type is (fautodiff_stack_r8_t)
         if (.not. associated(self%ary(self%page_num)%ptr)) then
+          call check(self%page_num, size(self%ary))
           allocate(self%ary(self%page_num)%ptr(self%page_size))
         end if
         self%ary(self%page_num)%ptr(j0:j1) = ptr_r8(i0:i1)
       type is (fautodiff_stack_i_t)
         if (.not. associated(self%ary(self%page_num)%ptr)) then
+          call check(self%page_num, size(self%ary))
           allocate(self%ary(self%page_num)%ptr(self%page_size))
         end if
         self%ary(self%page_num)%ptr(j0:j1) = ptr_i(i0:i1)
       type is (fautodiff_stack_l_t)
         if (.not. associated(self%ary(self%page_num)%ptr)) then
+          call check(self%page_num, size(self%ary))
           allocate(self%ary(self%page_num)%ptr(self%page_size))
         end if
         self%ary(self%page_num)%ptr(j0:j1) = ptr_l(i0:i1)
@@ -124,19 +145,13 @@ contains
       if (self%pos > self%page_size) then
         self%pos = 1
         self%page_num = self%page_num + 1
-        if (self%page_num > MAX_PAGE_NUM) then
-          print *, 'Page number exceeds the limit'
-          error stop 1
-        end if
       end if
     end do
   end subroutine push
 
   subroutine pop(self, data)
-    use iso_c_binding
     class(fautodiff_stack_t), intent(inout) :: self
-    class(*), dimension(..), intent(inout), target :: data
-    type(c_ptr) :: ptr
+    class(*), intent(inout), target :: data(..)
     real,    pointer, contiguous :: ptr_r4(:)
     real(8), pointer, contiguous :: ptr_r8(:)
     integer, pointer, contiguous :: ptr_i(:)
@@ -180,6 +195,112 @@ contains
       end if
     end do
   end subroutine pop
+
+  subroutine push_p_r4(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real, intent(in), target :: data(..)
+    type(c_ptr) :: ptr
+
+    select rank(data)
+    rank(1)
+      ptr = c_loc(data)
+      self%dims(1, self%pos) = size(data)
+    rank(2)
+      ptr = c_loc(data)
+      self%dims(1, self%pos) = size(data, 1)
+      self%dims(2, self%pos) = size(data, 2)
+    rank(3)
+      ptr = c_loc(data)
+      self%dims(1, self%pos) = size(data, 1)
+      self%dims(2, self%pos) = size(data, 2)
+      self%dims(3, self%pos) = size(data, 3)
+    rank default
+      print *, 'Unsupported rank'
+      error stop 1
+    end select
+    self%ary(self%pos) = ptr
+    self%pos = self%pos + 1
+
+    return
+  end subroutine push_p_r4
+
+  subroutine push_p_r8(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real(8), intent(in), target :: data(..)
+    type(c_ptr) :: ptr
+
+    select rank(data)
+    rank(1)
+      ptr = c_loc(data)
+      self%dims(1, self%pos) = size(data)
+    rank(2)
+      ptr = c_loc(data)
+      self%dims(1, self%pos) = size(data, 1)
+      self%dims(2, self%pos) = size(data, 2)
+    rank(3)
+      ptr = c_loc(data)
+      self%dims(1, self%pos) = size(data, 1)
+      self%dims(2, self%pos) = size(data, 2)
+      self%dims(3, self%pos) = size(data, 3)
+    rank default
+      print *, 'Unsupported rank'
+      error stop 1
+    end select
+    self%ary(self%pos) = ptr
+    self%pos = self%pos + 1
+
+    return
+  end subroutine push_p_r8
+
+  subroutine pop_p_r4(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real, intent(inout), pointer :: data(..)
+    type(c_ptr) :: ptr
+
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+       print *, 'No stored data'
+       error stop 1
+    end if
+    ptr = c_loc(data)
+    select rank(data)
+    rank(1)
+      call c_f_pointer(ptr, data, [self%dims(1, self%pos)])
+    rank(2)
+      call c_f_pointer(ptr, data, [self%dims(1, self%pos), self%dims(2, self%pos)])
+    rank(3)
+      call c_f_pointer(ptr, data, [self%dims(1, self%pos), self%dims(2, self%pos), self%dims(3, self%pos)])
+    end select
+
+    return
+  end subroutine pop_p_r4
+
+  subroutine pop_p_r8(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real(8), intent(inout), pointer :: data(..)
+    type(c_ptr) :: ptr
+
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+       print *, 'No stored data'
+       error stop 1
+    end if
+    ptr = c_loc(data)
+    select rank(data)
+    rank(1)
+      call c_f_pointer(ptr, data, [self%dims(1, self%pos)])
+    rank(2)
+      call c_f_pointer(ptr, data, [self%dims(1, self%pos), self%dims(2, self%pos)])
+    rank(3)
+      call c_f_pointer(ptr, data, [self%dims(1, self%pos), self%dims(2, self%pos), self%dims(3, self%pos)])
+    end select
+
+    return
+  end subroutine pop_p_r8
 
   function get_i(self) result(res)
     class(fautodiff_stack_i_t), intent(inout) :: self
@@ -317,5 +438,18 @@ contains
 
     return
   end subroutine get_ptr
+
+  subroutine check(page_num, ary_size)
+    integer, intent(in) :: page_num
+    integer, intent(in) :: ary_size
+
+    if (page_num > ary_size) then
+      print *, 'Page number exceeds the limit'
+      error stop 1
+    end if
+
+    return
+  end subroutine check
+
 
 end module fautodiff_stack

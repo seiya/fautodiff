@@ -1,5 +1,6 @@
 module pointer_arrays_ad
   use pointer_arrays
+  use fautodiff_stack
   implicit none
 
   real, pointer :: mod_p_ad(:)
@@ -182,8 +183,8 @@ contains
     res = 0.0
     res_ad = 0.0
     do i = 1, n
-      res_ad = res_ad + sub1_p_ad(i) + sub2_p_ad(i) ! res = res + sub1_p(i) + sub2_p(i)
-      res = res + sub1_p(i) + sub2_p(i)
+      res_ad = res_ad + sub1_p_ad(i) * sub2_p(i) + sub2_p_ad(i) * sub1_p(i) ! res = res + sub1_p(i) * sub2_p(i)
+      res = res + sub1_p(i) * sub2_p(i)
     end do
 
     return
@@ -195,6 +196,14 @@ contains
     real, intent(out) :: x_ad(n)
     real, intent(inout) :: res_ad
     integer :: i
+
+    call fautodiff_stack_p%pop(sub2_p)
+    call fautodiff_stack_p%pop(sub1_p)
+
+    do i = 1, n
+      sub1_p(i) = sub1_p(i) + x(i)
+      sub2_p(i) = sub2_p(i) + i
+    end do
 
     if (.not. associated(sub1_p_ad)) then
       if (.not. allocated(all_p_ad)) then
@@ -212,8 +221,8 @@ contains
     end if
 
     do i = n, 1, - 1
-      sub1_p_ad(i) = res_ad + sub1_p_ad(i) ! res = res + sub1_p(i) + sub2_p(i)
-      sub2_p_ad(i) = res_ad + sub2_p_ad(i) ! res = res + sub1_p(i) + sub2_p(i)
+      sub1_p_ad(i) = res_ad * sub2_p(i) + sub1_p_ad(i) ! res = res + sub1_p(i) * sub2_p(i)
+      sub2_p_ad(i) = res_ad * sub1_p(i) + sub2_p_ad(i) ! res = res + sub1_p(i) * sub2_p(i)
     end do
     res_ad = 0.0 ! res = 0.0
     do i = n, 1, - 1
@@ -222,6 +231,14 @@ contains
 
     return
   end subroutine pointer_allsub_main_rev_ad
+
+  subroutine pointer_allsub_main_fwd_rev_ad
+
+    call fautodiff_stack_p%push(sub1_p)
+    call fautodiff_stack_p%push(sub2_p)
+
+    return
+  end subroutine pointer_allsub_main_fwd_rev_ad
 
   subroutine pointer_swap_fwd_ad(n, x, x_ad, y, y_ad, res, res_ad)
     integer, intent(in) :: n
