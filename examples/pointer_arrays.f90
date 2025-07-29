@@ -98,7 +98,7 @@ contains
     work1 => x
     work2 => y
     res = 0.0
-    do j = 1, 4
+    do j = 1, 3
       do i = 1, n
         res = res + work1(i)
       end do

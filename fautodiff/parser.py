@@ -19,6 +19,7 @@ from typing import List, Tuple, Dict, Optional, Union
 from .code_tree import (
     Assignment,
     PointerAssignment,
+    PointerClear,
     Block,
     CallStatement,
     Declaration,
@@ -808,6 +809,8 @@ def _parse_routine(content,
             return Assignment(lhs, rhs, False, info)
         if isinstance(stmt, Fortran2003.Pointer_Assignment_Stmt):
             lhs = _stmt2op(stmt.items[0], decl_map, type_map)
+            if stmt.items[2].string == "null()":
+                return PointerClear(lhs, None)
             rhs = _stmt2op(stmt.items[2], decl_map, type_map)
             return PointerAssignment(lhs, rhs, info=info)
         if isinstance(stmt, Fortran2003.Write_Stmt):

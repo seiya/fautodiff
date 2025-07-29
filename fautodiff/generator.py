@@ -9,7 +9,7 @@ REV_SUFFIX = "_rev_ad"
 import json
 import sys
 from pathlib import Path
-from typing import Optional, List, Tuple, Dict
+from typing import Optional, Union, List, Tuple, Dict
 
 # Ensure other modules use the same AD suffix
 from . import code_tree as code_tree
@@ -28,7 +28,11 @@ from .code_tree import (
     SaveAssignment,
     PushPop,
     ClearAssignment,
+    PointerAssignment,
+    PointerClear,
+    DoAbst,
     DoLoop,
+    DoWhile,
     IfBlock,
     SelectBlock,
     Allocate,
@@ -43,6 +47,7 @@ from .operators import (
     OpVar,
     OpRange,
     OpFunc,
+    OpNot,
 )
 
 code_tree.AD_SUFFIX = AD_SUFFIX
@@ -104,13 +109,25 @@ def _add_fwd_rev_calls(node, routine_map: dict, generic_map:dict, donot_prune: b
 
 def _module_var_fwd_rev(routine_org: Routine,
                         subroutine: Subroutine,
-                        vars: list[OpVar],
-                        ) -> Subroutine:
-    """Return a forward wrapper that saves variables."""
+                        mod_vars: List[OpVar],
+                        assigned: VarList,
+                        required: VarList,
+                        ) -> Optional[Subroutine]:
+    """Return a forward wrapper"""
+
+    # save module variables
+    common = assigned & required
+    mod_names = [v.name_ext() for v in mod_vars]
+    cross_vars = []
+    for var in common:
+        name = var.name_ext()
+        if name in mod_names and not name.endswith(AD_SUFFIX):
+            cross_vars.append(next(v for v in mod_vars if v.name_ext() == name))
+    cross_vars = sorted(cross_vars, key=lambda v: v.name_ext())
     args = []
-    sub_fwd_rev = Subroutine(f"{routine_org.name}_fwd_rev_ad", args)
+    sub_fwd_rev = None
     index = []
-    for var in vars:
+    for var in cross_vars:
         block_fwd = Block([])
         block_rev = Block([])
         node_fwd = block_fwd
@@ -149,22 +166,70 @@ def _module_var_fwd_rev(routine_org: Routine,
                     node_rev = DoLoop(node_rev, i, OpRange([r[1], r[0], OpInt(-1)]))
             var = var_ref
             var_ref = var.ref_var
-        pushpop = PushPop(var_org, subroutine.get_id())
+        pushpop = PushPop(var_org, subroutine.get_id(), pointer=var_org.pointer)
         block_fwd.append(pushpop)
         block_rev.append(pushpop.to_load())
         if node_fwd is block_fwd:
             node_fwd = block_fwd[0]
         if node_rev is block_rev:
             node_rev = block_rev[0]
+        if sub_fwd_rev is None:
+            sub_fwd_rev = Subroutine(f"{routine_org.name}_fwd_rev_ad", args)
         sub_fwd_rev.content.append(node_fwd)
         subroutine.content.insert_begin(node_rev)
-    sub_fwd_rev.ad_init = Block([])
-    sub_fwd_rev.ad_content = Block([])
     for idx in index:
         decl = Declaration(name=idx.name, typename="integer")
         if decl.name not in sub_fwd_rev.args:
             sub_fwd_rev.decls.append(decl)
         subroutine.decls.append(decl)
+
+    # pointer variables
+    def _search_pointer(node: Node,
+                        sub_fwd_rev: Optional[Subroutine],
+                        map: Optional[Dict[str, Tuple[OpVar, OpVar, bool]]] = None,
+                        allocated: Optional[Dict[str, bool]] = None,
+                        ) -> Optional[Subroutine]:
+        if map is None:
+            map = {}
+            allocated = {}
+            top = True
+        else:
+            top = False
+        for child in node.iter_children():
+            sub_fwd_rev = _search_pointer(child, sub_fwd_rev, map, allocated)
+        if isinstance(node, PointerAssignment):
+            lhs = node.lhs
+            rhs = node.rhs
+            lhs_name = lhs.name_ext()
+            if (lhs.pointer and lhs_name in mod_var_names and
+                isinstance(rhs, OpVar) and rhs.name_ext() in mod_var_names):
+                rhs_name = rhs.name_ext()
+                if rhs.allocatable and rhs_name not in allocated:
+                    allocated[rhs_name] = True
+                    al = True
+                else:
+                    al = False
+                map[lhs_name] = (lhs, rhs, al)
+        if top and map:
+            if sub_fwd_rev is None:
+                sub_fwd_rev = Subroutine(f"{routine_org.name}_fwd_rev_ad", args)
+                sub_fwd_rev.ad_content = Block([])
+            for lhs_name, value in map.items():
+                lhs, rhs, allocate = value
+                rhs_ad = rhs.add_suffix(AD_SUFFIX)
+                if allocate:
+                    v = rhs_ad.change_index(None)
+                    cond = OpNot([OpFunc("allocated", [v])])
+                    block = Block([
+                        Allocate([v], mold=rhs),
+                        ClearAssignment(v),
+                        ])
+                    sub_fwd_rev.ad_content.append(IfBlock([(cond, block)]))
+                pa = PointerAssignment(lhs.add_suffix(AD_SUFFIX), rhs_ad)
+                sub_fwd_rev.ad_content.append(pa)
+        return sub_fwd_rev
+    mod_var_names = [v.name for v in mod_vars]
+    sub_fwd_rev = _search_pointer(routine_org.content, sub_fwd_rev)
 
     return sub_fwd_rev
 
@@ -199,6 +264,67 @@ def _parse_allocate(node: Node,
                 if name not in mod_var_names:
                     var = OpVar(name, index=map[name][0])
                     node.append(Declaration(vars=[OpVar]))
+
+def _parse_pointer(node: Node,
+                   mod_vars: List[OpVar],
+                   map_ptr: Optional[Dict[str, OpVar]] = None,
+                   map_ref: Optional[Dict[str, Optional[Union[OpVar, OpNull]]]] = None,
+                   inloop: bool = False,
+                   ) -> Tuple[Dict[str, OpVar], Dict[str, Optional[Union[OpVar, OpNull]]]]:
+    if map_ptr is None:
+        if not isinstance(node, Block):
+            raise ValueError(f"node must be Block: {type(node)}")
+        map_ptr = {}
+        map_ref = {}
+        top = True
+    else:
+        top = False
+    if isinstance(node, SelectBlock):
+        for child in node.iter_children():
+            map_ptr, map_ref_new = _parse_pointer(child, mod_vars, map_ptr, map_ref.copy(), inloop)
+            for key, value in map_ref.items():
+                if value != map_ref_new[key]: # pointer is updated in the branch
+                    map_ref[key] = None
+    elif isinstance(node, DoAbst):
+        map_ptr, map_ref_new = _parse_pointer(node._body, mod_vars, map_ptr, {}, True)
+        for key in map_ref_new: # pointer is updated in the loop
+            map_ref[key] = None
+    else:
+        for child in [n for n in node.iter_children()]:
+            map_ptr, map_ref = _parse_pointer(child, mod_vars, map_ptr, map_ref, inloop)
+    if isinstance(node, PointerAssignment):
+        lhs_name = node.lhs.name_ext()
+        rhs = node.rhs
+        map_ptr[lhs_name] = node.lhs
+        if lhs_name in map_ref:
+            node.parent.insert_before(node.get_id(), PointerClear(node.lhs, previous=map_ref[lhs_name], info=node.info))
+        else:
+            node.parent.insert_before(node.get_id(), PointerClear(node.lhs, previous=None, info=node.info))
+        if isinstance(rhs, OpVar):
+            rhs_name = rhs.name_ext()
+            if rhs_name in map_ref:
+                map_ref[lhs_name] = map_ref[rhs_name]
+            else:
+                map_ref[lhs_name] = rhs
+        elif isinstance(rhs, OpFunc) and rhs.name=="null":
+            map_ref[lhs_name] = OpNull()
+    if isinstance(node, Deallocate):
+        for var in node.vars:
+            name = var.name_ext()
+            for ptr_name, tgt in map_ref.items():
+                if isinstance(tgt, OpVar) and name == tgt.name_ext():
+                    node.parent.insert_before(node.get_id(), PointerClear(map_ptr[ptr_name], previous=tgt))
+                    map_ref[ptr_name] = None
+    if top:
+        mod_var_names = [v.name for v in mod_vars]
+        for name in map_ptr:
+            if ((name.endswith(AD_SUFFIX) and name.removesuffix(AD_SUFFIX) in mod_var_names) or
+                name in mod_var_names
+            ):
+                continue
+            node.append(PointerClear(map_ptr[name], previous=map_ref[name]))
+
+    return (map_ptr, map_ref)
 
 def _parse_mpi_calls(node: Node, calls: Optional[Dict[str, List[CallStatement]]] = None) -> None:
     if calls is None:
@@ -423,6 +549,7 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
                 is_constant=arg.is_constant,
                 allocatable=arg.allocatable,
                 pointer=arg.pointer,
+                target=arg.target,
             )
             args.append(var)
             grad_args.append(var)
@@ -450,6 +577,7 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
                 allocatable=var.allocatable,
                 pointer=var.pointer,
                 optional=var.optional,
+                target=var.target,
                 declared_in="routine",
             )
         )
@@ -518,6 +646,7 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                     is_constant=arg.is_constant,
                     allocatable=arg.allocatable,
                     pointer=arg.pointer,
+                    target=arg.target,
                 )
                 args.append(var)
                 grad_args.append(var)
@@ -541,6 +670,7 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                     is_constant=arg.is_constant,
                     allocatable=arg.allocatable,
                     pointer=arg.pointer,
+                    target=arg.target,
                 )
                 args.append(var)
                 grad_args.append(var)
@@ -566,6 +696,7 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                 allocatable=var.allocatable,
                 pointer=var.pointer,
                 optional=var.optional,
+                target=var.target,
                 declared_in="routine",
             )
         )
@@ -653,10 +784,6 @@ def _generate_ad_subroutine(
         subroutine.ad_content = ad_block
         return subroutine, False, set()
 
-    _parse_allocate(routine_org.content, mod_vars)
-    _parse_mpi_calls(routine_org.content)
-    _set_call_intents(routine_org.content, routine_map, generic_map)
-
     saved_vars: List[OpVar] = []
     if reverse:
         assigned_advars = None
@@ -701,6 +828,7 @@ def _generate_ad_subroutine(
                             allocatable=base_decl.allocatable,
                             pointer=base_decl.pointer,
                             optional=base_decl.optional,
+                            target=base_decl.target,
                             declared_in="routine",
                         )
                     )
@@ -713,6 +841,7 @@ def _generate_ad_subroutine(
             targets = VarList(grad_args + mod_ad_vars)
         else:
             targets = VarList(grad_args + out_args + mod_ad_vars + mod_vars)
+
         #print("Targets:", targets) # for debugging
         #print(subroutine.name)
         ad_code = ad_code.prune_for(targets, mod_vars)
@@ -723,8 +852,9 @@ def _generate_ad_subroutine(
             ad_block.append(node)
 
     if reverse:
-        targets = ad_code.required_vars()
-        #print(render_program(ad_code))
+        targets = ad_block.required_vars()
+
+        #print(render_program(ad_block))
         #print("Targets:", targets)
         fw_block = Block(routine_org.content.set_for_exitcycle(None))
         fw_block.build_parent()
@@ -734,21 +864,13 @@ def _generate_ad_subroutine(
         fw_block = fw_block.prune_for(targets, mod_vars)
 
         assigned = fw_block.assigned_vars(without_savevar=True)
-        assigned = ad_code.assigned_vars(assigned, without_savevar=True)
-        required = ad_code.required_vars(without_savevar=True)
+        assigned = ad_block.assigned_vars(assigned, without_savevar=True)
+        required = ad_block.required_vars(without_savevar=True)
         required = fw_block.required_vars(required, without_savevar=True)
-        common = assigned & required
-        mod_names = [v.name_ext() for v in mod_vars]
-        cross_vars = []
-        for var in common:
-            name = var.name_ext()
-            if name in mod_names and not name.endswith(AD_SUFFIX):
-                cross_vars.append(var)
-        cross_vars = sorted(cross_vars, key=lambda v: v.name_ext())
-        if cross_vars:
+        sub_fwd_rev = _module_var_fwd_rev(routine_org, subroutine, mod_vars, assigned, required)
+        if sub_fwd_rev:
             name_org = routine_org.name
             name_fwd_rev = f"{name_org}_fwd_rev_ad"
-            sub_fwd_rev = _module_var_fwd_rev(routine_org, subroutine, cross_vars)
             intents = [v.intent for v in sub_fwd_rev.arg_vars()]
             routine_map_new = {
                 name_org: {
@@ -770,6 +892,11 @@ def _generate_ad_subroutine(
             first = ad_block.first()
             if (isinstance(last, SaveAssignment) and isinstance(first, SaveAssignment) and
                 last.var.name == first.var.name and last.id == first.id and last.load != first.load):
+                fw_block.remove_child(last)
+                ad_block.remove_child(first)
+                continue
+            if (isinstance(last, PointerAssignment) and isinstance(first, PointerAssignment) and
+                last.lhs.name_ext() == first.rhs.name_ext() and last.rhs.name_ext() == first.lhs.name_ext()):
                 fw_block.remove_child(last)
                 ad_block.remove_child(first)
                 continue
@@ -797,8 +924,9 @@ def _generate_ad_subroutine(
         if not fw_block.is_effectively_empty():
             subroutine.content.extend(fw_block)
 
-    if (ad_code is not None) and (not ad_code.is_effectively_empty()):
-        vars = ad_code.required_vars(
+    if (ad_block is not None) and (not ad_block.is_effectively_empty()):
+        # initialize ad_var if necessary
+        vars = ad_block.required_vars(
             VarList([OpVar(var.name) for var in out_grad_args]),
             without_savevar=True
         )
@@ -827,7 +955,6 @@ def _generate_ad_subroutine(
                     Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind))
                 )
 
-
     var_names = []
     for var in subroutine.collect_vars():
         if var.name not in var_names:
@@ -852,6 +979,7 @@ def _generate_ad_subroutine(
                             allocatable=base_decl.allocatable,
                             pointer=base_decl.pointer,
                             optional=base_decl.optional,
+                            target=base_decl.target,
                             declared_in="routine",
                         )
                     )
@@ -918,6 +1046,7 @@ def _generate_ad_subroutine(
                             return
         return
 
+    # declaration of saved variables
     for var in reversed(saved_vars):
         if var.index is not None and var.name in save_assigns:
             if len(save_assigns[var.name]) < 2:
@@ -941,26 +1070,28 @@ def _generate_ad_subroutine(
 
         base_decl = None
         if var.reference is not None:
-            base_decl = routine_org.find_decl(var.reference)
+            ref = var.reference.remove_suffix(AD_SUFFIX)
+            base_decl = routine_org.find_decl(ref)
 
         allocatable = False
         if base_decl is not None:
             allocatable = base_decl.allocatable
             if allocatable and base_decl.declared_in != "routine": # module or use variable
                 allocatable = False
+                vname = str(var.change_index(None))
                 if var.index:
                     dims = []
-                    for idx in var.index:
+                    for n, idx in enumerate(var.index):
                         if isinstance(idx, OpRange):
                             if idx[0]==OpInt(1) and idx[1] is not None:
                                 dims.append(str(idx[1]))
                                 continue
                             elif idx[0] is not None and idx[1] is not None:
-                                dims.append(f"{idx[0]}:{idx[1]}")
+                                dims[n].append(f"{idx[0]}:{idx[1]}")
                                 continue
-                        dims.append(None)
+                        dims.append(f"size({vname}, {n})")
                 else:
-                    dims = [None] * len(dims)
+                    dims = [f"size({vname}, {n})" for n in range(len(base_decl.dims))]
                 _get_size(subroutine, var.name, dims)
                 dims = tuple(dims)
             else:
@@ -968,8 +1099,8 @@ def _generate_ad_subroutine(
         else:
             dims = var.dims
 
+        dims_new = []
         if dims is not None and var.reduced_dims is not None:
-            dims_new = []
             for i, idx in enumerate(dims):
                 if i not in var.reduced_dims:
                     dims_new.append(idx)
@@ -1006,18 +1137,23 @@ def _generate_ad_subroutine(
                 allocatable=allocatable,
                 pointer=base_decl.pointer if base_decl else False,
                 optional=base_decl.optional if base_decl else False,
+                target=base_decl.target if base_decl else False,
                 declared_in="routine",
             )
         )
 
     if reverse:
-        prune_targets = VarList(grad_args + mod_ad_vars)
+        targets = VarList(grad_args + mod_ad_vars)
     else:
-        prune_targets = VarList(grad_args + mod_vars + mod_ad_vars + out_args)
-    subroutine = subroutine.prune_for(prune_targets, mod_vars, decl_map=subroutine.decl_map)
+        targets = VarList(grad_args + mod_vars + mod_ad_vars + out_args)
 
-    mod_var_names = [var.name for var in mod_vars + mod_ad_vars]
-    required_vnames = [str(var) for var in subroutine.required_vars() if var.name not in mod_var_names]
+    #print(render_program(subroutine))
+    subroutine = subroutine.prune_for(targets, mod_vars, decl_map=subroutine.decl_map)
+
+    mod_all_var_names = [v.name_ext() for v in mod_vars]
+    for v in mod_ad_vars:
+        mod_all_var_names.append(v.name_ext())
+    required_vnames = [str(var) for var in subroutine.required_vars() if var.name not in mod_all_var_names]
     if len(required_vnames) > 0:
         _warn(
             warnings,
@@ -1119,6 +1255,12 @@ def generate_ad(
         ad_modules_used = set()
         pushpop_used = False
         for routine in mod_org.routines:
+
+            _parse_allocate(routine.content, mod_vars)
+            _parse_pointer(routine.content, mod_vars)
+            _parse_mpi_calls(routine.content)
+            _set_call_intents(routine.content, routine_map, generic_map)
+
             if mode in ("forward", "both"):
                 sub, _, mods_called = _generate_ad_subroutine(
                     mod_org,

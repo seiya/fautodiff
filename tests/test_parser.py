@@ -570,7 +570,7 @@ class TestParser(unittest.TestCase):
         self.assertTrue(decl.optional)
         self.assertEqual(
             render_program(Block([decl])).strip(),
-            "real, optional, intent(in)  :: y",
+            "real, intent(in), optional  :: y",
         )
 
 if __name__ == "__main__":

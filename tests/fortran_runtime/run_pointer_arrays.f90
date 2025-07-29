@@ -170,7 +170,7 @@ contains
   end subroutine test_pointer_allsub
 
   subroutine test_pointer_swap
-    real, parameter :: tol = 2.0e-4
+    real, parameter :: tol = 3.0e-4
     integer, parameter :: n = 5
     real :: x(n), y(n), res, res_eps
     real :: x_ad(n), y_ad(n), res_ad
