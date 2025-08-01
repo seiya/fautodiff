@@ -93,6 +93,29 @@ class TestVarList(unittest.TestCase):
         self.assertEqual(AryIndex([n,m]), vl.vars["vref%ary"][0])
         self.assertEqual([var], list(v for v in vl))
 
+    def test_merge(self):
+        v1 = OpVar("v", index=[OpRange([OpInt(1), OpInt(2)])])
+        v2 = OpVar("v", index=[OpRange([OpInt(2), OpInt(4)])])
+        vl1 = VarList([v1])
+        vl2 = VarList([v2])
+        vl1.merge(vl2)
+        self.assertIn(OpVar("v", index=[OpInt(1)]), vl1)
+        self.assertIn(OpVar("v", index=[OpInt(4)]), vl1)
+        self.assertIn(OpVar("v", index=[OpInt(3)]), vl1)
+        self.assertEqual(str(vl1), "v(1:4)")
+
+    def test_intersection(self):
+        v1 = OpVar("v", index=[OpRange([OpInt(1), OpInt(4), OpInt(1)])])
+        v2 = OpVar("v", index=[OpRange([OpInt(3), OpInt(5), OpInt(1)])])
+        vl1 = VarList([v1])
+        vl2 = VarList([v2])
+        inter = vl1 & vl2
+        self.assertIn(OpVar("v", index=[OpInt(3)]), inter)
+        self.assertIn(OpVar("v", index=[OpInt(4)]), inter)
+        self.assertNotIn(OpVar("v", index=[OpInt(2)]), inter)
+        self.assertEqual(str(inter), "v(3:4)")
+        self.assertEqual(inter.names(), ["v"])
+
 
 
 if __name__ == '__main__':
