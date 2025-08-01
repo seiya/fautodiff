@@ -145,6 +145,31 @@ class TestOperatorsBasic(unittest.TestCase):
         self.assertTrue(n-1 in rng)
         self.assertFalse(n+1 in rng)
 
+    def test_derivative_dot_product(self):
+        x = OpVar("x")
+        y = OpVar("y")
+        expr = OpFunc("dot_product", args=[x, y])
+        dx = expr.derivative(x)
+        dy = expr.derivative(y)
+        self.assertEqual(str(dx), "y")
+        self.assertEqual(str(dy), "x")
+
+    def test_derivative_matmul(self):
+        a = OpVar("a")
+        b = OpVar("b")
+        expr = OpFunc("matmul", args=[a, b])
+        da = expr.derivative(a)
+        db = expr.derivative(b)
+        self.assertEqual(str(da), "matmul(1, b)")
+        self.assertEqual(str(db), "matmul(a, 1)")
+
+    def test_nondiff_intrinsics(self):
+        x = OpVar("x")
+        maxloc_expr = OpFunc("maxloc", args=[x])
+        minloc_expr = OpFunc("minloc", args=[x])
+        self.assertEqual(str(maxloc_expr.derivative(x)), "0")
+        self.assertEqual(str(minloc_expr.derivative(x)), "0")
+
 
 if __name__ == "__main__":
     unittest.main()
