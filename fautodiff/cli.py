@@ -1,5 +1,6 @@
 """Command line interface for the fautodiff generator."""
 import argparse
+import sys
 from . import generator
 
 
@@ -44,15 +45,20 @@ def main():
     )
     args = parser_arg.parse_args()
 
-    code = generator.generate_ad(
-        args.input,
-        args.output,
-        warn=not args.no_warn,
-        search_dirs=args.search_dirs,
-        write_fadmod=not args.no_fadmod,
-        fadmod_dir=args.fadmod_dir,
-        mode=args.mode,
-    )
+    try:
+        code = generator.generate_ad(
+            args.input,
+            args.output,
+            warn=not args.no_warn,
+            search_dirs=args.search_dirs,
+            write_fadmod=not args.no_fadmod,
+            fadmod_dir=args.fadmod_dir,
+            mode=args.mode,
+        )
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
     if args.output is None:
         print(code, end="")
 
