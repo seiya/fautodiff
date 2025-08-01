@@ -114,7 +114,13 @@ def _module_var_fwd_rev(routine_org: Routine,
                         assigned: VarList,
                         required: VarList,
                         ) -> Optional[Subroutine]:
-    """Return a forward wrapper"""
+    """Return a forward wrapper for module variables and pointers.
+
+    The wrapper stores required module variable values to the stack before
+    executing ``routine_org`` and reloads them in reverse mode.  This enables
+    reverse differentiation when a routine reads from and later writes to
+    module level state.
+    """
 
     # save module variables
     common = assigned & required
@@ -190,6 +196,12 @@ def _module_var_fwd_rev(routine_org: Routine,
                         map: Optional[Dict[str, Tuple[OpVar, OpVar, bool]]] = None,
                         allocated: Optional[Dict[str, bool]] = None,
                         ) -> Optional[Subroutine]:
+        """Locate pointer assignments and record their associations.
+
+        Traverses ``node`` collecting pointer targets so that forward mode can
+        save them on the stack and reverse mode can restore the original
+        associations.
+        """
         if map is None:
             map = {}
             allocated = {}
@@ -238,6 +250,12 @@ def _parse_allocate(node: Node,
                     mod_vars: List[OpVar],
                     map: Optional[Dict[str, List[AryIndex]]] = None
                     ) -> None:
+    """Record indices of allocated arrays for later deallocation.
+
+    The function walks ``node`` collecting indices used in ``Allocate`` and
+    ``Deallocate`` statements so the same indices can be reused when
+    generating the adjoint code.
+    """
     if map is None:
         map = {}
         top = True
@@ -272,6 +290,12 @@ def _parse_pointer(node: Node,
                    map_ref: Optional[Dict[str, Optional[Union[OpVar, OpNull]]]] = None,
                    inloop: bool = False,
                    ) -> Tuple[Dict[str, OpVar], Dict[str, Optional[Union[OpVar, OpNull]]]]:
+    """Insert ``PointerClear`` nodes and track pointer associations.
+
+    ``map_ptr`` keeps the latest pointer variables while ``map_ref`` remembers
+    their targets.  This information is required when restoring pointer state
+    in the generated reverse code.
+    """
     if map_ptr is None:
         if not isinstance(node, Block):
             raise ValueError(f"node must be Block: {type(node)}")
@@ -328,6 +352,12 @@ def _parse_pointer(node: Node,
     return (map_ptr, map_ref)
 
 def _parse_mpi_calls(node: Node, calls: Optional[Dict[str, List[CallStatement]]] = None) -> None:
+    """Collect MPI calls that should not be pruned.
+
+    MPI routines may have side effects even if their results are unused.  The
+    collected calls are marked to remain in the AD output and their buffers
+    are associated when necessary.
+    """
     if calls is None:
         top = True
         calls = {}
@@ -357,6 +387,9 @@ def _parse_mpi_calls(node: Node, calls: Optional[Dict[str, List[CallStatement]]]
             _parse_mpi_calls(child, calls)
 
     if top:
+        # Top-level call: mark certain MPI routines to avoid pruning and
+        # associate buffer variables so that the generated code preserves
+        # communication semantics.
         if "start" in calls:
             for key in ("start", "wait"):
                 if key in calls:
@@ -506,6 +539,12 @@ def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
 
 
 def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
+    """Create forward-mode AD subroutine header and argument info.
+
+    The function duplicates the original arguments, appends gradient
+    counterparts when required and returns both the created ``Subroutine``
+    and metadata describing these arguments.
+    """
     args = []
     grad_args = []
     in_grad_args = []
@@ -776,7 +815,12 @@ def _generate_ad_subroutine(
     *,
     reverse: bool,
 ) -> tuple[Optional[Subroutine], bool, set]:
-    """Generate forward or reverse AD subroutine."""
+    """Generate forward or reverse AD subroutine.
+
+    Returns the generated ``Subroutine`` (or ``None`` when skipped), a flag
+    indicating whether stack push/pop operations are required and the set of
+    modules whose AD wrappers are invoked.
+    """
 
     if routine_info.get("skip"):
         return None, False, set()
@@ -792,6 +836,7 @@ def _generate_ad_subroutine(
 
     sub_fwd_rev: Optional[Subroutine] = None
 
+    # Collect gradient variables originating from module scope
     has_mod_grad_input = False
     mod_ad_vars = []
     for var in mod_vars:
@@ -799,6 +844,7 @@ def _generate_ad_subroutine(
             mod_ad_vars.append(var.add_suffix(AD_SUFFIX))
             has_mod_grad_input = True
 
+    # SAVE variables behave like module variables and may carry gradients
     save_vars = []
     save_ad_vars = []
     has_save_grad_input = False
@@ -824,6 +870,7 @@ def _generate_ad_subroutine(
         assigned_advars = None
     else:
         assigned_advars = VarList(in_grad_args + mod_ad_vars + save_ad_vars)
+    # Generate AD statements from the original routine body
     nodes = routine_org.content.generate_ad(
         saved_vars,
         reverse=reverse,
@@ -843,6 +890,7 @@ def _generate_ad_subroutine(
     #print(render_program(routine_org))
 
     if not ad_code.is_effectively_empty():
+        # Declare any temporary gradient variables introduced by AD code
         for var in ad_code.assigned_vars(without_savevar=True):
             name = var.name
             if name.endswith(AD_SUFFIX):
@@ -881,10 +929,8 @@ def _generate_ad_subroutine(
         else:
             targets = VarList(grad_args + out_args + mod_ad_vars + mod_vars + save_ad_vars + save_vars)
 
-        #print("Targets:", targets) # for debugging
-        #print(subroutine.name)
+        # Remove statements unrelated to derivative targets
         ad_code = ad_code.prune_for(targets, mod_vars + save_vars)
-        #print(render_program(ad_code)) # for debugging
 
     for node in ad_code:
         if not node.is_effectively_empty():
@@ -1054,7 +1100,10 @@ def _generate_ad_subroutine(
                 subroutine.decls.append(decl)
 
     subroutine.build_parent()
+
     def _find_save_assign(node: Node, save_assigns: dict) -> None:
+        """Collect ``SaveAssignment`` nodes used for restoring values."""
+
         if isinstance(node, SaveAssignment) and not node.pushpop:
             name = node.tmpvar.name
             if name not in save_assigns:
@@ -1067,11 +1116,17 @@ def _generate_ad_subroutine(
     #print(render_program(subroutine))
 
     def _find_loop(parent: Node, index_list: List[str]):
-        while parent is not None and not(isinstance(parent, DoLoop) and parent.index.name in index_list):
+        """Return nearest ``DoLoop`` whose index appears in ``index_list``."""
+
+        while parent is not None and not (
+            isinstance(parent, DoLoop) and parent.index.name in index_list
+        ):
             parent = parent.parent
         return parent
 
     def _get_size(node: Node, name: str, dims: List[str]):
+        """Populate ``dims`` with loop bounds for array ``name``."""
+
         var_list = VarList()
         for child in node.iter_children():
             _get_size(child, name, dims)
