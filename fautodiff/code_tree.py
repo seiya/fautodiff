@@ -81,7 +81,7 @@ class Node:
         """Return ``True`` if ``var`` is refered within this node."""
         if any(var == v.name for v in self.iter_ref_vars()):
             return True
-        return any(child.has_ref_to(var) for child in self.iter_children())
+        return any(child.has_reference_to(var) for child in self.iter_children())
 
     def has_assignment_to(self, var: str) -> bool:
         """Return ``True`` if ``var`` is assigned within this node."""
