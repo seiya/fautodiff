@@ -36,11 +36,13 @@ _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 def _append_unique(items: List[str], name: str) -> None:
+    """Append ``name`` to ``items`` if it is not already present."""
     if name not in items:
         items.append(name)
 
 
 def _extend_unique(items: List[str], names: List[str]) -> None:
+    """Extend ``items`` with ``names`` while avoiding duplicates."""
     for name in names:
         if name not in items:
             items.append(name)
@@ -57,6 +59,7 @@ class Node:
     _id_counter = 0
 
     def __post_init__(self):
+        """Assign a unique id and initialise the loop index tracking list."""
         self.__id = Node._id_counter
         Node._id_counter += 1
         self.do_index_list = []
@@ -149,12 +152,25 @@ class Node:
                           set_cond: bool = False,
                           keep: bool = False,
                           ) -> List["Node"]:
+        """Return nodes adjusted for exit/cycle handling.
+
+        The base implementation simply returns ``self`` unchanged; subclasses
+        override this to insert conditional blocks around exit or cycle
+        statements.
+        """
         return [self]
 
     def _save_vars(self, var: OpVar, saved_vars: List[OpVar]) -> SaveAssignment:
+        """Insert a ``SaveAssignment`` before this node and return a loader.
+
+        The current value of ``var`` is stored so it can be restored later, and
+        the temporary variable name is recorded in ``saved_vars``.
+        """
         id = self.get_id()
         save = SaveAssignment(var, id)
+        # place the save instruction before the current node
         self.parent.insert_before(id, save)
+        # generate the corresponding load statement used after the mutation
         load = save.to_load()
         saved_vars.append(save.tmpvar)
         return load
@@ -415,8 +431,9 @@ class Node:
         mod_vars: Optional[List[OpVar]] = None,
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
-        rhs = rhs.deep_clone()
+        rhs = rhs.deep_clone()  # Work on a copy of the expression
         assigns: List[Node] = []
+        # Find user defined function calls inside the right-hand side
         funcs = rhs.find_userfunc()
         for n, ufunc in enumerate(funcs):
             if routine_map is None:
@@ -425,8 +442,10 @@ class Node:
             if arg_info is None:
                 raise RuntimeError(f"Not found in routime_map: {ufunc.name}")
             if rhs == ufunc and len(funcs) == 1:
+                # When the whole expression is a single function call, reuse lhs
                 result = lhs
             else:
+                # Save the intermediate result of the function call
                 name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
                 result = OpVar(name, typename=arg_info["type"][-1])
                 saved_vars.append(result)
@@ -441,6 +460,7 @@ class Node:
             intents = ufunc.intents
             if intents is None and ufunc.name in routine_map:
                 intents = routine_map[ufunc.name]["intents"]
+            # Recursively generate AD code for the function call
             callstmt = CallStatement(
                 name=ufunc.name,
                 args=ufunc.args,
@@ -459,13 +479,16 @@ class Node:
             )
             assigns.extend(call_nodes)
             if rhs == ufunc and len(funcs) == 1:
+                # The call produced the final result
                 return assigns
+            # Replace the function call with its result variable for further processing
             rhs = rhs.replace_with(ufunc, result)
 
         if lhs.ad_target:
             grad_lhs = lhs.add_suffix(AD_SUFFIX)
             ad_info = self.info.get("code") if self.info is not None else None
 
+            # Allow certain intrinsic functions to provide their own AD handler
             if isinstance(rhs, OpFunc):
                 handler = rhs.special_handler(lhs, rhs.args, AD_SUFFIX, reverse=False)
                 if handler is not None:
@@ -474,6 +497,7 @@ class Node:
 
             vars = rhs.collect_vars()
             expr = None
+            # Build the forward-mode derivative expression by summing contributions
             for var in vars:
                 if not var.ad_target:
                     continue
@@ -487,6 +511,7 @@ class Node:
                 else:
                     expr = expr + term
             if expr is None:
+                # No contributing variables -> derivative is cleared
                 assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
                 assigned_advars.remove(grad_lhs)
             else:
@@ -508,6 +533,7 @@ class Node:
     ) -> List["Node"]:
         rhs = rhs.deep_clone()
         extras: List[Node] = []
+        # Handle user defined functions appearing in the expression first
         funcs = rhs.find_userfunc()
         for n, ufunc in enumerate(funcs):
             if routine_map is None:
@@ -518,6 +544,8 @@ class Node:
             if rhs == ufunc and len(funcs) == 1:
                 result = lhs
             else:
+                # Save intermediate function results so they can be reused in
+                # the reverse sweep
                 name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
                 result = OpVar(name, typename=arg_info["type"][-1])
                 saved_vars.append(result)
@@ -536,6 +564,7 @@ class Node:
                 result=result,
                 info=self.info,
             )
+            # Generate reverse-mode AD for the function call
             call_nodes = callstmt.generate_ad(
                 saved_vars,
                 reverse=True,
@@ -554,6 +583,7 @@ class Node:
             grad_lhs = lhs.add_suffix(AD_SUFFIX)
             ad_info = self.info.get("code") if self.info is not None else None
 
+            # Intrinsic functions may provide their own reverse-mode handler
             if isinstance(rhs, OpFunc):
                 handler = rhs.special_handler(lhs, rhs.args, AD_SUFFIX, reverse=True)
                 if handler is not None:
@@ -571,7 +601,7 @@ class Node:
 
             vars = rhs.collect_vars(without_index=True, without_refvar=True)
             if lhs in vars:
-                # move lhs to the last of vars
+                # Ensure the derivative for lhs is computed last
                 vars.remove(lhs)
                 vars.append(lhs)
             for var in vars:
@@ -586,6 +616,7 @@ class Node:
                     Assignment(v, res, accumulate=(v != grad_lhs), ad_info=ad_info)
                 )
             if lhs not in vars:
+                # If lhs does not appear in rhs, its gradient is cleared
                 assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
         assigns.extend(extras)
         return assigns
@@ -636,8 +667,10 @@ class Block(Node):
         type_map: Optional[dict] = None,
         warnings: Optional[List[str]] = None,
     ) -> List[Node]:
+        """Generate AD code for each child node in the block."""
         ad_code: List[Node] = []
         iterator = self._children
+        # Reverse mode processes statements in reverse order
         if reverse:
             iterator = reversed(iterator)
         for node in iterator:
@@ -645,7 +678,16 @@ class Block(Node):
                 ec_flags = [ec.flag() for ec in node.collect_exitcycle()]
             else:
                 ec_flags = None
-            nodes = node.generate_ad(saved_vars, reverse, assigned_advars, routine_map, generic_map, mod_vars, ec_flags, warnings)
+            nodes = node.generate_ad(
+                saved_vars,
+                reverse,
+                assigned_advars,
+                routine_map,
+                generic_map,
+                mod_vars,
+                ec_flags,
+                warnings,
+            )
             nodes = [node for node in nodes if node and not node.is_effectively_empty()]
             if reverse and nodes and exitcycle_flags and not isinstance(node, (ExitStmt, CycleStmt)):
                 if ec_flags:
