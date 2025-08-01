@@ -551,6 +551,10 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
                 allocatable=arg.allocatable,
                 pointer=arg.pointer,
                 target=arg.target,
+                save=arg.save,
+                value=arg.value,
+                volatile=arg.volatile,
+                asynchronous=arg.asynchronous,
             )
             args.append(var)
             grad_args.append(var)
@@ -579,6 +583,10 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
                 pointer=var.pointer,
                 optional=var.optional,
                 target=var.target,
+                save=getattr(var, "save", False),
+                value=getattr(var, "value", False),
+                volatile=getattr(var, "volatile", False),
+                asynchronous=getattr(var, "asynchronous", False),
                 declared_in="routine",
             )
         )
@@ -648,6 +656,10 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                     allocatable=arg.allocatable,
                     pointer=arg.pointer,
                     target=arg.target,
+                    save=arg.save,
+                    value=arg.value,
+                    volatile=arg.volatile,
+                    asynchronous=arg.asynchronous,
                 )
                 args.append(var)
                 grad_args.append(var)
@@ -672,6 +684,10 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                     allocatable=arg.allocatable,
                     pointer=arg.pointer,
                     target=arg.target,
+                    save=arg.save,
+                    value=arg.value,
+                    volatile=arg.volatile,
+                    asynchronous=arg.asynchronous,
                 )
                 args.append(var)
                 grad_args.append(var)
@@ -698,6 +714,10 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                 pointer=var.pointer,
                 optional=var.optional,
                 target=var.target,
+                save=getattr(var, "save", False),
+                value=getattr(var, "value", False),
+                volatile=getattr(var, "volatile", False),
+                asynchronous=getattr(var, "asynchronous", False),
                 declared_in="routine",
             )
         )
@@ -778,7 +798,17 @@ def _generate_ad_subroutine(
         if var.ad_target:
             mod_ad_vars.append(var.add_suffix(AD_SUFFIX))
             has_mod_grad_input = True
-    if reverse and not has_grad_input and not has_mod_grad_input:
+
+    save_vars = []
+    save_ad_vars = []
+    has_save_grad_input = False
+    for var in routine_org.decls.collect_vars():
+        if var.save:
+            save_vars.append(var)
+            if var.ad_target:
+                save_ad_vars.append(var.add_suffix(AD_SUFFIX))
+                has_save_grad_input = True
+    if reverse and not has_grad_input and not has_mod_grad_input and not has_save_grad_input:
         for arg in out_grad_args:
             lhs = OpVar(arg.name, kind=arg.kind)
             if arg.is_complex_type:
@@ -793,7 +823,7 @@ def _generate_ad_subroutine(
     if reverse:
         assigned_advars = None
     else:
-        assigned_advars = VarList(in_grad_args + mod_ad_vars)
+        assigned_advars = VarList(in_grad_args + mod_ad_vars + save_ad_vars)
     nodes = routine_org.content.generate_ad(
         saved_vars,
         reverse=reverse,
@@ -834,22 +864,26 @@ def _generate_ad_subroutine(
                             pointer=base_decl.pointer,
                             optional=base_decl.optional,
                             target=base_decl.target,
+                            save=base_decl.save,
+                            value=base_decl.value,
+                            volatile=base_decl.volatile,
+                            asynchronous=base_decl.asynchronous,
                             declared_in="routine",
                         )
                     )
 
         if reverse:
-            targets = VarList(in_grad_args + mod_ad_vars)
+            targets = VarList(in_grad_args + mod_ad_vars + save_ad_vars)
             ad_code.check_initial(targets)
 
         if reverse:
-            targets = VarList(grad_args + mod_ad_vars)
+            targets = VarList(grad_args + mod_ad_vars + save_ad_vars)
         else:
-            targets = VarList(grad_args + out_args + mod_ad_vars + mod_vars)
+            targets = VarList(grad_args + out_args + mod_ad_vars + mod_vars + save_ad_vars + save_vars)
 
         #print("Targets:", targets) # for debugging
         #print(subroutine.name)
-        ad_code = ad_code.prune_for(targets, mod_vars)
+        ad_code = ad_code.prune_for(targets, mod_vars + save_vars)
         #print(render_program(ad_code)) # for debugging
 
     for node in ad_code:
@@ -866,7 +900,7 @@ def _generate_ad_subroutine(
 
         _add_fwd_rev_calls(fw_block, routine_map, generic_map)
 
-        fw_block = fw_block.prune_for(targets, mod_vars)
+        fw_block = fw_block.prune_for(targets, mod_vars + save_vars)
 
         assigned = fw_block.assigned_vars(without_savevar=True)
         assigned = ad_block.assigned_vars(assigned, without_savevar=True)
@@ -932,7 +966,7 @@ def _generate_ad_subroutine(
     if (ad_block is not None) and (not ad_block.is_effectively_empty()):
         # initialize ad_var if necessary
         vars = ad_block.required_vars(
-            VarList([OpVar(var.name) for var in out_grad_args]),
+            VarList([OpVar(var.name) for var in out_grad_args + save_ad_vars]),
             without_savevar=True
         )
         if reverse and not fw_block.is_effectively_empty():
@@ -951,7 +985,7 @@ def _generate_ad_subroutine(
                 if any(v for v in in_grad_args if v.name == name):
                     continue
                 var = next(v for v in out_grad_args if v.name == name)
-            if var is not None:
+            if var is not None and not var.save:
                 if var.dims is not None and len(var.dims) > 0:
                     index = AryIndex((None,) * len(var.dims))
                 else:
@@ -989,6 +1023,10 @@ def _generate_ad_subroutine(
                             pointer=base_decl.pointer,
                             optional=base_decl.optional,
                             target=base_decl.target,
+                            save=base_decl.save,
+                            value=base_decl.value,
+                            volatile=base_decl.volatile,
+                            asynchronous=base_decl.asynchronous,
                             declared_in="routine",
                         )
                     )
@@ -1152,12 +1190,13 @@ def _generate_ad_subroutine(
         )
 
     if reverse:
-        targets = VarList(grad_args + mod_ad_vars)
+        targets = VarList(grad_args + mod_ad_vars + save_ad_vars)
     else:
-        targets = VarList(grad_args + mod_vars + mod_ad_vars + out_args)
+        targets = VarList(grad_args + mod_vars + mod_ad_vars + out_args + save_vars + save_ad_vars)
 
     #print(render_program(subroutine))
-    subroutine = subroutine.prune_for(targets, mod_vars, decl_map=subroutine.decl_map)
+    mod_vars_all = mod_vars + save_vars
+    subroutine = subroutine.prune_for(targets, mod_vars_all, decl_map=subroutine.decl_map)
 
     mod_all_var_names = [v.name_ext() for v in mod_vars]
     for v in mod_ad_vars:

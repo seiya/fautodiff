@@ -709,6 +709,10 @@ class OpVar(OpLeaf):
     pointer: Optional[bool] = field(default=None, repr=False)
     optional: Optional[bool] = field(default=None, repr=False)
     target: Optional[bool] = field(default=None, repr=False)
+    save: Optional[bool] = field(default=None, repr=False)
+    value: Optional[bool] = field(default=None, repr=False)
+    volatile: Optional[bool] = field(default=None, repr=False)
+    asynchronous: Optional[bool] = field(default=None, repr=False)
     declared_in: Optional[str] = field(default=None, repr=False)
     ref_var: Optional["OpVar"] = field(default=None)
     reduced_dims: Optional[List[int]] = field(init=False, repr=False, default=None)
@@ -729,6 +733,10 @@ class OpVar(OpLeaf):
         pointer: Optional[bool] = None,
         optional: Optional[bool] = None,
         target: Optional[bool] = None,
+        save: Optional[bool] = None,
+        value: Optional[bool] = None,
+        volatile: Optional[bool] = None,
+        asynchronous: Optional[bool] = None,
         declared_in: Optional[str] = None,
         ref_var: Optional[OpVar] = None,
     ):
@@ -753,6 +761,10 @@ class OpVar(OpLeaf):
         self.pointer = pointer
         self.optional = optional
         self.target = target
+        self.save = save
+        self.value = value
+        self.volatile = volatile
+        self.asynchronous = asynchronous
         self.declared_in = declared_in
         self.ref_var = ref_var
         if self.ad_target is None and self.typename is not None:
@@ -869,6 +881,10 @@ class OpVar(OpLeaf):
             pointer=self.pointer,
             optional=self.optional,
             target=self.target,
+            save=self.save,
+            value=self.value,
+            volatile=self.volatile,
+            asynchronous=self.asynchronous,
             declared_in=self.declared_in,
             ref_var=self.ref_var,
         )
@@ -899,6 +915,10 @@ class OpVar(OpLeaf):
             pointer=self.pointer,
             optional=self.optional,
             target=self.target,
+            save=self.save,
+            value=self.value,
+            volatile=self.volatile,
+            asynchronous=self.asynchronous,
             declared_in=self.declared_in,
             ref_var=ref_var
         )
@@ -929,6 +949,10 @@ class OpVar(OpLeaf):
             pointer=self.pointer,
             optional=self.optional,
             target=self.target,
+            save=self.save,
+            value=self.value,
+            volatile=self.volatile,
+            asynchronous=self.asynchronous,
             declared_in=self.declared_in,
             ref_var=ref_var
         )
