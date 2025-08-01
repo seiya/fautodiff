@@ -129,6 +129,20 @@ class TestNodeMethods(unittest.TestCase):
         self.assertFalse(outer.has_assignment_to("b"))
         self.assertFalse(outer.has_assignment_to("c"))
 
+    def test_has_reference_to(self):
+        inner = Block([
+            Assignment(OpVar("b"), OpVar("a")),
+        ])
+        loop = DoLoop(
+            inner,
+            index=OpVar("i"),
+            range=OpRange([OpInt(1), OpInt(10)])
+        )
+        outer = Block([loop])
+        self.assertTrue(outer.has_reference_to("a"))
+        self.assertFalse(outer.has_reference_to("c"))
+        self.assertFalse(outer.has_reference_to("b"))
+
     def test_ids_and_clone(self):
         blk = Block([Assignment(OpVar("a"), OpInt(1))])
         for child in blk.iter_children():
