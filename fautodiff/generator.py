@@ -44,6 +44,7 @@ from .operators import (
     AryIndex,
     OpInt,
     OpReal,
+    OpComplex,
     OpVar,
     OpRange,
     OpFunc,
@@ -780,7 +781,11 @@ def _generate_ad_subroutine(
     if reverse and not has_grad_input and not has_mod_grad_input:
         for arg in out_grad_args:
             lhs = OpVar(arg.name, kind=arg.kind)
-            ad_block.append(Assignment(lhs, OpReal("0.0", kind=arg.kind)))
+            if arg.is_complex_type:
+                zero = OpComplex(OpReal("0.0", kind=arg.kind), OpReal("0.0", kind=arg.kind), kind=arg.kind)
+            else:
+                zero = OpReal("0.0", kind=arg.kind)
+            ad_block.append(Assignment(lhs, zero))
         subroutine.ad_content = ad_block
         return subroutine, False, set()
 
@@ -951,8 +956,12 @@ def _generate_ad_subroutine(
                     index = AryIndex((None,) * len(var.dims))
                 else:
                     index = None
+                if var.is_complex_type:
+                    zero = OpComplex(OpReal("0.0", kind=var.kind), OpReal("0.0", kind=var.kind), kind=var.kind)
+                else:
+                    zero = OpReal(0.0, kind=var.kind)
                 subroutine.ad_init.append(
-                    Assignment(OpVar(name, index=index), OpReal(0.0, kind=var.kind))
+                    Assignment(OpVar(name, index=index), zero)
                 )
 
     var_names = []

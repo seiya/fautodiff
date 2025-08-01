@@ -60,6 +60,7 @@ from .operators import (
     OpPow,
     OpRange,
     OpReal,
+    OpComplex,
     OpSub,
     OpVar,
     OpType,
@@ -97,6 +98,17 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
     if isinstance(stmt, Fortran2003.Int_Literal_Constant):
         return OpInt(val=int(stmt.items[0]), kind=stmt.items[1])
 
+    if isinstance(stmt, Fortran2003.Signed_Int_Literal_Constant):
+        text = stmt.tofortran()
+        if "_" in text:
+            val_str, kind = text.split("_", 1)
+        else:
+            val_str, kind = text, None
+        val = int(val_str)
+        if val < 0:
+            return -OpInt(-val, kind=kind)
+        return OpInt(val, kind=kind)
+
     if isinstance(stmt, Fortran2003.Real_Literal_Constant):
         m = _KIND_RE.fullmatch(stmt.tofortran())
         if m:
@@ -115,6 +127,35 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
             return ret
         else:
             raise ValueError(f"Failed to convert real number: {stmt}")
+
+    if isinstance(stmt, Fortran2003.Signed_Real_Literal_Constant):
+        m = _KIND_RE.fullmatch(stmt.tofortran())
+        if m:
+            sign = m.group(1)
+            val = m.group(2)
+            expo = m.group(3)
+            kind = m.group(4)
+            if kind is None and expo is not None:
+                if expo[0].lower() == "d":
+                    kind = "8"
+            if expo is not None:
+                expo = int(expo[1:])
+            ret = OpReal(val=val, kind=kind, expo=expo)
+            if sign is not None and sign[0] == "-":
+                ret = -ret
+            return ret
+        else:
+            raise ValueError(f"Failed to convert real number: {stmt}")
+
+    if isinstance(stmt, Fortran2003.Complex_Literal_Constant):
+        real = _stmt2op(stmt.items[0], decl_map, type_map)
+        imag = _stmt2op(stmt.items[1], decl_map, type_map)
+        kind = getattr(real, "kind", None)
+        if getattr(imag, "kind", None) == kind:
+            pass
+        elif getattr(imag, "kind", None) is not None:
+            kind = imag.kind
+        return OpComplex(real, imag, kind=kind)
 
     if isinstance(stmt, Fortran2003.Name):
         name = stmt.string

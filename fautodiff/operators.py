@@ -569,6 +569,9 @@ class OpNum(OpLeaf):
         return []
 
     def derivative(self, var: OpVar, target: Optional[OpVar] = None, info: Optional[dict] = None, warnings: Optional[List[str]] = None) -> Operator:
+        if target is not None and getattr(target, "is_complex_type", False):
+            zero = OpReal("0.0", kind=target.kind)
+            return OpComplex(zero, zero, kind=target.kind)
         return OpInt(0, target=target)
 
 @dataclass
@@ -601,7 +604,7 @@ class OpInt(OpNum):
         kind = None
         if self.target is not None:
             kind = self.target.kind
-            if self.target.is_real_type:
+            if self.target.is_real_type or getattr(self.target, "is_complex_type", False):
                 if self.kind is not None:
                     kind = self.kind
                 if kind == "8":
@@ -674,6 +677,21 @@ class OpReal(OpNum):
                     return f"{self.val}_{self.kind}"
         return str(self.val)
 
+
+@dataclass
+class OpComplex(OpNum):
+
+    real: Operator = field(default=None)
+    imag: Operator = field(default=None)
+
+    def __init__(self, real: Operator, imag: Operator, kind: Optional[str] = None):
+        super().__init__(args=[real, imag], kind=kind)
+        self.real = real
+        self.imag = imag
+
+    def __str__(self) -> str:
+        return f"({self.real}, {self.imag})"
+
 @dataclass
 class OpVar(OpLeaf):
 
@@ -741,8 +759,8 @@ class OpVar(OpLeaf):
             typename = self.typename.lower()
             if typename.startswith(("type", "class")):
                 raise ValueError("ad_target must be set for type or class variable")
-            is_real_type = typename.startswith("real") or typename.startswith("double")
-            self.ad_target = is_real_type and not self.is_constant
+            is_deriv_type = typename.startswith("real") or typename.startswith("double") or typename.startswith("complex")
+            self.ad_target = is_deriv_type and not self.is_constant
         elif self.ad_target is None:
             self.ad_target = False
 
@@ -817,6 +835,12 @@ class OpVar(OpLeaf):
             return False
         typename = self.typename.lower()
         return typename.startswith("real") or typename.startswith("double")
+
+    @property
+    def is_complex_type(self) -> bool:
+        if self.typename is None:
+            return False
+        return self.typename.lower().startswith("complex")
 
     def is_array(self) -> bool:
         if self.dims is None and self.index is None:
@@ -1128,7 +1152,7 @@ class OpLogic(OpBinary):
 INTRINSIC_FUNCTIONS = {
     'abs', 'sqrt', 'exp', 'log', 'log10', 'sin', 'cos', 'tan', 'asin',
     'acos', 'atan', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
-    'erf', 'erfc', 'real', 'dble', 'mod', 'min', 'max', 'sign', 'atan2',
+    'erf', 'erfc', 'real', 'dble', 'aimag', 'conjg', 'cmplx', 'mod', 'min', 'max', 'sign', 'atan2',
     'transpose', 'cshift', 'dot_product', 'matmul',
     'len', 'len_trim', 'adjustl', 'index', 'lbound',
     'ubound', 'size', 'epsilon', 'huge', 'tiny', 'ichar', 'achar', 'int',
@@ -1245,6 +1269,16 @@ class OpFunc(Operator):
             return dvar0
         if self.name == "dble":
             return dvar0
+        if self.name == "aimag":
+            return OpFunc("aimag", args=[dvar0])
+        if self.name == "conjg":
+            return OpFunc("conjg", args=[dvar0])
+        if self.name == "cmplx":
+            if len(self.args) == 1:
+                dvar1 = OpReal("0.0", kind=kind)
+            else:
+                dvar1 = self.args[1].derivative(var, target, info, warnings)
+            return OpFunc("cmplx", args=[dvar0, dvar1])
         if self.name == "sum":
             return dvar0
         if self.name == "minval":
