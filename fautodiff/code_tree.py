@@ -2901,7 +2901,7 @@ class BranchBlock(Node):
             if not isinstance(tup, tuple):
                 raise ValueError(f"item in cond_blocks must be a tuple: {type(tup)}")
             cond, block = tup
-            if isinstance(self, IfBlock):
+            if isinstance(self, (IfBlock, WhereBlock)):
                 if not (isinstance(cond, Operator) or cond is None):
                     raise ValueError(f"cond must be a Operator: {type(cond)}")
             if isinstance(self, SelectBlock):
@@ -2949,6 +2949,8 @@ class BranchBlock(Node):
             block = IfBlock(cond_blocks)
         elif isinstance(self, SelectBlock):
             block = SelectBlock(cond_blocks, self.expr)
+        elif isinstance(self, WhereBlock):
+            block = WhereBlock(cond_blocks)
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
         if reverse:
@@ -2980,8 +2982,10 @@ class BranchBlock(Node):
             cond_blocks.append((cond, body))
         if isinstance(self, IfBlock):
             return [IfBlock(cond_blocks)]
-        else: # SelectBlock
+        elif isinstance(self, SelectBlock):
             return [SelectBlock(cond_blocks, expr=self.expr)]
+        else:  # WhereBlock
+            return [WhereBlock(cond_blocks)]
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         if vars is None:
@@ -3003,7 +3007,7 @@ class BranchBlock(Node):
             vars_new.merge(vs)
             advars = {name for name in vs.names() if Node.is_savevar(name)}
             to_remove = to_remove | (origin_savevars - advars)
-            if isinstance(self, IfBlock) and isinstance(block[0], Deallocate):
+            if isinstance(self, (IfBlock, WhereBlock)) and isinstance(block[0], Deallocate):
                 if cond is not None and _check(cond):
                     to_remove = to_remove | {v.name_ext() for v in block[0].vars}
             if cond is None:
@@ -3015,7 +3019,7 @@ class BranchBlock(Node):
                 del vars_new.vars[name]
         for cond, _ in self.cond_blocks:
             if cond is not None:
-                if isinstance(self, IfBlock):
+                if isinstance(self, (IfBlock, WhereBlock)):
                     if not _check(cond):
                         for var in cond.collect_vars(without_checkfunc=True):
                             vars_new.push(var)
@@ -3047,6 +3051,8 @@ class BranchBlock(Node):
             return IfBlock(new_condblocks)
         elif isinstance(self, SelectBlock):
             return SelectBlock(new_condblocks, expr=self.expr)
+        elif isinstance(self, WhereBlock):
+            return WhereBlock(new_condblocks)
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
 
@@ -3136,6 +3142,42 @@ class SelectBlock(BranchBlock):
                 lines.append(f"{space}{case} default\n")
             lines.extend(block.render(indent+1))
         lines.append(f"{space}end select\n")
+        return lines
+
+
+@dataclass
+class WhereBlock(BranchBlock):
+    """A ``where`` construct with optional ``elsewhere`` blocks."""
+
+    def copy(self) -> "WhereBlock":
+        return WhereBlock(self.cond_blocks)
+
+    def deep_clone(self) -> "WhereBlock":
+        cond_blocks = []
+        for cond, block in self.cond_blocks:
+            cond = cond.deep_clone() if cond else None
+            block = block.deep_clone()
+            cond_blocks.append((cond, block))
+        return WhereBlock(cond_blocks)
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        for cond, _ in self.cond_blocks:
+            if cond is not None:
+                for var in cond.collect_vars():
+                    yield var
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        cond, block = self.cond_blocks[0]
+        lines = [f"{space}where ({cond})\n"]
+        lines.extend(block.render(indent + 1))
+        for cond, block in self.cond_blocks[1:]:
+            if cond is None:
+                lines.append(f"{space}elsewhere\n")
+            else:
+                lines.append(f"{space}elsewhere ({cond})\n")
+            lines.extend(block.render(indent + 1))
+        lines.append(f"{space}end where\n")
         return lines
 
 
@@ -3607,6 +3649,117 @@ class DoWhile(DoAbst):
         assigned_vars.merge(self._body.assigned_vars(check_init_advars = True))
         assigned_vars = self._body.check_initial(assigned_vars)
         return assigned_vars
+
+
+@dataclass
+class ForallBlock(Node):
+    """A ``forall`` construct."""
+
+    _body: Block
+    index_specs: List[Tuple[OpVar, OpRange]]
+    mask: Optional[Operator] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        self._body.set_parent(self)
+
+    def copy(self) -> "ForallBlock":
+        return ForallBlock(self._body, self.index_specs, self.mask)
+
+    def deep_clone(self) -> "ForallBlock":
+        body = self._body.deep_clone()
+        specs = [(idx.deep_clone(), rng.deep_clone()) for idx, rng in self.index_specs]
+        mask = self.mask.deep_clone() if self.mask is not None else None
+        return ForallBlock(body, specs, mask)
+
+    def iter_children(self) -> Iterator[Node]:
+        yield self._body
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        for idx, rng in self.index_specs:
+            for var in rng.collect_vars():
+                yield var
+        if self.mask is not None:
+            for var in self.mask.collect_vars():
+                yield var
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        for idx, _ in self.index_specs:
+            yield idx
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        parts = []
+        for idx, rng in self.index_specs:
+            part = f"{idx}={rng[0]}:{rng[1]}"
+            if rng[2] is not None:
+                part += f":{rng[2]}"
+            parts.append(part)
+        if self.mask is not None:
+            parts.append(str(self.mask))
+        lines = [f"{space}forall ({', '.join(parts)})\n"]
+        lines.extend(self._body.render(indent + 1))
+        lines.append(f"{space}end forall\n")
+        return lines
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        nodes = self._body.generate_ad(
+            saved_vars,
+            reverse,
+            assigned_advars,
+            routine_map,
+            generic_map,
+            mod_vars,
+            exitcycle_flags,
+            warnings,
+        )
+        body = Block(nodes)
+        return [ForallBlock(body, self.index_specs, self.mask)]
+
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        vars = self._body.required_vars(vars, no_accumulate, without_savevar)
+        for idx, _ in self.index_specs:
+            if idx in vars:
+                vars.remove(idx)
+        for idx, rng in self.index_specs:
+            for var in rng.collect_vars():
+                vars.push(var)
+        if self.mask is not None:
+            for var in self.mask.collect_vars():
+                vars.push(var)
+        return vars
+
+    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False, check_init_advars: bool = False) -> VarList:
+        vars = self._body.assigned_vars(vars, without_savevar=without_savevar, check_init_advars=check_init_advars)
+        for idx, rng in self.index_specs:
+            for var in rng.collect_vars():
+                vars.push(var)
+            if not check_init_advars:
+                vars.push(idx)
+        return vars
+
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        return self._body.unrefered_advars(vars)
+
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[Node]:
+        new_body = self._body.prune_for(targets, mod_vars, decl_map)
+        if new_body.is_effectively_empty():
+            return None
+        return ForallBlock(new_body, self.index_specs, self.mask)
+
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        return self._body.check_initial(assigned_vars)
 
 def render_program(node: Node, indent: int = 0) -> str:
     """Return formatted Fortran code for the entire ``node`` tree."""

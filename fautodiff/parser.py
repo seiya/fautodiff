@@ -32,6 +32,8 @@ from .code_tree import (
     Module,
     Node,
     SelectBlock,
+    WhereBlock,
+    ForallBlock,
     Statement,
     ExitStmt,
     CycleStmt,
@@ -1085,6 +1087,48 @@ def _parse_routine(content,
                 blk = _block(seg, decl_map_new, type_map)
                 cond_blocks.append(((OpType(cond),), blk))
             return SelectBlock(cond_blocks, expr, select_type=True)
+        if isinstance(stmt, Fortran2003.Where_Construct):
+            cond = _stmt2op(stmt.content[0].items[0], decl_map, type_map)
+            cond_blocks = []
+            i = 1
+            seg = []
+            while i < len(stmt.content):
+                itm = stmt.content[i]
+                if isinstance(itm, (Fortran2003.Elsewhere_Stmt, Fortran2003.End_Where_Stmt)):
+                    blk = _block(seg, decl_map, type_map)
+                    cond_blocks.append((cond, blk))
+                    seg = []
+                    if isinstance(itm, Fortran2003.End_Where_Stmt):
+                        break
+                    cond = (
+                        _stmt2op(itm.items[1], decl_map, type_map)
+                        if itm.items[1] is not None
+                        else None
+                    )
+                else:
+                    seg.append(itm)
+                i += 1
+            return WhereBlock(cond_blocks)
+        if isinstance(stmt, Fortran2003.Forall_Construct):
+            header = stmt.content[0].items[1]
+            specs = []
+            for spec in header.items[0].items:
+                idx = _stmt2op(spec.items[0], decl_map, type_map)
+                lb = _stmt2op(spec.items[1], decl_map, type_map)
+                ub = _stmt2op(spec.items[2], decl_map, type_map)
+                step = (
+                    _stmt2op(spec.items[3], decl_map, type_map)
+                    if spec.items[3] is not None
+                    else None
+                )
+                specs.append((idx, OpRange([lb, ub, step])))
+            mask = (
+                _stmt2op(header.items[1], decl_map, type_map)
+                if header.items[1] is not None
+                else None
+            )
+            body = _block(stmt.content[1:-1], decl_map, type_map)
+            return ForallBlock(body, specs, mask=mask)
         if isinstance(stmt, Fortran2008.Block_Nonlabel_Do_Construct):
             idx = 0
             while idx < len(stmt.content) and isinstance(

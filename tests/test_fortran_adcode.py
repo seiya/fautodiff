@@ -129,6 +129,10 @@ class TestFortranADCode(unittest.TestCase):
     def test_mpi_example(self):
         self._run_test('mpi_example', ['sum_reduce'], use_mpi=True)
 
+    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
+    def test_where_forall(self):
+        self._run_test('where_forall', ['where_example', 'forall_example'])
+
 
 
 if __name__ == '__main__':
