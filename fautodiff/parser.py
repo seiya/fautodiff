@@ -418,6 +418,10 @@ def _parse_decl_stmt(
     pointer = False
     optional = False
     target = False
+    save = False
+    value = False
+    volatile = False
+    asynchronous = False
     attrs = stmt.items[1]
     if attrs is not None:
         for attr in attrs.items:
@@ -427,7 +431,7 @@ def _parse_decl_stmt(
                 intent = attr.items[1].string.lower()
                 continue
             if isinstance(attr, Fortran2008.attr_spec_r502.Attr_Spec):
-                attr_name = attr.string
+                attr_name = attr.string.upper()
                 if attr_name == "PARAMETER":
                     parameter = True
                     continue
@@ -442,6 +446,18 @@ def _parse_decl_stmt(
                     continue
                 if attr_name == "TARGET":
                     target = True
+                    continue
+                if attr_name == "SAVE":
+                    save = True
+                    continue
+                if attr_name == "VALUE":
+                    value = True
+                    continue
+                if attr_name == "VOLATILE":
+                    volatile = True
+                    continue
+                if attr_name in ("ASYNC", "ASYNCHRONOUS"):
+                    asynchronous = True
                     continue
                 raise RuntimeError(f"Unsupported attribute: {type(attr)} {attr}")
             if isinstance(attr, Fortran2008.component_attr_spec_r437.Component_Attr_Spec):
@@ -513,6 +529,10 @@ def _parse_decl_stmt(
                 pointer=pointer,
                 optional=optional,
                 target=target,
+                save=save,
+                value=value,
+                volatile=volatile,
+                asynchronous=asynchronous,
                 type_def=type_def,
                 declared_in=declared_in,
             )
@@ -636,19 +656,33 @@ def _parse_decls(
             components: List[Declaration] = []
             procs: List[list] = []
             access = None
+            bind = None
+            abstract = False
+            sequence = False
             for cnt in item.content:
                 if isinstance(cnt, Fortran2003.Derived_Type_Stmt):
                     if isinstance(cnt.items[0], Fortran2003.Type_Attr_Spec_List):
                         for spec in cnt.items[0].items:
                             if isinstance(spec, Fortran2003.Type_Attr_Spec):
-                                parent = spec.items[1].string
-                                if not parent in type_map:
-                                    raise RuntimeError(f"Type definition not found: {parent}")
-                                for decl in type_map[parent].iter_children():
-                                    components.append(decl)
-                                continue
+                                key = str(spec.items[0]).upper()
+                                if key == "EXTENDS":
+                                    parent = spec.items[1].string
+                                    if not parent in type_map:
+                                        raise RuntimeError(f"Type definition not found: {parent}")
+                                    for decl in type_map[parent].iter_children():
+                                        components.append(decl)
+                                    continue
+                                if key == "BIND":
+                                    bind = spec.string[5:-1].strip()
+                                    continue
+                                if key == "ABSTRACT":
+                                    abstract = True
+                                    continue
+                                if key == "SEQUENCE":
+                                    sequence = True
+                                    continue
                             if isinstance(spec, Fortran2003.Access_Spec):
-                                if spec.string ==  "PUBLIC":
+                                if spec.string == "PUBLIC":
                                     access = "public"
                                 elif spec.string == "PRIVATE":
                                     access = "private"
@@ -656,6 +690,9 @@ def _parse_decls(
                             print(cnt)
                             raise RuntimeError(f"Unsupported spec: {type(spec)} {spec}")
                     type_name = cnt.items[1].string
+                    continue
+                if isinstance(cnt, Fortran2003.Sequence_Stmt):
+                    sequence = True
                     continue
                 if isinstance(cnt, Fortran2003.Component_Part):
                     for c in cnt.content:
@@ -675,8 +712,8 @@ def _parse_decls(
                     continue
 
                 if isinstance(cnt, Fortran2003.End_Type_Stmt):
-                    if type_name is not None and components:
-                        type_def = TypeDef(name=type_name, components=components, procs=procs, access=access)
+                    if type_name is not None:
+                        type_def = TypeDef(name=type_name, components=components, procs=procs, access=access, bind=bind, abstract=abstract, sequence=sequence)
                         decls.append(type_def)
                         type_map[type_name] = type_def
                         continue

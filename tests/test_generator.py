@@ -272,6 +272,72 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad(str(src_path), warn=False)
             self.assertIn("real, intent(in), optional  :: y", generated)
 
+    def test_preserve_new_attributes(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module test
+              real, save :: a
+              type, abstract, bind(C) :: t
+              end type t
+              type :: seq_t
+                sequence
+                integer :: i
+              end type seq_t
+            contains
+              subroutine foo(b, c, d)
+                integer, value :: b
+                real, volatile :: c
+                real, asynchronous :: d
+                a = c + b
+                c = c + d
+              end subroutine foo
+            end module test
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "attrs.f90"
+            src_path.write_text(src)
+            generated = generator.generate_ad(str(src_path), warn=False)
+            self.assertIn("real, save :: a", generated)
+            self.assertIn("integer, value :: b", generated)
+            self.assertIn("real, volatile :: c", generated)
+            self.assertIn("real, asynchronous :: d", generated)
+            self.assertIn("type, abstract, bind(C) :: t_ad", generated)
+            self.assertIn("type :: seq_ad_t", generated)
+            self.assertIn("sequence", generated)
+
+    def test_save_variable_treated_like_inout(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+              subroutine foo(x)
+                real, intent(in) :: x
+                real, save :: s
+                s = s + x
+              end subroutine foo
+            end module test
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "save.f90"
+            src_path.write_text(src)
+            generated = generator.generate_ad(str(src_path), warn=False)
+            self.assertIn("real, save :: s", generated)
+            self.assertIn("real, save :: s_ad", generated)
+            self.assertIn("x_ad = s_ad", generated)
+            self.assertNotIn("s_ad = 0", generated)
+
     def test_persistent_mpi_wrappers(self):
         code_tree.Node.reset()
         import textwrap

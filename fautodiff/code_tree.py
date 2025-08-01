@@ -1538,8 +1538,14 @@ class Routine(Node):
             intent=intent,
             ad_target=None,
             is_constant=decl.parameter or getattr(decl, "constant", False),
+            allocatable=decl.allocatable,
+            pointer=decl.pointer,
             optional=decl.optional,
             target=decl.target,
+            save=decl.save,
+            value=decl.value,
+            volatile=decl.volatile,
+            asynchronous=decl.asynchronous,
             declared_in=decl.declared_in,
         )
 
@@ -1621,6 +1627,10 @@ class Declaration(Node):
     pointer: bool = False
     optional: bool = False
     target: bool = False
+    save: bool = False
+    value: bool = False
+    volatile: bool = False
+    asynchronous: bool = False
     type_def: Optional[TypeDef] = None
     declared_in: Optional[str] = None
 
@@ -1651,6 +1661,10 @@ class Declaration(Node):
             pointer=self.pointer,
             optional=self.optional,
             target=self.target,
+            save=self.save,
+            value=self.value,
+            volatile=self.volatile,
+            asynchronous=self.asynchronous,
             type_def=self.type_def,
             declared_in=self.declared_in,
         )
@@ -1672,12 +1686,16 @@ class Declaration(Node):
             pointer=self.pointer,
             optional=self.optional,
             target=self.target,
+            save=self.save,
+            value=self.value,
+            volatile=self.volatile,
+            asynchronous=self.asynchronous,
             type_def=self.type_def,
             declared_in=self.declared_in,
         )
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
-        if self.intent in ("in", "inout"):
+        if self.intent in ("in", "inout") or self.save:
             yield OpVar(
                 name=self.name,
                 typename=self.typename,
@@ -1687,6 +1705,10 @@ class Declaration(Node):
                 pointer=self.pointer,
                 optional=self.optional,
                 target=self.target,
+                save=self.save,
+                value=self.value,
+                volatile=self.volatile,
+                asynchronous=self.asynchronous,
                 declared_in=self.declared_in,
             )
         else:
@@ -1705,6 +1727,10 @@ class Declaration(Node):
             pointer=self.pointer,
             optional=self.optional,
             target=self.target,
+            save=self.save,
+            value=self.value,
+            volatile=self.volatile,
+            asynchronous=self.asynchronous,
             dims=self.dims,
             ad_target=self.ad_target(),
             intent=self.intent,
@@ -1742,6 +1768,14 @@ class Declaration(Node):
             line += ", optional"
         if self.target:
             line += ", target"
+        if self.save:
+            line += ", save"
+        if self.value:
+            line += ", value"
+        if self.volatile:
+            line += ", volatile"
+        if self.asynchronous:
+            line += ", asynchronous"
         line += f"{pat} :: {self.name}"
         if self.dims is not None:
             dims = ",".join(self.dims)
@@ -1767,7 +1801,7 @@ class Declaration(Node):
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         if vars is None:
             return VarList()
-        if self.intent in ("in", "inout"):
+        if self.intent in ("in", "inout") or self.save:
             vars = vars.copy()
             vars.remove(OpVar(self.name))
         return vars
@@ -1775,7 +1809,7 @@ class Declaration(Node):
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
         if vars is None:
             vars = VarList()
-        if self.intent in ("in", "inout"):
+        if self.intent in ("in", "inout") or self.save:
             if self.name.endswith(AD_SUFFIX):
                 vars = vars.copy()
                 vars.push(
@@ -1788,6 +1822,10 @@ class Declaration(Node):
                         pointer=self.pointer,
                         optional=self.optional,
                         target=self.target,
+                        save=self.save,
+                        value=self.value,
+                        volatile=self.volatile,
+                        asynchronous=self.asynchronous,
                         declared_in=self.declared_in,
                     )
                 )
@@ -1822,6 +1860,10 @@ class Declaration(Node):
             allocatable=self.allocatable,
             pointer=self.pointer,
             target=self.target,
+            save=self.save,
+            value=self.value,
+            volatile=self.volatile,
+            asynchronous=self.asynchronous,
             type_def=self.type_def,
             declared_in=self.declared_in,
         )
@@ -1858,6 +1900,9 @@ class TypeDef(Node):
     components: List[Declaration]
     procs: List[list]
     access: Optional[str] = None
+    bind: Optional[str] = None
+    abstract: bool = False
+    sequence: bool = False
     map: Dict[str, Declaration] = field(init=False, repr=False)
 
     def __post_init__(self):
@@ -1875,12 +1920,20 @@ class TypeDef(Node):
         return iter(self.components)
 
     def copy(self) -> "TypeDef":
-        return TypeDef(self.name, self.components, self.procs, self.access)
+        return TypeDef(self.name, self.components, self.procs, self.access, bind=self.bind, abstract=self.abstract, sequence=self.sequence)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         lines: List[str] = []
-        lines.append(f"{space}type :: {self.name}\n")
+        line = f"{space}type"
+        if self.abstract:
+            line += ", abstract"
+        if self.bind is not None:
+            line += f", bind({self.bind})"
+        line += f" :: {self.name}\n"
+        lines.append(line)
+        if self.sequence:
+            lines.append(f"{space}  sequence\n")
         for decl in self.components:
             lines.extend(decl.render(indent+1))
         lines.append(f"{space}end type {self.name}\n")
@@ -1912,7 +1965,7 @@ class TypeDef(Node):
         for proc in self.procs:
             procs.append(list(proc))
         access = self.access
-        return [TypeDef(name=name, components=components, procs=procs, access=access)]
+        return [TypeDef(name=name, components=components, procs=procs, access=access, bind=self.bind, abstract=self.abstract, sequence=self.sequence)]
 
 
 @dataclass

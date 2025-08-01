@@ -573,5 +573,39 @@ class TestParser(unittest.TestCase):
             "real, intent(in), optional  :: y",
         )
 
+    def test_new_decl_and_type_attrs(self):
+        src = textwrap.dedent(
+            """
+            module test
+              type, abstract, bind(C) :: t
+              end type t
+              type :: seq_t
+                sequence
+                integer :: i
+              end type seq_t
+            contains
+              subroutine foo(a, b, c, d)
+                real, save :: a
+                integer, value :: b
+                real, volatile :: c
+                real, asynchronous :: d
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        decls = routine.decls
+        self.assertTrue(decls.find_by_name("a").save)
+        self.assertTrue(decls.find_by_name("b").value)
+        self.assertTrue(decls.find_by_name("c").volatile)
+        self.assertTrue(decls.find_by_name("d").asynchronous)
+        type_defs = [d for d in module.decls.iter_children() if isinstance(d, code_tree.TypeDef)]
+        t = next(d for d in type_defs if d.name == "t")
+        self.assertTrue(t.abstract)
+        self.assertEqual(t.bind, "C")
+        seq_t = next(d for d in type_defs if d.name == "seq_t")
+        self.assertTrue(seq_t.sequence)
+
 if __name__ == "__main__":
     unittest.main()
