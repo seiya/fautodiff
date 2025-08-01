@@ -35,6 +35,8 @@ from .code_tree import (
     DoWhile,
     IfBlock,
     SelectBlock,
+    WhereBlock,
+    ForallBlock,
     Allocate,
     Deallocate,
     Statement,
@@ -313,6 +315,10 @@ def _parse_pointer(node: Node,
     elif isinstance(node, DoAbst):
         map_ptr, map_ref_new = _parse_pointer(node._body, mod_vars, map_ptr, {}, True)
         for key in map_ref_new: # pointer is updated in the loop
+            map_ref[key] = None
+    elif isinstance(node, ForallBlock):
+        map_ptr, map_ref_new = _parse_pointer(node._body, mod_vars, map_ptr, {}, True)
+        for key in map_ref_new:
             map_ref[key] = None
     else:
         for child in [n for n in node.iter_children()]:

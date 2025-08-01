@@ -381,6 +381,13 @@ class TestGenerator(unittest.TestCase):
         expected = Path('examples/mpi_example_ad.f90').read_text()
         self.assertEqual(generated, expected)
 
+    def test_where_forall(self):
+        code_tree.Node.reset()
+        src = Path('examples/where_forall.f90')
+        generated = generator.generate_ad(str(src), warn=False)
+        expected = src.with_name('where_forall_ad.f90').read_text()
+        self.assertEqual(generated, expected)
+
 
 def _make_example_test(src: Path):
     def test(self):

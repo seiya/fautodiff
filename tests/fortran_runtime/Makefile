@@ -18,7 +18,7 @@ PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_cont
            run_intrinsic_func.out run_real_kind.out run_save_vars.out run_store_vars.out \
            run_directives.out run_parameter_var.out run_module_vars.out run_call_module_vars.out run_allocate_vars.out \
            run_exit_cycle.out run_pointer_arrays.out run_derived_alloc.out run_mpi_example.out \
-		   run_stack.out
+                   run_stack.out run_where_forall.out
 PROGRAMS = $(addprefix $(OUTDIR)/,$(PROGRAM_NAMES))
 
 .PHONY: all clean
@@ -66,6 +66,7 @@ $(OUTDIR)/run_exit_cycle.o: $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(O
 $(OUTDIR)/run_pointer_arrays.o: $(OUTDIR)/pointer_arrays.o $(OUTDIR)/pointer_arrays_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_derived_alloc.o: $(OUTDIR)/derived_alloc.o $(OUTDIR)/derived_alloc_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_mpi_example.o: $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
+$(OUTDIR)/run_where_forall.o: $(OUTDIR)/where_forall.o $(OUTDIR)/where_forall_ad.o
 
 $(OUTDIR)/run_fautodiff_stack.o: $(OUTDIR)/fautodiff_stack.o
 
@@ -88,6 +89,7 @@ $(OUTDIR)/run_exit_cycle.out: $(OUTDIR)/run_exit_cycle.o $(OUTDIR)/exit_cycle.o 
 $(OUTDIR)/run_pointer_arrays.out: $(OUTDIR)/run_pointer_arrays.o $(OUTDIR)/pointer_arrays.o $(OUTDIR)/pointer_arrays_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_derived_alloc.out: $(OUTDIR)/run_derived_alloc.o $(OUTDIR)/derived_alloc.o $(OUTDIR)/derived_alloc_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_mpi_example.out: $(OUTDIR)/run_mpi_example.o $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
+$(OUTDIR)/run_where_forall.out: $(OUTDIR)/run_where_forall.o $(OUTDIR)/where_forall.o $(OUTDIR)/where_forall_ad.o
 
 $(OUTDIR)/run_fautodiff_stack.out: $(OUTDIR)/run_fautodiff_stack.o $(OUTDIR)/fautodiff_stack.o
 
