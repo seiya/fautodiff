@@ -1755,7 +1755,7 @@ class Declaration(Node):
         if self.constant or self.parameter:
             return False
         typename = self.typename.lower()
-        if typename.startswith("real") or typename.startswith("double"):
+        if typename.startswith("real") or typename.startswith("double") or typename.startswith("complex"):
             return True
         if self.type_def is not None:
             for decl in self.type_def.iter_children():
