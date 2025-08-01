@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fautodiff"
+version = "0.1.0"
+description = "Autodiff code generator for Fortran"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "BSD-2-Clause"}
+authors = [{name = "Seiya Nishizawa"}]
+classifiers = [
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+    "fparser>=0.2.0",
+]
+
+[project.scripts]
+fautodiff = "fautodiff.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
