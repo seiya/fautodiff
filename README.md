@@ -8,10 +8,12 @@ can be found in ``doc/fortran_support.md``.
 
 ## Installation
 
-The parser relies on the `fparser` package (version **0.2.0 or later**) which can be installed via pip:
+The parser relies on the `fparser` package (version **0.2.0 or later**).
+
+Install `fautodiff` and its dependencies with:
 
 ```bash
-pip install "fparser>=0.2.0"
+pip install .
 ```
 
 ## Generating AD code
