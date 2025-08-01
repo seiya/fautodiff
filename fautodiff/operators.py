@@ -690,6 +690,7 @@ class OpVar(OpLeaf):
     allocatable: Optional[bool] = field(default=None, repr=False)
     pointer: Optional[bool] = field(default=None, repr=False)
     optional: Optional[bool] = field(default=None, repr=False)
+    target: Optional[bool] = field(default=None, repr=False)
     declared_in: Optional[str] = field(default=None, repr=False)
     ref_var: Optional["OpVar"] = field(default=None)
     reduced_dims: Optional[List[int]] = field(init=False, repr=False, default=None)
@@ -709,6 +710,7 @@ class OpVar(OpLeaf):
         allocatable: Optional[bool] = None,
         pointer: Optional[bool] = None,
         optional: Optional[bool] = None,
+        target: Optional[bool] = None,
         declared_in: Optional[str] = None,
         ref_var: Optional[OpVar] = None,
     ):
@@ -732,6 +734,7 @@ class OpVar(OpLeaf):
         self.allocatable = allocatable
         self.pointer = pointer
         self.optional = optional
+        self.target = target
         self.declared_in = declared_in
         self.ref_var = ref_var
         if self.ad_target is None and self.typename is not None:
@@ -841,6 +844,7 @@ class OpVar(OpLeaf):
             allocatable=self.allocatable,
             pointer=self.pointer,
             optional=self.optional,
+            target=self.target,
             declared_in=self.declared_in,
             ref_var=self.ref_var,
         )
@@ -870,6 +874,37 @@ class OpVar(OpLeaf):
             allocatable=self.allocatable,
             pointer=self.pointer,
             optional=self.optional,
+            target=self.target,
+            declared_in=self.declared_in,
+            ref_var=ref_var
+        )
+
+    def remove_suffix(self, suffix: Optional[str] = None) -> "OpVar":
+        if suffix is None:
+            return self
+        index = self.index
+        name = self.name.removesuffix(suffix)
+        if self.ref_var is None:
+            if index is not None:
+                index = AryIndex(list(index.dims) if index.dims is not None else None)
+            ref_var = None
+        else:
+            ref_var = self.ref_var.remove_suffix(suffix)
+        return OpVar(
+            name,
+            index=index,
+            kind=self.kind,
+            char_len=self.char_len,
+            dims=self.dims,
+            reference=self.reference,
+            typename=self.typename,
+            intent=self.intent,
+            ad_target=self.ad_target,
+            is_constant=self.is_constant,
+            allocatable=self.allocatable,
+            pointer=self.pointer,
+            optional=self.optional,
+            target=self.target,
             declared_in=self.declared_in,
             ref_var=ref_var
         )

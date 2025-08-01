@@ -270,7 +270,7 @@ class TestGenerator(unittest.TestCase):
             src_path = Path(tmp) / "opt.f90"
             src_path.write_text(src)
             generated = generator.generate_ad(str(src_path), warn=False)
-            self.assertIn("real, optional, intent(in)  :: y", generated)
+            self.assertIn("real, intent(in), optional  :: y", generated)
 
     def test_persistent_mpi_wrappers(self):
         code_tree.Node.reset()

@@ -68,8 +68,8 @@ contains
     do j = m, 1, - 1
       if (.not. allocated(obj_ad(j)%arr_ad)) then
         allocate(obj_ad(j)%arr_ad, mold=obj(j)%arr)
-        obj_ad(j)%arr_ad = 0.0
       end if
+      obj_ad(j)%arr_ad = 0.0
     end do
 
     return

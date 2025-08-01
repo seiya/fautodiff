@@ -67,9 +67,6 @@ contains
     end if
 
     inner1 = res_ad**2
-    do j = 1, m
-      inner1 = inner1 + sum(obj_ad(j)%arr_ad(:)**2)
-    end do
     call derived_alloc_finalize_rev_ad(m)
     call derived_alloc_run_rev_ad(n, m, x, x_ad, res_ad)
     inner2 = x_ad

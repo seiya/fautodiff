@@ -1,321 +1,1348 @@
 module fautodiff_stack
+  use iso_c_binding
   implicit none
   private
 
-  public :: fautodiff_stack_t
-  public :: fautodiff_stack_r4_t, fautodiff_stack_r8_t, fautodiff_stack_i_t, fautodiff_stack_l_t
-  public :: fautodiff_stack_r4, fautodiff_stack_r8, fautodiff_stack_i, fautodiff_stack_l
+  public :: fautodiff_stack_r4_t
+  public :: fautodiff_stack_r8_t
+  public :: fautodiff_stack_i_t
+  public :: fautodiff_stack_l_t
+  public :: fautodiff_stack_p_t
+  public :: fautodiff_stack_r4
+  public :: fautodiff_stack_r8
+  public :: fautodiff_stack_i
+  public :: fautodiff_stack_l
+  public :: fautodiff_stack_p
 
   integer, parameter :: DEFAULT_PAGE_SIZE = 1024 * 1024
-  integer, parameter :: MAX_PAGE_NUM = 1024 * 1024
+  integer, parameter :: MAX_PAGE_NUM_LARGE = 1024 * 1024
+  integer, parameter :: MAX_PAGE_NUM_SMALL = 1
 
-  integer, parameter :: i_type_r4 = 1
-  integer, parameter :: i_type_r8 = 2
-  integer, parameter :: i_type_i  = 3
-  integer, parameter :: i_type_l  = 4
+  type :: data_r4_t
+    real, allocatable :: data(:)
+  end type data_r4_t
 
-  type :: ptr_r4_t
-    real, pointer, contiguous :: ptr(:) => null()
-  end type ptr_r4_t
+  type :: data_r8_t
+    real(8), allocatable :: data(:)
+  end type data_r8_t
 
-  type :: ptr_r8_t
-    real(8), pointer, contiguous :: ptr(:) => null()
-  end type ptr_r8_t
+  type :: data_i_t
+    integer, allocatable :: data(:)
+  end type data_i_t
 
-  type :: ptr_i_t
-    integer, pointer, contiguous :: ptr(:) => null()
-  end type ptr_i_t
+  type :: data_l_t
+    logical, allocatable :: data(:)
+  end type data_l_t
 
-  type :: ptr_l_t
-    logical, pointer, contiguous :: ptr(:) => null()
-  end type ptr_l_t
-
-  type, abstract :: fautodiff_stack_t
+  type :: fautodiff_stack_r4_t
+    integer :: max_page_num = MAX_PAGE_NUM_LARGE
+    type(data_r4_t) :: ary(MAX_PAGE_NUM_LARGE)
     integer :: page_num = 1
     integer :: pos = 1
     integer :: page_size = DEFAULT_PAGE_SIZE
   contains
-    procedure :: push
-    procedure :: pop
-    procedure :: size => data_size
-  end type fautodiff_stack_t
-
-  ! stack types
-  type, extends(fautodiff_stack_t) :: fautodiff_stack_r4_t
-    type(ptr_r4_t) :: ary(MAX_PAGE_NUM)
+    procedure :: push_r4_0d
+    procedure :: push_r4_1d
+    procedure :: push_r4_2d
+    procedure :: push_r4_3d
+    procedure :: pop_r4_0d
+    procedure :: pop_r4_1d
+    procedure :: pop_r4_2d
+    procedure :: pop_r4_3d
+    generic :: push => push_r4_0d, push_r4_1d, push_r4_2d, push_r4_3d
+    generic :: pop => pop_r4_0d, pop_r4_1d, pop_r4_2d, pop_r4_3d
+    procedure :: get => get_r4
   end type fautodiff_stack_r4_t
 
-  type, extends(fautodiff_stack_t) :: fautodiff_stack_r8_t
-    type(ptr_r8_t) :: ary(MAX_PAGE_NUM)
+  type :: fautodiff_stack_r8_t
+    integer :: max_page_num = MAX_PAGE_NUM_LARGE
+    type(data_r8_t) :: ary(MAX_PAGE_NUM_LARGE)
+    integer :: page_num = 1
+    integer :: pos = 1
+    integer :: page_size = DEFAULT_PAGE_SIZE
+  contains
+    procedure :: push_r8_0d
+    procedure :: push_r8_1d
+    procedure :: push_r8_2d
+    procedure :: push_r8_3d
+    procedure :: pop_r8_0d
+    procedure :: pop_r8_1d
+    procedure :: pop_r8_2d
+    procedure :: pop_r8_3d
+    generic :: push => push_r8_0d, push_r8_1d, push_r8_2d, push_r8_3d
+    generic :: pop => pop_r8_0d, pop_r8_1d, pop_r8_2d, pop_r8_3d
+    procedure :: get => get_r8
   end type fautodiff_stack_r8_t
 
-  type, extends(fautodiff_stack_t) :: fautodiff_stack_i_t
-    type(ptr_i_t) :: ary(MAX_PAGE_NUM)
+  type :: fautodiff_stack_i_t
+    integer :: max_page_num = MAX_PAGE_NUM_SMALL
+    type(data_i_t) :: ary(MAX_PAGE_NUM_SMALL)
+    integer :: page_num = 1
+    integer :: pos = 1
+    integer :: page_size = DEFAULT_PAGE_SIZE
   contains
+    procedure :: push_i_0d
+    procedure :: push_i_1d
+    procedure :: push_i_2d
+    procedure :: push_i_3d
+    procedure :: pop_i_0d
+    procedure :: pop_i_1d
+    procedure :: pop_i_2d
+    procedure :: pop_i_3d
+    generic :: push => push_i_0d, push_i_1d, push_i_2d, push_i_3d
+    generic :: pop => pop_i_0d, pop_i_1d, pop_i_2d, pop_i_3d
     procedure :: get => get_i
   end type fautodiff_stack_i_t
 
-  type, extends(fautodiff_stack_t) :: fautodiff_stack_l_t
-    type(ptr_l_t) :: ary(MAX_PAGE_NUM)
+  type :: fautodiff_stack_l_t
+    integer :: max_page_num = MAX_PAGE_NUM_SMALL
+    type(data_l_t) :: ary(MAX_PAGE_NUM_SMALL)
+    integer :: page_num = 1
+    integer :: pos = 1
+    integer :: page_size = DEFAULT_PAGE_SIZE
   contains
+    procedure :: push_l_0d
+    procedure :: push_l_1d
+    procedure :: push_l_2d
+    procedure :: push_l_3d
+    procedure :: pop_l_0d
+    procedure :: pop_l_1d
+    procedure :: pop_l_2d
+    procedure :: pop_l_3d
+    generic :: push => push_l_0d, push_l_1d, push_l_2d, push_l_3d
+    generic :: pop => pop_l_0d, pop_l_1d, pop_l_2d, pop_l_3d
     procedure :: get => get_l
   end type fautodiff_stack_l_t
 
-  ! default stacks used by wrapper procedures
+  type :: fautodiff_stack_p_t
+    type(c_ptr) :: ary(DEFAULT_PAGE_SIZE)
+    integer :: dims(3, DEFAULT_PAGE_SIZE)
+    integer :: pos = 1
+    integer :: page_size = DEFAULT_PAGE_SIZE
+  contains
+    procedure :: push_p_r4_1d
+    procedure :: push_p_r4_2d
+    procedure :: push_p_r4_3d
+    procedure :: pop_p_r4_1d
+    procedure :: pop_p_r4_2d
+    procedure :: pop_p_r4_3d
+    procedure :: push_p_r8_1d
+    procedure :: push_p_r8_2d
+    procedure :: push_p_r8_3d
+    procedure :: pop_p_r8_1d
+    procedure :: pop_p_r8_2d
+    procedure :: pop_p_r8_3d
+    generic :: push => push_p_r4_1d, push_p_r4_2d, push_p_r4_3d, push_p_r8_1d, push_p_r8_2d, push_p_r8_3d
+    generic :: pop => pop_p_r4_1d, pop_p_r4_2d, pop_p_r4_3d, pop_p_r8_1d, pop_p_r8_2d, pop_p_r8_3d
+  end type fautodiff_stack_p_t
+
   type(fautodiff_stack_r4_t), save :: fautodiff_stack_r4
   type(fautodiff_stack_r8_t), save :: fautodiff_stack_r8
-  type(fautodiff_stack_i_t),  save :: fautodiff_stack_i
-  type(fautodiff_stack_l_t),  save :: fautodiff_stack_l
+  type(fautodiff_stack_i_t), save :: fautodiff_stack_i
+  type(fautodiff_stack_l_t), save :: fautodiff_stack_l
+  type(fautodiff_stack_p_t), save :: fautodiff_stack_p
 
 contains
 
-  !====================== type-bounded proedures ======================
-  integer(8) function data_size(self)
-    class(fautodiff_stack_t), intent(in) :: self
-    data_size = (self%page_num - 1) * self%page_size + self%pos - 1
-  end function data_size
-
-  subroutine push(self, data)
+  subroutine push_r4_0d(self, data)
     use iso_c_binding
-    class(fautodiff_stack_t), intent(inout) :: self
-    class(*), dimension(..), intent(in), target :: data
-    type(c_ptr) :: ptr
-    real,    pointer, contiguous :: ptr_r4(:)
-    real(8), pointer, contiguous :: ptr_r8(:)
-    integer, pointer, contiguous :: ptr_i(:)
-    logical, pointer, contiguous :: ptr_l(:)
-    integer(8) :: len
+    implicit none
+    class(fautodiff_stack_r4_t), intent(inout) :: self
+    real, intent(in) :: data
+    if (.not. allocated(self%ary(self%page_num)%data)) then
+      allocate(self%ary(self%page_num)%data(self%page_size))
+    end if
+    self%ary(self%page_num)%data(self%pos) = data
+    self%pos = self%pos + 1
+    if (self%pos > self%page_size) then
+      self%pos = 1
+      self%page_num = self%page_num + 1
+      if (self%page_num > self%max_page_num) then
+        print *, 'Page number exceeds the limit'
+        error stop 1
+      end if
+    end if
+    return
+  end subroutine push_r4_0d
+
+
+  subroutine pop_r4_0d(self, data)
+    implicit none
+    class(fautodiff_stack_r4_t), intent(inout) :: self
+    real, intent(out) :: data
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+            print *, 'No stacked data'
+            error stop 1
+        end if
+        self%pos = self%page_size
+    end if
+    data = self%ary(self%page_num)%data(self%pos)
+    return
+  end subroutine pop_r4_0d
+
+
+  subroutine push_r4_1d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r4_t), intent(inout) :: self
+    real, intent(in), target :: data(:)
+       integer(8) :: len
     integer(8) :: i0, i1
     integer :: j0, j1
-    integer :: i_type
-
-    call get_ptr(self, data, i_type, len, ptr_r4, ptr_r8, ptr_i, ptr_l)
-
+    real, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
     i0 = 1
     do while (len > 0)
       i1 = i0 + min(len - 1, self%page_size - self%pos)
       j0 = self%pos
       j1 = self%pos + int(i1 - i0)
-      select type (self)
-      type is (fautodiff_stack_r4_t)
-        if (.not. associated(self%ary(self%page_num)%ptr)) then
-          allocate(self%ary(self%page_num)%ptr(self%page_size))
-        end if
-        self%ary(self%page_num)%ptr(j0:j1) = ptr_r4(i0:i1)
-      type is (fautodiff_stack_r8_t)
-        if (.not. associated(self%ary(self%page_num)%ptr)) then
-          allocate(self%ary(self%page_num)%ptr(self%page_size))
-        end if
-        self%ary(self%page_num)%ptr(j0:j1) = ptr_r8(i0:i1)
-      type is (fautodiff_stack_i_t)
-        if (.not. associated(self%ary(self%page_num)%ptr)) then
-          allocate(self%ary(self%page_num)%ptr(self%page_size))
-        end if
-        self%ary(self%page_num)%ptr(j0:j1) = ptr_i(i0:i1)
-      type is (fautodiff_stack_l_t)
-        if (.not. associated(self%ary(self%page_num)%ptr)) then
-          allocate(self%ary(self%page_num)%ptr(self%page_size))
-        end if
-        self%ary(self%page_num)%ptr(j0:j1) = ptr_l(i0:i1)
-      end select
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
       len = len - (i1 - i0 + 1)
       self%pos = j1 + 1
       i0 = i1 + 1
       if (self%pos > self%page_size) then
         self%pos = 1
         self%page_num = self%page_num + 1
-        if (self%page_num > MAX_PAGE_NUM) then
+        if (self%page_num > self%max_page_num) then
           print *, 'Page number exceeds the limit'
           error stop 1
         end if
       end if
     end do
-  end subroutine push
+    return
+  end subroutine push_r4_1d
 
-  subroutine pop(self, data)
+
+  subroutine pop_r4_1d(self, data)
     use iso_c_binding
-    class(fautodiff_stack_t), intent(inout) :: self
-    class(*), dimension(..), intent(inout), target :: data
-    type(c_ptr) :: ptr
-    real,    pointer, contiguous :: ptr_r4(:)
-    real(8), pointer, contiguous :: ptr_r8(:)
-    integer, pointer, contiguous :: ptr_i(:)
-    logical, pointer, contiguous :: ptr_l(:)
+    implicit none
+    class(fautodiff_stack_r4_t), intent(inout) :: self
+        real, intent(out), target :: data(:)
     integer(8) :: len
     integer(8) :: i0, i1
     integer :: j0, j1
-    integer :: i_type
-
-    call get_ptr(self, data, i_type, len, ptr_r4, ptr_r8, ptr_i, ptr_l)
-
+    real, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
     i1 = len
-    if (len > self%size()) then
-       print *, 'Stored data is not enough: ', len, self%size()
-       error stop 1
-    end if
     do while (len > 0)
-      i0 = i1 - min(len, self%pos - 1) + 1
-      j0 = self%pos - int(i1 - i0) - 1
-      j1 = self%pos - 1
-      select type(self)
-      type is (fautodiff_stack_r4_t)
-        ptr_r4(i0:i1) = self%ary(self%page_num)%ptr(j0:j1)
-      type is (fautodiff_stack_r8_t)
-        ptr_r8(i0:i1) = self%ary(self%page_num)%ptr(j0:j1)
-      type is (fautodiff_stack_i_t)
-        ptr_i(i0:i1) = self%ary(self%page_num)%ptr(j0:j1)
-      type is (fautodiff_stack_l_t)
-        ptr_l(i0:i1) = self%ary(self%page_num)%ptr(j0:j1)
-      end select
-      len = len - (i1 - i0 + 1)
-      self%pos = j0
-      i1 = i0 - 1
-      if (self%pos < 1) then
+      if (self%pos == 1) then
         self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
-          print *, 'Unexpected error occured'
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_r4_1d
+
+
+  subroutine push_r4_2d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r4_t), intent(inout) :: self
+    real, intent(in), target :: data(:, :)
+       integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    real, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i0 = 1
+    do while (len > 0)
+      i1 = i0 + min(len - 1, self%page_size - self%pos)
+      j0 = self%pos
+      j1 = self%pos + int(i1 - i0)
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j1 + 1
+      i0 = i1 + 1
+      if (self%pos > self%page_size) then
+        self%pos = 1
+        self%page_num = self%page_num + 1
+        if (self%page_num > self%max_page_num) then
+          print *, 'Page number exceeds the limit'
           error stop 1
         end if
       end if
     end do
-  end subroutine pop
+    return
+  end subroutine push_r4_2d
+
+
+  subroutine pop_r4_2d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r4_t), intent(inout) :: self
+        real, intent(out), target :: data(:, :)
+    integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    real, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i1 = len
+    do while (len > 0)
+      if (self%pos == 1) then
+        self%pos = self%page_size
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_r4_2d
+
+
+  subroutine push_r4_3d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r4_t), intent(inout) :: self
+    real, intent(in), target :: data(:, :, :)
+       integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    real, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i0 = 1
+    do while (len > 0)
+      i1 = i0 + min(len - 1, self%page_size - self%pos)
+      j0 = self%pos
+      j1 = self%pos + int(i1 - i0)
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j1 + 1
+      i0 = i1 + 1
+      if (self%pos > self%page_size) then
+        self%pos = 1
+        self%page_num = self%page_num + 1
+        if (self%page_num > self%max_page_num) then
+          print *, 'Page number exceeds the limit'
+          error stop 1
+        end if
+      end if
+    end do
+    return
+  end subroutine push_r4_3d
+
+
+  subroutine pop_r4_3d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r4_t), intent(inout) :: self
+        real, intent(out), target :: data(:, :, :)
+    integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    real, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i1 = len
+    do while (len > 0)
+      if (self%pos == 1) then
+        self%pos = self%page_size
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_r4_3d
+
+
+  subroutine push_r8_0d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r8_t), intent(inout) :: self
+    real(8), intent(in) :: data
+    if (.not. allocated(self%ary(self%page_num)%data)) then
+      allocate(self%ary(self%page_num)%data(self%page_size))
+    end if
+    self%ary(self%page_num)%data(self%pos) = data
+    self%pos = self%pos + 1
+    if (self%pos > self%page_size) then
+      self%pos = 1
+      self%page_num = self%page_num + 1
+      if (self%page_num > self%max_page_num) then
+        print *, 'Page number exceeds the limit'
+        error stop 1
+      end if
+    end if
+    return
+  end subroutine push_r8_0d
+
+
+  subroutine pop_r8_0d(self, data)
+    implicit none
+    class(fautodiff_stack_r8_t), intent(inout) :: self
+    real(8), intent(out) :: data
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+            print *, 'No stacked data'
+            error stop 1
+        end if
+        self%pos = self%page_size
+    end if
+    data = self%ary(self%page_num)%data(self%pos)
+    return
+  end subroutine pop_r8_0d
+
+
+  subroutine push_r8_1d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r8_t), intent(inout) :: self
+    real(8), intent(in), target :: data(:)
+       integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    real(8), pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i0 = 1
+    do while (len > 0)
+      i1 = i0 + min(len - 1, self%page_size - self%pos)
+      j0 = self%pos
+      j1 = self%pos + int(i1 - i0)
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j1 + 1
+      i0 = i1 + 1
+      if (self%pos > self%page_size) then
+        self%pos = 1
+        self%page_num = self%page_num + 1
+        if (self%page_num > self%max_page_num) then
+          print *, 'Page number exceeds the limit'
+          error stop 1
+        end if
+      end if
+    end do
+    return
+  end subroutine push_r8_1d
+
+
+  subroutine pop_r8_1d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r8_t), intent(inout) :: self
+        real(8), intent(out), target :: data(:)
+    integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    real(8), pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i1 = len
+    do while (len > 0)
+      if (self%pos == 1) then
+        self%pos = self%page_size
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_r8_1d
+
+
+  subroutine push_r8_2d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r8_t), intent(inout) :: self
+    real(8), intent(in), target :: data(:, :)
+       integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    real(8), pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i0 = 1
+    do while (len > 0)
+      i1 = i0 + min(len - 1, self%page_size - self%pos)
+      j0 = self%pos
+      j1 = self%pos + int(i1 - i0)
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j1 + 1
+      i0 = i1 + 1
+      if (self%pos > self%page_size) then
+        self%pos = 1
+        self%page_num = self%page_num + 1
+        if (self%page_num > self%max_page_num) then
+          print *, 'Page number exceeds the limit'
+          error stop 1
+        end if
+      end if
+    end do
+    return
+  end subroutine push_r8_2d
+
+
+  subroutine pop_r8_2d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r8_t), intent(inout) :: self
+        real(8), intent(out), target :: data(:, :)
+    integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    real(8), pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i1 = len
+    do while (len > 0)
+      if (self%pos == 1) then
+        self%pos = self%page_size
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_r8_2d
+
+
+  subroutine push_r8_3d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r8_t), intent(inout) :: self
+    real(8), intent(in), target :: data(:, :, :)
+       integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    real(8), pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i0 = 1
+    do while (len > 0)
+      i1 = i0 + min(len - 1, self%page_size - self%pos)
+      j0 = self%pos
+      j1 = self%pos + int(i1 - i0)
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j1 + 1
+      i0 = i1 + 1
+      if (self%pos > self%page_size) then
+        self%pos = 1
+        self%page_num = self%page_num + 1
+        if (self%page_num > self%max_page_num) then
+          print *, 'Page number exceeds the limit'
+          error stop 1
+        end if
+      end if
+    end do
+    return
+  end subroutine push_r8_3d
+
+
+  subroutine pop_r8_3d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_r8_t), intent(inout) :: self
+        real(8), intent(out), target :: data(:, :, :)
+    integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    real(8), pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i1 = len
+    do while (len > 0)
+      if (self%pos == 1) then
+        self%pos = self%page_size
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_r8_3d
+
+
+  subroutine push_i_0d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_i_t), intent(inout) :: self
+    integer, intent(in) :: data
+    if (.not. allocated(self%ary(self%page_num)%data)) then
+      allocate(self%ary(self%page_num)%data(self%page_size))
+    end if
+    self%ary(self%page_num)%data(self%pos) = data
+    self%pos = self%pos + 1
+    if (self%pos > self%page_size) then
+      self%pos = 1
+      self%page_num = self%page_num + 1
+      if (self%page_num > self%max_page_num) then
+        print *, 'Page number exceeds the limit'
+        error stop 1
+      end if
+    end if
+    return
+  end subroutine push_i_0d
+
+
+  subroutine pop_i_0d(self, data)
+    implicit none
+    class(fautodiff_stack_i_t), intent(inout) :: self
+    integer, intent(out) :: data
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+            print *, 'No stacked data'
+            error stop 1
+        end if
+        self%pos = self%page_size
+    end if
+    data = self%ary(self%page_num)%data(self%pos)
+    return
+  end subroutine pop_i_0d
+
+
+  subroutine push_i_1d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_i_t), intent(inout) :: self
+    integer, intent(in), target :: data(:)
+       integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    integer, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i0 = 1
+    do while (len > 0)
+      i1 = i0 + min(len - 1, self%page_size - self%pos)
+      j0 = self%pos
+      j1 = self%pos + int(i1 - i0)
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j1 + 1
+      i0 = i1 + 1
+      if (self%pos > self%page_size) then
+        self%pos = 1
+        self%page_num = self%page_num + 1
+        if (self%page_num > self%max_page_num) then
+          print *, 'Page number exceeds the limit'
+          error stop 1
+        end if
+      end if
+    end do
+    return
+  end subroutine push_i_1d
+
+
+  subroutine pop_i_1d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_i_t), intent(inout) :: self
+        integer, intent(out), target :: data(:)
+    integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    integer, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i1 = len
+    do while (len > 0)
+      if (self%pos == 1) then
+        self%pos = self%page_size
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_i_1d
+
+
+  subroutine push_i_2d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_i_t), intent(inout) :: self
+    integer, intent(in), target :: data(:, :)
+       integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    integer, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i0 = 1
+    do while (len > 0)
+      i1 = i0 + min(len - 1, self%page_size - self%pos)
+      j0 = self%pos
+      j1 = self%pos + int(i1 - i0)
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j1 + 1
+      i0 = i1 + 1
+      if (self%pos > self%page_size) then
+        self%pos = 1
+        self%page_num = self%page_num + 1
+        if (self%page_num > self%max_page_num) then
+          print *, 'Page number exceeds the limit'
+          error stop 1
+        end if
+      end if
+    end do
+    return
+  end subroutine push_i_2d
+
+
+  subroutine pop_i_2d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_i_t), intent(inout) :: self
+        integer, intent(out), target :: data(:, :)
+    integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    integer, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i1 = len
+    do while (len > 0)
+      if (self%pos == 1) then
+        self%pos = self%page_size
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_i_2d
+
+
+  subroutine push_i_3d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_i_t), intent(inout) :: self
+    integer, intent(in), target :: data(:, :, :)
+       integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    integer, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i0 = 1
+    do while (len > 0)
+      i1 = i0 + min(len - 1, self%page_size - self%pos)
+      j0 = self%pos
+      j1 = self%pos + int(i1 - i0)
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j1 + 1
+      i0 = i1 + 1
+      if (self%pos > self%page_size) then
+        self%pos = 1
+        self%page_num = self%page_num + 1
+        if (self%page_num > self%max_page_num) then
+          print *, 'Page number exceeds the limit'
+          error stop 1
+        end if
+      end if
+    end do
+    return
+  end subroutine push_i_3d
+
+
+  subroutine pop_i_3d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_i_t), intent(inout) :: self
+        integer, intent(out), target :: data(:, :, :)
+    integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    integer, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i1 = len
+    do while (len > 0)
+      if (self%pos == 1) then
+        self%pos = self%page_size
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_i_3d
+
+
+  subroutine push_l_0d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_l_t), intent(inout) :: self
+    logical, intent(in) :: data
+    if (.not. allocated(self%ary(self%page_num)%data)) then
+      allocate(self%ary(self%page_num)%data(self%page_size))
+    end if
+    self%ary(self%page_num)%data(self%pos) = data
+    self%pos = self%pos + 1
+    if (self%pos > self%page_size) then
+      self%pos = 1
+      self%page_num = self%page_num + 1
+      if (self%page_num > self%max_page_num) then
+        print *, 'Page number exceeds the limit'
+        error stop 1
+      end if
+    end if
+    return
+  end subroutine push_l_0d
+
+
+  subroutine pop_l_0d(self, data)
+    implicit none
+    class(fautodiff_stack_l_t), intent(inout) :: self
+    logical, intent(out) :: data
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+            print *, 'No stacked data'
+            error stop 1
+        end if
+        self%pos = self%page_size
+    end if
+    data = self%ary(self%page_num)%data(self%pos)
+    return
+  end subroutine pop_l_0d
+
+
+  subroutine push_l_1d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_l_t), intent(inout) :: self
+    logical, intent(in), target :: data(:)
+       integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    logical, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i0 = 1
+    do while (len > 0)
+      i1 = i0 + min(len - 1, self%page_size - self%pos)
+      j0 = self%pos
+      j1 = self%pos + int(i1 - i0)
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j1 + 1
+      i0 = i1 + 1
+      if (self%pos > self%page_size) then
+        self%pos = 1
+        self%page_num = self%page_num + 1
+        if (self%page_num > self%max_page_num) then
+          print *, 'Page number exceeds the limit'
+          error stop 1
+        end if
+      end if
+    end do
+    return
+  end subroutine push_l_1d
+
+
+  subroutine pop_l_1d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_l_t), intent(inout) :: self
+        logical, intent(out), target :: data(:)
+    integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    logical, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i1 = len
+    do while (len > 0)
+      if (self%pos == 1) then
+        self%pos = self%page_size
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_l_1d
+
+
+  subroutine push_l_2d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_l_t), intent(inout) :: self
+    logical, intent(in), target :: data(:, :)
+       integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    logical, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i0 = 1
+    do while (len > 0)
+      i1 = i0 + min(len - 1, self%page_size - self%pos)
+      j0 = self%pos
+      j1 = self%pos + int(i1 - i0)
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j1 + 1
+      i0 = i1 + 1
+      if (self%pos > self%page_size) then
+        self%pos = 1
+        self%page_num = self%page_num + 1
+        if (self%page_num > self%max_page_num) then
+          print *, 'Page number exceeds the limit'
+          error stop 1
+        end if
+      end if
+    end do
+    return
+  end subroutine push_l_2d
+
+
+  subroutine pop_l_2d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_l_t), intent(inout) :: self
+        logical, intent(out), target :: data(:, :)
+    integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    logical, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i1 = len
+    do while (len > 0)
+      if (self%pos == 1) then
+        self%pos = self%page_size
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_l_2d
+
+
+  subroutine push_l_3d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_l_t), intent(inout) :: self
+    logical, intent(in), target :: data(:, :, :)
+       integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    logical, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i0 = 1
+    do while (len > 0)
+      i1 = i0 + min(len - 1, self%page_size - self%pos)
+      j0 = self%pos
+      j1 = self%pos + int(i1 - i0)
+      if (.not. allocated(self%ary(self%page_num)%data)) then
+        allocate(self%ary(self%page_num)%data(self%page_size))
+      end if
+      self%ary(self%page_num)%data(j0:j1) = ptr(i0:i1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j1 + 1
+      i0 = i1 + 1
+      if (self%pos > self%page_size) then
+        self%pos = 1
+        self%page_num = self%page_num + 1
+        if (self%page_num > self%max_page_num) then
+          print *, 'Page number exceeds the limit'
+          error stop 1
+        end if
+      end if
+    end do
+    return
+  end subroutine push_l_3d
+
+
+  subroutine pop_l_3d(self, data)
+    use iso_c_binding
+    implicit none
+    class(fautodiff_stack_l_t), intent(inout) :: self
+        logical, intent(out), target :: data(:, :, :)
+    integer(8) :: len
+    integer(8) :: i0, i1
+    integer :: j0, j1
+    logical, pointer :: ptr(:)
+    len = size(data)
+    call c_f_pointer(c_loc(data), ptr, [len])
+    i1 = len
+    do while (len > 0)
+      if (self%pos == 1) then
+        self%pos = self%page_size
+        self%page_num = self%page_num - 1
+        if (self%page_num < 1) then
+          print *, 'No stacked data'
+          error stop 1
+        end if
+      end if
+      i0 = i1 - min(len, self%pos - 1) + 1
+      j0 = self%pos - int(i1 - i0) - 1
+      j1 = self%pos - 1
+      ptr(i0:i1) = self%ary(self%page_num)%data(j0:j1)
+      len = len - (i1 - i0 + 1)
+      self%pos = j0
+      i1 = i0 - 1
+    end do
+    return
+  end subroutine pop_l_3d
+
+
+  function get_r4(self) result(res)
+    class(fautodiff_stack_r4_t), intent(inout) :: self
+    real :: res
+    call self%pop(res)
+  end function get_r4
+
+
+  function get_r8(self) result(res)
+    class(fautodiff_stack_r8_t), intent(inout) :: self
+    real(8) :: res
+    call self%pop(res)
+  end function get_r8
+
 
   function get_i(self) result(res)
     class(fautodiff_stack_i_t), intent(inout) :: self
     integer :: res
+    call self%pop(res)
+  end function get_i
 
-    call pop(self, res)
-  end function
 
   function get_l(self) result(res)
     class(fautodiff_stack_l_t), intent(inout) :: self
     logical :: res
+    call self%pop(res)
+  end function get_l
 
-    call pop(self, res)
-  end function
 
-  !====================== helper routines =============================
-  subroutine get_ptr(self, data, i_type, len, ptr_r4, ptr_r8, ptr_i, ptr_l)
+  subroutine push_p_r4_1d(self, data)
     use iso_c_binding
-    class(fautodiff_stack_t), intent(in) :: self
-    class(*), dimension(..), intent(in), target :: data
-    integer, intent(out) :: i_type
-    integer(8) , intent(out) :: len
-    real,    intent(out), pointer :: ptr_r4(:)
-    real(8), intent(out), pointer :: ptr_r8(:)
-    integer, intent(out), pointer :: ptr_i(:)
-    logical, intent(out), pointer :: ptr_l(:)
-    type(c_ptr) :: ptr
-
-    i_type = 0
-    select rank(data)
-    rank (0)
-      len = 1
-      select type(data)
-      type is (real)
-        ptr = c_loc(data)
-        i_type = i_type_r4
-      type is (real(8))
-        ptr = c_loc(data)
-        i_type = i_type_r8
-      type is (integer)
-        ptr = c_loc(data)
-        i_type = i_type_i
-      type is (logical)
-        ptr = c_loc(data)
-        i_type = i_type_l
-      end select
-    rank (1)
-      select type(data)
-      type is (real)
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_r4
-      type is (real(8))
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_r8
-      type is (integer)
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_i
-      type is (logical)
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_l
-      end select
-    rank (2)
-      select type(data)
-      type is (real)
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_r4
-      type is (real(8))
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_r8
-      type is (integer)
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_i
-      type is (logical)
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_l
-      end select
-    rank (3)
-      select type(data)
-      type is (real)
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_r4
-      type is (real(8))
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_r8
-      type is (integer)
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_i
-      type is (logical)
-        ptr = c_loc(data)
-        len = size(data)
-        i_type = i_type_l
-      end select
-    end select
-
-    select case (i_type)
-    case (i_type_r4)
-      if (.not. extends_type_of(self, fautodiff_stack_r4)) then
-        print *, 'data must be real'
-        error stop 1
-      end if
-      call c_f_pointer(ptr, ptr_r4, [len])
-    case (i_type_r8)
-      if (.not. extends_type_of(self, fautodiff_stack_r8)) then
-        print *, 'data must be real(8)'
-        error stop 1
-      end if
-      call c_f_pointer(ptr, ptr_r8, [len])
-    case (i_type_i)
-      if (.not. extends_type_of(self, fautodiff_stack_i)) then
-        print *, 'data must be integer'
-        error stop 1
-      end if
-      call c_f_pointer(ptr, ptr_i, [len])
-    case (i_type_l)
-      if (.not. extends_type_of(self, fautodiff_stack_l)) then
-        print *, 'data must be logical'
-        error stop 1
-      end if
-      call c_f_pointer(ptr, ptr_l, [len])
-    case default
-      print *, 'Unsupported data type'
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real, intent(in), target :: data(:)
+        self%dims(1, self%pos) = size(data, 1)
+    self%ary(self%pos) = c_loc(data)
+    self%pos = self%pos + 1
+    if (self%pos > self%page_size) then
+      print *, 'Data size exceeds the limit'
       error stop 1
-    end select
-
+    end if
     return
-  end subroutine get_ptr
+  end subroutine push_p_r4_1d
+
+
+  subroutine pop_p_r4_1d(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real, intent(out), pointer :: data(:)
+    type(c_ptr) :: ptr
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+       print *, 'No stacked data'
+       error stop 1
+    end if
+    call c_f_pointer(self%ary(self%pos), data, [self%dims(1, self%pos)])
+    return
+  end subroutine pop_p_r4_1d
+
+
+  subroutine push_p_r4_2d(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real, intent(in), target :: data(:, :)
+        self%dims(1, self%pos) = size(data, 1)
+    self%dims(2, self%pos) = size(data, 2)
+    self%ary(self%pos) = c_loc(data)
+    self%pos = self%pos + 1
+    if (self%pos > self%page_size) then
+      print *, 'Data size exceeds the limit'
+      error stop 1
+    end if
+    return
+  end subroutine push_p_r4_2d
+
+
+  subroutine pop_p_r4_2d(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real, intent(out), pointer :: data(:, :)
+    type(c_ptr) :: ptr
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+       print *, 'No stacked data'
+       error stop 1
+    end if
+    call c_f_pointer(self%ary(self%pos), data, [self%dims(1, self%pos), self%dims(2, self%pos)])
+    return
+  end subroutine pop_p_r4_2d
+
+
+  subroutine push_p_r4_3d(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real, intent(in), target :: data(:, :, :)
+        self%dims(1, self%pos) = size(data, 1)
+    self%dims(2, self%pos) = size(data, 2)
+    self%dims(3, self%pos) = size(data, 3)
+    self%ary(self%pos) = c_loc(data)
+    self%pos = self%pos + 1
+    if (self%pos > self%page_size) then
+      print *, 'Data size exceeds the limit'
+      error stop 1
+    end if
+    return
+  end subroutine push_p_r4_3d
+
+
+  subroutine pop_p_r4_3d(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real, intent(out), pointer :: data(:, :, :)
+    type(c_ptr) :: ptr
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+       print *, 'No stacked data'
+       error stop 1
+    end if
+    call c_f_pointer(self%ary(self%pos), data, [self%dims(1, self%pos), self%dims(2, self%pos), self%dims(3, self%pos)])
+    return
+  end subroutine pop_p_r4_3d
+
+
+  subroutine push_p_r8_1d(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real(8), intent(in), target :: data(:)
+        self%dims(1, self%pos) = size(data, 1)
+    self%ary(self%pos) = c_loc(data)
+    self%pos = self%pos + 1
+    if (self%pos > self%page_size) then
+      print *, 'Data size exceeds the limit'
+      error stop 1
+    end if
+    return
+  end subroutine push_p_r8_1d
+
+
+  subroutine pop_p_r8_1d(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real(8), intent(out), pointer :: data(:)
+    type(c_ptr) :: ptr
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+       print *, 'No stacked data'
+       error stop 1
+    end if
+    call c_f_pointer(self%ary(self%pos), data, [self%dims(1, self%pos)])
+    return
+  end subroutine pop_p_r8_1d
+
+
+  subroutine push_p_r8_2d(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real(8), intent(in), target :: data(:, :)
+        self%dims(1, self%pos) = size(data, 1)
+    self%dims(2, self%pos) = size(data, 2)
+    self%ary(self%pos) = c_loc(data)
+    self%pos = self%pos + 1
+    if (self%pos > self%page_size) then
+      print *, 'Data size exceeds the limit'
+      error stop 1
+    end if
+    return
+  end subroutine push_p_r8_2d
+
+
+  subroutine pop_p_r8_2d(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real(8), intent(out), pointer :: data(:, :)
+    type(c_ptr) :: ptr
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+       print *, 'No stacked data'
+       error stop 1
+    end if
+    call c_f_pointer(self%ary(self%pos), data, [self%dims(1, self%pos), self%dims(2, self%pos)])
+    return
+  end subroutine pop_p_r8_2d
+
+
+  subroutine push_p_r8_3d(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real(8), intent(in), target :: data(:, :, :)
+        self%dims(1, self%pos) = size(data, 1)
+    self%dims(2, self%pos) = size(data, 2)
+    self%dims(3, self%pos) = size(data, 3)
+    self%ary(self%pos) = c_loc(data)
+    self%pos = self%pos + 1
+    if (self%pos > self%page_size) then
+      print *, 'Data size exceeds the limit'
+      error stop 1
+    end if
+    return
+  end subroutine push_p_r8_3d
+
+
+  subroutine pop_p_r8_3d(self, data)
+    use iso_c_binding
+    class(fautodiff_stack_p_t), intent(inout) :: self
+    real(8), intent(out), pointer :: data(:, :, :)
+    type(c_ptr) :: ptr
+    self%pos = self%pos - 1
+    if (self%pos < 1) then
+       print *, 'No stacked data'
+       error stop 1
+    end if
+    call c_f_pointer(self%ary(self%pos), data, [self%dims(1, self%pos), self%dims(2, self%pos), self%dims(3, self%pos)])
+    return
+  end subroutine pop_p_r8_3d
 
 end module fautodiff_stack

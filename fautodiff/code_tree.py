@@ -14,10 +14,10 @@ REV_SUFFIX = "_rev_ad"
 from .operators import (
     AryIndex,
     Operator,
-    OpVar,
     OpLeaf,
     OpInt,
     OpReal,
+    OpVar,
     OpTrue,
     OpFalse,
     OpNeg,
@@ -699,13 +699,13 @@ class Block(Node):
     def remove_child(self, child: Node) -> None:
         self._children.remove(child)
 
-    def first(self) -> Node:
+    def first(self) -> Optional[Node]:
         """Return the first element."""
         if len(self._children) > 0:
             return self._children[0]
         return None
 
-    def last(self) -> Node:
+    def last(self) -> Optional[Node]:
         """Return the last element."""
         if len(self._children) > 0:
             return self._children[-1]
@@ -729,7 +729,7 @@ class Block(Node):
         for node in nodes:
             self.append(node)
 
-    def insert_before(self, id: int, node:Node) -> Node:
+    def insert_before(self, id: int, node:Node) -> None:
         for i, child in enumerate(self._children):
             if child.get_id() == id:
                 node.build_do_index_list(self.do_index_list)
@@ -737,7 +737,15 @@ class Block(Node):
                 return self._children.insert(i, node)
         raise ValueError("id is not found")
 
-    def insert_begin(self, node:Node) -> Node:
+    def insert_after(self, id: int, node: Node) -> None:
+        for i, child in enumerate(self._children):
+            if child.get_id() == id:
+                node.build_do_index_list(self.do_index_list)
+                self._set_parent(node)
+                return self._children.insert(i+1, node)
+        raise ValueError("id is not found")
+
+    def insert_begin(self, node:Node) -> None:
         node.build_do_index_list(self.do_index_list)
         self._set_parent(node)
         return self._children.insert(0, node)
@@ -780,29 +788,68 @@ class Block(Node):
             i = 0
             while i < len(children)-1:
                 child1 = children[i]
-                if not isinstance(child1, SaveAssignment) or child1.load or child1.pushpop:
-                    i += 1
+                if isinstance(child1, SaveAssignment) and not child1.load and not child1.pushpop:
+                    var = child1.var
+                    flag = False
+                    for child2 in children[i+1:]:
+                        if isinstance(child2, SaveAssignment) and child2.var == var and child2.id == child1.id and child2.load:
+                            children.remove(child2)
+                            children.remove(child1)
+                            flag = True
+                            break
+                        if var in child2.assigned_vars():
+                            i += 1
+                            flag = True
+                            break
+                    if flag:
+                        continue
+                if isinstance(child1, PointerAssignment):
+                    lhs = child1.lhs
+                    lhs_name = lhs.name_ext()
+                    flag = False
+                    for child2 in children[i+1:]:
+                        if isinstance(child2, PointerClear):
+                            if child2.var == lhs:
+                                children.remove(child1)
+                                children.remove(child2)
+                                flag = True
+                                break
+                        if isinstance(child2, PointerAssignment):
+                            if child2.rhs == lhs and child2.lhs == child1.rhs:
+                                children.remove(child1)
+                                children.remove(child2)
+                                flag = True
+                                break
+                        if any(v.name_ext() == lhs_name for v in child2.collect_vars()):
+                            i += 1
+                            flag = True
+                            break
+                    if flag:
+                        continue
+                i += 1
+
+            i = 0
+            while i < len(children)-1:
+                child1 = children[i]
+                if isinstance(child1, PushPop) and child1.pointer and child1.load:
+                    var = child1.var
+                    name = var.name_ext()
+                    flag = False
+                    for child2 in children[i+1:]:
+                        if any(v.name_ext() == name for v in child2.collect_vars()):
+                            i += 1
+                            flag = True
+                            break
+                    if flag:
+                        continue
+                    children.remove(child1)
                     continue
-                var = child1.var
-                for child2 in children[i+1:]:
-                    if isinstance(child2, SaveAssignment) and child2.var == var and child2.id == child1.id and child2.load:
-                        children.remove(child2)
-                        children.remove(child1)
-                        break
-                    if var in child2.assigned_vars():
-                        i += 1
-                        break
                 i += 1
 
             new_children = []
             for child in children:
                 if len(new_children) > 0:
                     last = new_children[-1]
-                    # if (isinstance(child, SaveAssignment) and not child.pushpop and
-                    #     isinstance(last,  SaveAssignment) and not last.pushpop and
-                    #     last.var.name == child.var.name and last.id == child.id and last.load != child.load):
-                    #     new_children.remove(last)
-                    #     continue
                     if isinstance(child, DoLoop) and isinstance(last, DoLoop):
                         item1 = child._body[0]
                         item2 = last._body[-1]
@@ -1492,6 +1539,7 @@ class Routine(Node):
             ad_target=None,
             is_constant=decl.parameter or getattr(decl, "constant", False),
             optional=decl.optional,
+            target=decl.target,
             declared_in=decl.declared_in,
         )
 
@@ -1553,6 +1601,318 @@ class Function(Routine):
 
     result: str
     kind: ClassVar[str] = "function"
+
+
+@dataclass
+class Declaration(Node):
+    """A variable declaration."""
+
+    name: str
+    typename: str
+    kind: Optional[str] = None
+    char_len: Optional[str] = None
+    dims: Optional[Union[Tuple[str],str]] = None
+    intent: Optional[str] = None
+    parameter: bool = False
+    constant: bool = False
+    init_val: Optional[str] = None
+    access: Optional[str] = None
+    allocatable: bool = False
+    pointer: bool = False
+    optional: bool = False
+    target: bool = False
+    type_def: Optional[TypeDef] = None
+    declared_in: Optional[str] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.kind is not None and not isinstance(self.kind, str):
+            raise ValueError(f"kind must be str: {type(self.kind)}")
+        if self.char_len is not None and not isinstance(self.char_len, str):
+            raise ValueError(f"char_len must be str: {type(self.char_len)}")
+        if self.dims is not None and (not (isinstance(self.dims, tuple) or self.dims == "*") or any(not isinstance(dim, str) for dim in self.dims)):
+            raise ValueError(f"dims must be tuple of str or '*': {type(self.dims)} {self.dims}")
+        if self.intent is not None and not isinstance(self.intent, str):
+            raise ValueError(f"intent must be str: {type(self.intent)}")
+
+    def copy(self) -> "Declaration":
+        return Declaration(
+            name=self.name,
+            typename=self.typename,
+            kind=self.kind,
+            char_len=self.char_len,
+            dims=self.dims,
+            intent=self.intent,
+            parameter=self.parameter,
+            constant=self.constant,
+            init_val=self.init_val,
+            access=self.access,
+            allocatable=self.allocatable,
+            pointer=self.pointer,
+            optional=self.optional,
+            target=self.target,
+            type_def=self.type_def,
+            declared_in=self.declared_in,
+        )
+
+    def deep_clone(self) -> "Declaration":
+        dims = tuple(self.dims) if self.dims else None
+        return Declaration(
+            name=self.name,
+            typename=self.typename,
+            kind=self.kind,
+            char_len=self.char_len,
+            dims=dims,
+            intent=self.intent,
+            parameter=self.parameter,
+            constant=self.constant,
+            init_val=self.init_val,
+            access=self.access,
+            allocatable=self.allocatable,
+            pointer=self.pointer,
+            optional=self.optional,
+            target=self.target,
+            type_def=self.type_def,
+            declared_in=self.declared_in,
+        )
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        if self.intent in ("in", "inout"):
+            yield OpVar(
+                name=self.name,
+                typename=self.typename,
+                kind=self.kind,
+                is_constant=self.parameter or self.constant,
+                allocatable=self.allocatable,
+                pointer=self.pointer,
+                optional=self.optional,
+                target=self.target,
+                declared_in=self.declared_in,
+            )
+        else:
+            return iter(())
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def collect_vars(self) -> List[OpVar]:
+        var = OpVar(
+            name=self.name,
+            typename=self.typename,
+            kind=self.kind,
+            is_constant=self.parameter or self.constant,
+            allocatable=self.allocatable,
+            pointer=self.pointer,
+            optional=self.optional,
+            target=self.target,
+            dims=self.dims,
+            ad_target=self.ad_target(),
+            intent=self.intent,
+            declared_in=self.declared_in,
+        )
+        vars = [var]
+        if self.type_def is not None:
+            for decl in self.type_def.iter_children():
+                for v in decl.collect_vars():
+                    v.ref_var = var
+                    vars.append(v)
+        return vars
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        line = f"{space}{self.typename}"
+        pat = ""
+        if self.kind is not None:
+            line += f"({self.kind})"
+        if self.char_len is not None:
+            line += f"(len={self.char_len})"
+        if self.parameter:
+            line += ", parameter"
+        if self.access is not None:
+            line += f", {self.access}"
+        if self.intent is not None:
+            if self.intent == "in":
+                pat = " "
+            line += f", intent({self.intent})"
+        if self.allocatable:
+            line += ", allocatable"
+        if self.pointer:
+            line += ", pointer"
+        if self.optional:
+            line += ", optional"
+        if self.target:
+            line += ", target"
+        line += f"{pat} :: {self.name}"
+        if self.dims is not None:
+            dims = ",".join(self.dims)
+            line += f"({dims})"
+        if self.init_val is not None:
+            line += f" = {self.init_val}"
+        line += "\n"
+        return [line]
+
+    def ad_target(self) -> bool:
+        if self.constant or self.parameter:
+            return False
+        typename = self.typename.lower()
+        if typename.startswith("real") or typename.startswith("double"):
+            return True
+        if self.type_def is not None:
+            for decl in self.type_def.iter_children():
+                if decl.ad_target():
+                    return True
+        return False
+
+
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        if vars is None:
+            return VarList()
+        if self.intent in ("in", "inout"):
+            vars = vars.copy()
+            vars.remove(OpVar(self.name))
+        return vars
+
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        if vars is None:
+            vars = VarList()
+        if self.intent in ("in", "inout"):
+            if self.name.endswith(AD_SUFFIX):
+                vars = vars.copy()
+                vars.push(
+                    OpVar(
+                        self.name,
+                        typename=self.typename,
+                        kind=self.kind,
+                        is_constant=self.parameter or self.constant,
+                        allocatable=self.allocatable,
+                        pointer=self.pointer,
+                        optional=self.optional,
+                        target=self.target,
+                        declared_in=self.declared_in,
+                    )
+                )
+        return vars
+
+    def generate_ad(self,
+                    saved_vars: List[OpVar],
+                    reverse: bool = False,
+                    assigned_advars: Optional[VarList] = None,
+                    routine_map: Optional[Dict] = None,
+                    generic_map: Optional[Dict] = None,
+                    mod_vars: Optional[List[OpVar]] = None,
+                    exitcycle_flags: Optional[List[OpVar]] = None,
+                    type_map: Optional[dict] = None,
+                    warnings: Optional[List[str]] = None) -> List[Node]:
+        if self.constant or self.parameter or not self.ad_target():
+            return []
+        name = f"{self.name}{AD_SUFFIX}"
+        if self.type_def is None:
+            typename = self.typename
+            type_def = None
+        else:
+            type_def = type_map[self.type_def.name]
+            typename = f"type({type_def.name})"
+        init_val = str(OpReal("0.0", kind=self.kind)) if not (self.allocatable or self.pointer) else None
+        decl = Declaration(
+            name=name,
+            typename=typename,
+            kind=self.kind,
+            dims=self.dims,
+            init_val=init_val,
+            allocatable=self.allocatable,
+            pointer=self.pointer,
+            target=self.target,
+            type_def=self.type_def,
+            declared_in=self.declared_in,
+        )
+        return [decl]
+
+
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional["Declaration"]:
+        target_names = targets.names()
+        if self.intent is not None or self.name in target_names:
+            return self.deep_clone()
+        return None
+
+
+@dataclass
+class Interface(Node):
+    """Class for interface"""
+
+    name: str
+    module_procs: Optional[List[str]] = field(default=None) # module procedures
+
+    def __post_init__(self):
+        super().__post_init__()
+        if not isinstance(self.name, str):
+            raise ValueError(f"name must be str: {type(self.name)}")
+        if self.module_procs is not None and not isinstance(self.module_procs, list):
+            raise ValueError(f"module_procs must be list: {type(self.module_procs)}")
+
+
+@dataclass
+class TypeDef(Node):
+    """Class for type declaration"""
+
+    name: str
+    components: List[Declaration]
+    procs: List[list]
+    access: Optional[str] = None
+    map: Dict[str, Declaration] = field(init=False, repr=False)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.map = {}
+        for decl in self.components:
+            if not isinstance(decl, Declaration):
+                raise ValueError(f"components must be a list of Declaration: {self.components}")
+            self.map[decl.name] = decl
+
+    def __getitem__(self, name: str) -> Optional[Declaration]:
+        return self.map.get(name)
+
+    def iter_children(self) -> Iterator[Declaration]:
+        return iter(self.components)
+
+    def copy(self) -> "TypeDef":
+        return TypeDef(self.name, self.components, self.procs, self.access)
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        lines: List[str] = []
+        lines.append(f"{space}type :: {self.name}\n")
+        for decl in self.components:
+            lines.extend(decl.render(indent+1))
+        lines.append(f"{space}end type {self.name}\n")
+        return lines
+
+    def collect_vars(self) -> List[OpVar]:
+        return []
+
+    def generate_ad(self,
+                    saved_vars: List[OpVar],
+                    reverse: bool = False,
+                    assigned_advars: Optional[VarList] = None,
+                    routine_map: Optional[Dict] = None,
+                    generic_map: Optional[Dict] = None,
+                    mod_vars: Optional[List[OpVar]] = None,
+                    exitcycle_flags: Optional[List[OpVar]] = None,
+                    type_map: Optional[dict] = None,
+                    warnings: Optional[List[str]] = None) -> List[Node]:
+        if self.name.endswith("_t"):
+            name = f"{self.name.removesuffix('_t')}{AD_SUFFIX}_t"
+        else:
+            name = f"{self.name}{AD_SUFFIX}"
+        components = []
+        for decl in self.components:
+            decl = decl.copy()
+            decl.name = f"{decl.name}{AD_SUFFIX}"
+            components.append(decl)
+        procs = []
+        for proc in self.procs:
+            procs.append(list(proc))
+        access = self.access
+        return [TypeDef(name=name, components=components, procs=procs, access=access)]
 
 
 @dataclass
@@ -1685,93 +2045,6 @@ class Assignment(Node):
 
 
 @dataclass
-class PointerAssignment(Node):
-    """A pointer assignment statement ``lhs => rhs``."""
-
-    lhs: OpVar
-    rhs: Operator
-    info: Optional[dict] = field(repr=False, default=None)
-    ad_info: Optional[str] = field(repr=False, default=None)
-    _rhs_vars: List[OpVar] = field(init=False, repr=False)
-    _ufuncs: List[OpFuncUser] = field(init=False, repr=False)
-
-    def __post_init__(self):
-        super().__post_init__()
-        if not isinstance(self.lhs, OpVar):
-            raise ValueError(f"lhs must be OpVar: {type(self.lhs)}")
-        if not isinstance(self.rhs, Operator):
-            raise ValueError(f"rhs must be Operator: {type(self.rhs)}")
-        self._rhs_vars = list(self.rhs.collect_vars(without_refvar=True))
-        self._ufuncs = self.rhs.find_userfunc()
-
-    def copy(self) -> "PointerAssignment":
-        return PointerAssignment(self.lhs, self.rhs, self.info, self.ad_info)
-
-    def deep_clone(self):
-        lhs = self.lhs.deep_clone()
-        rhs = self.rhs.deep_clone()
-        return PointerAssignment(lhs, rhs, self.info, self.ad_info)
-
-    def iter_ref_vars(self) -> Iterator[OpVar]:
-        for var in self._rhs_vars:
-            yield var
-        if self.lhs.index is not None:
-            for var in self.lhs.index.collect_vars():
-                yield var
-
-    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
-        yield self.lhs
-
-    def is_effectively_empty(self) -> bool:
-        return False
-
-    def generate_ad(
-        self,
-        saved_vars: List[OpVar],
-        reverse: bool = False,
-        assigned_advars: Optional[VarList] = None,
-        routine_map: Optional[dict] = None,
-        generic_map: Optional[dict] = None,
-        mod_vars: Optional[List[OpVar]] = None,
-        exitcycle_flags: Optional[List[OpVar]] = None,
-        type_map: Optional[dict] = None,
-        warnings: Optional[list[str]] = None,
-    ) -> List[Node]:
-        return [self]
-
-    def render(self, indent: int = 0) -> List[str]:
-        space = "  " * indent
-        ad_comment = ""
-        if self.ad_info is not None:
-            ad_comment = f" ! {self.ad_info}"
-        return [f"{space}{self.lhs} => {self.rhs}{ad_comment}\n"]
-
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
-        lhs = self.lhs
-        if vars is None:
-            vars = VarList()
-        else:
-            if not isinstance(vars, VarList):
-                raise ValueError(f"Must be VarList: {type(vars)}")
-            vars = vars.copy()
-            vars.remove(lhs)
-        for var in lhs.collect_vars():
-            if var != lhs:
-                vars.push(var)
-        for var in self._rhs_vars:
-            vars.push(var)
-        return vars
-
-    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
-        if assigned_vars is None:
-            assigned_vars = VarList()
-        if self.lhs.name.endswith(AD_SUFFIX):
-            assigned_vars = assigned_vars.copy()
-            assigned_vars.push(self.lhs)
-        return assigned_vars
-
-
-@dataclass
 class ClearAssignment(Node):
 
     lhs: OpVar
@@ -1863,10 +2136,10 @@ class SaveAssignment(Node):
 
     var: OpVar
     id: int
-    tmpvar: OpVar = field(repr=False, default=None)
+    tmpvar: Optional[OpVar] = field(repr=False, default=None)
     load: bool = False
-    lhs: OpVar = field(init=False, repr=False, default=None)
-    rhs: OpVar = field(init=False, repr=False, default=None)
+    lhs: OpVar = field(init=False, repr=False)
+    rhs: OpVar = field(init=False, repr=False)
     pushpop: ClassVar[bool] = False
 
     def __post_init__(self):
@@ -1951,7 +2224,13 @@ class SaveAssignment(Node):
                 vars.push(self.lhs)
         return vars
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[SaveAssignment]:
+    def prune_for(self,
+                  targets: VarList,
+                  mod_vars: Optional[List[OpVar]] = None,
+                  decl_map: Optional[Dict[str, Declaration]] = None
+                  ) -> Optional[SaveAssignment]:
+        if isinstance(self, PushPop) and self.pointer and self.load:
+            return self
         found = False
         for var in self.iter_assign_vars():
             if var in targets:
@@ -2006,14 +2285,20 @@ class PushPop(SaveAssignment):
     """Push or pop a variable to/from a stack."""
 
     pushpop: ClassVar[bool] = True
+    pointer: bool = False
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         op = "pop" if self.load else "push"
         stack = self._stack_name()
-        return [f"{space}call {stack}%{op}({self.var})\n"]
+        var = self.var
+        if self.pointer:
+            var = var.change_index(None)
+        return [f"{space}call {stack}%{op}({var})\n"]
 
     def _stack_name(self) -> str:
+        if self.pointer:
+            return "fautodiff_stack_p"
         typ = self.var.typename
         kind = self.var.kind
         if typ is None:
@@ -2036,19 +2321,8 @@ class PushPop(SaveAssignment):
             return "fautodiff_stack_r4"
         return "fautodiff_stack_r4"
 
-    # def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
-    #     if vars is None:
-    #         vars = VarList()
-    #     # else:
-    #     #     vars_new = VarList()
-    #     #     for name in vars.names():
-    #     #         if not name.startswith(f"{self.var.name}_save_"):
-    #     #             vars_new.vars[name] = vars.vars[name]
-    #     #     vars = vars_new
-    #     return super().required_vars(vars, no_accumulate, without_savevar)
-
     def to_load(self) -> "PushPop":
-        return PushPop(self.var, id=self.id, tmpvar=self.tmpvar, load=True)
+        return PushPop(self.var, id=self.id, tmpvar=self.tmpvar, pointer=self.pointer, load=True)
 
 
 @dataclass
@@ -2090,6 +2364,7 @@ class PushPopL(PushPop):
 
     def to_load(self):
         raise NotImplementedError
+
 
 @dataclass
 class Allocate(Node):
@@ -2155,6 +2430,9 @@ class Allocate(Node):
                     nodes.append(Allocate([var]))
                 if var.ad_target:
                     nodes.append(Allocate._add_if(Allocate([ad_var]), ad_var, is_mod_var))
+                    if not var.typename.startswith(("type", "class")):
+                        nodes.append(ClearAssignment(ad_var.change_index(None)))
+
         return nodes
 
     def is_effectively_empty(self) -> bool:
@@ -2198,14 +2476,12 @@ class Allocate(Node):
             body = Block([node])
             if isinstance(node, Allocate):
                 cond = OpNot([cond])
-                if var.name.endswith(AD_SUFFIX):
-                    if not var.typename.startswith(("type", "class")):
-                        body.append(ClearAssignment(var.change_index(None)))
             else:
                 if var.ref_var is not None and var.ref_var.allocatable:
                     cond = OpLogic(".and.", args=[OpFunc(func, args=[var.ref_var.change_index(None)]), cond])
             return IfBlock([(cond, body)])
         return node
+
 
 @dataclass
 class Deallocate(Node):
@@ -2274,6 +2550,9 @@ class Deallocate(Node):
                     elif self.index is not None:
                         ad_var = ad_var.change_index(self.index)
                     nodes.append(Allocate._add_if(Allocate([ad_var], mold=mold), ad_var, is_mod_var))
+                    if not var.typename.startswith(("type", "class")):
+                        nodes.append(ClearAssignment(ad_var.change_index(None)))
+
             else:
                 if var.ad_target:
                     nodes.append(Deallocate([ad_var.change_index(None)], ad_code=True))
@@ -2289,7 +2568,8 @@ class Deallocate(Node):
         else:
             vars = vars.copy()
         for var in self.vars:
-            vars.remove(var.change_index(AryIndex([None])))
+            index = None if var.index is None else AryIndex([None] * len(var.index))
+            vars.remove(var.change_index(index))
         return vars
 
     def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional["Deallocate"]:
@@ -2306,311 +2586,211 @@ class Deallocate(Node):
 
 
 @dataclass
-class Declaration(Node):
-    """A variable declaration."""
+class PointerAssignment(Node):
+    """A pointer assignment statement ``lhs => rhs``."""
 
-    name: str
-    typename: str
-    kind: Optional[str] = None
-    char_len: Optional[str] = None
-    dims: Optional[Union[Tuple[str],str]] = None
-    intent: Optional[str] = None
-    parameter: bool = False
-    constant: bool = False
-    init_val: Optional[str] = None
-    access: Optional[str] = None
-    allocatable: bool = False
-    pointer: bool = False
-    optional: bool = False
-    target: bool = False
-    type_def: Optional[TypeDef] = None
-    declared_in: Optional[str] = None
+    lhs: OpVar
+    rhs: OpVar
+    info: Optional[dict] = field(repr=False, default=None)
+    ad_info: Optional[str] = field(repr=False, default=None)
+    _rhs_vars: List[OpVar] = field(init=False, repr=False)
 
     def __post_init__(self):
         super().__post_init__()
-        if self.kind is not None and not isinstance(self.kind, str):
-            raise ValueError(f"kind must be str: {type(self.kind)}")
-        if self.char_len is not None and not isinstance(self.char_len, str):
-            raise ValueError(f"char_len must be str: {type(self.char_len)}")
-        if self.dims is not None and not (isinstance(self.dims, tuple) or self.dims == "*"):
-            raise ValueError(f"dims must be tuple of str or '*': {type(self.dims)}")
-        if self.intent is not None and not isinstance(self.intent, str):
-            raise ValueError(f"intent must be str: {type(self.intent)}")
+        if not isinstance(self.lhs, OpVar):
+            raise ValueError(f"lhs must be OpVar: {type(self.lhs)}")
+        if not isinstance(self.rhs, OpVar):
+            raise ValueError(f"rhs must be OpVar: {type(self.rhs)}")
+        self._rhs_vars = list(self.rhs.collect_vars(without_refvar=True))
 
-    def copy(self) -> "Declaration":
-        return Declaration(
-            name=self.name,
-            typename=self.typename,
-            kind=self.kind,
-            char_len=self.char_len,
-            dims=self.dims,
-            intent=self.intent,
-            parameter=self.parameter,
-            constant=self.constant,
-            init_val=self.init_val,
-            access=self.access,
-            allocatable=self.allocatable,
-            pointer=self.pointer,
-            optional=self.optional,
-            target=self.target,
-            type_def=self.type_def,
-            declared_in=self.declared_in,
-        )
+    def copy(self) -> "PointerAssignment":
+        return PointerAssignment(self.lhs, self.rhs, self.info, self.ad_info)
 
-    def deep_clone(self) -> "Declaration":
-        dims = tuple(self.dims) if self.dims else None
-        return Declaration(
-            name=self.name,
-            typename=self.typename,
-            kind=self.kind,
-            char_len=self.char_len,
-            dims=dims,
-            intent=self.intent,
-            parameter=self.parameter,
-            constant=self.constant,
-            init_val=self.init_val,
-            access=self.access,
-            allocatable=self.allocatable,
-            pointer=self.pointer,
-            optional=self.optional,
-            target=self.target,
-            type_def=self.type_def,
-            declared_in=self.declared_in,
-        )
+    def deep_clone(self):
+        lhs = self.lhs.deep_clone()
+        rhs = self.rhs.deep_clone()
+        return PointerAssignment(lhs, rhs, self.info, self.ad_info)
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        for var in self._rhs_vars:
+            yield var
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
-        if self.intent in ("in", "inout"):
-            yield OpVar(
-                name=self.name,
-                typename=self.typename,
-                kind=self.kind,
-                is_constant=self.parameter or self.constant,
-                allocatable=self.allocatable,
-                pointer=self.pointer,
-                optional=self.optional,
-                declared_in=self.declared_in,
-            )
-        else:
-            return iter(())
+        yield self.lhs
 
     def is_effectively_empty(self) -> bool:
         return False
 
-    def collect_vars(self) -> List[OpVar]:
-        var = OpVar(
-            name=self.name,
-            typename=self.typename,
-            kind=self.kind,
-            is_constant=self.parameter or self.constant,
-            allocatable=self.allocatable,
-            pointer=self.pointer,
-            optional=self.optional,
-            dims=self.dims,
-            ad_target=self.ad_target(),
-            intent=self.intent,
-            declared_in=self.declared_in,
-        )
-        vars = [var]
-        if self.type_def is not None:
-            for decl in self.type_def.iter_children():
-                for v in decl.collect_vars():
-                    v.ref_var = var
-                    vars.append(v)
-        return vars
-
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        line = f"{space}{self.typename}"
-        if self.kind is not None:
-            line += f"({self.kind})"
-        if self.char_len is not None:
-            line += f"(len={self.char_len})"
-        if self.parameter:
-            line += ", parameter"
-        if self.access is not None:
-            line += f", {self.access}"
-        if self.allocatable:
-            line += ", allocatable"
-        if self.pointer:
-            line += ", pointer"
-        if self.optional:
-            line += ", optional"
-        if self.target:
-            line += ", target"
-        if self.intent is not None:
-            pad = "  " if self.intent == "in" else " "
-            line += f", intent({self.intent})" + pad + f":: {self.name}"
-        else:
-            line += f" :: {self.name}"
-        if self.dims is not None:
-            dims = ",".join(self.dims)
-            line += f"({dims})"
-        if self.init_val is not None:
-            line += f" = {self.init_val}"
-        line += "\n"
-        return [line]
+        ad_comment = ""
+        if self.ad_info is not None:
+            ad_comment = f" ! {self.ad_info}"
+        return [f"{space}{self.lhs} => {self.rhs}{ad_comment}\n"]
 
-    def ad_target(self) -> bool:
-        if self.constant or self.parameter:
-            return False
-        typename = self.typename.lower()
-        if typename.startswith("real") or typename.startswith("double"):
-            return True
-        if self.type_def is not None:
-            for decl in self.type_def.iter_children():
-                if decl.ad_target():
-                    return True
-        return False
-
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        nodes = []
+        if self.lhs.ad_target:
+            ad_info = self.info.get("code") if self.info is not None else None
+            lhs = self.lhs
+            lhs_ad = lhs.add_suffix(AD_SUFFIX)
+            rhs = self.rhs
+            rhs_ad = self.rhs.add_suffix(AD_SUFFIX)
+            if reverse:
+                id = self.get_id()
+                self.parent.insert_before(id, PointerAssignment(lhs_ad, rhs_ad, info=self.info, ad_info=ad_info))
+                nodes.append(PointerClear(lhs, previous=rhs, info=self.info, ad_info=ad_info))
+                nodes.append(PointerClear(lhs_ad, previous=rhs_ad, info=self.info, ad_info=ad_info))
+            else:
+                nodes.append(PointerAssignment(lhs_ad, rhs_ad, info=self.info, ad_info=ad_info))
+                nodes.append(self)
+                if isinstance(rhs_ad, OpVar) and assigned_advars is not None:
+                    if rhs_ad in assigned_advars:
+                        assigned_advars.push(lhs_ad)
+        return nodes
 
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
-        if vars is None:
-            return VarList()
-        if self.intent in ("in", "inout"):
-            vars = vars.copy()
-            vars.remove(OpVar(self.name))
-        return vars
-
-    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        lhs = self.lhs
         if vars is None:
             vars = VarList()
-        if self.intent in ("in", "inout"):
-            if self.name.endswith(AD_SUFFIX):
-                vars = vars.copy()
-                vars.push(
-                    OpVar(
-                        self.name,
-                        typename=self.typename,
-                        kind=self.kind,
-                        is_constant=self.parameter or self.constant,
-                        allocatable=self.allocatable,
-                        pointer=self.pointer,
-                        optional=self.optional,
-                        declared_in=self.declared_in,
-                    )
-                )
+        else:
+            if not isinstance(vars, VarList):
+                raise ValueError(f"Must be VarList: {type(vars)}")
+            vars = vars.copy()
+            vars.remove(lhs)
+        for var in self._rhs_vars:
+            vars.push(var)
         return vars
 
-    def generate_ad(self,
-                    saved_vars: List[OpVar],
-                    reverse: bool = False,
-                    assigned_advars: Optional[VarList] = None,
-                    routine_map: Optional[Dict] = None,
-                    generic_map: Optional[Dict] = None,
-                    mod_vars: Optional[List[OpVar]] = None,
-                    exitcycle_flags: Optional[List[OpVar]] = None,
-                    type_map: Optional[dict] = None,
-                    warnings: Optional[List[str]] = None) -> List[Node]:
-        if self.constant or self.parameter or not self.ad_target():
-            return []
-        name = f"{self.name}{AD_SUFFIX}"
-        if self.type_def is None:
-            typename = self.typename
-            type_def = None
-        else:
-            type_def = type_map[self.type_def.name]
-            typename = f"type({type_def.name})"
-        init_val = str(OpReal("0.0", kind=self.kind)) if not (self.allocatable or self.pointer) else None
-        decl = Declaration(
-            name=name,
-            typename=typename,
-            kind=self.kind,
-            dims=self.dims,
-            init_val=init_val,
-            allocatable=self.allocatable,
-            pointer=self.pointer,
-            target=self.target,
-            type_def=self.type_def,
-            declared_in=self.declared_in,
-        )
-        return [decl]
-
-
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional["Declaration"]:
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[Node]:
         target_names = targets.names()
-        if self.intent is not None or self.name in target_names:
+        if self.lhs.name_ext() in target_names or self.rhs.name_ext() in target_names:
             return self.deep_clone()
         return None
 
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        if assigned_vars is None:
+            return VarList()
+        if self.lhs.name.endswith(AD_SUFFIX):
+            names = assigned_vars.names()
+            lhs_name = self.lhs.name_ext()
+            rhs_name = self.rhs.name_ext()
+            if lhs_name in names and rhs_name not in names:
+                assigned_vars.vars[rhs_name] = list(assigned_vars.vars[lhs_name])
+                assigned_vars.dims[rhs_name] = list(assigned_vars.dims[lhs_name])
+            if rhs_name in names and lhs_name not in names:
+                assigned_vars.vars[lhs_name] = list(assigned_vars.vars[rhs_name])
+                assigned_vars.dims[lhs_name] = list(assigned_vars.dims[rhs_name])
+        return assigned_vars
+
 
 @dataclass
-class Interface(Node):
-    """Class for interface"""
+class PointerClear(Node):
 
-    name: str
-    module_procs: Optional[List[str]] = field(default=None) # module procedures
+    var: OpVar
+    previous: Optional[OpVar]
+    info: Optional[dict] = field(repr=False, default=None)
+    ad_info: Optional[str] = field(repr=False, default=None)
 
     def __post_init__(self):
         super().__post_init__()
-        if not isinstance(self.name, str):
-            raise ValueError(f"name must be str: {type(self.name)}")
-        if self.module_procs is not None and not isinstance(self.module_procs, list):
-            raise ValueError(f"module_procs must be list: {type(self.module_procs)}")
 
+    def copy(self) -> "PointerClear":
+        return PointerClear(self.var, self.previous, self.info, self.ad_info)
 
-@dataclass
-class TypeDef(Node):
-    """Class for type declaration"""
+    def deep_clone(self):
+        var = self.var.deep_clone()
+        previous = self.previous.deep_clone() if self.previous is not None else None
+        return PointerClear(var, previous, self.info, self.ad_info)
 
-    name: str
-    components: List[Declaration]
-    procs: List[list]
-    access: Optional[str] = None
-    map: Dict[str, Declaration] = field(init=False, repr=False)
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        return iter(())
 
-    def __post_init__(self):
-        super().__post_init__()
-        self.map = {}
-        for decl in self.components:
-            if not isinstance(decl, Declaration):
-                raise ValueError(f"components must be a list of Declaration: {self.components}")
-            self.map[decl.name] = decl
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        return iter(())
 
-    def __getitem__(self, name: str) -> Optional[Declaration]:
-        return self.map.get(name)
-
-    def iter_children(self) -> Iterator[Declaration]:
-        return iter(self.components)
-
-    def copy(self) -> "TypeDef":
-        return TypeDef(self.name, self.components, self.procs, self.access)
+    def is_effectively_empty(self) -> bool:
+        return False
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        lines: List[str] = []
-        lines.append(f"{space}type :: {self.name}\n")
-        for decl in self.components:
-            lines.extend(decl.render(indent+1))
-        lines.append(f"{space}end type {self.name}\n")
-        return lines
-
-    def collect_vars(self) -> List[OpVar]:
-        return []
+        ad_comment = ""
+        if self.ad_info is not None:
+            ad_comment = f" ! {self.ad_info}"
+        return [f"{space}{self.var} => null(){ad_comment}\n"]
 
     def generate_ad(self,
                     saved_vars: List[OpVar],
                     reverse: bool = False,
                     assigned_advars: Optional[VarList] = None,
-                    routine_map: Optional[Dict] = None,
-                    generic_map: Optional[Dict] = None,
+                    routine_map: Optional[dict] = None,
+                    generic_map: Optional[dict] = None,
                     mod_vars: Optional[List[OpVar]] = None,
                     exitcycle_flags: Optional[List[OpVar]] = None,
                     type_map: Optional[dict] = None,
-                    warnings: Optional[List[str]] = None) -> List[Node]:
-        if self.name.endswith("_t"):
-            name = f"{self.name.removesuffix('_t')}{AD_SUFFIX}_t"
+                    warnings: Optional[List[str]] = None
+                    ) -> List[Node]:
+        nodes: List[Node] = []
+        if self.var.ad_target:
+            ad_info = self.info.get("code") if self.info is not None else None
+            var = self.var
+            var_ad = var.add_suffix(AD_SUFFIX)
+            typename = var.typename
+            kind = var.kind
+            index = var.index
+            dims = var.dims
+            if isinstance(self.previous, OpVar):
+                previous_ad = self.previous.add_suffix(AD_SUFFIX)
+            else:
+                previous_ad = self.previous # None
+            if reverse:
+                id = self.get_id()
+                if self.previous is None:
+                    tmpvar = OpVar(self._save_var_name(var.name, id), typename=typename, kind=kind, index=index, dims=dims, pointer=True, reference=var)
+                    self.parent.insert_before(id, PointerAssignment(tmpvar, var, info=self.info, ad_info=ad_info))
+                    saved_vars.append(tmpvar)
+                    tmpvar_ad = OpVar(self._save_var_name(var_ad.name, id), typename=typename, kind=kind, index=index, dims=dims, pointer=True, reference=var_ad)
+                    self.parent.insert_before(id, PointerAssignment(tmpvar_ad, var_ad, info=self.info, ad_info=ad_info))
+                    saved_vars.append(tmpvar_ad)
+                    nodes.append(PointerAssignment(var_ad, tmpvar_ad, info=self.info, ad_info=ad_info))
+                    nodes.append(PointerAssignment(var, tmpvar, info=self.info, ad_info=ad_info))
+                else:
+                    self.parent.insert_after(id, PointerClear(var_ad, previous_ad, info=self.info, ad_info=ad_info))
+                    nodes.append(PointerAssignment(var_ad, previous_ad, info=self.info, ad_info=ad_info))
+                    nodes.append(PointerAssignment(var, self.previous, info=self.info, ad_info=ad_info))
+            else:
+                nodes.append(PointerClear(var_ad, previous_ad, info=self.info, ad_info=ad_info))
+                nodes.append(self)
+                if assigned_advars is not None:
+                    assigned_advars.remove(var_ad)
+        return nodes
+
+    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+        if vars is None:
+            vars = VarList()
         else:
-            name = f"{self.name}{AD_SUFFIX}"
-        components = []
-        for decl in self.components:
-            decl = decl.copy()
-            decl.name = f"{decl.name}{AD_SUFFIX}"
-            components.append(decl)
-        procs = []
-        for proc in self.procs:
-            procs.append(list(proc))
-        access = self.access
-        return [TypeDef(name=name, components=components, procs=procs, access=access)]
+            vars = vars.copy()
+            vars.remove(self.var)
+        if isinstance(self.previous, OpVar):
+            vars.push(self.var)
+        return vars
+
+    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[Node]:
+        if isinstance(self.previous, OpVar) and self.previous.name_ext() in targets.names():
+            return self.deep_clone()
+        return None
+
 
 @dataclass
 class BranchBlock(Node):
@@ -2958,7 +3138,19 @@ class DoAbst(Node):
 
             pushed = []
             recurrent_vars = self.recurrent_vars()
-            for node in self._body.iter_children():
+            for node in [node for node in self._body.iter_children()]:
+                if isinstance(node, PointerClear):
+                    if node.previous is None:
+                        save = PushPop(node.var, node.get_id(), pointer=True)
+                        self._body.insert_begin(save)
+                        new_body.append(save.to_load())
+                        var_ad = node.var.add_suffix(AD_SUFFIX)
+                        save_ad = PushPop(var_ad, node.get_id(), pointer=True)
+                        self._body.insert_begin(save_ad)
+                        new_body.append(save_ad.to_load())
+                    continue
+                if isinstance(node, PointerAssignment):
+                    continue
                 for var in node.assigned_vars():
                     if var.name in recurrent_vars and (not self.do or var.name in conflict_vars):
                         if not var in pushed:
@@ -3173,7 +3365,10 @@ class DoLoop(DoAbst):
         if self.index in vars:
             vars.remove(self.index)
         index_map = self._build_index_map()
-        if self.range[2] is None or (isinstance(self.range[2], OpInt) and self.range[2].val==1) or (isinstance(self.range[2], OpNeg) and isinstance(self.range[2].args[0], OpInt) and self.range[2].args[0].val==1):
+        if (self.range[2] is None or
+            (isinstance(self.range[2], OpInt) and self.range[2].val==1) or
+            (isinstance(self.range[2], OpNeg) and isinstance(self.range[2].args[0], OpInt) and self.range[2].args[0].val==1)
+        ):
             step = 1 if self.range[2] is None else self.range[2]
             plusOne = self.index + step
             minusOne = self.index - step
@@ -3212,18 +3407,18 @@ class DoLoop(DoAbst):
 
     def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[Node]:
         targets = targets.copy()
-        #targets.update_index_downward(self._build_index_map(), self.index)
-        new_body = self._body.prune_for(targets, mod_vars, decl_map)
-
-        for var in new_body.required_vars(targets):
-            if var.name == self.index.name:
-                continue
-            #if var.name.endswith(AD_SUFFIX):
-            #    continue
-            # check if the variable has no reccurent in this loop
-            if var.index is not None and set(self.do_index_list) <= set(var.index_list()):
-                continue
-            targets.push(var)
+        flag = True
+        while flag:
+            flag = False
+            new_body = self._body.prune_for(targets, mod_vars, decl_map)
+            for var in new_body.required_vars(targets):
+                if var.name == self.index.name:
+                    continue
+                if var.index is not None and set(self.do_index_list) <= set(var.index_list()):
+                    continue
+                if var not in targets:
+                    targets.push(var)
+                    flag = True
         new_body = self._body.prune_for(targets, mod_vars, decl_map)
 
         if new_body.is_effectively_empty():
