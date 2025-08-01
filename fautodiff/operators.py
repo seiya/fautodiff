@@ -1129,10 +1129,11 @@ INTRINSIC_FUNCTIONS = {
     'abs', 'sqrt', 'exp', 'log', 'log10', 'sin', 'cos', 'tan', 'asin',
     'acos', 'atan', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
     'erf', 'erfc', 'real', 'dble', 'mod', 'min', 'max', 'sign', 'atan2',
-    'transpose', 'cshift', 'len', 'len_trim', 'adjustl', 'index', 'lbound',
+    'transpose', 'cshift', 'dot_product', 'matmul',
+    'len', 'len_trim', 'adjustl', 'index', 'lbound',
     'ubound', 'size', 'epsilon', 'huge', 'tiny', 'ichar', 'achar', 'int',
     'nint',
-    'sum', 'product', 'minval', 'maxval',
+    'sum', 'product', 'minval', 'maxval', 'maxloc', 'minloc',
 }
 
 NONDIFF_INTRINSICS = {
@@ -1142,7 +1143,8 @@ NONDIFF_INTRINSICS = {
     'ichar', 'achar',
     'int', 'nint',
     'allocated',
-    'all', 'any', 'count'
+    'all', 'any', 'count',
+    'maxloc', 'minloc',
 }
 
 @dataclass
@@ -1269,6 +1271,16 @@ class OpFunc(Operator):
             return dvar0 * OpFunc("sign", args=[one, arg0]) * OpFunc("sign", args=[one, arg1])
         if self.name == "atan2":
             return (dvar0 * arg1 - dvar1 * arg0) / (arg0**2 + arg1**2)
+        if self.name == "dot_product":
+            return arg1 * dvar0 + arg0 * dvar1
+        if self.name == "matmul":
+            term0 = OpFunc("matmul", args=[dvar0, arg1])
+            term1 = OpFunc("matmul", args=[arg0, dvar1])
+            if isinstance(dvar0, OpInt) and dvar0.val == 0:
+                term0 = OpInt(0, target=target)
+            if isinstance(dvar1, OpInt) and dvar1.val == 0:
+                term1 = OpInt(0, target=target)
+            return term0 + term1
 
         raise ValueError(f"Function ({self.name}) is not supported")
 
