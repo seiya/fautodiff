@@ -4,7 +4,7 @@ This document summarizes the Fortran constructs handled by the AD code generator
 
 ## Modules and routines
 - Each module in the input becomes a `<module>_ad` module.
-- Every subroutine or function produces `<name>_fwd_ad` and `<name>_rev_ad` versions.
+- By default, every subroutine or function produces `<name>_fwd_ad` and `<name>_rev_ad` versions. The command line `--mode` flag can restrict generation to only forward or reverse routines.
 - Forward-mode routines also return the original `intent(out)` variables together with their gradients. These routines execute the original computations internally so callers do not need to invoke the non-AD version.
 - Integer variables are treated as constants and do not receive `_ad` counterparts.
 

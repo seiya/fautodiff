@@ -1,9 +1,10 @@
 # fautodiff
 Autodiff code generator for Fortran
 
-This is a source-to-source conversion tool that generates automatic differentiation code from Fortran programs.
-Documentation of the supported Fortran constructs can be found under
-``doc/fortran_support.md``.
+This source-to-source tool parses existing Fortran programs and emits new modules
+with ``_ad`` suffixes, preserving the original structure while providing forward
+and reverse mode derivatives. Documentation of the supported Fortran constructs
+can be found in ``doc/fortran_support.md``.
 
 ## Installation
 
@@ -72,6 +73,11 @@ Generate reverse mode only:
 bin/fautodiff --mode reverse examples/simple_math.f90
 ```
 
+Suppress warnings about unsupported derivatives with ``--no-warn``:
+```bash
+bin/fautodiff --no-warn examples/simple_math.f90
+```
+
 Each module's routine signatures are also written to a `<module>.fadmod` file when AD code is generated.
 These JSON files can be loaded when differentiating another file that uses the module.
 Add search directories with ``-I`` (repeat as needed), choose the output directory with ``-M DIR`` (defaults to the current directory), and disable writing with ``--no-fadmod``:
@@ -111,10 +117,12 @@ call foo_fwd_ad(x, x_ad, y, y_ad) ! x: in, x_ad: in, y: out, y_ad: out
 
 ### Calling reverse-mode routines
 
-Reverse-mode subroutines return each ``intent(in)`` or ``intent(inout)`` variable along with its derivative.
-Arguments consist of the original inputs followed by their derivative counterparts:
+Reverse-mode subroutines accept the original inputs and the derivatives of any
+``intent(out)`` results. They return derivatives for ``intent(in)`` arguments and
+update the derivatives of ``intent(inout)`` and ``intent(out)`` variables in
+place:
 ```fortran
-real :: x, x_ad, y, y_ad
+real :: x, x_ad, y_ad
 x = 2.0
 y_ad = 1.0
 call foo_rev_ad(x, x_ad, y_ad) ! x: in, x_ad: out, y_ad: inout

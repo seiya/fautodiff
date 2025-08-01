@@ -18,5 +18,10 @@ A constant variable does not receive a corresponding `_ad` variable and no deriv
 ```
 !$FAD SKIP
 ```
+Use `SKIP` before a routine to parse it but omit the generation of AD code:
 
-Use `SKIP` before a routine to parse it but omit the generation of AD code.
+```fortran
+!$FAD SKIP
+subroutine helper(...)
+```
+
