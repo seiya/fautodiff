@@ -8,7 +8,7 @@ from fractions import Fraction
 import re
 import copy
 
-_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")  # pattern for valid variable names
 
 
 @dataclass
@@ -18,26 +18,37 @@ class AryIndex:
     dims: Optional[List[Optional["Operator"]]] = field(default_factory=list)
 
     def __post_init__(self):
+        """Validate and normalise the dimension list."""
         if not (isinstance(self.dims, list) or isinstance(self.dims, tuple)):
-            raise ValueError(f"dims must be either list or tuple: {type(self.dims)}")
+            raise ValueError(
+                f"dims must be either list or tuple: {type(self.dims)}"
+            )
         if isinstance(self.dims, tuple):
             self.dims = list(self.dims)
         for i, dim in enumerate(self.dims):
+            # Convert integers to ``OpInt`` and ensure allowed types.
             if isinstance(dim, int):
                 self.dims[i] = OpInt(dim)
                 continue
             if dim is None:
                 continue
             if not isinstance(dim, Operator):
-                raise ValueError("dim must be either None, int, or Operator")
+                raise ValueError(
+                    "dim must be either None, int, or Operator"
+                )
 
     def list(self) -> List[str]:
-        return [(":" if dim is None else str(dim)) for dim in self.dims] if self.dims is not None else []
+        """Return list of dimension strings, using ':' for undefined."""
+        return [
+            (":" if dim is None else str(dim)) for dim in self.dims
+        ] if self.dims is not None else []
 
     def copy(self) -> AryIndex:
+        """Create a shallow copy of this index."""
         return AryIndex(list(self.dims) if self.dims is not None else None)
 
     def deep_clone(self) -> "AryIndex":
+        """Return a deep copy where nested operators are cloned."""
         dims = None
         if self.dims is not None:
             dims = []
@@ -49,12 +60,17 @@ class AryIndex:
         return AryIndex(dims)
 
     def __len__(self) -> int:
+        """Return the number of dimensions stored."""
         return len(self.dims) if self.dims is not None else 0
 
-    def __getitem__(self, index: Union[int, slice]) -> Optional[Union["Operator", List[Optional["Operator"]]]]:
+    def __getitem__(
+        self, index: Union[int, slice]
+    ) -> Optional[Union["Operator", List[Optional["Operator"]]]]:
+        """Provide list-style indexing access to dimensions."""
         return self.dims[index] if self.dims is not None else None
 
     def __setitem__(self, index: int, var: Operator) -> None:
+        """Set a dimension value, expanding the list as necessary."""
         if self.dims is None:
             self.dims = []
         if index >= len(self.dims):
@@ -62,12 +78,15 @@ class AryIndex:
         self.dims[index] = var
 
     def __iter__(self) -> Iterator[Optional["Operator"]]:
+        """Iterate through each dimension entry."""
         return iter(self.dims) if self.dims is not None else iter([])
 
     def __str__(self) -> str:
-        return",".join(self.list())
+        """Human-readable string form of the index."""
+        return ",".join(self.list())
 
     def __eq__(self, other) -> bool:
+        """Equality with support for wildcards and ranges."""
         if other is not None and not isinstance(other, AryIndex):
             return NotImplemented
         if other is None or other.dims is None:
@@ -82,7 +101,11 @@ class AryIndex:
             dim2 = other.dims[i]
             if dim1 == dim2:
                 continue
-            if (dim1 is None or isinstance(dim1, OpRange)) and (dim2 is None or isinstance(dim2, OpRange)):
+            if (
+                dim1 is None or isinstance(dim1, OpRange)
+            ) and (
+                dim2 is None or isinstance(dim2, OpRange)
+            ):
                 if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
                     return False
                 continue
@@ -91,6 +114,7 @@ class AryIndex:
 
     @classmethod
     def dim_is_entire(cls, dim) -> bool:
+        """Return ``True`` if ``dim`` spans the whole dimension."""
         if dim is None:
             return True
         if isinstance(dim, OpRange):
@@ -100,14 +124,15 @@ class AryIndex:
 
     @classmethod
     def get_diff_dim(cls, index1, index2) -> int:
+        """Identify the first dimension where two indices differ."""
         if len(index1.dims) != len(index2.dims):
             raise ValueError("Different number of dimensions")
 
         def _check_found():
             if diff_dim > 0:
-                return -1 # not allow difference in multiple dimensions
+                return -1  # disallow differences in multiple dimensions
 
-        diff_dim = -1 # dimension at which difference was found
+        diff_dim = -1  # dimension at which difference was found
         for i, dim1 in enumerate(index1):
             dim2 = index2[i]
             if dim1 == dim2:
@@ -121,7 +146,7 @@ class AryIndex:
 
     @staticmethod
     def _check_cover(index1, index2) -> bool:
-        """Return true if index1 >= index2"""
+        """Return true if ``index1`` fully covers ``index2``."""
         if len(index1.dims) != len(index2.dims):
             raise ValueError(f"Different number of dimensions: {index1} {index2}")
         if index1 == index2:
@@ -185,6 +210,7 @@ class AryIndex:
         return True
 
     def __le__(self, other) -> bool:
+        """Return True if ``self`` is covered by ``other``."""
         if other is not None and not isinstance(other, AryIndex):
             raise NotImplemented
         if other is None:
@@ -192,13 +218,17 @@ class AryIndex:
         return AryIndex._check_cover(other, self)
 
     def __ge__(self, other) -> bool:
+        """Return True if ``self`` covers ``other``."""
         if other is not None and not isinstance(other, AryIndex):
             raise NotImplemented
         if other is None:
-            return self.dims is None or all([dim is None or isinstance(dim, OpRange) for dim in self.dims])
+            return self.dims is None or all(
+                [dim is None or isinstance(dim, OpRange) for dim in self.dims]
+            )
         return AryIndex._check_cover(self, other)
 
     def collect_vars(self) -> List[OpVar]:
+        """Collect all variables used within the index expressions."""
         if self.dims is None:
             return []
         vars = []
@@ -206,14 +236,18 @@ class AryIndex:
             if dim is None:
                 continue
             for var in dim.collect_vars():
-                if not var in vars:
+                if var not in vars:
                     vars.append(var)
         return vars
 
     def is_partial_access(self) -> bool:
-        return self.dims is not None and any([(dim is not None and not isinstance(dim, OpRange)) for dim in self.dims])
+        """Check if the index specifies a partial array access."""
+        return self.dims is not None and any(
+            [(dim is not None and not isinstance(dim, OpRange)) for dim in self.dims]
+        )
 
-    def is_depended_on(self, var:OpVar) -> bool:
+    def is_depended_on(self, var: OpVar) -> bool:
+        """Return True if ``var`` appears in any dimension expression."""
         if self.dims is None:
             return False
         for dim in self.dims:
@@ -232,17 +266,20 @@ class Operator:
     PRIORITY: ClassVar[int] = -999
 
     def __post_init__(self):
+        """Ensure the argument list is stored as a Python list."""
         if self.args is not None and not isinstance(self.args, list):
             raise ValueError(f"args must be a list: {type(self.args)}")
         return None
 
     def _paren(self, arg: Operator, eq: bool = False) -> str:
+        """Add parentheses around ``arg`` if precedence requires it."""
         if self.PRIORITY < arg.PRIORITY or (eq and self.PRIORITY == arg.PRIORITY):
             return f"({arg})"
         else:
             return f"{arg}"
 
     def deep_clone(self) -> "Operator":
+        """Create a deep copy of the operator tree."""
         clone = copy.copy(self)
         if self.args is not None:
             clone.args = [
@@ -251,12 +288,20 @@ class Operator:
             ]
         return clone
 
-    def collect_vars(self, without_index: bool = False, without_refvar: bool = False, without_checkfunc: bool = False) -> List[OpVar]:
+    def collect_vars(
+        self,
+        without_index: bool = False,
+        without_refvar: bool = False,
+        without_checkfunc: bool = False,
+    ) -> List[OpVar]:
+        """Gather variables referenced by this operator and its children."""
         vars = []
         if self.args is None:
             return vars
         for arg in self.args:
-            for var in arg.collect_vars(without_index, without_refvar, without_checkfunc):
+            for var in arg.collect_vars(
+                without_index, without_refvar, without_checkfunc
+            ):
                 if var not in vars:
                     vars.append(var)
         return vars
@@ -266,6 +311,7 @@ class Operator:
         raise NotImplementedError(f"is_array in {type(self)}")
 
     def find_userfunc(self) -> List[OpFuncUser]:
+        """Return a list of user-defined functions referenced."""
         funcs = []
         if self.args is None:
             return funcs
@@ -275,6 +321,7 @@ class Operator:
         return funcs
 
     def replace_with(self, src: Operator, dest: Operator) -> Operator:
+        """Replace occurrences of ``src`` with ``dest`` in the tree."""
         if self is src:
             return dest
         if self.args is None:
@@ -295,6 +342,7 @@ class Operator:
         raise NotImplementedError(f"derivative in {type(self)}")
 
     def __neg__(self):
+        """Return the negated operator, simplifying when possible."""
         if isinstance(self, OpNeg):
             return self.args[0]
         if isinstance(self, OpInt) and self.val == 0:
@@ -302,6 +350,7 @@ class Operator:
         return OpNeg(args=[self])
 
     def __add__(self, other):
+        """Addition with various algebraic simplifications."""
         if isinstance(other, int):
             return self + OpInt(other)
         if isinstance(other, Operator):
@@ -311,27 +360,79 @@ class Operator:
                 return self
             if isinstance(self, OpInt) and isinstance(other, OpInt):
                 return OpInt(self.val + other.val, target=self.target, kind=self.kind)
-            if isinstance(self, OpReal) and isinstance(other, OpReal) and self.kind==other.kind and self.val==f"{float(self.val)}" and other.val==f"{float(other.val)}":
-                return OpReal(val=f"{float(self.val) + float(other.val)}", kind=self.kind)
-            if isinstance(self, OpReal) and isinstance(other, OpInt) and self.val==f"{float(self.val)}":
-                return OpReal(val=f"{float(self.val) + other.val}", kind=self.kind)
-            if isinstance(other, OpReal) and isinstance(self, OpInt) and other.val==f"{float(other.val)}":
-                return OpReal(val=f"{float(other.val) + self.val}", kind=other.kind)
-            if isinstance(self, OpAdd) and isinstance(self.args[0], OpNum) and isinstance(other, OpNum):
+            if (
+                isinstance(self, OpReal)
+                and isinstance(other, OpReal)
+                and self.kind == other.kind
+                and self.val == f"{float(self.val)}"
+                and other.val == f"{float(other.val)}"
+            ):
+                return OpReal(
+                    val=f"{float(self.val) + float(other.val)}", kind=self.kind
+                )
+            if (
+                isinstance(self, OpReal)
+                and isinstance(other, OpInt)
+                and self.val == f"{float(self.val)}"
+            ):
+                return OpReal(
+                    val=f"{float(self.val) + other.val}", kind=self.kind
+                )
+            if (
+                isinstance(other, OpReal)
+                and isinstance(self, OpInt)
+                and other.val == f"{float(other.val)}"
+            ):
+                return OpReal(
+                    val=f"{float(other.val) + self.val}", kind=other.kind
+                )
+            if (
+                isinstance(self, OpAdd)
+                and isinstance(self.args[0], OpNum)
+                and isinstance(other, OpNum)
+            ):
                 return self.args[1] + (self.args[0] + other)
-            if isinstance(self, OpAdd) and isinstance(self.args[1], OpNum) and isinstance(other, OpNum):
+            if (
+                isinstance(self, OpAdd)
+                and isinstance(self.args[1], OpNum)
+                and isinstance(other, OpNum)
+            ):
                 return self.args[0] + (self.args[1] + other)
-            if isinstance(other, OpAdd) and isinstance(other.args[0], OpNum) and isinstance(self, OpNum):
+            if (
+                isinstance(other, OpAdd)
+                and isinstance(other.args[0], OpNum)
+                and isinstance(self, OpNum)
+            ):
                 return other.args[1] + (other.args[0] + self)
-            if isinstance(other, OpAdd) and isinstance(other.args[1], OpNum) and isinstance(self, OpNum):
+            if (
+                isinstance(other, OpAdd)
+                and isinstance(other.args[1], OpNum)
+                and isinstance(self, OpNum)
+            ):
                 return other.args[0] + (other.args[1] + self)
-            if isinstance(self, OpSub) and isinstance(self.args[0], OpNum) and isinstance(other, OpNum):
-                return - self.args[1] + (self.args[0] + other)
-            if isinstance(self, OpSub) and isinstance(self.args[1], OpNum) and isinstance(other, OpNum):
+            if (
+                isinstance(self, OpSub)
+                and isinstance(self.args[0], OpNum)
+                and isinstance(other, OpNum)
+            ):
+                return -self.args[1] + (self.args[0] + other)
+            if (
+                isinstance(self, OpSub)
+                and isinstance(self.args[1], OpNum)
+                and isinstance(other, OpNum)
+            ):
                 return self.args[0] + (other - self.args[1])
-            if isinstance(other, OpSub) and isinstance(other.args[0], OpNum) and isinstance(self, OpNum):
-                return - other.args[1] + (other.args[0] + self)
-            if isinstance(other, OpSub) and isinstance(other.args[1], OpNum) and isinstance(self, OpNum):
+            if (
+                isinstance(other, OpSub)
+                and isinstance(other.args[0], OpNum)
+                and isinstance(self, OpNum)
+            ):
+                return -other.args[1] + (other.args[0] + self)
+            if (
+                isinstance(other, OpSub)
+                and isinstance(other.args[1], OpNum)
+                and isinstance(self, OpNum)
+            ):
                 return other.args[0] + (self - other.args[1])
             if isinstance(self, OpSub) and self.args[1] == other:
                 return self.args[0]
@@ -343,53 +444,106 @@ class Operator:
         return NotImplemented
 
     def __sub__(self, other):
+        """Subtraction with algebraic simplifications."""
         if isinstance(other, int):
             return self - OpInt(other)
         if isinstance(other, Operator):
             if self == other:
                 return OpInt(0)
             if isinstance(self, OpInt) and self.val == 0:
-                return - other
+                return -other
             if isinstance(other, OpInt) and other.val == 0:
                 return self
             if isinstance(self, OpInt) and isinstance(other, OpInt):
                 val = self.val - other.val
                 if val < 0:
-                    return - OpInt(-val, target=self.target, kind=self.kind)
+                    return -OpInt(-val, target=self.target, kind=self.kind)
                 else:
                     return OpInt(val, target=self.target, kind=self.kind)
-            if isinstance(self, OpReal) and isinstance(other, OpReal) and self.kind==other.kind and self.val==f"{float(self.val)}" and other.val==f"{float(other.val)}":
-                return OpReal(val=f"{float(self.val) - float(other.val)}", kind=self.kind)
-            if isinstance(self, OpReal) and isinstance(other, OpInt) and self.val==f"{float(self.val)}":
-                return OpReal(val=f"{float(self.val) - other.val}", kind=self.kind)
-            if isinstance(other, OpReal) and isinstance(self, OpInt) and other.val==f"{float(other.val)}":
-                return OpReal(val=f"{float(other.val) - self.val}", kind=other.kind)
-            if isinstance(self, OpAdd) and isinstance(self.args[0], OpNum) and isinstance(other, OpNum):
+            if (
+                isinstance(self, OpReal)
+                and isinstance(other, OpReal)
+                and self.kind == other.kind
+                and self.val == f"{float(self.val)}"
+                and other.val == f"{float(other.val)}"
+            ):
+                return OpReal(
+                    val=f"{float(self.val) - float(other.val)}", kind=self.kind
+                )
+            if (
+                isinstance(self, OpReal)
+                and isinstance(other, OpInt)
+                and self.val == f"{float(self.val)}"
+            ):
+                return OpReal(
+                    val=f"{float(self.val) - other.val}", kind=self.kind
+                )
+            if (
+                isinstance(other, OpReal)
+                and isinstance(self, OpInt)
+                and other.val == f"{float(other.val)}"
+            ):
+                return OpReal(
+                    val=f"{float(other.val) - self.val}", kind=other.kind
+                )
+            if (
+                isinstance(self, OpAdd)
+                and isinstance(self.args[0], OpNum)
+                and isinstance(other, OpNum)
+            ):
                 return self.args[1] + (self.args[0] - other)
-            if isinstance(self, OpAdd) and isinstance(self.args[1], OpNum) and isinstance(other, OpNum):
+            if (
+                isinstance(self, OpAdd)
+                and isinstance(self.args[1], OpNum)
+                and isinstance(other, OpNum)
+            ):
                 return self.args[0] + (self.args[1] - other)
-            if isinstance(other, OpAdd) and isinstance(other.args[0], OpNum) and isinstance(self, OpNum):
-                return - other.args[1] + (self - other.args[0])
-            if isinstance(other, OpAdd) and isinstance(other.args[1], OpNum) and isinstance(self, OpNum):
-                return - other.args[0] + (self - other.args[1])
+            if (
+                isinstance(other, OpAdd)
+                and isinstance(other.args[0], OpNum)
+                and isinstance(self, OpNum)
+            ):
+                return -other.args[1] + (self - other.args[0])
+            if (
+                isinstance(other, OpAdd)
+                and isinstance(other.args[1], OpNum)
+                and isinstance(self, OpNum)
+            ):
+                return -other.args[0] + (self - other.args[1])
             if isinstance(self, OpAdd) and self.args[0] == other:
                 return self.args[1]
             if isinstance(self, OpAdd) and self.args[1] == other:
                 return self.args[0]
             if isinstance(other, OpAdd) and other.args[0] == self:
-                return - other.args[1]
+                return -other.args[1]
             if isinstance(other, OpAdd) and other.args[1] == self:
                 return other.args[0]
-            if isinstance(self, OpSub) and isinstance(self.args[0], OpNum) and isinstance(other, OpNum):
-                return - self.args[1] + (self.args[0] - other)
-            if isinstance(self, OpSub) and isinstance(self.args[1], OpNum) and isinstance(other, OpNum):
+            if (
+                isinstance(self, OpSub)
+                and isinstance(self.args[0], OpNum)
+                and isinstance(other, OpNum)
+            ):
+                return -self.args[1] + (self.args[0] - other)
+            if (
+                isinstance(self, OpSub)
+                and isinstance(self.args[1], OpNum)
+                and isinstance(other, OpNum)
+            ):
                 return self.args[0] - (self.args[1] + other)
-            if isinstance(other, OpSub) and isinstance(other.args[0], OpNum) and isinstance(self, OpNum):
+            if (
+                isinstance(other, OpSub)
+                and isinstance(other.args[0], OpNum)
+                and isinstance(self, OpNum)
+            ):
                 return other.args[1] + (self - other.args[0])
-            if isinstance(other, OpSub) and isinstance(other.args[1], OpNum) and isinstance(self, OpNum):
-                return - other.args[0] + (self + other.args[1])
+            if (
+                isinstance(other, OpSub)
+                and isinstance(other.args[1], OpNum)
+                and isinstance(self, OpNum)
+            ):
+                return -other.args[0] + (self + other.args[1])
             if isinstance(self, OpSub) and self.args[0] == other:
-                return - self.args[1]
+                return -self.args[1]
             if isinstance(other, OpSub) and other.args[0] == self:
                 return other.args[1]
             if isinstance(other, OpNeg):
@@ -398,6 +552,7 @@ class Operator:
         return NotImplemented
 
     def __mul__(self, other):
+        """Multiplication with constant folding and simplifications."""
         if isinstance(other, int):
             return self * OpInt(other)
         if isinstance(other, Operator):
@@ -410,53 +565,97 @@ class Operator:
             if isinstance(other, OpInt) and other.val == 0:
                 return OpInt(0, target=other.target, kind=other.kind)
             if isinstance(self, OpInt) and self.val == -1:
-                return - other
+                return -other
             if isinstance(other, OpInt) and other.val == -1:
-                return - self
+                return -self
             if isinstance(self, OpInt) and isinstance(other, OpInt):
                 return OpInt(self.val * other.val, target=self.target, kind=self.kind)
-            if isinstance(self, OpReal) and isinstance(other, OpReal) and self.kind==other.kind and self.val==str(float(self.val)) and other.val==str(float(other.val)):
-                return OpReal(val=str(float(self.val) * float(other.val)), kind=self.kind)
-            if isinstance(self, OpReal) and isinstance(other, OpInt) and self.val==str(float(self.val)):
+            if (
+                isinstance(self, OpReal)
+                and isinstance(other, OpReal)
+                and self.kind == other.kind
+                and self.val == str(float(self.val))
+                and other.val == str(float(other.val))
+            ):
+                return OpReal(
+                    val=str(float(self.val) * float(other.val)), kind=self.kind
+                )
+            if (
+                isinstance(self, OpReal)
+                and isinstance(other, OpInt)
+                and self.val == str(float(self.val))
+            ):
                 if float(self.val) == float(int(self.val)):
-                    return OpInt(int(self.val) * other.val, target=other.target, kind=other.kind)
+                    return OpInt(
+                        int(self.val) * other.val,
+                        target=other.target,
+                        kind=other.kind,
+                    )
                 else:
-                    return OpReal(val=str(float(self.val) * other.val), kind=self.kind)
-            if isinstance(other, OpReal) and isinstance(self, OpInt) and other.val==str(float(other.val)):
+                    return OpReal(
+                        val=str(float(self.val) * other.val), kind=self.kind
+                    )
+            if (
+                isinstance(other, OpReal)
+                and isinstance(self, OpInt)
+                and other.val == str(float(other.val))
+            ):
                 if float(other.val) == float(int(other.val)):
-                    return OpInt(int(other.val) * self.val, target=self.target, kind=self.kind)
+                    return OpInt(
+                        int(other.val) * self.val,
+                        target=self.target,
+                        kind=self.kind,
+                    )
                 else:
-                    return OpReal(val=str(float(other.val) * self.val), kind=other.kind)
+                    return OpReal(
+                        val=str(float(other.val) * self.val), kind=other.kind
+                    )
             if isinstance(self, OpNeg):
-                return - (self.args[0] * other)
+                return -(self.args[0] * other)
             if isinstance(other, OpNeg):
-                return - (self * other.args[0])
-            if isinstance(other, OpMul) and isinstance(self, OpNum) and isinstance(other.args[0], OpNum):
+                return -(self * other.args[0])
+            if (
+                isinstance(other, OpMul)
+                and isinstance(self, OpNum)
+                and isinstance(other.args[0], OpNum)
+            ):
                 return (self * other.args[0]) * other.args[1]
-            if isinstance(other, OpMul) and isinstance(self, OpNum) and isinstance(other.args[1], OpNum):
+            if (
+                isinstance(other, OpMul)
+                and isinstance(self, OpNum)
+                and isinstance(other.args[1], OpNum)
+            ):
                 return (self * other.args[1]) * other.args[0]
-            if isinstance(other, OpDiv) and isinstance(other.args[0], OpInt) and other.args[0].val == 1:
+            if (
+                isinstance(other, OpDiv)
+                and isinstance(other.args[0], OpInt)
+                and other.args[0].val == 1
+            ):
                 return self / other.args[1]
-            if isinstance(other, OpPow) and isinstance(other.args[1], OpNeg):
-                return self / other.args[0]**(other.args[1].args[0])
+            if (
+                isinstance(other, OpPow)
+                and isinstance(other.args[1], OpNeg)
+            ):
+                return self / other.args[0] ** (other.args[1].args[0])
             if isinstance(self, OpPow) and self.args[0] == other:
                 expo = self.args[1]
                 if isinstance(expo, OpVar) and expo.is_real_type:
                     one = OpReal("1.0", kind=expo.kind)
                 else:
                     one = OpInt(1)
-                return (self.args[0])**(self.args[1] + one)
+                return (self.args[0]) ** (self.args[1] + one)
             if isinstance(other, OpPow) and other.args[0] == self:
                 expo = other.args[1]
                 if isinstance(expo, OpVar) and expo.is_real_type:
                     one = OpReal("1.0", kind=expo.kind)
                 else:
                     one = OpInt(1)
-                return (other.args[0])**(one + other.args[1])
+                return (other.args[0]) ** (one + other.args[1])
             return OpMul(args=[self, other])
         return NotImplemented
 
     def __truediv__(self, other):
+        """Division with simplifications and fraction handling."""
         if isinstance(other, int):
             return self / OpInt(other)
         if isinstance(other, Operator):
@@ -465,9 +664,9 @@ class Operator:
             if isinstance(self, OpInt) and self.val == 0:
                 return self
             if isinstance(self, OpNeg):
-                return - (self.args[0] / other)
+                return -(self.args[0] / other)
             if isinstance(other, OpNeg):
-                return - (self / other.args[0])
+                return -(self / other.args[0])
             if isinstance(self, OpInt) and isinstance(other, OpInt):
                 kind = self.kind or other.kind
                 target = self.target or other.target
@@ -482,21 +681,21 @@ class Operator:
             if isinstance(other, OpDiv):
                 return (self * other.args[1]) / other.args[0]
             if isinstance(other, OpPow) and isinstance(other.args[1], OpNeg):
-                return self * other.args[0]**(other.args[1].args[0])
+                return self * other.args[0] ** (other.args[1].args[0])
             if isinstance(self, OpPow) and self.args[0] == other:
                 expo = self.args[1]
                 if isinstance(expo, OpVar) and expo.is_real_type:
                     one = OpReal("1.0", kind=expo.kind)
                 else:
                     one = OpInt(1)
-                return (self.args[0])**(self.args[1] - one)
+                return (self.args[0]) ** (self.args[1] - one)
             if isinstance(other, OpPow) and other.args[0] == self:
                 expo = other.args[1]
                 if isinstance(expo, OpVar) and expo.is_real_type:
                     one = OpReal("1.0", kind=expo.kind)
                 else:
                     one = OpInt(1)
-                return (other.args[0])**(one - other.args[1])
+                return (other.args[0]) ** (one - other.args[1])
             return OpDiv(args=[self, other])
         return NotImplemented
 
