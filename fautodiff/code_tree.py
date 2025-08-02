@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Tuple, Dict, Optional, Iterator, Pattern, ClassVar, Union
+from typing import Iterable, List, Tuple, Dict, Optional, Iterator, Pattern, ClassVar, Union, Any
 import re
 from functools import reduce
+import copy
 
 AD_SUFFIX = "_ad"
 FWD_SUFFIX = "_fwd_ad"
@@ -3932,24 +3933,45 @@ class OmpDirective(Node):
     """Representation of an OpenMP directive."""
 
     directive: str
-    clauses: List[str] = field(default_factory=list)
+    clauses: List[Union[str, Dict[str, List[Any]]]] = field(default_factory=list)
     body: Optional[Node] = None
 
     def __post_init__(self):
         super().__post_init__()
+        self.clauses = [self._parse_clause(c) if isinstance(c, str) else c for c in self.clauses]
         if self.body is not None:
             self.body.set_parent(self)
+
+    @staticmethod
+    def _parse_clause(clause: str) -> Union[str, Dict[str, List[Any]]]:
+        m = re.match(r"\s*(\w+)\s*\((.*)\)\s*", clause)
+        if not m:
+            return clause.strip()
+        key = m.group(1)
+        body = m.group(2).strip()
+        low_key = key.lower()
+        if low_key == "reduction":
+            m2 = re.match(r"([^:]+):(.*)", body)
+            if m2:
+                op = m2.group(1).strip()
+                vars = [v.strip() for v in m2.group(2).split(',') if v.strip()]
+                return {key: [op, vars]}
+            return clause.strip()
+        if low_key in {"private", "firstprivate", "lastprivate", "shared", "copyin", "copyprivate"}:
+            vars = [v.strip() for v in body.split(',') if v.strip()]
+            return {key: vars}
+        return clause.strip()
 
     def iter_children(self) -> Iterator[Node]:
         if self.body is not None:
             yield self.body
 
     def copy(self) -> "OmpDirective":
-        return OmpDirective(self.directive, list(self.clauses), self.body)
+        return OmpDirective(self.directive, copy.deepcopy(self.clauses), self.body)
 
     def deep_clone(self) -> "OmpDirective":
         body = self.body.deep_clone() if self.body is not None else None
-        return OmpDirective(self.directive, list(self.clauses), body)
+        return OmpDirective(self.directive, copy.deepcopy(self.clauses), body)
 
     def insert_before(self, id: int, node: "Node"):
         if self.body is None:
@@ -3974,52 +3996,21 @@ class OmpDirective(Node):
         self.body = Block([node, self.body])
         self.body.set_parent(self)
 
-    def augment_clauses(self, routine: Routine) -> "OmpDirective":
-        """Return a copy with *_ad variables added to relevant clauses.
-
-        ``private``, ``shared``, ``firstprivate`` and ``reduction`` clause lists are
-        inspected and corresponding ``*_ad`` variables appended when they are
-        declared or passed as arguments of ``routine``.
-        """
-
-        new_clauses: List[str] = []
-        for clause in self.clauses:
-            m = re.match(r"(\w+)\s*\((.*)\)", clause, re.IGNORECASE)
-            if not m:
-                new_clauses.append(clause)
-                continue
-            key, body = m.group(1), m.group(2)
-            low_key = key.lower()
-            vars: List[str]
-            if low_key in ("private", "shared", "firstprivate"):
-                vars = [v.strip() for v in body.split(',') if v.strip()]
-                added: List[str] = []
-                for v in vars:
-                    ad = f"{v}{AD_SUFFIX}"
-                    if (ad in routine.args or routine.is_declared(ad)) and ad not in vars:
-                        added.append(ad)
-                vars.extend(added)
-                new_clauses.append(f"{key}({', '.join(vars)})")
-                continue
-            if low_key == "reduction":
-                m2 = re.match(r"([^:]+):(.*)", body)
-                if m2:
-                    op = m2.group(1).strip()
-                    vars = [v.strip() for v in m2.group(2).split(',') if v.strip()]
-                    added: List[str] = []
-                    for v in vars:
-                        ad = f"{v}{AD_SUFFIX}"
-                        if (ad in routine.args or routine.is_declared(ad)) and ad not in vars:
-                            added.append(ad)
-                    vars.extend(added)
-                    new_clauses.append(f"{key}({op}:{', '.join(vars)})")
-                    continue
-            new_clauses.append(clause)
-        return OmpDirective(self.directive, new_clauses, self.body)
-
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        clause = f" {' '.join(self.clauses)}" if self.clauses else ""
+        parts: List[str] = []
+        for c in self.clauses:
+            if isinstance(c, str):
+                parts.append(c)
+                continue
+            key, values = next(iter(c.items()))
+            low_key = key.lower()
+            if low_key == "reduction":
+                op, vars = values[0], values[1]
+                parts.append(f"{key}({op}:{', '.join(vars)})")
+            else:
+                parts.append(f"{key}({', '.join(values)})")
+        clause = f" {' '.join(parts)}" if parts else ""
         lines = [f"{space}!$omp {self.directive}{clause}\n"]
         if self.body is not None:
             lines.extend(self.body.render(indent))
@@ -4058,7 +4049,31 @@ class OmpDirective(Node):
         if not nodes:
             return []
         body = Block(nodes)
-        node = OmpDirective(self.directive, list(self.clauses), body)
+        new_clauses: List[Union[str, Dict[str, List[Any]]]] = []
+        for clause in self.clauses:
+            if isinstance(clause, str):
+                new_clauses.append(clause)
+                continue
+            key, values = next(iter(clause.items()))
+            low_key = key.lower()
+            if low_key in ("private", "shared", "firstprivate"):
+                vars = list(values)
+                for v in list(vars):
+                    ad = f"{v}{AD_SUFFIX}"
+                    if ad not in vars:
+                        vars.append(ad)
+                new_clauses.append({key: vars})
+                continue
+            if low_key == "reduction":
+                op, vars = values[0], list(values[1])
+                for v in list(vars):
+                    ad = f"{v}{AD_SUFFIX}"
+                    if ad not in vars:
+                        vars.append(ad)
+                new_clauses.append({key: [op, vars]})
+                continue
+            new_clauses.append(clause)
+        node = OmpDirective(self.directive, new_clauses, body)
         return [node]
 
     def prune_for(self,
@@ -4071,7 +4086,28 @@ class OmpDirective(Node):
         body = self.body.prune_for(targets, mod_vars, decl_map)
         if body is None:
             return None
-        return OmpDirective(self.directive, list(self.clauses), body)
+
+        used = {v.name for v in body.collect_vars()}
+        new_clauses: List[Union[str, Dict[str, List[Any]]]] = []
+        for clause in self.clauses:
+            if isinstance(clause, str):
+                new_clauses.append(clause)
+                continue
+            key, values = next(iter(clause.items()))
+            low_key = key.lower()
+            if low_key == "reduction":
+                op, vars = values[0], [v for v in values[1] if v in used]
+                if vars:
+                    new_clauses.append({key: [op, vars]})
+                continue
+            elif low_key in {"private", "firstprivate", "lastprivate",
+                              "shared", "copyin", "copyprivate"}:
+                vars = [v for v in values if v in used]
+                if vars:
+                    new_clauses.append({key: vars})
+                continue
+            new_clauses.append(clause)
+        return OmpDirective(self.directive, new_clauses, body)
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         if self.body is None:
