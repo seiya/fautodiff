@@ -55,6 +55,18 @@ class TestGenerator(unittest.TestCase):
                 warn=False,
             )
 
+    def test_fadmod_function_intents_length(self):
+        code_tree.Node.reset()
+        fadmod = Path("simple_math.fadmod")
+        if fadmod.exists():
+            fadmod.unlink()
+        generator.generate_ad("examples/simple_math.f90", warn=False)
+        routines, _, _ = generator._load_fadmods(["simple_math"], ["."])
+        info = routines.get("add_numbers")
+        self.assertIsNotNone(info)
+        self.assertEqual(len(info["args"]), len(info["intents"]))
+        self.assertEqual(info["intents"][-1], "out")
+
     def test_call_module_vars(self):
         code_tree.Node.reset()
         generator.generate_ad("examples/module_vars.f90", warn=False)

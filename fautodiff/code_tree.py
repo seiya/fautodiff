@@ -474,6 +474,8 @@ class Node:
             intents = ufunc.intents
             if intents is None and ufunc.name in routine_map:
                 intents = routine_map[ufunc.name]["intents"]
+                if len(intents) > len(ufunc.args):
+                    intents = intents[:-1]
             # Recursively generate AD code for the function call
             callstmt = CallStatement(
                 name=ufunc.name,

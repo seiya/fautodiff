@@ -651,9 +651,6 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
             if intent in ("out", "inout"):
                 out_grad_args.append(var)
 
-    if routine_org.result is not None:
-        arg_info["intents"] = arg_info["intents"][:-1]
-
     ad_name = f"{routine_org.name}{FWD_SUFFIX}"
     subroutine = Subroutine(ad_name, [v.name for v in args])
     arg_info["name_fwd_ad"] = ad_name
@@ -782,8 +779,6 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                 if grad_intent == "inout":
                     in_grad_args.append(var)
                     has_grad_input = True
-    if routine_org.result is not None:
-        arg_info["intents"] = arg_info["intents"][:-1]
 
     ad_name = f"{routine_org.name}{REV_SUFFIX}"
     subroutine = Subroutine(ad_name, [v.name for v in args])
