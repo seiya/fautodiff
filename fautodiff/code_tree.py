@@ -276,7 +276,11 @@ class Node:
     # variable analysis helpers
     # ------------------------------------------------------------------
 
-    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False, check_init_advars: bool = False) -> VarList:
+    def assigned_vars(self,
+                      vars: Optional[VarList] = None,
+                      without_savevar: bool = False,
+                      check_init_advars: bool = False
+                      ) -> VarList:
         """Return variables assigned within this node and children."""
         flag = False
         for child in self.iter_children():
@@ -323,11 +327,14 @@ class Node:
             vars = child.unrefered_advars(vars)
         return vars
 
-    def collect_vars(self) -> List[OpVar]:
+    def collect_vars(self,
+                     without_refvar: bool = False,
+                     without_index: bool = False
+                     ) -> List[OpVar]:
         """Return variables used in this node."""
         vars = []
         for child in self.iter_children():
-            _extend_unique(vars, child.collect_vars())
+            _extend_unique(vars, child.collect_vars(without_refvar=without_refvar, without_index=without_index))
         for var in self.iter_ref_vars():
             _append_unique(vars, var)
         for var in self.iter_assign_vars():
@@ -502,7 +509,7 @@ class Node:
                     assigns.append(Assignment(grad_lhs, handler, ad_info=ad_info))
                     return assigns
 
-            vars = rhs.collect_vars()
+            vars = rhs.collect_vars(without_index=True, without_refvar=True)
             expr = None
             # Build the forward-mode derivative expression by summing contributions
             for var in vars:
@@ -1146,10 +1153,14 @@ class CallStatement(Node):
                              associated_vars=self.associated_vars,
                              donot_prune=self.donot_prune)
 
-    def _iter_vars(self, intents: List[str], kinds: Tuple[str, ...]) -> Iterator[OpVar]:
+    def _iter_vars(self,
+                   intents: List[str],
+                   kinds: Tuple[str],
+                   without_index: bool = False
+                   ) -> Iterator[OpVar]:
         for arg, intent in zip(self.args, intents):
             if intent in kinds:
-                for var in arg.collect_vars():
+                for var in arg.collect_vars(without_index=without_index):
                     yield var
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
@@ -1158,7 +1169,7 @@ class CallStatement(Node):
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         intents = self.intents or ["inout"] * len(self.args)
-        yield from self._iter_vars(intents, ("out", "inout"))
+        yield from self._iter_vars(intents, ("out", "inout"), without_index=True)
         if self.result is not None:
             yield self.result
 
@@ -1190,7 +1201,7 @@ class CallStatement(Node):
             vars = vars.copy()
             for arg, intent in zip(self.args, intents):
                 if intent in ("out", "inout"):
-                    for var in arg.collect_vars():
+                    for var in arg.collect_vars(without_index=True):
                         vars.remove(var)
             if self.result is not None:
                 vars.remove(self.result)
@@ -1430,7 +1441,7 @@ class CallStatement(Node):
         intents = self.intents or ["inout"] * len(self.args)
         for arg, intent in zip(self.args, intents):
             if intent in ("out", "inout"):
-                for var in arg.collect_vars():
+                for var in arg.collect_vars(without_index=True):
                     if var.name.endswith(AD_SUFFIX):
                         assigned_vars = assigned_vars.copy()
                         assigned_vars.push(var)
@@ -1751,7 +1762,10 @@ class Declaration(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
-    def collect_vars(self) -> List[OpVar]:
+    def collect_vars(self,
+                     without_refvar: bool = False,
+                     without_index: bool = False,
+                     ) -> List[OpVar]:
         var = OpVar(
             name=self.name,
             typename=self.typename,
@@ -1973,7 +1987,10 @@ class TypeDef(Node):
         lines.append(f"{space}end type {self.name}\n")
         return lines
 
-    def collect_vars(self) -> List[OpVar]:
+    def collect_vars(self,
+                     without_refvar: bool = False,
+                     without_index: bool = False
+                     ) -> List[OpVar]:
         return []
 
     def generate_ad(self,
@@ -2183,7 +2200,11 @@ class ClearAssignment(Node):
         zero = OpReal("0.0", kind=self.lhs.kind)
         return [f"{space}{self.lhs} = {zero}{ad_comment}\n"]
 
-    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False, check_init_advars: bool = False) -> VarList:
+    def assigned_vars(self,
+                      vars: Optional[VarList] = None,
+                      without_savevar: bool = False,
+                      check_init_advars: bool = False
+                      ) -> VarList:
         if vars is None:
             vars = VarList()
         else:
@@ -2702,6 +2723,9 @@ class PointerAssignment(Node):
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self._rhs_vars:
             yield var
+        for var in  self.lhs.collect_vars():
+            if var != self.lhs:
+                yield var
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         yield self.lhs
@@ -3377,7 +3401,7 @@ class DoLoop(DoAbst):
     def _build_index_map(self) -> dict:
         # build index map: variable name -> position of the loop index in the array index
         index_map = {}
-        for var in self._body.collect_vars():
+        for var in self._body.collect_vars(without_refvar=True, without_index=True):
             index = var.concat_index()
             if index is not None:
                 for i, idx in enumerate(index):
@@ -3413,7 +3437,7 @@ class DoLoop(DoAbst):
             nonlocal dep_vars, simple_aliases
 
             # Check array index expressions in referenced and assigned vars
-            vars = list(node.iter_ref_vars()) + list(node.iter_assign_vars())
+            vars = node.collect_vars(without_refvar=True, without_index=True)
             for var in vars:
                 if var.index is None:
                     continue
@@ -3581,7 +3605,11 @@ class DoLoop(DoAbst):
             vars.push(var)
         return vars
 
-    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False, check_init_advars: bool = False) -> VarList:
+    def assigned_vars(self,
+                      vars: Optional[VarList] = None,
+                      without_savevar: bool = False,
+                      check_init_advars: bool = False
+                      ) -> VarList:
         vars = self._body.assigned_vars(vars, without_savevar=without_savevar, check_init_advars=check_init_advars)
         vars.update_index_upward(self._build_index_map(), range=self.range)
         if not check_init_advars:
@@ -3897,7 +3925,7 @@ class BlockConstruct(Node):
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         local_names = self._local_names()
-        for var in self.decls.iter_assign_vars(without_savevar):
+        for var in self.decls.iter_assign_vars(without_savevar=without_savevar):
             if var.name not in local_names:
                 yield var
 
@@ -4188,10 +4216,14 @@ class ForallBlock(Node):
                 vars.push(var)
         return vars
 
-    def assigned_vars(self, vars: Optional[VarList] = None, without_savevar: bool = False, check_init_advars: bool = False) -> VarList:
+    def assigned_vars(self,
+                      vars: Optional[VarList] = None,
+                      without_savevar: bool = False,
+                      check_init_advars: bool = False,
+                      ) -> VarList:
         vars = self._body.assigned_vars(vars, without_savevar=without_savevar, check_init_advars=check_init_advars)
         for idx, rng in self.index_specs:
-            for var in rng.collect_vars():
+            for var in rng.collect_vars(without_refvar=True, without_index=True):
                 vars.push(var)
             if not check_init_advars:
                 vars.push(idx)
