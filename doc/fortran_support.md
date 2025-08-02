@@ -32,6 +32,16 @@ This document summarizes the Fortran constructs handled by the AD code generator
 - Basic assignments to pointer targets are differentiated just like assignments to normal variables.
 - `allocate` and `deallocate` on pointer variables create and destroy the associated `_ad` pointers. Module-level pointers use an `associated` check before allocation.
 
+## OpenMP constructs
+- OpenMP directives are preserved for `parallel`, `parallel do`, `parallel do simd`, `do`,
+  `do simd`, `sections`, `parallel sections`, and `single`.  Standalone directives
+  `barrier`, `flush`, `taskwait`, and `taskyield` are also supported.
+- Clauses that list variables (such as `private`, `firstprivate`, `lastprivate`,
+  `reduction`, `copyin`, or `copyprivate`) automatically include the
+  corresponding derivative variables with the `_ad` suffix.
+- In reverse mode, loops that introduce cross‑iteration dependencies are detected and
+  their OpenMP directives are removed so that the loop executes sequentially.
+
 ## Parameter and module variables
 - Parameter constants remain untouched.
 - Module variables and variables imported with `use` are differentiated by default. Use `CONSTANT_VARS` to treat them as constants.

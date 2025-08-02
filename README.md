@@ -139,6 +139,19 @@ Details on how module variable assignments are handled in reverse mode are in th
 
 See ``doc/fortran_support.md`` for a description of supported Fortran constructs.
 
+## OpenMP constructs
+
+OpenMP directives are preserved in the generated code.  Supported constructs
+include `parallel`, `parallel do` (and related forms such as `do`,
+`parallel do simd`, and `do simd`), `sections`, `parallel sections`, and
+`single` blocks, as well as stand‑alone directives like `barrier`, `flush`,
+`taskwait`, and `taskyield`.  Clauses that list variables—e.g. `private`,
+`firstprivate`, or `reduction`—automatically receive the corresponding
+derivative variables so that both the primal and `_ad` versions participate.
+Loops with cross‑iteration dependencies are detected during reverse-mode
+generation; in these cases the OpenMP directive is dropped and the loop runs
+sequentially.
+
 ## Runtime stack module
 
 The helper module `fautodiff_stack` stores data that must persist between the forward and reverse sweeps.
