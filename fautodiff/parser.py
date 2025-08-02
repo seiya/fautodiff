@@ -35,6 +35,7 @@ from .code_tree import (
     WhereBlock,
     ForallBlock,
     BlockConstruct,
+    OmpDirective,
     Statement,
     ExitStmt,
     CycleStmt,
@@ -340,13 +341,17 @@ __all__ = [
 
 def parse_file(path, *, search_dirs=None, decl_map=None, type_map=None):
     """Parse ``path`` and return a list of :class:`Module` nodes."""
-    reader = FortranFileReader(path, ignore_comments=False)
+    reader = FortranFileReader(
+        path, ignore_comments=False, include_omp_conditional_lines=True
+    )
     return _parse_from_reader(reader, path, search_dirs=search_dirs, decl_map=decl_map, type_map=type_map)
 
 
 def parse_src(src, *, search_dirs=None, decl_map=None, type_map=None):
     """Parse ``src`` and return a list of :class:`Module` nodes."""
-    reader = FortranStringReader(src, ignore_comments=False)
+    reader = FortranStringReader(
+        src, ignore_comments=False, include_omp_conditional_lines=True
+    )
     return _parse_from_reader(reader, "<string>", search_dirs=search_dirs, decl_map=decl_map, type_map=type_map)
 
 
@@ -554,6 +559,41 @@ def _parse_directive(text: str, directives: dict) -> None:
         directives[body.strip().upper()] = True
     return
 
+
+def _parse_omp_directive(text: str) -> Tuple[bool, str, List[str]]:
+    body = text[5:].strip()
+    end = False
+    if body.lower().startswith("end"):
+        end = True
+        body = body[3:].strip()
+    tokens = body.split()
+    clause_keys = {
+        "private",
+        "shared",
+        "firstprivate",
+        "lastprivate",
+        "reduction",
+        "schedule",
+        "collapse",
+        "if",
+        "num_threads",
+        "default",
+        "copyin",
+        "copyprivate",
+        "nowait",
+        "ordered",
+        "proc_bind",
+    }
+    directive_tokens: List[str] = []
+    for tok in tokens:
+        low = tok.lower()
+        if directive_tokens and ("(" in tok or "=" in tok or low in clause_keys):
+            break
+        directive_tokens.append(tok)
+    clauses = tokens[len(directive_tokens):]
+    directive = " ".join(directive_tokens)
+    return end, directive, clauses
+
 def _parse_decls(
     spec,
     *,
@@ -566,6 +606,7 @@ def _parse_decls(
     default_access: Optional[str] = None,
     module_map: Optional[dict] = None,
     search_dirs: Optional[List[str]] = None,
+    omp_pending: Optional[List[OmpDirective]] = None,
 ) -> Tuple[List[Use], List[Node], List[Node]]:
     """Return declarations parsed from a specification part."""
 
@@ -581,6 +622,12 @@ def _parse_decls(
                     text = cnt.items[0].strip()
                     if text.startswith("!$FAD"):
                         _parse_directive(text, directives)
+                        continue
+                    if text.lower().startswith("!$omp"):
+                        if omp_pending is not None:
+                            end, directive, clauses = _parse_omp_directive(text)
+                            if not end:
+                                omp_pending.append(OmpDirective(directive, clauses))
                         continue
                     if text != "":
                         decls.append(Statement(text))
@@ -873,8 +920,14 @@ def _parse_routine(content,
                    ):
     """Return node tree correspoinding to the input AST"""
 
+    pending_omp: List[OmpDirective] = []
+
     def _parse_stmt(stmt, decl_map: dict, type_map: dict) -> Optional[Node]:
         if isinstance(stmt, Fortran2003.Comment):
+            text = stmt.items[0].strip()
+            if text.lower().startswith("!$omp"):
+                # handled separately
+                return None
             return None
         line_no = None
         if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
@@ -1189,12 +1242,63 @@ def _parse_routine(content,
         print(stmt.items)
         raise ValueError(f"stmt is not supported: {stmt}")
 
+    def _parse_omp_region(
+        body_list, start_idx: int, decl_map: dict, type_map: dict, directive: str
+    ) -> Tuple[Node, int]:
+        sub: List = []
+        i = start_idx
+        while i < len(body_list):
+            st = body_list[i]
+            if isinstance(st, Fortran2003.Comment):
+                text = st.items[0].strip()
+                if text.lower().startswith("!$omp"):
+                    end, dir2, _ = _parse_omp_directive(text)
+                    if end and dir2.lower() == directive.lower():
+                        i += 1
+                        break
+            sub.append(st)
+            i += 1
+        body_block = _block(sub, decl_map, type_map)
+        body: Node
+        if (
+            len(body_block) == 1
+            and isinstance(
+                body_block[0],
+                (DoLoop, DoWhile, BlockConstruct, IfBlock, SelectBlock, WhereBlock, ForallBlock),
+            )
+        ):
+            body = body_block[0]
+        else:
+            body = body_block
+        return body, i
+
     def _block(body_list, decl_map: dict, type_map: dict) -> Block:
         blk = Block([])
-        for st in body_list:
+        i = 0
+        while i < len(body_list):
+            if pending_omp:
+                omp = pending_omp.pop(0)
+                body, i = _parse_omp_region(body_list, i, decl_map, type_map, omp.directive)
+                omp.body = body
+                blk.append(omp)
+                continue
+            st = body_list[i]
+            if isinstance(st, Fortran2003.Comment):
+                text = st.items[0].strip()
+                if text.lower().startswith("!$omp"):
+                    end, directive, clauses = _parse_omp_directive(text)
+                    if end:
+                        i += 1
+                        continue
+                    body, i = _parse_omp_region(body_list, i + 1, decl_map, type_map, directive)
+                    blk.append(OmpDirective(directive, clauses, body))
+                    continue
+                i += 1
+                continue
             node = _parse_stmt(st, decl_map, type_map)
             if node is not None:
                 blk.append(node)
+            i += 1
         return blk
 
     stmt = None
@@ -1231,15 +1335,13 @@ def _parse_routine(content,
                 allow_access=False,
                 module_map=module_map,
                 search_dirs=search_dirs,
+                omp_pending=pending_omp,
             )
             routine.decls = Block(uses + decls + nodes)
             routine.decl_map = decl_map
             continue
         if isinstance(item, Fortran2003.Execution_Part):
-            for stmt in item.content:
-                node = _parse_stmt(stmt, routine.decl_map, type_map)
-                if node is not None:
-                    routine.content.append(node)
+            routine.content = _block(item.content, routine.decl_map, type_map)
             continue
         if isinstance(item, Fortran2003.End_Subroutine_Stmt):
             continue
