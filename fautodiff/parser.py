@@ -72,6 +72,17 @@ from .operators import (
 
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
 
+# Modules provided by the Fortran standard or compiler that do not require
+# corresponding ``.fadmod`` files when ``use``d.
+INTRINSIC_MODULES = {
+    "iso_c_binding",
+    "iso_fortran_env",
+    "ieee_arithmetic",
+    "ieee_exceptions",
+    "ieee_features",
+    "omp_lib",
+}
+
 
 if parse(getattr(fparser, "__version__", "0")) < Version("0.2.0"):
     raise RuntimeError("fautodiff requires fparser version 0.2.0 or later")
@@ -357,16 +368,20 @@ def parse_src(src, *, search_dirs=None, decl_map=None, type_map=None):
 
 def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
     """Return variable declaration info from ``mod_name`` fadmod file."""
+    if mod_name.lower() in INTRINSIC_MODULES:
+        return {}
     for d in search_dirs:
         path = Path(d) / f"{mod_name}.fadmod"
         if path.exists():
             try:
                 data = json.loads(path.read_text())
                 return data.get("variables", {})
-            except Exception:
-                pass
+            except Exception as exc:
+                raise RuntimeError(
+                    f"invalid fadmod file for module {mod_name}: {exc}"
+                ) from exc
             break
-    return {}
+    raise RuntimeError(f"fadmod file not found for module {mod_name}")
 
 
 def _parse_decl_stmt(

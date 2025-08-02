@@ -44,6 +44,17 @@ class TestGenerator(unittest.TestCase):
         expected = Path("examples/cross_mod_b_ad.f90").read_text()
         self.assertEqual(generated, expected)
 
+    def test_missing_fadmod_raises(self):
+        code_tree.Node.reset()
+        fadmod = Path("cross_mod_a.fadmod")
+        if fadmod.exists():
+            fadmod.unlink()
+        with self.assertRaises(RuntimeError):
+            generator.generate_ad(
+                "examples/cross_mod_b.f90",
+                warn=False,
+            )
+
     def test_call_module_vars(self):
         code_tree.Node.reset()
         generator.generate_ad("examples/module_vars.f90", warn=False)

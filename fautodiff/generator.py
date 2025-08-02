@@ -60,6 +60,7 @@ code_tree.FWD_SUFFIX = FWD_SUFFIX
 code_tree.REV_SUFFIX = REV_SUFFIX
 
 from . import parser
+from .parser import INTRINSIC_MODULES
 from .var_list import VarList
 
 
@@ -486,9 +487,13 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, d
     variables = {}
     generics = {}
     for mod in mod_names:
+        if mod.lower() in INTRINSIC_MODULES:
+            continue
+        found = False
         for d in search_dirs:
             path = Path(d) / f"{mod}.fadmod"
             if path.exists():
+                found = True
                 try:
                     data = json.loads(path.read_text())
                     generics.update(data.pop("generics", {}))
@@ -499,7 +504,9 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, d
                             for key in ["intents", "dims", "type", "kind"]:
                                 if key in info:
                                     if len(info[key]) != nargs:
-                                        raise RuntimeError(f"invalid routine data: {name} {info}")
+                                        raise RuntimeError(
+                                            f"invalid routine data: {name} {info}"
+                                        )
                                 else:
                                     info[key] = [None] * nargs
                     routines.update(routines_data)
@@ -519,9 +526,13 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, d
                                 )
                             )
                         variables[mod] = vars
-                except Exception:
-                    pass
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"invalid fadmod file for module {mod}: {exc}"
+                    ) from exc
                 break
+        if not found:
+            raise RuntimeError(f"fadmod file not found for module {mod}")
     return routines, variables, generics
 
 
