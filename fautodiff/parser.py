@@ -1377,6 +1377,7 @@ def _parse_routine(content,
             else:
                 raise ValueError(type(content))
             routine.directives = directives
+            routine.decl_map = decl_map
             continue
         if isinstance(item, Fortran2003.Specification_Part):
             uses, decls, nodes = _parse_decls(
@@ -1392,7 +1393,6 @@ def _parse_routine(content,
                 omp_pending=pending_omp,
             )
             routine.decls = Block(uses + decls + nodes)
-            routine.decl_map = decl_map
             continue
         if isinstance(item, Fortran2003.Execution_Part):
             routine.content = _block(item.content, routine.decl_map, type_map)
