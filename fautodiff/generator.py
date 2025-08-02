@@ -42,6 +42,7 @@ from .code_tree import (
     Allocate,
     Deallocate,
     Statement,
+    OmpDirective,
     render_program,
 )
 from .operators import (
@@ -139,6 +140,34 @@ def _add_fwd_rev_calls(node, routine_map: dict, generic_map:dict, donot_prune: b
             return
     for child in list(getattr(node, "iter_children", lambda: [])()):
         _add_fwd_rev_calls(child, routine_map, generic_map, donot_prune)
+
+
+def _augment_omp_clauses(node: Node, subroutine: Routine) -> None:
+    """Replace ``OmpDirective`` nodes with augmented copies."""
+
+    for child in list(getattr(node, "iter_children", lambda: [])()):
+        if isinstance(child, OmpDirective):
+            parent = child.parent
+            new_child = child.augment_clauses(subroutine)
+            if isinstance(parent, Block):
+                for i, c in enumerate(parent._children):
+                    if c is child:
+                        parent._children[i] = new_child
+                        new_child.set_parent(parent)
+                        break
+            if new_child.body is not None:
+                _augment_omp_clauses(new_child, subroutine)
+        else:
+            _augment_omp_clauses(child, subroutine)
+
+
+def _has_omp(node: Node) -> bool:
+    if isinstance(node, OmpDirective):
+        return True
+    for child in getattr(node, "iter_children", lambda: [])():
+        if _has_omp(child):
+            return True
+    return False
 
 
 def _module_var_fwd_rev(routine_org: Routine,
@@ -973,6 +1002,9 @@ def _generate_ad_subroutine(
         if not node.is_effectively_empty():
             ad_block.append(node)
 
+    if _has_omp(ad_block):
+        _augment_omp_clauses(ad_block, subroutine)
+
     if reverse:
         _strip_sequential_omp(ad_block, warnings, reverse=True)
         targets = ad_block.required_vars()
@@ -985,6 +1017,8 @@ def _generate_ad_subroutine(
         _add_fwd_rev_calls(fw_block, routine_map, generic_map)
 
         fw_block = fw_block.prune_for(targets, mod_vars + save_vars)
+        if _has_omp(fw_block):
+            _augment_omp_clauses(fw_block, subroutine)
 
         assigned = fw_block.assigned_vars(without_savevar=True)
         assigned = ad_block.assigned_vars(assigned, without_savevar=True)

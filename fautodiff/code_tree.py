@@ -3943,6 +3943,49 @@ class OmpDirective(Node):
         body = self.body.deep_clone() if self.body is not None else None
         return OmpDirective(self.directive, list(self.clauses), body)
 
+    def augment_clauses(self, routine: "Routine") -> "OmpDirective":
+        """Return a copy with *_ad variables added to relevant clauses.
+
+        ``private``, ``shared``, ``firstprivate`` and ``reduction`` clause lists are
+        inspected and corresponding ``*_ad`` variables appended when they are
+        declared or passed as arguments of ``routine``.
+        """
+
+        new_clauses: List[str] = []
+        for clause in self.clauses:
+            m = re.match(r"(\w+)\s*\((.*)\)", clause, re.IGNORECASE)
+            if not m:
+                new_clauses.append(clause)
+                continue
+            key, body = m.group(1), m.group(2)
+            low_key = key.lower()
+            vars: List[str]
+            if low_key in ("private", "shared", "firstprivate"):
+                vars = [v.strip() for v in body.split(',') if v.strip()]
+                added: List[str] = []
+                for v in vars:
+                    ad = f"{v}{AD_SUFFIX}"
+                    if (ad in routine.args or routine.is_declared(ad)) and ad not in vars:
+                        added.append(ad)
+                vars.extend(added)
+                new_clauses.append(f"{key}({', '.join(vars)})")
+                continue
+            if low_key == "reduction":
+                m2 = re.match(r"([^:]+):(.*)", body)
+                if m2:
+                    op = m2.group(1).strip()
+                    vars = [v.strip() for v in m2.group(2).split(',') if v.strip()]
+                    added: List[str] = []
+                    for v in vars:
+                        ad = f"{v}{AD_SUFFIX}"
+                        if (ad in routine.args or routine.is_declared(ad)) and ad not in vars:
+                            added.append(ad)
+                    vars.extend(added)
+                    new_clauses.append(f"{key}({op}:{', '.join(vars)})")
+                    continue
+            new_clauses.append(clause)
+        return OmpDirective(self.directive, new_clauses, self.body)
+
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         clause = f" {' '.join(self.clauses)}" if self.clauses else ""
