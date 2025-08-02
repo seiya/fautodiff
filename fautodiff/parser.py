@@ -594,6 +594,28 @@ def _parse_omp_directive(text: str) -> Tuple[bool, str, List[str]]:
     directive = " ".join(directive_tokens)
     return end, directive, clauses
 
+
+# OpenMP directives that do not expect a paired ``end`` directive.
+_OMP_STANDALONE_DIRECTIVES = {
+    "barrier",
+    "flush",
+    "taskwait",
+    "taskyield",
+}
+
+
+# OpenMP directives where the body is the following Fortran statement and
+# the ``end`` directive is optional (e.g. ``!$omp do``).
+_OMP_FOLLOWS_STMT_DIRECTIVES = {
+    "do",
+    "parallel do",
+    "parallel do simd",
+    "do simd",
+    "sections",
+    "parallel sections",
+    "single",
+}
+
 def _parse_decls(
     spec,
     *,
@@ -1207,18 +1229,30 @@ def _parse_routine(content,
             return BlockConstruct(Block(decls_nodes), body)
         if isinstance(stmt, Fortran2008.Block_Nonlabel_Do_Construct):
             idx = 0
+            omp_info = None
             while idx < len(stmt.content) and isinstance(
                 stmt.content[idx], Fortran2003.Comment
             ):
+                text = stmt.content[idx].items[0].strip()
+                if text.lower().startswith("!$omp"):
+                    end, directive, clauses = _parse_omp_directive(text)
+                    if not end:
+                        omp_info = (directive, clauses)
                 idx += 1
             idx += 1
             body = _block(stmt.content[idx:-1], decl_map, type_map)
             if not isinstance(stmt.content[-1], Fortran2003.End_Do_Stmt):
                 raise ValueError("Unexpected error")
-            label = stmt.content[-1].items[1].string if stmt.content[-1].items[1] is not None else None
-            if stmt.content[idx-1].items[1].items[0] is not None:
-                cond = _stmt2op(stmt.content[idx - 1].items[1].items[0], decl_map, type_map)
-                return DoWhile(body, cond, label=label)
+            label = (
+                stmt.content[-1].items[1].string
+                if stmt.content[-1].items[1] is not None
+                else None
+            )
+            if stmt.content[idx - 1].items[1].items[0] is not None:
+                cond = _stmt2op(
+                    stmt.content[idx - 1].items[1].items[0], decl_map, type_map
+                )
+                loop = DoWhile(body, cond, label=label)
             else:
                 itm = stmt.content[idx - 1].items[1].items[1]
                 index = _stmt2op(itm[0], decl_map, type_map)
@@ -1228,7 +1262,12 @@ def _parse_routine(content,
                     step = None
                 else:
                     step = _stmt2op(itm[1][2], decl_map, type_map)
-                return DoLoop(body, index, OpRange([start_val, end_val, step]), label=label)
+                loop = DoLoop(
+                    body, index, OpRange([start_val, end_val, step]), label=label
+                )
+            if omp_info is not None:
+                return OmpDirective(omp_info[0], omp_info[1], loop)
+            return loop
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return Statement("return")
         if isinstance(stmt, Fortran2003.Exit_Stmt):
@@ -1289,6 +1328,21 @@ def _parse_routine(content,
                     end, directive, clauses = _parse_omp_directive(text)
                     if end:
                         i += 1
+                        continue
+                    dir_norm = directive.split("(")[0].strip().lower()
+                    if dir_norm in _OMP_STANDALONE_DIRECTIVES:
+                        blk.append(OmpDirective(directive, clauses))
+                        i += 1
+                        continue
+                    if dir_norm in _OMP_FOLLOWS_STMT_DIRECTIVES:
+                        i += 1
+                        if i < len(body_list):
+                            st2 = body_list[i]
+                            node = _parse_stmt(st2, decl_map, type_map)
+                            blk.append(OmpDirective(directive, clauses, node))
+                            i += 1
+                        else:
+                            blk.append(OmpDirective(directive, clauses))
                         continue
                     body, i = _parse_omp_region(body_list, i + 1, decl_map, type_map, directive)
                     blk.append(OmpDirective(directive, clauses, body))

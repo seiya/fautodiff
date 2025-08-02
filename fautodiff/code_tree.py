@@ -3949,6 +3949,29 @@ class OmpDirective(Node):
         body = self.body.deep_clone() if self.body is not None else None
         return OmpDirective(self.directive, list(self.clauses), body)
 
+    def insert_before(self, id: int, node: "Node"):
+        if self.body is None:
+            raise NotImplementedError("OmpDirective has no body")
+        if isinstance(self.body, Block):
+            self.body.insert_before(id, node)
+            return
+        if self.body.get_id() == id:
+            self.body = Block([node, self.body])
+            self.body.set_parent(self)
+            return
+        self.body.insert_before(id, node)
+
+    def insert_begin(self, node: "Node"):
+        if self.body is None:
+            self.body = Block([node])
+            self.body.set_parent(self)
+            return
+        if isinstance(self.body, Block):
+            self.body.insert_begin(node)
+            return
+        self.body = Block([node, self.body])
+        self.body.set_parent(self)
+
     def augment_clauses(self, routine: Routine) -> "OmpDirective":
         """Return a copy with *_ad variables added to relevant clauses.
 
