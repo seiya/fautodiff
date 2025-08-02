@@ -30,7 +30,7 @@ contains
     real :: y
     real :: a_save_13_ad
 
-    call fautodiff_stack_r4%pop(a)
+    call fautodiff_stack_pop_r(a)
     y = (c + x) * a
     a_save_13_ad = a
     a = a + x
@@ -48,7 +48,7 @@ contains
 
   subroutine inc_and_use_fwd_rev_ad()
 
-    call fautodiff_stack_r4%push(a)
+    call fautodiff_stack_push_r(a)
 
     return
   end subroutine inc_and_use_fwd_rev_ad

@@ -13,6 +13,8 @@ module fautodiff_stack
   public :: fautodiff_stack_i
   public :: fautodiff_stack_l
   public :: fautodiff_stack_p
+  public :: fautodiff_stack_push_r
+  public :: fautodiff_stack_pop_r
 
   integer, parameter :: DEFAULT_PAGE_SIZE = 1024 * 1024
   integer, parameter :: MAX_PAGE_NUM_LARGE = 1024 * 1024
@@ -141,6 +143,13 @@ module fautodiff_stack
   type(fautodiff_stack_i_t), save :: fautodiff_stack_i
   type(fautodiff_stack_l_t), save :: fautodiff_stack_l
   type(fautodiff_stack_p_t), save :: fautodiff_stack_p
+
+  interface fautodiff_stack_push_r
+    module procedure fautodiff_stack_push_r4, fautodiff_stack_push_r8
+  end interface
+  interface fautodiff_stack_pop_r
+    module procedure fautodiff_stack_pop_r4, fautodiff_stack_pop_r8
+  end interface
 
 contains
 
@@ -1344,5 +1353,73 @@ contains
     call c_f_pointer(self%ary(self%pos), data, [self%dims(1, self%pos), self%dims(2, self%pos), self%dims(3, self%pos)])
     return
   end subroutine pop_p_r8_3d
+
+  subroutine fautodiff_stack_push_r4(data)
+    real, intent(in) :: data(..)
+    select rank(data)
+    rank(0)
+      call fautodiff_stack_r4%push(data)
+    rank(1)
+      call fautodiff_stack_r4%push(data)
+    rank(2)
+      call fautodiff_stack_r4%push(data)
+    rank(3)
+      call fautodiff_stack_r4%push(data)
+    rank default
+      print *, 'Rank larger than 3 is not supported'
+      error stop 1
+    end select
+  end subroutine fautodiff_stack_push_r4
+
+  subroutine fautodiff_stack_pop_r4(data)
+    real, intent(out) :: data(..)
+    select rank(data)
+    rank(0)
+      call fautodiff_stack_r4%pop(data)
+    rank(1)
+      call fautodiff_stack_r4%pop(data)
+    rank(2)
+      call fautodiff_stack_r4%pop(data)
+    rank(3)
+      call fautodiff_stack_r4%pop(data)
+    rank default
+      print *, 'Rank larger than 3 is not supported'
+      error stop 1
+    end select
+  end subroutine fautodiff_stack_pop_r4
+
+  subroutine fautodiff_stack_push_r8(data)
+    real(8), intent(in) :: data(..)
+    select rank(data)
+    rank(0)
+      call fautodiff_stack_r8%push(data)
+    rank(1)
+      call fautodiff_stack_r8%push(data)
+    rank(2)
+      call fautodiff_stack_r8%push(data)
+    rank(3)
+      call fautodiff_stack_r8%push(data)
+    rank default
+      print *, 'Rank larger than 3 is not supported'
+      error stop 1
+    end select
+  end subroutine fautodiff_stack_push_r8
+
+  subroutine fautodiff_stack_pop_r8(data)
+    real(8), intent(out) :: data(..)
+    select rank(data)
+    rank(0)
+      call fautodiff_stack_r8%pop(data)
+    rank(1)
+      call fautodiff_stack_r8%pop(data)
+    rank(2)
+      call fautodiff_stack_r8%pop(data)
+    rank(3)
+      call fautodiff_stack_r8%pop(data)
+    rank default
+      print *, 'Rank larger than 3 is not supported'
+      error stop 1
+    end select
+  end subroutine fautodiff_stack_pop_r8
 
 end module fautodiff_stack

@@ -583,13 +583,13 @@ class TestPushPop(unittest.TestCase):
     def test_push(self):
         var = OpVar("a")
         node = PushPop(var, 100)
-        self.assertEqual(render_program(Block([node])), "call fautodiff_stack_r4%push(a)\n")
+        self.assertEqual(render_program(Block([node])), "call fautodiff_stack_push_r(a)\n")
         self.assertEqual({str(v) for v in node.iter_ref_vars()}, {"a"})
 
     def test_pop(self):
         var = OpVar("a")
         node = PushPop(var, 100).to_load()
-        self.assertEqual(render_program(Block([node])), "call fautodiff_stack_r4%pop(a)\n")
+        self.assertEqual(render_program(Block([node])), "call fautodiff_stack_pop_r(a)\n")
         self.assertEqual({str(v) for v in node.iter_assign_vars()}, {"a"})
 
 
