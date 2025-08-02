@@ -627,7 +627,9 @@ def _parse_decls(
     allow_access: bool = False,
     default_access: Optional[str] = None,
     module_map: Optional[dict] = None,
+    module_asts: Optional[dict] = None,
     search_dirs: Optional[List[str]] = None,
+    src_name: Optional[str] = None,
     omp_pending: Optional[List[OmpDirective]] = None,
 ) -> Tuple[List[Use], List[Node], List[Node]]:
     """Return declarations parsed from a specification part."""
@@ -663,7 +665,15 @@ def _parse_decls(
                 only = [s.string for s in item.items[4].items]
             mod_name = item.items[2].string
             uses.append(Use(mod_name, only=only))
-            _search_use(mod_name, only, decl_map, module_map, search_dirs)
+            _search_use(
+                mod_name,
+                only,
+                decl_map,
+                module_map,
+                search_dirs,
+                module_asts=module_asts,
+                src_name=src_name,
+            )
             continue
         if isinstance(item, Fortran2003.Access_Stmt):
             if not allow_access:
@@ -795,8 +805,27 @@ def _parse_decls(
         raise RuntimeError(f"Unsupported statement: {type(item)} {item}")
     return (uses, decls, nodes)
 
-def _search_use(name: str, only: Optional[List[str]], decl_map: dict, module_map: dict, search_dirs: Optional[List[str]]):
+def _search_use(
+    name: str,
+    only: Optional[List[str]],
+    decl_map: dict,
+    module_map: Optional[dict],
+    search_dirs: Optional[List[str]],
+    *,
+    module_asts: Optional[dict] = None,
+    src_name: Optional[str] = None,
+):
     used = module_map.get(name) if module_map else None
+    if (used is None or used.decls is None) and module_asts and name in module_asts:
+        used = _parse_module_ast(
+            module_asts[name],
+            src_name,
+            module_map=module_map,
+            module_asts=module_asts,
+            search_dirs=search_dirs,
+        )
+        if module_map is not None:
+            module_map[name] = used
     if used and used.decls is not None:
         for d in used.decls:
             if only is None or (d.name in only):
@@ -808,112 +837,143 @@ def _search_use(name: str, only: Optional[List[str]], decl_map: dict, module_map
         for vname, info in vars_map.items():
             if only is None or vname in only:
                 decl_map[vname] = Declaration(
-                        vname,
-                        info["typename"],
-                        info.get("kind"),
-                        dims=(
-                            tuple(info["dims"])
-                            if info.get("dims") is not None
-                            else None
-                        ),
-                        intent=None,
-                        parameter=info.get("parameter", False),
-                        constant=info.get("constant", False),
-                        init_val=info.get("init_val"),
-                        access=info.get("access"),
-                        pointer=info.get("pointer", False),
-                        optional=info.get("optional", False),
-                        declared_in="use",
+                    vname,
+                    info["typename"],
+                    info.get("kind"),
+                    dims=(
+                        tuple(info["dims"])
+                        if info.get("dims") is not None
+                        else None
+                    ),
+                    intent=None,
+                    parameter=info.get("parameter", False),
+                    constant=info.get("constant", False),
+                    init_val=info.get("init_val"),
+                    access=info.get("access"),
+                    pointer=info.get("pointer", False),
+                    optional=info.get("optional", False),
+                    declared_in="use",
+                )
+
+
+def _parse_module_ast(
+    module,
+    src_name: str,
+    *,
+    search_dirs: Optional[List[str]] = None,
+    decl_map: Optional[dict] = None,
+    type_map: Optional[dict] = None,
+    module_map: Optional[dict] = None,
+    module_asts: Optional[dict] = None,
+) -> Module:
+    name = _stmt_name(module.content[0])
+    if module_map is not None and name in module_map and module_map[name].decls is not None:
+        return module_map[name]
+    mod_node = module_map.get(name) if module_map is not None else None
+    if mod_node is None:
+        mod_node = Module(name)
+        if module_map is not None:
+            module_map[name] = mod_node
+
+    if decl_map is not None:
+        decl_map_new = decl_map.copy()
+    else:
+        decl_map_new = {}
+    if type_map is not None:
+        type_map_new = type_map.copy()
+    else:
+        type_map_new = {}
+    module_directives = {}
+    allocate_vars: List[OpVar] = []
+
+    for part in module.content:
+        if isinstance(part, Fortran2003.Module_Stmt):
+            continue
+        if isinstance(part, Fortran2003.End_Module_Stmt):
+            break
+        if isinstance(part, Fortran2003.Comment):
+            continue
+        if isinstance(part, Fortran2003.Specification_Part):
+            uses, decls, nodes = _parse_decls(
+                part,
+                directives=module_directives,
+                decl_map=decl_map_new,
+                type_map=type_map_new,
+                declared_in="module",
+                allow_intent=False,
+                allow_access=True,
+                default_access="public",
+                module_map=module_map,
+                module_asts=module_asts,
+                search_dirs=search_dirs,
+                src_name=src_name,
+            )
+            if "CONSTANT_VARS" in module_directives:
+                for n in module_directives["CONSTANT_VARS"]:
+                    if n in decl_map_new:
+                        decl_map_new[n].constant = True
+            if uses:
+                mod_node.uses = Block(uses)
+            if decls:
+                mod_node.decls = Block(decls)
+            if nodes:
+                mod_node.body = Block(nodes)
+            continue
+        if isinstance(part, Fortran2003.Module_Subprogram_Part):
+            for c in part.content:
+                if isinstance(c, Fortran2003.Contains_Stmt):
+                    continue
+                if isinstance(c, Fortran2003.Comment):
+                    continue
+                if isinstance(
+                    c,
+                    (
+                        Fortran2003.Function_Subprogram,
+                        Fortran2003.Subroutine_Subprogram,
+                    ),
+                ):
+                    mod_node.routines.append(
+                        _parse_routine(
+                            content=c,
+                            src_name=src_name,
+                            allocate_vars=allocate_vars,
+                            decl_map_mod=decl_map_new,
+                            type_map_mod=type_map_new,
+                            module_map=module_map,
+                            module_asts=module_asts,
+                            search_dirs=search_dirs,
+                        )
                     )
+                else:
+                    print(type(c), c)
+                    print(c.items)
+                    raise RuntimeError(
+                        "Unsupported  statement: {type(c)} {c.string}"
+                    )
+        else:
+            print(type(part), part)
+            raise RuntimeError("Unsupported statement: {type(part)} {part.string}")
+    mod_node.directives = module_directives
+    return mod_node
 
 def _parse_from_reader(reader, src_name, *, search_dirs=None, decl_map=None, type_map=None) -> List[Module]:
     factory = ParserFactory().create(std="f2008")
     ast = factory(reader)
-    output = []
-    warnings = []
-    module_map = {}
-    for module in walk(ast, Fortran2003.Module):
-        name = _stmt_name(module.content[0])
-        mod_node = Module(name)
+    module_list = list(walk(ast, Fortran2003.Module))
+    module_asts = { _stmt_name(m.content[0]): m for m in module_list }
+    output: List[Module] = []
+    module_map: dict = {}
+    for m in module_list:
+        mod_node = _parse_module_ast(
+            m,
+            src_name,
+            search_dirs=search_dirs,
+            decl_map=decl_map,
+            type_map=type_map,
+            module_map=module_map,
+            module_asts=module_asts,
+        )
         output.append(mod_node)
-        module_map[name] = mod_node
-
-        if decl_map is not None:
-            decl_map_new = decl_map.copy()
-        else:
-            decl_map_new = {}
-        if type_map is not None:
-            type_map_new = type_map.copy()
-        else:
-            type_map_new = {}
-        module_directives = {}
-        allocate_vars: List[OpVar] = []
-
-        for part in module.content:
-            if isinstance(part, Fortran2003.Module_Stmt):
-                continue
-            if isinstance(part, Fortran2003.End_Module_Stmt):
-                break
-            if isinstance(part, Fortran2003.Comment):
-                continue
-            if isinstance(part, Fortran2003.Specification_Part):
-                uses, decls, nodes = _parse_decls(
-                            part,
-                            directives=module_directives,
-                            decl_map=decl_map_new,
-                            type_map=type_map_new,
-                            declared_in="module",
-                            allow_intent=False,
-                            allow_access=True,
-                            default_access="public",
-                            module_map=module_map,
-                            search_dirs=search_dirs,
-                        )
-                if "CONSTANT_VARS" in module_directives:
-                    for n in module_directives["CONSTANT_VARS"]:
-                        if n in decl_map_new:
-                            decl_map_new[n].constant = True
-                if uses:
-                    mod_node.uses = Block(uses)
-                if decls:
-                    mod_node.decls = Block(decls)
-                if nodes:
-                    mod_node.body = Block(nodes)
-                continue
-            if isinstance(part, Fortran2003.Module_Subprogram_Part):
-                for c in part.content:
-                    if isinstance(c, Fortran2003.Contains_Stmt):
-                        continue
-                    if isinstance(c, Fortran2003.Comment):
-                        continue
-                    if isinstance(
-                        c,
-                        (
-                            Fortran2003.Function_Subprogram,
-                            Fortran2003.Subroutine_Subprogram,
-                        ),
-                    ):
-                        mod_node.routines.append(
-                            _parse_routine(
-                                content=c,
-                                src_name=src_name,
-                                allocate_vars=allocate_vars,
-                                decl_map_mod=decl_map_new,
-                                type_map_mod=type_map_new,
-                                module_map=module_map,
-                                search_dirs=search_dirs,
-                            )
-                        )
-                    else:
-                        print(type(c), c)
-                        print(c.items)
-                        raise RuntimeError(
-                            "Unsupported  statement: {type(c)} {c.string}"
-                        )
-            else:
-                print(type(part), part)
-                raise RuntimeError("Unsupported statement: {type(part)} {part.string}")
-        mod_node.directives = module_directives
     return output
 
 
@@ -938,7 +998,8 @@ def _parse_routine(content,
                    decl_map_mod: dict,
                    type_map_mod: dict,
                    module_map: dict,
-                   search_dirs: Optional[List[str]]=None
+                   module_asts: Optional[dict] = None,
+                   search_dirs: Optional[List[str]] = None
                    ):
     """Return node tree correspoinding to the input AST"""
 
@@ -1389,7 +1450,9 @@ def _parse_routine(content,
                 allow_intent=True,
                 allow_access=False,
                 module_map=module_map,
+                module_asts=module_asts,
                 search_dirs=search_dirs,
+                src_name=src_name,
                 omp_pending=pending_omp,
             )
             routine.decls = Block(uses + decls + nodes)

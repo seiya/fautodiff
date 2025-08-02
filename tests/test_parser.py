@@ -509,6 +509,35 @@ class TestParser(unittest.TestCase):
         var_a = routine.get_var("a")
         self.assertEqual(var_a.declared_in, "use")
 
+    def test_use_module_defined_later(self):
+        src = textwrap.dedent(
+            """
+            module modb
+              use moda
+              implicit none
+            contains
+              subroutine foo(x)
+                integer, intent(out) :: x
+                x = K
+              end subroutine foo
+            end module modb
+
+            module moda
+              implicit none
+              integer, parameter :: K = 3
+            contains
+              subroutine dummy()
+              end subroutine dummy
+            end module moda
+            """
+        )
+        modules = parser.parse_src(src)
+        routine = modules[0].routines[0]
+        self.assertTrue(routine.is_declared("K"))
+        decl = routine.decl_map.get("K")
+        self.assertIsNotNone(decl)
+        self.assertTrue(decl.parameter)
+
     def test_parse_pointer_decl(self):
         src = textwrap.dedent(
             """
