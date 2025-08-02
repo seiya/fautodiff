@@ -151,6 +151,12 @@ class TestGenerator(unittest.TestCase):
         variables = data.get("variables", {})
         self.assertIn("c", variables)
 
+    def test_block_construct(self):
+        code_tree.Node.reset()
+        generated = generator.generate_ad("examples/block_construct.f90", warn=False)
+        expected = Path("examples/block_construct_ad.f90").read_text()
+        self.assertEqual(generated, expected)
+
     def test_fadmod_variable_defaults(self):
         code_tree.Node.reset()
         fadmod = Path("module_vars.fadmod")

@@ -37,6 +37,7 @@ from .code_tree import (
     SelectBlock,
     WhereBlock,
     ForallBlock,
+    BlockConstruct,
     Allocate,
     Deallocate,
     Statement,
