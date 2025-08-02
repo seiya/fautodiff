@@ -1050,7 +1050,7 @@ def _generate_ad_subroutine(
     if (ad_block is not None) and (not ad_block.is_effectively_empty()):
         # initialize ad_var if necessary
         vars = ad_block.required_vars(
-            VarList([OpVar(var.name) for var in out_grad_args + save_ad_vars]),
+            VarList(out_grad_args + save_ad_vars),
             without_savevar=True
         )
         if reverse and not fw_block.is_effectively_empty():
