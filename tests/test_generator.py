@@ -346,8 +346,6 @@ class TestGenerator(unittest.TestCase):
         modules = parser.parse_src(src)
         with patch('fautodiff.generator.parser.parse_file', return_value=modules):
             generated = generator.generate_ad("omp.f90", warn=False)
-        if "!$omp" not in generated:
-            self.skipTest("OpenMP directives not preserved")
         self.assertIn("!$omp parallel do reduction(+:x, x_ad)", generated)
 
     def test_save_variable_treated_like_inout(self):

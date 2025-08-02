@@ -1,6 +1,8 @@
 module omp_loops
   implicit none
+
 contains
+
   subroutine sum_loop(n, x, y, s)
     integer, intent(in) :: n
     real, intent(in) :: x(n)
@@ -10,12 +12,14 @@ contains
 
     y = 0.0
     s = 0.0
-!$omp parallel do reduction(+:s)
+    !$omp parallel do reduction(+:s)
     do i = 1, n
       y(i) = x(i)
       s = s + y(i)
     end do
-!$omp end parallel do
+    !$omp end parallel do
+
+    return
   end subroutine sum_loop
 
   subroutine stencil_loop(n, x, y)
@@ -23,7 +27,8 @@ contains
     real, intent(in) :: x(n)
     real, intent(out) :: y(n)
     integer :: i, in, ip
-!$omp parallel do private(in, ip)
+
+   !$omp parallel do private(in, ip)
     do i = 1, n
       in = i - 1
       ip = i + 1

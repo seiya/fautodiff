@@ -99,10 +99,10 @@ contains
     real, intent(inout) :: x_ad
     real, intent(in)  :: y
     real, intent(in)  :: y_ad
-    real :: foo_arg1_save_40_ad
+    real :: foo_arg1_save_45_ad
 
-    foo_arg1_save_40_ad = y_ad * 2.0 ! call foo(x, y * 2.0)
-    call foo_fwd_ad(x, x_ad, y * 2.0, foo_arg1_save_40_ad) ! call foo(x, y * 2.0)
+    foo_arg1_save_45_ad = y_ad * 2.0 ! call foo(x, y * 2.0)
+    call foo_fwd_ad(x, x_ad, y * 2.0, foo_arg1_save_45_ad) ! call foo(x, y * 2.0)
 
     return
   end subroutine arg_operation_fwd_ad
@@ -112,10 +112,10 @@ contains
     real, intent(inout) :: x_ad
     real, intent(in)  :: y
     real, intent(out) :: y_ad
-    real :: foo_arg1_save_40_ad
+    real :: foo_arg1_save_45_ad
 
-    call foo_rev_ad(x, x_ad, y * 2.0, foo_arg1_save_40_ad) ! call foo(x, y * 2.0)
-    y_ad = foo_arg1_save_40_ad * 2.0 ! call foo(x, y * 2.0)
+    call foo_rev_ad(x, x_ad, y * 2.0, foo_arg1_save_45_ad) ! call foo(x, y * 2.0)
+    y_ad = foo_arg1_save_45_ad * 2.0 ! call foo(x, y * 2.0)
 
     return
   end subroutine arg_operation_rev_ad
@@ -125,11 +125,11 @@ contains
     real, intent(inout) :: x_ad
     real, intent(in)  :: y
     real, intent(in)  :: y_ad
-    real :: foo_arg1_save_48_ad
-    real :: foo_arg1_save_48
+    real :: foo_arg1_save_54_ad
+    real :: foo_arg1_save_54
 
-    call bar_fwd_ad(y, y_ad, foo_arg1_save_48, foo_arg1_save_48_ad) ! call foo(x, bar(y))
-    call foo_fwd_ad(x, x_ad, foo_arg1_save_48, foo_arg1_save_48_ad) ! call foo(x, bar(y))
+    call bar_fwd_ad(y, y_ad, foo_arg1_save_54, foo_arg1_save_54_ad) ! call foo(x, bar(y))
+    call foo_fwd_ad(x, x_ad, foo_arg1_save_54, foo_arg1_save_54_ad) ! call foo(x, bar(y))
 
     return
   end subroutine arg_function_fwd_ad
@@ -139,10 +139,10 @@ contains
     real, intent(inout) :: x_ad
     real, intent(in)  :: y
     real, intent(out) :: y_ad
-    real :: foo_arg1_save_48_ad
+    real :: foo_arg1_save_54_ad
 
-    call foo_rev_ad(x, x_ad, bar(y), foo_arg1_save_48_ad) ! call foo(x, bar(y))
-    call bar_rev_ad(y, y_ad, foo_arg1_save_48_ad) ! call foo(x, bar(y))
+    call foo_rev_ad(x, x_ad, bar(y), foo_arg1_save_54_ad) ! call foo(x, bar(y))
+    call bar_rev_ad(y, y_ad, foo_arg1_save_54_ad) ! call foo(x, bar(y))
 
     return
   end subroutine arg_function_rev_ad

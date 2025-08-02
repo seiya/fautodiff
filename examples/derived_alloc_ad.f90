@@ -112,13 +112,13 @@ contains
     integer :: n0_ad
     integer :: i
     integer :: j
-    real :: obj_arr_save_40_ad(m,n)
+    real :: obj_arr_save_43_ad(m,n)
 
     do n0_ad = ubound(obj, 1), lbound(obj, 1), - 1
       call fautodiff_stack_r4%pop(obj(n0_ad)%arr)
     end do
     do j = 1, m
-      obj_arr_save_40_ad(j,1:n) = obj(j)%arr(1:n)
+      obj_arr_save_43_ad(j,1:n) = obj(j)%arr(1:n)
       do i = 1, n
         obj(j)%arr(i) = obj(j)%arr(i) * x + j
       end do
@@ -134,7 +134,7 @@ contains
     end do
     res_ad = 0.0 ! res = 0.0
     do j = m, 1, - 1
-      obj(j)%arr(1:n) = obj_arr_save_40_ad(j,1:n)
+      obj(j)%arr(1:n) = obj_arr_save_43_ad(j,1:n)
       do i = n, 1, - 1
         x_ad = obj_ad(j)%arr_ad(i) * obj(j)%arr(i) + x_ad ! obj(j)%arr(i) = obj(j)%arr(i) * x + j
         obj_ad(j)%arr_ad(i) = obj_ad(j)%arr_ad(i) * x ! obj(j)%arr(i) = obj(j)%arr(i) * x + j

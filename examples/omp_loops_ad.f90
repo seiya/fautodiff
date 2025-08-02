@@ -16,14 +16,14 @@ contains
 
     s_ad = 0.0 ! s = 0.0
     s = 0.0
-!$omp parallel do reduction(+:s, s_ad)
+    !$omp parallel do reduction(+:s, s_ad)
     do i = 1, n
       y_ad(i) = x_ad(i) ! y(i) = x(i)
       y(i) = x(i)
       s_ad = s_ad + y_ad(i) ! s = s + y(i)
       s = s + y(i)
     end do
-!$omp end parallel do
+    !$omp end parallel do
 
     return
   end subroutine sum_loop_fwd_ad
@@ -36,12 +36,12 @@ contains
     real, intent(inout) :: s_ad
     integer :: i
 
-!$omp parallel do
+    !$omp parallel do
     do i = n, 1, - 1
       y_ad(i) = s_ad + y_ad(i) ! s = s + y(i)
       x_ad(i) = y_ad(i) ! y(i) = x(i)
     end do
-!$omp end parallel do
+    !$omp end parallel do
     s_ad = 0.0 ! s = 0.0
     y_ad = 0.0 ! y = 0.0
 
@@ -58,7 +58,7 @@ contains
     integer :: in
     integer :: ip
 
-!$omp parallel do private(in, ip)
+    !$omp parallel do private(in, ip)
     do i = 1, n
       in = i - 1
       ip = i + 1
@@ -70,6 +70,7 @@ contains
       y_ad(i) = x_ad(i) * 2.0 / 4.0 + x_ad(in) / 4.0 + x_ad(ip) / 4.0 ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
       y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
     end do
+    !$omp end parallel do
 
     return
   end subroutine stencil_loop_fwd_ad
