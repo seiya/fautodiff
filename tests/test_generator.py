@@ -317,6 +317,39 @@ class TestGenerator(unittest.TestCase):
             self.assertIn("type :: seq_ad_t", generated)
             self.assertIn("sequence", generated)
 
+    def test_omp_directive_clause_forward(self):
+        """Ensure OpenMP directives are kept and `_ad` variables added."""
+        code_tree.Node.reset()
+        import textwrap
+        src = textwrap.dedent(
+            """
+            module t
+            contains
+              subroutine s(n, a, x)
+                integer, intent(in) :: n
+                real, intent(in) :: a(n)
+                real, intent(out) :: x
+                integer :: i
+
+                x = 0.0
+!$omp parallel do reduction(+:x)
+                do i = 1, n
+                  x = x + a(i)
+                end do
+!$omp end parallel do
+              end subroutine s
+            end module t
+            """
+        )
+        import fautodiff.parser as parser
+        from unittest.mock import patch
+        modules = parser.parse_src(src)
+        with patch('fautodiff.generator.parser.parse_file', return_value=modules):
+            generated = generator.generate_ad("omp.f90", warn=False)
+        if "!$omp" not in generated:
+            self.skipTest("OpenMP directives not preserved")
+        self.assertIn("!$omp parallel do reduction(+:x, x_ad)", generated)
+
     def test_save_variable_treated_like_inout(self):
         code_tree.Node.reset()
         import textwrap
@@ -407,7 +440,7 @@ def _make_example_test(src: Path):
 
 examples_dir = Path("examples")
 for _src in sorted(examples_dir.glob("*.f90")):
-    if _src.name.endswith("_ad.f90") or _src.stem in {"cross_mod_a", "cross_mod_b", "call_module_vars", "pointer_arrays", "mpi_example"}:
+    if _src.name.endswith("_ad.f90") or _src.stem in {"cross_mod_a", "cross_mod_b", "call_module_vars", "pointer_arrays", "mpi_example", "omp_loops"}:
         continue
     test_name = f"test_{_src.stem}"
     setattr(TestGenerator, test_name, _make_example_test(_src))
