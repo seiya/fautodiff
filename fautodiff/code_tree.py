@@ -572,7 +572,9 @@ class Node:
                 intents=ufunc.intents,
                 result=result,
                 info=self.info,
+                org_node=self,
             )
+            callstmt.parent = self.parent
             # Generate reverse-mode AD for the function call
             call_nodes = callstmt.generate_ad(
                 saved_vars,
@@ -1100,6 +1102,7 @@ class CallStatement(Node):
     ad_info: Optional[str] = field(repr=False, default=None)
     associated_vars: Optional[List[OpVar]] = field(default=None)
     donot_prune: bool = False
+    org_node: Optional[Node] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -1317,30 +1320,6 @@ class CallStatement(Node):
             args_key = "args_fwd_ad"
             intents_key = "intents_fwd_ad"
         ad_args = CallStatement.rename_args(ordered, arg_info["args"], arg_info[args_key], args_new, reverse)
-        # for ad_arg in arg_info[args_key]:
-        #     if ad_arg.endswith(AD_SUFFIX):
-        #         arg = ad_arg.removesuffix(AD_SUFFIX)
-        #     else:
-        #         arg = ad_arg
-        #     i = arg_info["args"].index(arg)
-        #     var = args[i]
-        #     if not reverse and isinstance(var, OpFuncUser):
-        #         var = args_new[i]
-        #     if ad_arg.endswith(AD_SUFFIX):
-        #         var = args_new[i]
-        #         if var.is_constant:
-        #             ad_name = var.name
-        #         else:
-        #             ad_name = f"{var.name}{AD_SUFFIX}"
-        #         var = OpVar(
-        #             name=ad_name,
-        #             index=var.index,
-        #             kind=var.kind,
-        #             typename=var.typename,
-        #             ad_target=var.ad_target,
-        #             is_constant=var.is_constant,
-        #         )
-        #     ad_args.append(var)
         if self.associated_vars is None:
             associated_vars = None
         else:
@@ -1391,7 +1370,11 @@ class CallStatement(Node):
             blocks = []
             for var in ad_call.assigned_vars():
                 if not var.name.endswith(AD_SUFFIX):
-                    load = self._save_vars(var, saved_vars)
+                    if self.org_node is not None:
+                        node = self.org_node
+                    else:
+                        node = self
+                    load = node._save_vars(var, saved_vars)
                     loads.append(load)
                     blocks.insert(0, load)
             blocks.extend(ad_nodes)
