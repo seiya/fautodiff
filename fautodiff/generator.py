@@ -38,6 +38,7 @@ from .code_tree import (
     WhereBlock,
     ForallBlock,
     BlockConstruct,
+    OmpDirective,
     Allocate,
     Deallocate,
     Statement,
@@ -79,6 +80,35 @@ def _contains_pushpop(node) -> bool:
         if _contains_pushpop(child):
             return True
     return False
+
+
+def _strip_sequential_omp(node: Node, warnings: Optional[List[str]], *, reverse: bool) -> Node:
+    """Remove OpenMP directives for loops with modified indices in reverse mode."""
+
+    if isinstance(node, Block):
+        new_children = []
+        for child in list(node.iter_children()):
+            new_child = _strip_sequential_omp(child, warnings, reverse=reverse)
+            new_children.append(new_child)
+        node._children = new_children
+        return node
+
+    if isinstance(node, OmpDirective):
+        body = node.body
+        if body is not None:
+            body = _strip_sequential_omp(body, warnings, reverse=reverse)
+            if reverse and isinstance(body, DoLoop) and body.has_modified_indices():
+                if warnings is not None:
+                    warnings.append(
+                        "Dropped OpenMP directive: loop runs sequentially in reverse mode due to index dependency"
+                    )
+                return body
+            node.body = body
+        return node
+
+    for child in list(getattr(node, "iter_children", lambda: [])()):
+        _strip_sequential_omp(child, warnings, reverse=reverse)
+    return node
 
 
 def _add_fwd_rev_calls(node, routine_map: dict, generic_map:dict, donot_prune: bool = False) -> None:
@@ -944,6 +974,7 @@ def _generate_ad_subroutine(
             ad_block.append(node)
 
     if reverse:
+        _strip_sequential_omp(ad_block, warnings, reverse=True)
         targets = ad_block.required_vars()
 
         #print(render_program(ad_block))

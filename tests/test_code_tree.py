@@ -748,6 +748,42 @@ class TestLoopAnalysis(unittest.TestCase):
         self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "c", "n"})
         self.assertEqual(set(loop.recurrent_vars()), {"a"})
 
+    def test_has_modified_indices_simple(self):
+        i = OpVar("i")
+        a = OpVar("a", index=[i])
+        b = OpVar("b", index=[i + OpInt(1)])
+        body = Block([Assignment(a, b)])
+        loop = DoLoop(body, i, OpRange([OpInt(1), OpVar("n")]))
+        self.assertTrue(loop.has_modified_indices())
+
+    def test_has_modified_indices_alias(self):
+        i = OpVar("i")
+        ip = OpVar("ip")
+        body = Block([
+            Assignment(ip, i + OpInt(1)),
+            Assignment(OpVar("a", index=[i]), OpVar("b", index=[ip]))
+        ])
+        loop = DoLoop(body, i, OpRange([OpInt(1), OpVar("n")]))
+        self.assertTrue(loop.has_modified_indices())
+
+    def test_has_modified_indices_none(self):
+        i = OpVar("i")
+        body = Block([
+            Assignment(OpVar("a", index=[i]), OpVar("b", index=[i]))
+        ])
+        loop = DoLoop(body, i, OpRange([OpInt(1), OpVar("n")]))
+        self.assertFalse(loop.has_modified_indices())
+
+    def test_has_modified_indices_simple_alias(self):
+        i = OpVar("i")
+        ip = OpVar("ip")
+        body = Block([
+            Assignment(ip, i),
+            Assignment(OpVar("a", index=[ip]), OpVar("b", index=[ip]))
+        ])
+        loop = DoLoop(body, i, OpRange([OpInt(1), OpVar("n")]))
+        self.assertFalse(loop.has_modified_indices())
+
     def test_nested_loop(self):
         i = OpVar("i")
         j = OpVar("j")
