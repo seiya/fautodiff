@@ -3862,6 +3862,45 @@ class BlockConstruct(Node):
 
 
 @dataclass
+class OmpDirective(Node):
+    """Representation of an OpenMP directive."""
+
+    directive: str
+    clauses: List[str] = field(default_factory=list)
+    body: Optional[Node] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.body is not None:
+            self.body.set_parent(self)
+
+    def iter_children(self) -> Iterator[Node]:
+        if self.body is not None:
+            yield self.body
+
+    def copy(self) -> "OmpDirective":
+        return OmpDirective(self.directive, list(self.clauses), self.body)
+
+    def deep_clone(self) -> "OmpDirective":
+        body = self.body.deep_clone() if self.body is not None else None
+        return OmpDirective(self.directive, list(self.clauses), body)
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        clause = f" {' '.join(self.clauses)}" if self.clauses else ""
+        lines = [f"{space}!$omp {self.directive}{clause}\n"]
+        if self.body is not None:
+            lines.extend(self.body.render(indent))
+            lines.append(f"{space}!$omp end {self.directive}\n")
+        return lines
+
+    def build_do_index_list(self, index_list: List[str]) -> None:
+        self.do_index_list = index_list
+        if self.body is not None:
+            self.body.build_do_index_list(index_list)
+
+
+@dataclass
 class ForallBlock(Node):
     """A ``forall`` construct."""
 
