@@ -133,6 +133,10 @@ class TestFortranADCode(unittest.TestCase):
     def test_where_forall(self):
         self._run_test('where_forall', ['where_example', 'forall_example'])
 
+    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
+    def test_omp_loops(self):
+        self._run_test('omp_loops', ['sum_loop', 'stencil_loop'])
+
 
 
 if __name__ == '__main__':

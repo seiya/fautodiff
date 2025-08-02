@@ -3,7 +3,7 @@ OUTDIR ?= $(shell pwd)
 FC = gfortran
 MPIFC ?= mpifort
 FFLAGS = -O2 -ffree-line-length-none \
-         -ffpe-trap=invalid,zero,overflow,underflow -fbounds-check -finit-real=nan -g -fbacktrace
+         -ffpe-trap=invalid,zero,overflow,underflow -fbounds-check -finit-real=nan -g -fbacktrace -fopenmp
 
 HELPER_DIR = ../../fortran_modules
 MOD_DIR = ../../examples
@@ -18,7 +18,7 @@ PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_cont
            run_intrinsic_func.out run_real_kind.out run_save_vars.out run_store_vars.out \
            run_directives.out run_parameter_var.out run_module_vars.out run_call_module_vars.out run_allocate_vars.out \
            run_exit_cycle.out run_pointer_arrays.out run_derived_alloc.out run_mpi_example.out \
-                   run_stack.out run_where_forall.out
+                   run_stack.out run_where_forall.out run_omp_loops.out
 PROGRAMS = $(addprefix $(OUTDIR)/,$(PROGRAM_NAMES))
 
 .PHONY: all clean
@@ -27,10 +27,10 @@ all: $(PROGRAMS)
 
 
 $(OUTDIR)/run_%.out: $(OUTDIR)/run_%.o
-	$(FC) -o $@ $^
+	$(FC) $(FFLAGS) -o $@ $^
 
 $(OUTDIR)/run_mpi_example.out: $(OUTDIR)/run_mpi_example.o
-	$(MPIFC) -o $@ $^
+	$(MPIFC) $(FFLAGS) -o $@ $^
 
 $(OUTDIR)/run_%.o: run_%.f90
 	$(FC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
@@ -68,6 +68,8 @@ $(OUTDIR)/run_derived_alloc.o: $(OUTDIR)/derived_alloc.o $(OUTDIR)/derived_alloc
 $(OUTDIR)/run_mpi_example.o: $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
 $(OUTDIR)/run_where_forall.o: $(OUTDIR)/where_forall.o $(OUTDIR)/where_forall_ad.o
 
+$(OUTDIR)/run_omp_loops.o: $(OUTDIR)/omp_loops.o $(OUTDIR)/omp_loops_ad.o
+
 $(OUTDIR)/run_fautodiff_stack.o: $(OUTDIR)/fautodiff_stack.o
 
 
@@ -90,6 +92,8 @@ $(OUTDIR)/run_pointer_arrays.out: $(OUTDIR)/run_pointer_arrays.o $(OUTDIR)/point
 $(OUTDIR)/run_derived_alloc.out: $(OUTDIR)/run_derived_alloc.o $(OUTDIR)/derived_alloc.o $(OUTDIR)/derived_alloc_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_mpi_example.out: $(OUTDIR)/run_mpi_example.o $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
 $(OUTDIR)/run_where_forall.out: $(OUTDIR)/run_where_forall.o $(OUTDIR)/where_forall.o $(OUTDIR)/where_forall_ad.o
+
+$(OUTDIR)/run_omp_loops.out: $(OUTDIR)/run_omp_loops.o $(OUTDIR)/omp_loops.o $(OUTDIR)/omp_loops_ad.o
 
 $(OUTDIR)/run_fautodiff_stack.out: $(OUTDIR)/run_fautodiff_stack.o $(OUTDIR)/fautodiff_stack.o
 
