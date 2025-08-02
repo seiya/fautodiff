@@ -510,8 +510,12 @@ class Node:
                 v = var.add_suffix(AD_SUFFIX)
                 if assigned_advars is not None and not v in assigned_advars:
                     continue
-                dev = rhs.derivative(var, target=grad_lhs, info=self.info, warnings=warnings)
+                dev = rhs.derivative(
+                    var, target=grad_lhs, info=self.info, warnings=warnings
+                )
                 term = v * dev
+                if not grad_lhs.is_array() and term.is_array():
+                    term = OpFunc("sum", args=[term])
                 if expr is None:
                     expr = term
                 else:
@@ -521,8 +525,6 @@ class Node:
                 assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
                 assigned_advars.remove(grad_lhs)
             else:
-                if not grad_lhs.is_array() and expr.is_array():
-                    expr = OpFunc("sum", args=[expr])
                 assigns.append(Assignment(grad_lhs, expr, ad_info=ad_info))
                 assigned_advars.push(grad_lhs)
         return assigns
