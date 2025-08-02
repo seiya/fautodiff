@@ -1448,6 +1448,8 @@ def generate_ad(
                     reverse=False,
                 )
                 if sub is not None:
+                    if _has_omp(sub.ad_content):
+                        _augment_omp_clauses(sub.ad_content, sub)
                     mod.routines.append(sub)
                 ad_modules_used.update(mods_called)
             if mode in ("reverse", "both"):
@@ -1462,6 +1464,8 @@ def generate_ad(
                     reverse=True,
                 )
                 if sub is not None:
+                    if _has_omp(sub.ad_content):
+                        _augment_omp_clauses(sub.ad_content, sub)
                     mod.routines.append(sub)
                 ad_modules_used.update(mods_called)
                 if used:
