@@ -19,6 +19,7 @@ from fautodiff.code_tree import (
     DoWhile,
     IfBlock,
     BlockConstruct,
+    OmpDirective,
     render_program
 )
 from fautodiff.operators import (
@@ -1057,6 +1058,31 @@ class TestDoWhile(unittest.TestCase):
         pruned2 = loop.prune_for(VarList([OpVar('c')]))
         self.assertTrue(pruned2.is_effectively_empty())
 
+
+class TestOmpDirective(unittest.TestCase):
+    def test_prune_for_removes_unused_vars(self):
+        a = OpVar("a")
+        b = OpVar("b")
+        c = OpVar("c")
+        d = OpVar("d")
+        body = Block([
+            Assignment(c, c + OpInt(1)),
+            Assignment(a, OpInt(1)),
+            Assignment(b, OpInt(2)),
+        ])
+        omp = OmpDirective(
+            "parallel",
+            [{"private": ["a", "b"]}, {"reduction": ["+", ["c", "d"]]}],
+            body,
+        )
+        pruned = omp.prune_for(VarList([a]))
+        self.assertEqual(pruned.clauses, [{"private": ["a"]}])
+        self.assertEqual(
+            render_program(pruned),
+            "!$omp parallel private(a)\n"
+            "a = 1\n"
+            "!$omp end parallel\n",
+        )
 
 
 if __name__ == "__main__":
