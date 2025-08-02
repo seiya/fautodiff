@@ -302,6 +302,8 @@ class Node:
         """
         if vars is None:
             vars = VarList()
+        for child in reversed(list(node for node in self.iter_children())):
+            vars = child.required_vars(vars, no_accumulate, without_savevar)
         return vars
 
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
@@ -358,6 +360,8 @@ class Node:
 
     def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional["Node"]:
         """Return a copy of this node with only code needed for ``targets``."""
+        if any(node for node in self.iter_children()):
+            raise NotImplementedError(f"prune_for must be implemented for class having children")
         for var in self.assigned_vars():
             if var in targets:
                 return self.deep_clone()
@@ -367,6 +371,8 @@ class Node:
         """Remove self-add from the first assignment if safe.
         This method is for only AD variables.
         """
+        if any(node for node in self.iter_children()):
+            raise NotImplementedError(f"check_initial must be implemented for class having children")
         return assigned_vars
 
     # ------------------------------------------------------------------
@@ -3943,7 +3949,7 @@ class OmpDirective(Node):
         body = self.body.deep_clone() if self.body is not None else None
         return OmpDirective(self.directive, list(self.clauses), body)
 
-    def augment_clauses(self, routine: "Routine") -> "OmpDirective":
+    def augment_clauses(self, routine: Routine) -> "OmpDirective":
         """Return a copy with *_ad variables added to relevant clauses.
 
         ``private``, ``shared``, ``firstprivate`` and ``reduction`` clause lists are
@@ -4026,11 +4032,26 @@ class OmpDirective(Node):
         )
         if not nodes:
             return []
-        if len(nodes) == 1:
-            self.body = nodes[0]
-        else:
-            self.body = Block(nodes)
-        return [self]
+        body = Block(nodes)
+        node = OmpDirective(self.directive, list(self.clauses), body)
+        return [node]
+
+    def prune_for(self,
+                  targets: VarList,
+                  mod_vars: Optional[List[OpVar]] = None,
+                  decl_map: Optional[Dict[str, Declaration]] = None
+                  ) -> Optional["Node"]:
+        if self.body is None:
+            return self
+        body = self.body.prune_for(targets, mod_vars, decl_map)
+        if body is None:
+            return None
+        return OmpDirective(self.directive, list(self.clauses), body)
+
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        if self.body is None:
+            return assigned_vars
+        return self.body.check_initial(assigned_vars)
 
 
 @dataclass

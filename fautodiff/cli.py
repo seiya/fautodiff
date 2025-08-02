@@ -56,8 +56,7 @@ def main():
             mode=args.mode,
         )
     except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+        raise
 
     if args.output is None:
         print(code, end="")
