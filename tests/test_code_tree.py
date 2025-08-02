@@ -18,6 +18,7 @@ from fautodiff.code_tree import (
     DoLoop,
     DoWhile,
     IfBlock,
+    BlockConstruct,
     render_program
 )
 from fautodiff.operators import (
@@ -198,6 +199,27 @@ class TestNodeMethods(unittest.TestCase):
         )
         self.assertEqual({str(v) for v in sub.assigned_vars()}, {"a", "b"})
         self.assertEqual({str(v) for v in sub.required_vars()}, set())
+
+    def test_block_scope(self):
+        decls = Block([Declaration(name="a", typename="real")])
+        body = Block([Assignment(OpVar("b"), OpVar("a"))])
+        blk = BlockConstruct(decls, body)
+        self.assertFalse(blk.has_reference_to("a"))
+        self.assertFalse(blk.has_assignment_to("a"))
+        self.assertTrue(blk.has_assignment_to("b"))
+        vars = VarList([OpVar("a")])
+        vars = blk.required_vars(vars)
+        self.assertEqual({str(v) for v in vars}, {"a"})
+        vars = VarList([OpVar("a")])
+        vars = blk.assigned_vars(vars)
+        self.assertEqual({str(v) for v in vars}, {"a", "b"})
+
+    def test_block_unrefered_advars(self):
+        decls = Block([Declaration(name="a_ad", typename="real")])
+        blk = BlockConstruct(decls, Block([]))
+        vars = VarList([OpVar("b_ad")])
+        vars = blk.unrefered_advars(vars)
+        self.assertEqual({str(v) for v in vars}, {"b_ad"})
 
     def test_do_loop_list(self):
         a = Assignment(OpVar("a"), OpInt(0))

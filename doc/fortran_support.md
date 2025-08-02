@@ -13,6 +13,7 @@ This document summarizes the Fortran constructs handled by the AD code generator
 - `select case`
 - `do` and `do while` loops
 - `exit` and `cycle` statements inside `do` loops
+- `block` constructs providing local scoping
 
 ## Array operations
 - Array assignments and loops over arrays are supported.

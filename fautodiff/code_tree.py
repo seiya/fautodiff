@@ -3652,6 +3652,216 @@ class DoWhile(DoAbst):
 
 
 @dataclass
+class BlockConstruct(Node):
+    """A ``block`` construct with its own declarations."""
+
+    decls: Block = field(default_factory=Block)
+    body: Block = field(default_factory=Block)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.decls.set_parent(self)
+        self.body.set_parent(self)
+
+    def copy(self) -> "BlockConstruct":
+        return BlockConstruct(self.decls, self.body)
+
+    def deep_clone(self) -> "BlockConstruct":
+        return BlockConstruct(self.decls.deep_clone(), self.body.deep_clone())
+
+    def iter_children(self) -> Iterator[Node]:
+        yield self.decls
+        yield self.body
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        lines = [f"{space}block\n"]
+        if not self.decls.is_effectively_empty():
+            lines.extend(self.decls.render(indent + 1))
+            lines.append("\n")
+        if not self.body.is_effectively_empty():
+            lines.extend(self.body.render(indent + 1))
+        lines.append(f"{space}end block\n")
+        return lines
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[List[str]] = None,
+    ) -> List[Node]:
+        decls = self.decls.deep_clone()
+        for node in self.decls.generate_ad(
+            saved_vars,
+            reverse,
+            assigned_advars,
+            routine_map,
+            generic_map,
+            mod_vars,
+            exitcycle_flags,
+            type_map,
+            warnings,
+        ):
+            decls.append(node)
+        body_nodes = self.body.generate_ad(
+            saved_vars,
+            reverse,
+            assigned_advars,
+            routine_map,
+            generic_map,
+            mod_vars,
+            exitcycle_flags,
+            type_map,
+            warnings,
+        )
+        body = Block(body_nodes)
+        return [BlockConstruct(decls, body)]
+
+    # ------------------------------------------------------------------
+    # helper utilities
+    # ------------------------------------------------------------------
+
+    def _local_names(self) -> List[str]:
+        names: List[str] = []
+        for node in self.decls.iter_children():
+            if isinstance(node, Declaration):
+                names.append(node.name)
+        return names
+
+    @staticmethod
+    def _save_remove(vars: Optional[VarList], names: List[str]):
+        if vars is None:
+            return {}, {}, {}
+        saved = {}
+        saved_dims = {}
+        saved_ex = {}
+        for name in names:
+            if name in vars.vars:
+                saved[name] = vars.vars.pop(name)
+                saved_dims[name] = vars.dims.pop(name)
+                if name in vars.exclude:
+                    saved_ex[name] = vars.exclude.pop(name)
+        return saved, saved_dims, saved_ex
+
+    @staticmethod
+    def _remove_names(vars: Optional[VarList], names: List[str]):
+        if vars is None:
+            return
+        for name in names:
+            if name in vars.vars:
+                vars.vars.pop(name)
+                vars.dims.pop(name, None)
+                vars.exclude.pop(name, None)
+
+    @staticmethod
+    def _restore(vars: VarList, saved, saved_dims, saved_ex):
+        for name in saved:
+            vars.vars[name] = saved[name]
+            vars.dims[name] = saved_dims[name]
+            if name in saved_ex:
+                vars.exclude[name] = saved_ex[name]
+
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
+        local_names = self._local_names()
+        saved, saved_dims, saved_ex = self._save_remove(vars, local_names)
+        vars = self.body.required_vars(vars, no_accumulate, without_savevar)
+        vars = self.decls.required_vars(vars, no_accumulate, without_savevar)
+        self._remove_names(vars, local_names)
+        self._restore(vars, saved, saved_dims, saved_ex)
+        return vars
+
+    def assigned_vars(
+        self,
+        vars: Optional[VarList] = None,
+        without_savevar: bool = False,
+        check_init_advars: bool = False,
+    ) -> VarList:
+        local_names = self._local_names()
+        saved, saved_dims, saved_ex = self._save_remove(vars, local_names)
+        vars = self.body.assigned_vars(
+            vars, without_savevar=without_savevar, check_init_advars=check_init_advars
+        )
+        vars = self.decls.assigned_vars(
+            vars, without_savevar=without_savevar, check_init_advars=check_init_advars
+        )
+        self._remove_names(vars, local_names)
+        self._restore(vars, saved, saved_dims, saved_ex)
+        return vars
+
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        local_names = self._local_names()
+        saved, saved_dims, saved_ex = self._save_remove(vars, local_names)
+        vars = self.decls.unrefered_advars(vars)
+        vars = self.body.unrefered_advars(vars)
+        self._remove_names(vars, local_names)
+        self._restore(vars, saved, saved_dims, saved_ex)
+        return vars
+
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, Declaration]] = None,
+    ) -> Optional[Node]:
+        local_names = self._local_names()
+        t_local = targets.copy()
+        self._remove_names(t_local, local_names)
+        body = self.body.prune_for(t_local, mod_vars, decl_map)
+        targets_new = body.required_vars(t_local.copy())
+        targets_new.merge(body.assigned_vars())
+        decls = self.decls.prune_for(targets_new, mod_vars, decl_map)
+        if decls.is_effectively_empty() and body.is_effectively_empty():
+            return None
+        return BlockConstruct(decls, body)
+
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        local_names = self._local_names()
+        saved, saved_dims, saved_ex = self._save_remove(assigned_vars, local_names)
+        vars = self.decls.check_initial(assigned_vars)
+        vars = self.body.check_initial(vars)
+        self._remove_names(vars, local_names)
+        self._restore(vars, saved, saved_dims, saved_ex)
+        return vars
+
+    # ------------------------------------------------------------------
+    # reference and assignment helpers with scope handling
+    # ------------------------------------------------------------------
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        local_names = self._local_names()
+        for var in self.decls.iter_ref_vars():
+            if var.name not in local_names:
+                yield var
+
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
+        local_names = self._local_names()
+        for var in self.decls.iter_assign_vars(without_savevar):
+            if var.name not in local_names:
+                yield var
+
+    def has_reference_to(self, var: str) -> bool:
+        if var in self._local_names():
+            return False
+        return self.decls.has_reference_to(var) or self.body.has_reference_to(var)
+
+    def has_assignment_to(self, var: str) -> bool:
+        if var in self._local_names():
+            return False
+        return self.decls.has_assignment_to(var) or self.body.has_assignment_to(var)
+
+
+@dataclass
 class ForallBlock(Node):
     """A ``forall`` construct."""
 

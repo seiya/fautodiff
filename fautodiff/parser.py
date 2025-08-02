@@ -34,6 +34,7 @@ from .code_tree import (
     SelectBlock,
     WhereBlock,
     ForallBlock,
+    BlockConstruct,
     Statement,
     ExitStmt,
     CycleStmt,
@@ -1129,6 +1130,28 @@ def _parse_routine(content,
             )
             body = _block(stmt.content[1:-1], decl_map, type_map)
             return ForallBlock(body, specs, mask=mask)
+        if isinstance(stmt, Fortran2008.Block_Construct):
+            decl_map_new = decl_map.copy()
+            type_map_new = type_map.copy()
+            directives_blk: dict = {}
+            idx = 1
+            decls_nodes: List[Node] = []
+            if len(stmt.content) > 1 and isinstance(
+                stmt.content[1], Fortran2003.Specification_Part
+            ):
+                uses, decls, nodes = _parse_decls(
+                    stmt.content[1],
+                    directives=directives_blk,
+                    decl_map=decl_map_new,
+                    type_map=type_map_new,
+                    declared_in="routine",
+                    allow_intent=True,
+                    allow_access=False,
+                )
+                decls_nodes = uses + decls + nodes
+                idx = 2
+            body = _block(stmt.content[idx:-1], decl_map_new, type_map_new)
+            return BlockConstruct(Block(decls_nodes), body)
         if isinstance(stmt, Fortran2008.Block_Nonlabel_Do_Construct):
             idx = 0
             while idx < len(stmt.content) and isinstance(
