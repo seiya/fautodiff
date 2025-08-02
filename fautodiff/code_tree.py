@@ -3402,6 +3402,64 @@ class DoLoop(DoAbst):
                         return i
         return None
 
+    def has_modified_indices(self) -> bool:
+        """Return ``True`` if any array access modifies the loop index.
+
+        This scans the loop body for array index expressions that depend on
+        the loop index variable but are not a simple use of that index.  It
+        also tracks variables assigned from the loop index (e.g. ``ip = i``)
+        and treats them as aliases.  Aliases that are subsequently modified
+        (``ip = ip + 1``) are recognised as dependencies when used as array
+        indices.
+        """
+
+        dep_vars = {self.index.name}
+        simple_aliases = {self.index.name}
+
+        def _walk(node: Node) -> bool:
+            nonlocal dep_vars, simple_aliases
+
+            # Check array index expressions in referenced and assigned vars
+            vars = list(node.iter_ref_vars()) + list(node.iter_assign_vars())
+            for var in vars:
+                if var.index is None:
+                    continue
+                for dim in var.index:
+                    if dim is None:
+                        continue
+                    names = [v.name for v in dim.collect_vars()]
+                    if any(name in dep_vars for name in names):
+                        if isinstance(dim, OpVar) and dim.name in simple_aliases:
+                            continue
+                        return True
+
+            # Track variable assignments originating from dependent vars
+            if isinstance(node, Assignment):
+                lhs = node.lhs.name
+                rhs_vars = node.rhs.collect_vars()
+                if rhs_vars and any(v.name in dep_vars for v in rhs_vars):
+                    if (
+                        len(rhs_vars) == 1
+                        and isinstance(node.rhs, OpVar)
+                        and rhs_vars[0].name in simple_aliases
+                    ):
+                        dep_vars.add(lhs)
+                        simple_aliases.add(lhs)
+                    else:
+                        dep_vars.add(lhs)
+                        if lhs in simple_aliases:
+                            simple_aliases.remove(lhs)
+
+            for child in node.iter_children():
+                if _walk(child):
+                    return True
+            return False
+
+        for child in self._body.iter_children():
+            if _walk(child):
+                return True
+        return False
+
     def recurrent_vars(self) -> List[str]:
         required_vars = self._body.required_vars()
         assigned_vars = self._body.assigned_vars()
@@ -3898,6 +3956,38 @@ class OmpDirective(Node):
         self.do_index_list = index_list
         if self.body is not None:
             self.body.build_do_index_list(index_list)
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        if self.body is None:
+            return [self]
+        nodes = self.body.generate_ad(
+            saved_vars,
+            reverse,
+            assigned_advars,
+            routine_map,
+            generic_map,
+            mod_vars,
+            exitcycle_flags,
+            warnings,
+        )
+        if not nodes:
+            return []
+        if len(nodes) == 1:
+            self.body = nodes[0]
+        else:
+            self.body = Block(nodes)
+        return [self]
 
 
 @dataclass
