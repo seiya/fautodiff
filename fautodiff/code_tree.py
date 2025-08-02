@@ -2393,11 +2393,14 @@ class PushPop(SaveAssignment):
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        op = "pop" if self.load else "push"
         stack = self._stack_name()
         var = self.var
         if self.pointer:
             var = var.change_index(None)
+        if stack == "fautodiff_stack_r":
+            op = "fautodiff_stack_pop_r" if self.load else "fautodiff_stack_push_r"
+            return [f"{space}call {op}({var})\n"]
+        op = "pop" if self.load else "push"
         return [f"{space}call {stack}%{op}({var})\n"]
 
     def _stack_name(self) -> str:
@@ -2420,10 +2423,8 @@ class PushPop(SaveAssignment):
         if typ.startswith("integer"):
             return "fautodiff_stack_i"
         if typ.startswith("real") or typ.startswith("double"):
-            if kind == "8" or "(8" in typ or "double" in typ:
-                return "fautodiff_stack_r8"
-            return "fautodiff_stack_r4"
-        return "fautodiff_stack_r4"
+            return "fautodiff_stack_r"
+        return "fautodiff_stack_r"
 
     def to_load(self) -> "PushPop":
         return PushPop(self.var, id=self.id, tmpvar=self.tmpvar, pointer=self.pointer, load=True)

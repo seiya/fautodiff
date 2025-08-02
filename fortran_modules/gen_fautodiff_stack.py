@@ -207,6 +207,48 @@ def gen_get_function(tname):
     ftype = tmap[tname]
     return TEMPLATE_GET_SCALAR.format(tname=tname, ftype=ftype)
 
+def gen_wrapper_push(tname):
+    ftype = tmap[tname]
+    return (
+        f"  subroutine fautodiff_stack_push_{tname}(data)\n"
+        f"    {ftype}, intent(in) :: data(..)\n"
+        f"    select rank(data)\n"
+        f"    rank(0)\n"
+        f"      call fautodiff_stack_{tname}%push(data)\n"
+        f"    rank(1)\n"
+        f"      call fautodiff_stack_{tname}%push(data)\n"
+        f"    rank(2)\n"
+        f"      call fautodiff_stack_{tname}%push(data)\n"
+        f"    rank(3)\n"
+        f"      call fautodiff_stack_{tname}%push(data)\n"
+        f"    rank default\n"
+        f"      print *, 'Rank larger than 3 is not supported'\n"
+        f"      error stop 1\n"
+        f"    end select\n"
+        f"  end subroutine fautodiff_stack_push_{tname}\n"
+    )
+
+def gen_wrapper_pop(tname):
+    ftype = tmap[tname]
+    return (
+        f"  subroutine fautodiff_stack_pop_{tname}(data)\n"
+        f"    {ftype}, intent(out) :: data(..)\n"
+        f"    select rank(data)\n"
+        f"    rank(0)\n"
+        f"      call fautodiff_stack_{tname}%pop(data)\n"
+        f"    rank(1)\n"
+        f"      call fautodiff_stack_{tname}%pop(data)\n"
+        f"    rank(2)\n"
+        f"      call fautodiff_stack_{tname}%pop(data)\n"
+        f"    rank(3)\n"
+        f"      call fautodiff_stack_{tname}%pop(data)\n"
+        f"    rank default\n"
+        f"      print *, 'Rank larger than 3 is not supported'\n"
+        f"      error stop 1\n"
+        f"    end select\n"
+        f"  end subroutine fautodiff_stack_pop_{tname}\n"
+    )
+
 def gen_module():
     lines = [
         "module fautodiff_stack",
@@ -221,6 +263,8 @@ def gen_module():
     for t in types:
         lines.append(f"  public :: fautodiff_stack_{t}")
     lines.append(f"  public :: fautodiff_stack_p")
+    lines.append(f"  public :: fautodiff_stack_push_r")
+    lines.append(f"  public :: fautodiff_stack_pop_r")
     lines.extend([
         "",
         "  integer, parameter :: DEFAULT_PAGE_SIZE = 1024 * 1024",
@@ -288,6 +332,18 @@ def gen_module():
         lines.append(f"  type(fautodiff_stack_{t}_t), save :: fautodiff_stack_{t}")
     lines.append(f"  type(fautodiff_stack_p_t), save :: fautodiff_stack_p")
     lines.append("")
+    push_mods = []
+    pop_mods = []
+    for t in ("r4", "r8"):
+        push_mods.append(f"fautodiff_stack_push_{t}")
+        pop_mods.append(f"fautodiff_stack_pop_{t}")
+    lines.append("  interface fautodiff_stack_push_r")
+    lines.append("    module procedure " + ", ".join(push_mods))
+    lines.append("  end interface")
+    lines.append("  interface fautodiff_stack_pop_r")
+    lines.append("    module procedure " + ", ".join(pop_mods))
+    lines.append("  end interface")
+    lines.append("")
     lines.append("contains")
     for t, r in itertools.product(types, ranks):
         lines.append(gen_push_subroutine(t, r))
@@ -299,6 +355,9 @@ def gen_module():
             if r != 0:
                 lines.append(gen_push_ptr_subroutine(t, r))
                 lines.append(gen_pop_ptr_subroutine(t, r))
+    for t in ("r4", "r8"):
+        lines.append(gen_wrapper_push(t))
+        lines.append(gen_wrapper_pop(t))
     lines.append("end module fautodiff_stack")
     return "\n".join(lines)
 

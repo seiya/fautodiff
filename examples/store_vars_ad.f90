@@ -47,14 +47,14 @@ contains
     work = x(1) * work
     work_save_18_ad = work
     do i = 1, n
-      call fautodiff_stack_r4%push(work)
+      call fautodiff_stack_push_r(work)
       work = x(i) * work
     end do
 
     work_ad = 0.0
 
     do i = n, 1, - 1
-      call fautodiff_stack_r4%pop(work)
+      call fautodiff_stack_pop_r(work)
       work_save_16_ad = work
       work = x(i) * work
       work_ad = z_ad(i) * 2.0 * work + work_ad ! z(i) = work**2 + z(i)
@@ -121,8 +121,8 @@ contains
     y_save_37_ad = y
     do while (y < 10.0)
       call fautodiff_stack_l%push(.true.)
-      call fautodiff_stack_r4%push(z)
-      call fautodiff_stack_r4%push(a)
+      call fautodiff_stack_push_r(z)
+      call fautodiff_stack_push_r(a)
       a = a + x
       y = y + a
       a = a + 1.0
@@ -135,8 +135,8 @@ contains
     z_ad = y_ad * y + z_ad ! y = z * y
     y_ad = y_ad * z ! y = z * y
     do while (fautodiff_stack_l%get())
-      call fautodiff_stack_r4%pop(a)
-      call fautodiff_stack_r4%pop(z)
+      call fautodiff_stack_pop_r(a)
+      call fautodiff_stack_pop_r(z)
       a = a + x
       a = a + 1.0
       a_ad = z_ad * z + a_ad ! z = z * a

@@ -71,7 +71,7 @@ contains
     res = x**2
     exit_do_start_32_ad = n
     do i = 1, n
-      call fautodiff_stack_r4%push(res)
+      call fautodiff_stack_push_r(res)
       res = res * x
       if (i == 2) then
         cycle
@@ -102,7 +102,7 @@ contains
     label_32_0_ad: do i = exit_do_start_32_ad, 1, - 1
       cycle_flag_15_ad = .true.
       cycle_flag_24_ad = .true.
-      call fautodiff_stack_r4%pop(res)
+      call fautodiff_stack_pop_r(res)
       if (cycle_flag_15_ad .and. exit_flag_19_ad .and. cycle_flag_24_ad .and. exit_flag_29_ad) then
         res_save_13_ad = res
         res = res * x
@@ -266,7 +266,7 @@ contains
     do while (i <= n)
       call fautodiff_stack_l%push(.true.)
       call fautodiff_stack_i%push(i)
-      call fautodiff_stack_r4%push(res)
+      call fautodiff_stack_push_r(res)
       res = res * x
       if (i == 2) then
         i = i + 1
@@ -298,7 +298,7 @@ contains
     label_69_0_ad: do while (fautodiff_stack_l%get())
       cycle_flag_50_ad = .true.
       cycle_flag_60_ad = .true.
-      call fautodiff_stack_r4%pop(res)
+      call fautodiff_stack_pop_r(res)
       call fautodiff_stack_i%pop(i)
       if (cycle_flag_50_ad .and. exit_flag_54_ad .and. cycle_flag_60_ad .and. exit_flag_65_ad) then
         res_save_47_ad = res
@@ -469,7 +469,7 @@ contains
     call fautodiff_stack_l%push(.false.)
     outer: do while (i <= n)
       call fautodiff_stack_l%push(.true.)
-      call fautodiff_stack_r4%push(res)
+      call fautodiff_stack_push_r(res)
       i = i + 1
       res = res + 1.0
       middle: do j = 1, n
@@ -505,12 +505,12 @@ contains
     exit_flag_94_ad = .true.
     label_112_0_ad: do while (fautodiff_stack_l%get())
       cycle_flag_106_ad = .true.
-      call fautodiff_stack_r4%pop(res)
+      call fautodiff_stack_pop_r(res)
       if (exit_flag_90_ad .and. exit_flag_94_ad .and. cycle_flag_106_ad) then
         res = res + 1.0
         exit_do_start_110_ad = n
         label_110_1_ad: do j = 1, n
-          call fautodiff_stack_r4%push(res)
+          call fautodiff_stack_push_r(res)
           res = res + 10.0
           if (res > 5000.0) then
             exit_do_start_110_ad = j
@@ -551,7 +551,7 @@ contains
       label_110_0_ad: do j = exit_do_start_110_ad, 1, - 1
         cycle_flag_102_ad = .true.
         cycle_flag_106_ad = .true.
-        call fautodiff_stack_r4%pop(res)
+        call fautodiff_stack_pop_r(res)
         if (exit_flag_90_ad .and. exit_flag_94_ad .and. exit_flag_98_ad .and. cycle_flag_102_ad .and. cycle_flag_106_ad) then
           res = res + 10.0
           if (res > 5000.0) then
@@ -562,7 +562,7 @@ contains
           res_save_109_ad = res
           exit_do_start_109_ad = n
           label_109_1_ad: do k = 1, n
-            call fautodiff_stack_r4%push(res)
+            call fautodiff_stack_push_r(res)
             if (res > 4000.0) then
               exit_do_start_109_ad = k
               exit_flag_94_ad = .false.
@@ -593,7 +593,7 @@ contains
           label_109_0_ad: do k = exit_do_start_109_ad, 1, - 1
             cycle_flag_102_ad = .true.
             cycle_flag_106_ad = .true.
-            call fautodiff_stack_r4%pop(res)
+            call fautodiff_stack_pop_r(res)
             if (exit_flag_94_ad .and. exit_flag_98_ad .and. cycle_flag_102_ad .and. cycle_flag_106_ad) then
               if (res > 4000.0) then
                 exit_flag_94_ad = .false.
