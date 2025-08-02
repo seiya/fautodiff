@@ -24,7 +24,7 @@ def main():
         dest="search_dirs",
         action="append",
         default=[],
-        help="add directory to .fadmod search path (may be repeated)",
+        help="add directory to .fadmod search path before the current directory (may be repeated)",
     )
     parser_arg.add_argument(
         "-M",
@@ -45,12 +45,16 @@ def main():
     )
     args = parser_arg.parse_args()
 
+    search_dirs = args.search_dirs if args.search_dirs else []
+    if "." not in search_dirs:
+        search_dirs.append(".")
+
     try:
         code = generator.generate_ad(
             args.input,
             args.output,
             warn=not args.no_warn,
-            search_dirs=args.search_dirs,
+            search_dirs=search_dirs,
             write_fadmod=not args.no_fadmod,
             fadmod_dir=args.fadmod_dir,
             mode=args.mode,

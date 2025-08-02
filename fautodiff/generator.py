@@ -1332,15 +1332,16 @@ def generate_ad(
     ``fadmod_dir`` selects where ``<module>.fadmod`` files are written (defaults
     to the current working directory).
     """
-    modules_org = parser.parse_file(in_file, search_dirs=search_dirs)
     modules = []
     warnings = []
 
     if search_dirs is None:
         search_dirs = []
     cwd = "."
-    if not cwd in search_dirs:
+    if cwd not in search_dirs:
         search_dirs.append(cwd)
+
+    modules_org = parser.parse_file(in_file, search_dirs=search_dirs)
     if fadmod_dir is None:
         fadmod_dir = Path.cwd()
     else:

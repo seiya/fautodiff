@@ -40,7 +40,6 @@ class TestGenerator(unittest.TestCase):
         generated = generator.generate_ad(
             "examples/cross_mod_b.f90",
             warn=False,
-            search_dirs=["."],
         )
         expected = Path("examples/cross_mod_b_ad.f90").read_text()
         self.assertEqual(generated, expected)
@@ -51,7 +50,6 @@ class TestGenerator(unittest.TestCase):
         generated = generator.generate_ad(
             "examples/call_module_vars.f90",
             warn=False,
-            search_dirs=["."],
         )
         expected = Path("examples/call_module_vars_ad.f90").read_text()
         self.assertEqual(generated, expected)
