@@ -83,6 +83,44 @@ class TestGenerator(unittest.TestCase):
         expected = Path("examples/keyword_args_ad.f90").read_text()
         self.assertEqual(generated, expected)
 
+    def test_dependency_groups(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+        import fautodiff.parser as parser
+
+        src = textwrap.dedent(
+            """
+            module cyc
+            contains
+              subroutine a(x, y)
+                real, intent(in) :: x
+                real, intent(out) :: y
+                call b(x, y)
+              end subroutine a
+              subroutine b(x, y)
+                real, intent(in) :: x
+                real, intent(out) :: y
+                call a(x, y)
+              end subroutine b
+              subroutine c(x, y)
+                real, intent(in) :: x
+                real, intent(out) :: y
+                y = x
+              end subroutine c
+            end module cyc
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "cyc.f90"
+            src_path.write_text(src)
+            modules = parser.parse_file(str(src_path))
+        groups, _ = generator._dependency_groups(modules[0].routines)
+        group_sets = [set(g) for g in groups]
+        self.assertIn({"a", "b"}, group_sets)
+        self.assertIn({"c"}, group_sets)
+
     def test_constant_vars_directive(self):
         code_tree.Node.reset()
         import textwrap
