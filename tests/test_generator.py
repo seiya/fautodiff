@@ -273,6 +273,77 @@ class TestGenerator(unittest.TestCase):
         self.assertIn("foo", routines)
         self.assertTrue(routines["foo"].get("skip"))
 
+    def test_mod_grad_var_prevents_skip(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module test
+              real :: a
+              real :: a_ad
+            contains
+              subroutine foo(x)
+                real, intent(in) :: x
+                a_ad = a_ad + x
+              end subroutine foo
+              subroutine bar(x)
+                real, intent(in) :: x
+                a = a + x
+              end subroutine bar
+              subroutine baz(x)
+                real, intent(in) :: x
+              end subroutine baz
+            end module test
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "test.f90"
+            src_path.write_text(src)
+            generated = generator.generate_ad(str(src_path), warn=False, fadmod_dir=tmp)
+            fadmod = json.loads((Path(tmp) / "test.fadmod").read_text())
+            routines = fadmod.get("routines", {})
+
+        self.assertIn("foo_fwd_ad", generated)
+        self.assertIn("foo_rev_ad", generated)
+        self.assertIn("bar_fwd_ad", generated)
+        self.assertNotIn("baz_fwd_ad", generated)
+        self.assertFalse(routines["foo"].get("skip"))
+        self.assertFalse(routines["bar"].get("skip"))
+
+    def test_deallocate_mod_grad_var_prevents_skip(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module test
+              real, allocatable :: a(:)
+            contains
+              subroutine init(n)
+                integer, intent(in) :: n
+                allocate(a(n))
+              end subroutine init
+              subroutine fin()
+                if (allocated(a)) then
+                  deallocate(a)
+                end if
+              end subroutine fin
+            end module test
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "t.f90"
+            src_path.write_text(src)
+            generated = generator.generate_ad(str(src_path), warn=False, fadmod_dir=tmp)
+
+        self.assertIn("subroutine fin_fwd_ad", generated)
+        self.assertIn("subroutine fin_rev_ad", generated)
+
     def test_optional_argument(self):
         code_tree.Node.reset()
         import textwrap

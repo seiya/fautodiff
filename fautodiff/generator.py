@@ -589,6 +589,52 @@ def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
     path.write_text(json.dumps(data, indent=2))
 
 
+def _has_modified_module_grad_var(routine_org: Routine, mod_vars: List[OpVar]) -> bool:
+    """Return True if ``routine_org`` assigns to a module gradient variable."""
+
+    grad_names = set()
+    target_names = set()
+    for var in mod_vars:
+        if var.ad_target:
+            if var.name.endswith(AD_SUFFIX):
+                grad_names.add(var.name)
+                target_names.add(var.name[:-len(AD_SUFFIX)])
+            else:
+                grad_names.add(f"{var.name}{AD_SUFFIX}")
+                target_names.add(var.name)
+    if not grad_names and not target_names:
+        return False
+
+    def _scan(node: Node) -> bool:
+        if isinstance(node, (Allocate, Deallocate, PointerClear)):
+            vars = getattr(node, "vars", None)
+            if vars is None and hasattr(node, "var"):
+                vars = [node.var]
+            if vars is not None:
+                for v in vars:
+                    root = v
+                    while isinstance(root, OpVar) and root.ref_var is not None:
+                        root = root.ref_var
+                    if root.declared_in != "routine" and (
+                        root.name in grad_names or root.name in target_names
+                    ):
+                        return True
+        for v in node.iter_assign_vars():
+            root = v
+            while isinstance(root, OpVar) and root.ref_var is not None:
+                root = root.ref_var
+            if root.declared_in != "routine" and (
+                root.name in grad_names or root.name in target_names
+            ):
+                return True
+        for child in node.iter_children():
+            if _scan(child):
+                return True
+        return False
+
+    return _scan(routine_org.content)
+
+
 def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
     """Create forward-mode AD subroutine header and argument info.
 
@@ -1382,11 +1428,11 @@ def generate_ad(
                         mod.decls.append(node)
 
         mod_vars = [var for var in mod_org.decls.collect_vars()] if mod_org.decls is not None else []
-        has_mod_grad_var = any(var.ad_target for var in mod_vars)
 
         routine_info_fwd = {}
         routine_info_rev = {}
         for r in mod_org.routines:
+            has_mod_grad_var = _has_modified_module_grad_var(r, mod_vars)
             if mode in ("forward", "both"):
                 routine_info = _prepare_fwd_ad_header(r, has_mod_grad_var)
                 routine_info_fwd[r.name] = routine_info
