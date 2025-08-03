@@ -570,8 +570,9 @@ def _parse_directive(text: str, directives: dict) -> None:
     if ":" in body:
         key, rest = body.split(":", 1)
         key = key.strip().upper()
-        values = [a.strip() for a in rest.split(",") if a.strip()]
-        directives[key] = values
+        if key not in directives:
+            directives[key] = []
+        directives[key].extend([a.strip() for a in rest.split(",") if a.strip()])
     else:
         directives[body.strip().upper()] = True
     return
