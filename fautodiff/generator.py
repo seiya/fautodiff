@@ -501,6 +501,8 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, d
                     routines_data = data.get("routines", {})
                     if routines_data:
                         for name, info in routines_data.items():
+                            if "skip" in info:
+                                continue
                             nargs = len(info["args"])
                             for key in ["intents", "dims", "type", "kind"]:
                                 if key in info:
