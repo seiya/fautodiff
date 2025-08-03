@@ -2,28 +2,32 @@ program run_data_storage
   use fautodiff_stack
   implicit none
 
-  real :: arr(3)
-  real :: out(3)
-  real :: x1, x2, x3
+  integer, parameter :: n = 6
+  real :: val
+  real :: vals(n)
+  integer :: i
   logical :: ok
 
-  arr = (/10.0, 20.0, 30.0/)
+  ! Force small pages so that pushes cross page boundaries
+  fautodiff_stack_r4%page_size = 4
+  fautodiff_stack_r4%page_num = 1
+  fautodiff_stack_r4%pos = 1
 
-  call fautodiff_stack_push_r(1.0)
-  call fautodiff_stack_push_r(2.0)
-  call fautodiff_stack_push_r(3.0)
-  call fautodiff_stack_push_r(arr)
+  vals = [(real(i), i = 1, n)]
 
-  call fautodiff_stack_pop_r(out)
-  call fautodiff_stack_pop_r(x3)
-  call fautodiff_stack_pop_r(x2)
-  call fautodiff_stack_pop_r(x1)
+  ! First push crosses a page boundary
+  call fautodiff_stack_push_r(vals)
+
+  vals = [(real(n + i), i = 1, n)]
+
+  ! Second push also crosses a page boundary
+  call fautodiff_stack_push_r(vals)
 
   ok = .true.
-  ok = ok .and. abs(x1 - 1.0) < 1.0e-6
-  ok = ok .and. abs(x2 - 2.0) < 1.0e-6
-  ok = ok .and. abs(x3 - 3.0) < 1.0e-6
-  ok = ok .and. all(abs(out - arr) < 1.0e-6)
+  do i = 2 * n, 1, -1
+     call fautodiff_stack_pop_r(val)
+     ok = ok .and. abs(val - real(i)) < 1.0e-6
+  end do
 
   if (ok) then
      print *, 'OK'
@@ -32,3 +36,4 @@ program run_data_storage
   end if
 
 end program run_data_storage
+
