@@ -30,6 +30,7 @@ from .code_tree import (
     Function,
     IfBlock,
     Module,
+    Program,
     Node,
     SelectBlock,
     WhereBlock,
@@ -871,6 +872,94 @@ def _search_use(
                 )
 
 
+def _process_spec_part(
+    part,
+    node,
+    directives: dict,
+    decl_map: dict,
+    type_map: dict,
+    *,
+    declared_in: str,
+    allow_access: bool,
+    module_map: Optional[dict],
+    module_asts: Optional[dict],
+    search_dirs: Optional[List[str]],
+    src_name: str,
+    default_access: Optional[str] = None,
+):
+    """Parse a specification part for modules or programs."""
+
+    uses, decls, nodes = _parse_decls(
+        part,
+        directives=directives,
+        decl_map=decl_map,
+        type_map=type_map,
+        declared_in=declared_in,
+        allow_intent=False,
+        allow_access=allow_access,
+        default_access=default_access,
+        module_map=module_map,
+        module_asts=module_asts,
+        search_dirs=search_dirs,
+        src_name=src_name,
+    )
+    if "CONSTANT_VARS" in directives:
+        for n in directives["CONSTANT_VARS"]:
+            if n in decl_map:
+                decl_map[n].constant = True
+    if uses:
+        node.uses = Block(uses)
+    if decls:
+        node.decls = Block(decls)
+    if nodes:
+        if node.body is None:
+            node.body = Block(nodes)
+        else:
+            for n in nodes:
+                node.body.append(n)
+
+
+def _process_subprogram_part(
+    part,
+    node,
+    allocate_vars: List[OpVar],
+    decl_map_mod: dict,
+    type_map_mod: dict,
+    module_map: Optional[dict],
+    module_asts: Optional[dict],
+    search_dirs: Optional[List[str]],
+    src_name: str,
+):
+    """Parse contained subprograms for modules or programs."""
+
+    for c in part.content:
+        if isinstance(c, Fortran2003.Contains_Stmt):
+            continue
+        if isinstance(c, Fortran2003.Comment):
+            continue
+        if isinstance(
+            c,
+            (
+                Fortran2003.Function_Subprogram,
+                Fortran2003.Subroutine_Subprogram,
+            ),
+        ):
+            node.routines.append(
+                _parse_routine(
+                    content=c,
+                    src_name=src_name,
+                    allocate_vars=allocate_vars,
+                    decl_map_mod=decl_map_mod,
+                    type_map_mod=type_map_mod,
+                    module_map=module_map,
+                    module_asts=module_asts,
+                    search_dirs=search_dirs,
+                )
+            )
+        else:
+            raise RuntimeError(f"Unsupported statement: {type(c)} {c.string}")
+
+
 def _parse_module_ast(
     module,
     src_name: str,
@@ -909,72 +998,117 @@ def _parse_module_ast(
         if isinstance(part, Fortran2003.Comment):
             continue
         if isinstance(part, Fortran2003.Specification_Part):
-            uses, decls, nodes = _parse_decls(
+            _process_spec_part(
                 part,
-                directives=module_directives,
-                decl_map=decl_map_new,
-                type_map=type_map_new,
+                mod_node,
+                module_directives,
+                decl_map_new,
+                type_map_new,
                 declared_in="module",
-                allow_intent=False,
                 allow_access=True,
+                module_map=module_map,
+                module_asts=module_asts,
+                search_dirs=search_dirs,
+                src_name=src_name,
                 default_access="public",
+            )
+            continue
+        if isinstance(part, Fortran2003.Module_Subprogram_Part):
+            _process_subprogram_part(
+                part,
+                mod_node,
+                allocate_vars,
+                decl_map_new,
+                type_map_new,
+                module_map,
+                module_asts,
+                search_dirs,
+                src_name,
+            )
+            continue
+        print(type(part), part)
+        raise RuntimeError("Unsupported statement: {type(part)} {part.string}")
+    mod_node.directives = module_directives
+    return mod_node
+
+
+def _parse_program_ast(
+    program,
+    src_name: str,
+    *,
+    search_dirs: Optional[List[str]] = None,
+    decl_map: Optional[dict] = None,
+    type_map: Optional[dict] = None,
+    module_map: Optional[dict] = None,
+    module_asts: Optional[dict] = None,
+) -> Module:
+    name = _stmt_name(program.content[0])
+    prog_node = Program(name)
+
+    decl_map_new = decl_map.copy() if decl_map is not None else {}
+    type_map_new = type_map.copy() if type_map is not None else {}
+    program_directives = {}
+    allocate_vars: List[OpVar] = []
+
+    for part in program.content:
+        if isinstance(part, Fortran2003.Program_Stmt):
+            continue
+        if isinstance(part, Fortran2003.End_Program_Stmt):
+            break
+        if isinstance(part, Fortran2003.Comment):
+            continue
+        if isinstance(part, Fortran2003.Specification_Part):
+            _process_spec_part(
+                part,
+                prog_node,
+                program_directives,
+                decl_map_new,
+                type_map_new,
+                declared_in="program",
+                allow_access=False,
                 module_map=module_map,
                 module_asts=module_asts,
                 search_dirs=search_dirs,
                 src_name=src_name,
             )
-            if "CONSTANT_VARS" in module_directives:
-                for n in module_directives["CONSTANT_VARS"]:
-                    if n in decl_map_new:
-                        decl_map_new[n].constant = True
-            if uses:
-                mod_node.uses = Block(uses)
-            if decls:
-                mod_node.decls = Block(decls)
-            if nodes:
-                mod_node.body = Block(nodes)
             continue
-        if isinstance(part, Fortran2003.Module_Subprogram_Part):
-            for c in part.content:
-                if isinstance(c, Fortran2003.Contains_Stmt):
+        if isinstance(part, Fortran2003.Execution_Part):
+            stmts: List[Node] = []
+            for stmt in part.content:
+                if isinstance(stmt, Fortran2003.Internal_Subprogram_Part):
                     continue
-                if isinstance(c, Fortran2003.Comment):
+                if isinstance(stmt, Fortran2003.Comment):
                     continue
-                if isinstance(
-                    c,
-                    (
-                        Fortran2003.Function_Subprogram,
-                        Fortran2003.Subroutine_Subprogram,
-                    ),
-                ):
-                    mod_node.routines.append(
-                        _parse_routine(
-                            content=c,
-                            src_name=src_name,
-                            allocate_vars=allocate_vars,
-                            decl_map_mod=decl_map_new,
-                            type_map_mod=type_map_new,
-                            module_map=module_map,
-                            module_asts=module_asts,
-                            search_dirs=search_dirs,
-                        )
-                    )
+                stmts.append(Statement(stmt.string))
+            if stmts:
+                if prog_node.body is None:
+                    prog_node.body = Block(stmts)
                 else:
-                    print(type(c), c)
-                    print(c.items)
-                    raise RuntimeError(
-                        "Unsupported  statement: {type(c)} {c.string}"
-                    )
-        else:
-            print(type(part), part)
-            raise RuntimeError("Unsupported statement: {type(part)} {part.string}")
-    mod_node.directives = module_directives
-    return mod_node
+                    for s in stmts:
+                        prog_node.body.append(s)
+            continue
+        if isinstance(part, Fortran2003.Internal_Subprogram_Part):
+            _process_subprogram_part(
+                part,
+                prog_node,
+                allocate_vars,
+                decl_map_new,
+                type_map_new,
+                module_map,
+                module_asts,
+                search_dirs,
+                src_name,
+            )
+            continue
+        raise RuntimeError(f"Unsupported statement: {type(part)} {part}")
+    prog_node.directives = program_directives
+    return prog_node
 
 def _parse_from_reader(reader, src_name, *, search_dirs=None, decl_map=None, type_map=None) -> List[Module]:
     factory = ParserFactory().create(std="f2008")
     ast = factory(reader)
     module_list = list(walk(ast, Fortran2003.Module))
+    program_list = list(walk(ast, Fortran2003.Main_Program))
     module_asts = { _stmt_name(m.content[0]): m for m in module_list }
     output: List[Module] = []
     module_map: dict = {}
@@ -989,6 +1123,17 @@ def _parse_from_reader(reader, src_name, *, search_dirs=None, decl_map=None, typ
             module_asts=module_asts,
         )
         output.append(mod_node)
+    for p in program_list:
+        prog_node = _parse_program_ast(
+            p,
+            src_name,
+            search_dirs=search_dirs,
+            decl_map=decl_map,
+            type_map=type_map,
+            module_map=module_map,
+            module_asts=module_asts,
+        )
+        output.append(prog_node)
     return output
 
 

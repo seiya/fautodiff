@@ -1501,6 +1501,32 @@ class Module(Node):
                     mods.append(child.name)
         return mods
 
+
+@dataclass
+class Program(Module):
+    """Representation of a Fortran main program."""
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        lines = [f"{space}program {self.name}\n"]
+        if self.uses is not None:
+            lines.extend(self.uses.render(indent + 1))
+        lines.extend(f"{space}  implicit none\n")
+        if self.decls is not None:
+            lines.append("\n")
+            lines.extend(self.decls.render(indent + 1))
+        if self.body is not None:
+            lines.append("\n")
+            lines.extend(self.body.render(indent + 1))
+        lines.append("\n")
+        lines.append(f"{space}contains\n")
+        lines.append("\n")
+        for routine in self.routines:
+            lines.extend(routine.render(indent + 1))
+            lines.append("\n")
+        lines.append(f"{space}end program {self.name}\n")
+        return lines
+
 @dataclass
 class Routine(Node):
     """Common functionality for ``subroutine`` and ``function`` blocks."""
