@@ -1097,6 +1097,9 @@ class Use(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
+NONDIFF_STD_ROUTINES = {
+    "get_command_argument"
+}
 
 @dataclass
 class CallStatement(Node):
@@ -1258,6 +1261,8 @@ class CallStatement(Node):
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
+        if self.name in NONDIFF_STD_ROUTINES:
+            return [self]
         if routine_map is None:
             raise RuntimeError("routine_map is necessary for CallStatement")
         name = self.name

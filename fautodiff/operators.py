@@ -1377,10 +1377,7 @@ INTRINSIC_FUNCTIONS = {
     'acos', 'atan', 'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
     'erf', 'erfc', 'real', 'dble', 'aimag', 'conjg', 'cmplx', 'mod', 'min', 'max', 'sign', 'atan2',
     'transpose', 'cshift', 'dot_product', 'matmul',
-    'len', 'len_trim', 'adjustl', 'index', 'lbound',
-    'ubound', 'size', 'epsilon', 'huge', 'tiny', 'ichar', 'achar', 'int',
-    'nint',
-    'sum', 'product', 'minval', 'maxval', 'maxloc', 'minloc',
+    'sum', 'product', 'minval', 'maxval',
 }
 
 NONDIFF_INTRINSICS = {
