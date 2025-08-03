@@ -1653,6 +1653,25 @@ class Routine(Node):
         self.decls.expand(decls)
         return self
 
+    def deep_clone(self) -> "Routine":
+        decls = self.decls.deep_clone()
+        content = self.content.deep_clone()
+        ad_init = self.ad_init.deep_clone() if self.ad_init is not None else None
+        ad_content = self.ad_content.deep_clone() if self.ad_content is not None else None
+        clone = type(self)(
+            name=self.name,
+            args=list(self.args),
+            result=self.result,
+            decls=decls,
+            content=content,
+            ad_init=ad_init,
+            ad_content=ad_content,
+        )
+        clone.directives = dict(self.directives)
+        if self.decl_map is not None:
+            clone.decl_map = dict(self.decl_map)
+        return clone
+
     def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> "Routine":
         ad_content = self.ad_content.prune_for(targets, mod_vars, decl_map)
         targets = ad_content.required_vars(targets)

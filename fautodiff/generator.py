@@ -481,6 +481,86 @@ def _set_call_intents(node, routine_map, generic_map):
         _set_call_intents(child, routine_map, generic_map)
 
 
+def _collect_calls(node: Node, calls: Optional[set] = None) -> set:
+    """Return set of routine names called within ``node``."""
+
+    if calls is None:
+        calls = set()
+    if isinstance(node, CallStatement):
+        calls.add(node.name)
+
+    def _scan(obj):
+        if hasattr(obj, "find_userfunc"):
+            for ufunc in obj.find_userfunc():
+                calls.add(ufunc.name)
+        elif isinstance(obj, (list, tuple)):
+            for item in obj:
+                _scan(item)
+
+    for attr in vars(node).values():
+        _scan(attr)
+
+    for child in getattr(node, "iter_children", lambda: [])():
+        _collect_calls(child, calls)
+    return calls
+
+def _dependency_graph(routines: List[Routine]) -> Dict[str, set]:
+    """Return dependency graph mapping routine names to called routine names."""
+
+    lookup = {r.name: r for r in routines}
+    deps: Dict[str, set] = {}
+    for name, r in lookup.items():
+        calls = {c for c in _collect_calls(r.content) if c in lookup}
+        deps[name] = calls
+    return deps
+
+
+def _dependency_groups(routines: List[Routine]) -> tuple[List[List[str]], Dict[str, set]]:
+    """Return SCCs of routines and their dependency graph.
+
+    Returns
+    -------
+    (groups, deps)
+        ``groups`` is a list of strongly connected components in dependency
+        order. ``deps`` maps routine names to the set of routines they call.
+    """
+
+    deps = _dependency_graph(routines)
+    index = 0
+    stack: List[str] = []
+    indices: Dict[str, int] = {}
+    lowlink: Dict[str, int] = {}
+    comps: List[List[str]] = []
+
+    def strongconnect(v: str) -> None:
+        nonlocal index
+        indices[v] = index
+        lowlink[v] = index
+        index += 1
+        stack.append(v)
+        for w in deps[v]:
+            if w not in indices:
+                strongconnect(w)
+                lowlink[v] = min(lowlink[v], lowlink[w])
+            elif w in stack:
+                lowlink[v] = min(lowlink[v], indices[w])
+        if lowlink[v] == indices[v]:
+            comp: List[str] = []
+            while True:
+                w = stack.pop()
+                comp.append(w)
+                if w == v:
+                    break
+            comps.append(comp)
+
+    for v in deps:
+        if v not in indices:
+            strongconnect(v)
+
+    comps.reverse()  # Tarjan yields reverse topological order
+    return comps, deps
+
+
 def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, dict, dict]:
     """Load routine, variable and generic maps from ``mod_names`` using ``search_dirs``."""
 
@@ -917,10 +997,10 @@ def _generate_ad_subroutine(
     if routine_info.get("skip"):
         return None, False, set()
 
-    subroutine = routine_info["subroutine"]
-    grad_args = routine_info["grad_args"]
-    in_grad_args = routine_info["in_grad_args"]
-    out_grad_args = routine_info["out_grad_args"]
+    subroutine = routine_info["subroutine"].deep_clone()
+    grad_args = [v.deep_clone() for v in routine_info["grad_args"]]
+    in_grad_args = [v.deep_clone() for v in routine_info["in_grad_args"]]
+    out_grad_args = [v.deep_clone() for v in routine_info["out_grad_args"]]
     has_grad_input = routine_info["has_grad_input"]
     # list of original intent(out) arguments
     out_args = [var for var in routine_org.arg_vars() if (var.intent is None or var.intent in ("out", "inout"))]
@@ -1346,6 +1426,21 @@ def _generate_ad_subroutine(
     mod_vars_all = mod_vars + save_vars
     subroutine = subroutine.prune_for(targets, mod_vars_all, decl_map=subroutine.decl_map)
 
+    # update routine_map with pruned argument information
+    arg_info = routine_map.get(routine_org.name)
+    if arg_info is not None:
+        args_new = list(subroutine.args)
+        intents_new = []
+        for a in args_new:
+            decl = subroutine.decls.find_by_name(a)
+            intents_new.append(decl.intent if decl is not None else None)
+        if reverse:
+            arg_info["args_rev_ad"] = args_new
+            arg_info["intents_rev_ad"] = intents_new
+        else:
+            arg_info["args_fwd_ad"] = args_new
+            arg_info["intents_fwd_ad"] = intents_new
+
     mod_all_var_names = [v.name_ext() for v in mod_vars]
     for v in mod_ad_vars:
         mod_all_var_names.append(v.name_ext())
@@ -1454,54 +1549,98 @@ def generate_ad(
             if vars:
                 mod_vars.extend(vars)
 
-        # Generate AD subroutines
-        ad_modules_used = set()
-        pushpop_used = False
+        # Preprocess routines for allocate/pointer/mpi once
         for routine in mod_org.routines:
-
             _parse_allocate(routine.content, mod_vars)
             _parse_pointer(routine.content, mod_vars)
             _parse_mpi_calls(routine.content)
-            _set_call_intents(routine.content, routine_map, generic_map)
 
-            if mode in ("forward", "both"):
-                sub, _, mods_called = _generate_ad_subroutine(
-                    mod_org,
-                    routine,
-                    routine_map,
-                    generic_routines,
-                    mod_vars,
-                    routine_info_fwd[routine.name],
-                    warnings,
-                    reverse=False,
-                )
-                if sub is not None:
-                    mod.routines.append(sub)
-                ad_modules_used.update(mods_called)
-            if mode in ("reverse", "both"):
-                sub, used, mods_called = _generate_ad_subroutine(
-                    mod_org,
-                    routine,
-                    routine_map,
-                    generic_routines,
-                    mod_vars,
-                    routine_info_rev[routine.name],
-                    warnings,
-                    reverse=True,
-                )
-                if sub is not None:
-                    mod.routines.append(sub)
-                ad_modules_used.update(mods_called)
-                if used:
-                    pushpop_used = True
-                wrapper = routine_info_rev[routine.name].get("fwd_rev_subroutine")
-                if wrapper is not None:
-                    mod.routines.append(wrapper)
-                    pushpop_used = True
+        routine_lookup = {r.name: r for r in mod_org.routines}
+        orig_order = [r.name for r in mod_org.routines]
+        groups, deps = _dependency_groups(mod_org.routines)
 
-        name = mod.name
+        ad_modules_used = set()
+        pushpop_used = False
+        generated_subs: Dict[str, Dict[str, Routine]] = {}
+
+        for group in groups:
+            iterating = len(group) > 1 or any(n in deps[n] for n in group)
+            while True:
+                prev_args: Dict[str, Dict[str, List[str]]] = {}
+                if iterating:
+                    for n in group:
+                        info = routine_map.get(n, {})
+                        prev_args[n] = {
+                            "fwd": list(info.get("args_fwd_ad", [])),
+                            "rev": list(info.get("args_rev_ad", [])),
+                            "fwd_rev": list(info.get("args_fwd_rev_ad", [])),
+                        }
+                group_subs: Dict[str, Dict[str, Routine]] = {}
+                for name_r in group:
+                    routine = routine_lookup[name_r]
+                    _set_call_intents(routine.content, routine_map, generic_map)
+                    if mode in ("forward", "both"):
+                        sub, _, mods_called = _generate_ad_subroutine(
+                            mod_org,
+                            routine,
+                            routine_map,
+                            generic_routines,
+                            mod_vars,
+                            routine_info_fwd[name_r],
+                            warnings,
+                            reverse=False,
+                        )
+                        if sub is not None:
+                            group_subs.setdefault(name_r, {})["fwd"] = sub
+                        ad_modules_used.update(mods_called)
+                    if mode in ("reverse", "both"):
+                        routine_info_rev[name_r].pop("fwd_rev_subroutine", None)
+                        sub, used, mods_called = _generate_ad_subroutine(
+                            mod_org,
+                            routine,
+                            routine_map,
+                            generic_routines,
+                            mod_vars,
+                            routine_info_rev[name_r],
+                            warnings,
+                            reverse=True,
+                        )
+                        if sub is not None:
+                            group_subs.setdefault(name_r, {})["rev"] = sub
+                        wrapper = routine_info_rev[name_r].get("fwd_rev_subroutine")
+                        if wrapper is not None:
+                            group_subs.setdefault(name_r, {})["wrapper"] = wrapper
+                        ad_modules_used.update(mods_called)
+                        if used:
+                            pushpop_used = True
+                generated_subs.update(group_subs)
+                if not iterating:
+                    break
+                changed = False
+                for n in group:
+                    info_prev = prev_args[n]
+                    info_curr = routine_map.get(n, {})
+                    if mode in ("forward", "both") and info_prev["fwd"] != info_curr.get("args_fwd_ad", []):
+                        changed = True
+                    if mode in ("reverse", "both") and info_prev["rev"] != info_curr.get("args_rev_ad", []):
+                        changed = True
+                    if mode in ("reverse", "both") and info_prev["fwd_rev"] != info_curr.get("args_fwd_rev_ad", []):
+                        changed = True
+                if not changed:
+                    break
+
+        for name_r in orig_order:
+            info = generated_subs.get(name_r, {})
+            if mode in ("forward", "both") and "fwd" in info:
+                mod.routines.append(info["fwd"])
+            if mode in ("reverse", "both") and "rev" in info:
+                mod.routines.append(info["rev"])
+                if "wrapper" in info:
+                    mod.routines.append(info["wrapper"])
+
+        name_mod = mod.name
         for m in sorted(ad_modules_used):
-            if m != name:
+            if m != name_mod:
                 mod.uses.append(Use(m))
                 mod.uses.append(Use(f"{m}{AD_SUFFIX}"))
         if pushpop_used:
