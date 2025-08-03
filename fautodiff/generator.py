@@ -16,6 +16,7 @@ from . import code_tree as code_tree
 from .code_tree import (
     Node,
     Module,
+    Program,
     Routine,
     Subroutine,
     Function,
@@ -1357,8 +1358,14 @@ def generate_ad(
     generic_routines = {}
     for mod_org in modules_org:
         name = mod_org.name
-        mod = Module(f"{name}{AD_SUFFIX}")
-        mod.uses = Block([Use(name)])
+        mod = type(mod_org)(f"{name}{AD_SUFFIX}")
+        if isinstance(mod_org, Program):
+            if mod_org.uses is not None:
+                mod.uses = mod_org.uses.deep_clone()
+            else:
+                mod.uses = Block([])
+        else:
+            mod.uses = Block([Use(name)])
 
         if mod_org.decls:
             type_map = {}
