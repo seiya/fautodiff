@@ -3057,7 +3057,7 @@ class BranchBlock(Node):
             vars_new.merge(vs)
             advars = {name for name in vs.names() if Node.is_savevar(name)}
             to_remove = to_remove | (origin_savevars - advars)
-            if isinstance(self, (IfBlock, WhereBlock)) and isinstance(block[0], Deallocate):
+            if isinstance(self, (IfBlock, WhereBlock)) and len(block) > 0 and isinstance(block[0], Deallocate):
                 if cond is not None and _check(cond):
                     to_remove = to_remove | {v.name_ext() for v in block[0].vars}
             if cond is None:
@@ -3093,8 +3093,7 @@ class BranchBlock(Node):
         new_condblocks = []
         for cond, block in self.cond_blocks:
             new_block = block.prune_for(targets, mod_vars, decl_map)
-            if not new_block.is_effectively_empty():
-                new_condblocks.append((cond, new_block))
+            new_condblocks.append((cond, new_block))
         if len(new_condblocks) == 0:
             return Block([])
         if isinstance(self, IfBlock):
