@@ -47,6 +47,7 @@ from .code_tree import (
 )
 from .operators import (
     INTRINSIC_FUNCTIONS,
+    NONDIFF_INTRINSICS,
     AryIndex,
     OpAdd,
     OpChar,
@@ -231,7 +232,7 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
                 for arg in getattr(stmt.items[1], "items", [])
                 if not isinstance(arg, str)
             ]
-            if name_l in INTRINSIC_FUNCTIONS:
+            if name_l in INTRINSIC_FUNCTIONS or name_l in NONDIFF_INTRINSICS:
                 return OpFunc(name_l, args)
             return OpFuncUser(name_l, args)
 
@@ -1190,9 +1191,11 @@ def _parse_routine(content,
                 return PointerClear(lhs, None)
             rhs = _stmt2op(stmt.items[2], decl_map, type_map)
             return PointerAssignment(lhs, rhs, info=info)
-        if isinstance(stmt, Fortran2003.Write_Stmt):
+        if isinstance(stmt, (Fortran2003.Write_Stmt, Fortran2003.Print_Stmt)):
             return None
-        if isinstance(stmt, Fortran2003.Print_Stmt):
+        if isinstance(stmt, Fortran2003.Read_Stmt):
+            return None
+        if isinstance(stmt, (Fortran2003.Open_Stmt, Fortran2003.Close_Stmt)):
             return None
         if isinstance(stmt, Fortran2003.Call_Stmt):
             name = stmt.items[0].tofortran()
@@ -1279,14 +1282,7 @@ def _parse_routine(content,
             seg = []
             while i < len(stmt.content):
                 itm = stmt.content[i]
-                if isinstance(
-                    itm,
-                    (
-                        Fortran2003.Else_If_Stmt,
-                        Fortran2003.Else_Stmt,
-                        Fortran2003.End_If_Stmt,
-                    ),
-                ):
+                if isinstance(itm, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt,)):
                     break
                 seg.append(itm)
                 i += 1
@@ -1300,14 +1296,7 @@ def _parse_routine(content,
                     seg = []
                     while i < len(stmt.content):
                         j = stmt.content[i]
-                        if isinstance(
-                            j,
-                            (
-                                Fortran2003.Else_If_Stmt,
-                                Fortran2003.Else_Stmt,
-                                Fortran2003.End_If_Stmt,
-                            ),
-                        ):
+                        if isinstance(j, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt,)):
                             break
                         seg.append(j)
                         i += 1
