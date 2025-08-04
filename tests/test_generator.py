@@ -592,7 +592,9 @@ class TestGenerator(unittest.TestCase):
 def _make_example_test(src: Path):
     def test(self):
         code_tree.Node.reset()
-        generated = generator.generate_ad(str(src), warn=False)
+        generated = generator.generate_ad(
+            str(src), warn=False, search_dirs=[".", "examples", "fortran_modules"]
+        )
         expected = src.with_name(src.stem + "_ad.f90").read_text()
         self.assertEqual(generated, expected, msg=f"Mismatch for {src.name}")
 
@@ -601,18 +603,12 @@ def _make_example_test(src: Path):
 
 examples_dir = Path("examples")
 for _src in sorted(examples_dir.glob("*.f90")):
-    if _src.name.endswith("_ad.f90") or _src.stem in {"cross_mod_a", "cross_mod_b", "call_module_vars", "pointer_arrays", "mpi_example", "omp_loops", "call_example"}:
+    if _src.name.endswith("_ad.f90"):
         continue
     test_name = f"test_{_src.stem}"
+    if hasattr(TestGenerator, test_name):
+        continue
     setattr(TestGenerator, test_name, _make_example_test(_src))
-
-class TestPointerArrays(unittest.TestCase):
-    def test_pointer_arrays(self):
-        code_tree.Node.reset()
-        src = Path("examples/pointer_arrays.f90")
-        generated = generator.generate_ad(str(src), warn=False)
-        expected = src.with_name("pointer_arrays_ad.f90").read_text()
-        self.assertEqual(generated, expected)
 
 
 if __name__ == "__main__":
