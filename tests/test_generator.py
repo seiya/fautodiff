@@ -77,12 +77,6 @@ class TestGenerator(unittest.TestCase):
         expected = Path("examples/call_module_vars_ad.f90").read_text()
         self.assertEqual(generated, expected)
 
-    def test_keyword_arg_call(self):
-        code_tree.Node.reset()
-        generated = generator.generate_ad("examples/keyword_args.f90", warn=False)
-        expected = Path("examples/keyword_args_ad.f90").read_text()
-        self.assertEqual(generated, expected)
-
     def test_dependency_groups(self):
         code_tree.Node.reset()
         import textwrap
@@ -195,11 +189,6 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad(str(src), warn=False)
             self.assertNotIn("c_ad", generated)
 
-    def test_module_vars_example_no_diff(self):
-        code_tree.Node.reset()
-        generated = generator.generate_ad("examples/module_vars.f90", warn=False)
-        self.assertNotIn("c_ad", generated)
-
     def test_module_vars_example_fadmod(self):
         code_tree.Node.reset()
         fadmod = Path("module_vars.fadmod")
@@ -209,12 +198,6 @@ class TestGenerator(unittest.TestCase):
         data = json.loads(fadmod.read_text())
         variables = data.get("variables", {})
         self.assertIn("c", variables)
-
-    def test_block_construct(self):
-        code_tree.Node.reset()
-        generated = generator.generate_ad("examples/block_construct.f90", warn=False)
-        expected = Path("examples/block_construct_ad.f90").read_text()
-        self.assertEqual(generated, expected)
 
     def test_fadmod_variable_defaults(self):
         code_tree.Node.reset()
@@ -572,21 +555,6 @@ class TestGenerator(unittest.TestCase):
         self.assertIn('MPI_Recv_init', generics)
         for routine in generics['MPI_Recv_init']:
             self.assertIn(routine, routines)
-
-    def test_mpi_example(self):
-        code_tree.Node.reset()
-        generated = generator.generate_ad(
-            'examples/mpi_example.f90', warn=False, search_dirs=['fortran_modules']
-        )
-        expected = Path('examples/mpi_example_ad.f90').read_text()
-        self.assertEqual(generated, expected)
-
-    def test_where_forall(self):
-        code_tree.Node.reset()
-        src = Path('examples/where_forall.f90')
-        generated = generator.generate_ad(str(src), warn=False)
-        expected = src.with_name('where_forall_ad.f90').read_text()
-        self.assertEqual(generated, expected)
 
 
 def _make_example_test(src: Path):

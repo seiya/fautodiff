@@ -28,6 +28,9 @@ This file provides guidelines for contributors about the repository and develop 
 - Place the original Fortran code samples under “examples” and the test scripts under “tests.”
 - The provided test script reads code from ``examples`` and checks the generated
   AD output against the expected Fortran code.
+- Comparison tests between ``examples/*.f90`` files and their ``*_ad.f90``
+  counterparts are generated automatically in ``tests/test_generator.py``.
+  Do not write explicit tests for these pairs.
 - When adding modules or subroutines under ``examples/``, also create a driver and
   test subroutine in ``tests/fortran_runtime`` to verify the generated AD code via
   finite differences. Update the ``Makefile`` and ``tests/test_fortran_adcode.py``
