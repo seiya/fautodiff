@@ -9,10 +9,11 @@ REV_SUFFIX = "_rev_ad"
 import json
 import sys
 from pathlib import Path
-from typing import Optional, Union, List, Tuple, Dict
+from typing import Optional, Union, List, Tuple, Dict, Set
 
 # Ensure other modules use the same AD suffix
 from . import code_tree as code_tree
+from . import operators as operators
 from .code_tree import (
     Node,
     Module,
@@ -59,6 +60,7 @@ from .operators import (
 code_tree.AD_SUFFIX = AD_SUFFIX
 code_tree.FWD_SUFFIX = FWD_SUFFIX
 code_tree.REV_SUFFIX = REV_SUFFIX
+operators.AD_SUFFIX = AD_SUFFIX
 
 from . import parser
 from .parser import INTRINSIC_MODULES
@@ -162,9 +164,11 @@ def _module_var_fwd_rev(routine_org: Routine,
     mod_names = [v.name_ext() for v in mod_vars]
     cross_vars = []
     for var in common:
-        name = var.name_ext()
-        if name in mod_names and not name.endswith(AD_SUFFIX):
-            cross_vars.append(next(v for v in mod_vars if v.name_ext() == name))
+        if var.is_module_var(mod_names):
+            name = var.name_ext()
+            cross_var = next((v for v in mod_vars if v.name_ext() == name), None)
+            if cross_var is not None and cross_var not in cross_vars:
+                cross_vars.append(cross_var)
     cross_vars = sorted(cross_vars, key=lambda v: v.name_ext())
     args = []
     sub_fwd_rev = None
@@ -217,6 +221,7 @@ def _module_var_fwd_rev(routine_org: Routine,
             node_rev = block_rev[0]
         if sub_fwd_rev is None:
             sub_fwd_rev = Subroutine(f"{routine_org.name}_fwd_rev_ad", args)
+            sub_fwd_rev.ad_content = Block([])
         sub_fwd_rev.content.append(node_fwd)
         subroutine.content.insert_begin(node_rev)
     for idx in index:
@@ -249,8 +254,8 @@ def _module_var_fwd_rev(routine_org: Routine,
             lhs = node.lhs
             rhs = node.rhs
             lhs_name = lhs.name_ext()
-            if (lhs.pointer and lhs_name in mod_var_names and
-                isinstance(rhs, OpVar) and rhs.name_ext() in mod_var_names):
+            if (lhs.pointer and lhs.is_module_var(mod_var_names) and
+                isinstance(rhs, OpVar) and rhs.is_module_var(mod_var_names)):
                 rhs_name = rhs.name_ext()
                 if rhs.allocatable and rhs_name not in allocated:
                     allocated[rhs_name] = True
@@ -283,7 +288,8 @@ def _module_var_fwd_rev(routine_org: Routine,
 
 def _parse_allocate(node: Node,
                     mod_vars: List[OpVar],
-                    map: Optional[Dict[str, List[AryIndex]]] = None
+                    map: Optional[Dict[str, List[AryIndex]]] = None,
+                    local: Optional[Set[str]] = None
                     ) -> None:
     """Record indices of allocated arrays for later deallocation.
 
@@ -293,11 +299,12 @@ def _parse_allocate(node: Node,
     """
     if map is None:
         map = {}
+        local = set()
         top = True
     else:
         top = False
     for child in node.iter_children():
-        _parse_allocate(child, mod_vars, map)
+        _parse_allocate(child, mod_vars, map, local)
     if isinstance(node, Allocate):
         for var in node.vars:
             if var.is_constant:
@@ -306,18 +313,28 @@ def _parse_allocate(node: Node,
             if name not in map:
                 map[name] = []
             map[name].append(var.index)
+            root = var
+            while root.ref_var is not None:
+                root = root.ref_var
+            if root.declared_in == "routine":
+                local.add(name)
     if isinstance(node, Deallocate):
         for var in node.vars:
             name = var.name_ext()
             if name in map and map[name]:
                 node.index = map[name].pop()
+            root = var
+            while root.ref_var is not None:
+                root = root.ref_var
+            if root.declared_in == "routine":
+                local.add(name)
     if top:
         mod_var_names = [v.name_ext() for v in mod_vars]
         for name in map:
             if map[name]:
-                if name not in mod_var_names:
+                if name not in mod_var_names or name in local:
                     var = OpVar(name, index=map[name][0])
-                    node.append(Declaration(vars=[OpVar]))
+                    node.append(Deallocate([var]))
 
 def _parse_pointer(node: Node,
                    mod_vars: List[OpVar],
@@ -381,12 +398,10 @@ def _parse_pointer(node: Node,
                     map_ref[ptr_name] = None
     if top:
         mod_var_names = [v.name for v in mod_vars]
-        for name in map_ptr:
-            if ((name.endswith(AD_SUFFIX) and name.removesuffix(AD_SUFFIX) in mod_var_names) or
-                name in mod_var_names
-            ):
+        for name, var in map_ptr.items():
+            if var.is_module_var(mod_var_names, check_ad=True):
                 continue
-            node.append(PointerClear(map_ptr[name], previous=map_ref[name]))
+            node.append(PointerClear(var, previous=map_ref[name]))
 
     return (map_ptr, map_ref)
 

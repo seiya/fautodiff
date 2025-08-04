@@ -2579,7 +2579,7 @@ class Allocate(Node):
         nodes: List[Node] = []
         mod_var_names = [var.name for var in mod_vars] if mod_vars is not None else []
         for var in self.vars:
-            is_mod_var = var.name in mod_var_names
+            is_mod_var = var.is_module_var(mod_var_names)
             ad_var = var.add_suffix(AD_SUFFIX)
             if reverse:
                 if var.ad_target:
@@ -2616,7 +2616,9 @@ class Allocate(Node):
         mod_var_names = [var.name for var in mod_vars] if mod_vars is not None else []
         vars = []
         for var in self.vars:
-            if not var.name in mod_var_names and (any(var.name == f"{name}{AD_SUFFIX}" for name in mod_var_names) or (decl_map is None or var.name in decl_map)):
+            is_base_mod = var.is_module_var(mod_var_names)
+            is_any_mod = var.is_module_var(mod_var_names, check_ad=True)
+            if not is_base_mod and (is_any_mod or (decl_map is None or var.name in decl_map)):
                 vars.append(var)
         if vars:
             return Allocate(vars, mold=self.mold)
@@ -2691,7 +2693,7 @@ class Deallocate(Node):
         nodes: List[Node] = []
         mod_var_names = [var.name for var in mod_vars] if mod_vars is not None else []
         for var in self.vars:
-            is_mod_var = var.name in mod_var_names
+            is_mod_var = var.is_module_var(mod_var_names)
             ad_var = var.add_suffix(AD_SUFFIX)
             if reverse:
                 if var.ad_target:
@@ -2739,7 +2741,9 @@ class Deallocate(Node):
         mod_var_names = [var.name for var in mod_vars] if mod_vars is not None else []
         vars = []
         for var in self.vars:
-            if not var.name in mod_var_names and (any(var.name == f"{name}{AD_SUFFIX}" for name in mod_var_names) or (decl_map is None or var.name in decl_map)):
+            is_base_mod = var.is_module_var(mod_var_names)
+            is_any_mod = var.is_module_var(mod_var_names, check_ad=True)
+            if not is_base_mod and (is_any_mod or (decl_map is None or var.name in decl_map)):
                 vars.append(var)
         if vars:
             return Deallocate(vars, ad_code=True)
