@@ -843,7 +843,7 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "out",
+        "inout",
         "inout",
         "in",
         "in",
@@ -937,7 +937,7 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "out",
+        "inout",
         "inout",
         "in",
         "in",
@@ -1027,7 +1027,7 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "out",
+        "inout",
         "inout",
         "in",
         "in",
@@ -1117,7 +1117,7 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        "out",
+        "inout",
         "inout",
         "in",
         "in",
@@ -1992,7 +1992,7 @@
         "in",
         "in",
         "in",
-        "out",
+        "inout",
         "out"
       ]
     },
@@ -2114,7 +2114,7 @@
         "in",
         "in",
         "in",
-        "out",
+        "inout",
         "out"
       ]
     },
@@ -2234,7 +2234,7 @@
         "in",
         "in",
         "in",
-        "out",
+        "inout",
         "out"
       ]
     },
@@ -2354,7 +2354,7 @@
         "in",
         "in",
         "in",
-        "out",
+        "inout",
         "out"
       ]
     },
@@ -2476,7 +2476,7 @@
         "in",
         "in",
         "in",
-        "out",
+        "inout",
         "out"
       ]
     },
@@ -2598,7 +2598,7 @@
         "in",
         "in",
         "in",
-        "out",
+        "inout",
         "out"
       ]
     },
@@ -2718,7 +2718,7 @@
         "in",
         "in",
         "in",
-        "out",
+        "inout",
         "out"
       ]
     },
@@ -2838,7 +2838,7 @@
         "in",
         "in",
         "in",
-        "out",
+        "inout",
         "out"
       ]
     },

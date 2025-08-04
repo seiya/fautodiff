@@ -369,9 +369,12 @@ def parse_src(src, *, search_dirs=None, decl_map=None, type_map=None):
 
 
 def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
-    """Return variable declaration info from ``mod_name`` fadmod file."""
-    if mod_name.lower() in INTRINSIC_MODULES:
-        return {}
+    """Return variable declaration info from ``mod_name`` fadmod file.
+
+    Intrinsic modules normally do not require accompanying ``.fadmod`` files,
+    but if such a file exists we load it automatically.
+    """
+
     for d in search_dirs:
         path = Path(d) / f"{mod_name}.fadmod"
         if path.exists():
@@ -382,7 +385,10 @@ def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
                 raise RuntimeError(
                     f"invalid fadmod file for module {mod_name}: {exc}"
                 ) from exc
-            break
+
+    if mod_name.lower() in INTRINSIC_MODULES:
+        return {}
+
     raise RuntimeError(f"fadmod file not found for module {mod_name}")
 
 
@@ -429,7 +435,7 @@ def _parse_decl_stmt(
         if type_map is not None and name in type_map:
             type_def = type_map[name]
         elif name == "c_ptr": # tentative
-            type_def = TypeDef(name=name, components=[])
+            type_def = TypeDef(name=name, components=[], procs=[])
         else:
             raise RuntimeError(f"type definition not found: {name}")
     else:
