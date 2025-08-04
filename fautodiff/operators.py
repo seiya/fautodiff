@@ -10,6 +10,10 @@ import copy
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")  # pattern for valid variable names
 
+# Suffix used for adjoint variables.  This is set by ``generator`` when a
+# different suffix is desired but defaults to ``_ad``.
+AD_SUFFIX = "_ad"
+
 
 @dataclass
 class AryIndex:
@@ -1121,6 +1125,22 @@ class OpVar(OpLeaf):
             declared_in=self.declared_in,
             ref_var=ref_var
         )
+
+    def is_module_var(self, mod_var_names: List[str], check_ad: bool = False) -> bool:
+        """Return ``True`` if this variable refers to a (possibly AD) module variable.
+
+        The check walks to the root variable (ignoring components) and verifies
+        that it was not declared within the current routine.  When ``check_ad``
+        is ``True`` variables with the global ``AD_SUFFIX`` appended are also
+        considered module variables."""
+
+        root = self
+        while root.ref_var is not None:
+            root = root.ref_var
+        name = root.name
+        if check_ad and name.endswith(AD_SUFFIX):
+            name = name[:-len(AD_SUFFIX)]
+        return root.declared_in != "routine" and name in mod_var_names
 
     def remove_suffix(self, suffix: Optional[str] = None) -> "OpVar":
         if suffix is None:
