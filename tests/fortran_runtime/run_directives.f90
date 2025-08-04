@@ -63,6 +63,7 @@ contains
     end if
 
     inner1 = y_ad**2
+    x_ad = 0.0
     call add_const_rev_ad(x, x_ad, y_ad, z)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -92,6 +93,7 @@ contains
     end if
 
     inner1 = z_ad**2
+    x_ad = 0.0
     call worker_rev_ad(x, x_ad, z_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then

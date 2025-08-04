@@ -83,6 +83,8 @@ contains
     end if
 
     inner1 = c_ad**2
+    a_ad = 0.0
+    b_ad = 0.0
     call add_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
     inner2 = a_ad + b_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -114,6 +116,8 @@ contains
     end if
 
     inner1 = c_ad**2
+    a_ad = 0.0
+    b_ad = 0.0
     call subtract_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
     inner2 = a_ad + b_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -145,6 +149,8 @@ contains
     end if
 
     inner1 = c_ad**2
+    a_ad = 0.0
+    b_ad = 0.0
     call multiply_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
     inner2 = a_ad + b_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -177,6 +183,8 @@ contains
     end if
 
     inner1 = c_ad**2
+    a_ad = 0.0
+    b_ad = 0.0
     call divide_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
     inner2 = a_ad + b_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -209,6 +217,8 @@ contains
     end if
 
     inner1 = c_ad**2
+    a_ad = 0.0
+    b_ad = 0.0
     call power_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
     inner2 = a_ad + b_ad
     if (abs((inner2 - inner1) / inner1) > tol) then

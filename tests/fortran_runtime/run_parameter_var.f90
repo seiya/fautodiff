@@ -57,6 +57,7 @@ contains
     end if
 
     inner1 = area_ad**2
+    r_ad = 0.0
     call compute_area_rev_ad(r, r_ad, area_ad)
     inner2 = r_ad
     if (abs((inner2 - inner1) / inner1) > tol) then

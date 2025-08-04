@@ -77,6 +77,7 @@ contains
     end if
 
     inner1 = res_ad**2
+    x_ad = 0.0
     call pointer_allocate_rev_ad(n, x, x_ad, res_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -111,6 +112,7 @@ contains
     end if
 
     inner1 = res_ad**2
+    x_ad = 0.0
     call pointer_subarray_rev_ad(n, x, x_ad, res_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -152,9 +154,12 @@ contains
        error stop 1
     end if
 
-    inner1 = res_ad**2 + sum(sub1_p_ad(:)**2) + sum(sub2_p_ad(:)**2)
+    inner1 = res_ad**2
     deallocate(all_p)
     call pointer_allsub_init(n)
+    sub1_p_ad(:) = 0.0
+    sub2_p_ad(:) = 0.0
+    x_ad(:) = 0.0
     call pointer_allsub_main_fwd_rev_ad()
     call pointer_allsub_main_rev_ad(n, x, x_ad, res_ad)
     inner2 = sum(x_ad)
@@ -195,6 +200,8 @@ contains
     end if
 
     inner1 = res_ad**2
+    x_ad(:) = 0.0
+    y_ad(:) = 0.0
     call pointer_swap_rev_ad(n, x, x_ad, y, y_ad, res_ad)
     inner2 = sum(x_ad) + sum(y_ad)
     if (abs((inner2 - inner1) / inner1) > tol) then

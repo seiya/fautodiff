@@ -601,7 +601,7 @@ def _make_example_test(src: Path):
 
 examples_dir = Path("examples")
 for _src in sorted(examples_dir.glob("*.f90")):
-    if _src.name.endswith("_ad.f90") or _src.stem in {"cross_mod_a", "cross_mod_b", "call_module_vars", "pointer_arrays", "mpi_example", "omp_loops"}:
+    if _src.name.endswith("_ad.f90") or _src.stem in {"cross_mod_a", "cross_mod_b", "call_module_vars", "pointer_arrays", "mpi_example", "omp_loops", "call_example"}:
         continue
     test_name = f"test_{_src.stem}"
     setattr(TestGenerator, test_name, _make_example_test(_src))

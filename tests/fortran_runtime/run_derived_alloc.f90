@@ -68,6 +68,7 @@ contains
 
     inner1 = res_ad**2
     call derived_alloc_finalize_rev_ad(m)
+    x_ad = 0.0
     call derived_alloc_run_rev_ad(n, m, x, x_ad, res_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then

@@ -93,6 +93,7 @@ contains
     x = 1.0
     y = 2.0
     call call_subroutine(x, y)
+    y_ad = 0.0
     call call_subroutine_rev_ad(x, x_ad, y, y_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -125,6 +126,7 @@ contains
     inner1 = x_ad**2
     y = 3.0
     call call_fucntion(x, y)
+    y_ad = 0.0
     call call_fucntion_rev_ad(x_ad, y, y_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -162,6 +164,7 @@ contains
     x = 1.0
     y = 2.0
     call arg_operation(x, y)
+    y_ad = 0.0
     call arg_operation_rev_ad(x, x_ad, y, y_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -199,6 +202,7 @@ contains
     x = 1.0
     y = 2.0
     call arg_function(x, y)
+    y_ad = 0.0
     call arg_function_rev_ad(x, x_ad, y, y_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -236,6 +240,7 @@ contains
     a = 1.0
     b = 2.0
     call foo(a, b)
+    b_ad = 0.0
     call foo_rev_ad(a, a_ad, b, b_ad)
     inner2 = a_ad + 0.5 * b_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -269,6 +274,7 @@ contains
     inner1 = b_ad**2
     a = 2.0
     b = bar(a)
+    a_ad = 0.0
     call bar_rev_ad(a, a_ad, b_ad)
     inner2 = a_ad
     if (abs((inner2 - inner1) / inner1) > tol) then

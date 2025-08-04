@@ -141,6 +141,7 @@ contains
        error stop 1
     end if
     inner1 = z_ad**2
+    x_ad = 0.0
     call select_example_rev_ad(i, x, x_ad, z_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -159,6 +160,7 @@ contains
        error stop 1
     end if
     inner1 = z_ad**2
+    x_ad = 0.0
     call select_example_rev_ad(i, x, x_ad, z_ad)
     inner2 = x_ad
     if (abs(inner2 - inner1) > tol) then
