@@ -20,9 +20,9 @@ contains
     real, intent(inout) :: a
     real, intent(inout) :: a_ad
     real, intent(in)  :: b
-    real, intent(out) :: b_ad
+    real, intent(inout) :: b_ad
 
-    b_ad = a_ad ! a = a * 2.0 + b
+    b_ad = a_ad + b_ad ! a = a * 2.0 + b
     a_ad = a_ad * 2.0 ! a = a * 2.0 + b
 
     return
@@ -42,10 +42,10 @@ contains
 
   subroutine bar_rev_ad(a, a_ad, b_ad)
     real, intent(in)  :: a
-    real, intent(out) :: a_ad
+    real, intent(inout) :: a_ad
     real, intent(inout) :: b_ad
 
-    a_ad = b_ad * 2.0 * a ! b = a**2
+    a_ad = b_ad * 2.0 * a + a_ad ! b = a**2
     b_ad = 0.0 ! b = a**2
 
     return
@@ -66,7 +66,7 @@ contains
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
     real, intent(in)  :: y
-    real, intent(out) :: y_ad
+    real, intent(inout) :: y_ad
 
     call foo_rev_ad(x, x_ad, y, y_ad) ! call foo(x, y)
 
@@ -87,7 +87,7 @@ contains
   subroutine call_fucntion_rev_ad(x_ad, y, y_ad)
     real, intent(inout) :: x_ad
     real, intent(in)  :: y
-    real, intent(out) :: y_ad
+    real, intent(inout) :: y_ad
 
     call bar_rev_ad(y, y_ad, x_ad) ! x = bar(y)
 
@@ -111,11 +111,11 @@ contains
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
     real, intent(in)  :: y
-    real, intent(out) :: y_ad
+    real, intent(inout) :: y_ad
     real :: foo_arg1_save_45_ad
 
     call foo_rev_ad(x, x_ad, y * 2.0, foo_arg1_save_45_ad) ! call foo(x, y * 2.0)
-    y_ad = foo_arg1_save_45_ad * 2.0 ! call foo(x, y * 2.0)
+    y_ad = foo_arg1_save_45_ad * 2.0 + y_ad ! call foo(x, y * 2.0)
 
     return
   end subroutine arg_operation_rev_ad
@@ -138,7 +138,7 @@ contains
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
     real, intent(in)  :: y
-    real, intent(out) :: y_ad
+    real, intent(inout) :: y_ad
     real :: foo_arg1_save_54_ad
 
     call foo_rev_ad(x, x_ad, bar(y), foo_arg1_save_54_ad) ! call foo(x, bar(y))

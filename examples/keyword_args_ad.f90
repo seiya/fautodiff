@@ -20,9 +20,9 @@ contains
     real, intent(inout) :: a
     real, intent(inout) :: a_ad
     real, intent(in)  :: b
-    real, intent(out) :: b_ad
+    real, intent(inout) :: b_ad
 
-    b_ad = a_ad ! a = a + b
+    b_ad = a_ad + b_ad ! a = a + b
 
     return
   end subroutine inc_rev_ad
@@ -42,7 +42,7 @@ contains
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
     real, intent(in)  :: y
-    real, intent(out) :: y_ad
+    real, intent(inout) :: y_ad
 
     call inc_rev_ad(x, x_ad, y, y_ad) ! call inc(a=x, b=y)
 

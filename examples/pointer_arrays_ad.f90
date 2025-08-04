@@ -47,12 +47,10 @@ contains
   subroutine pointer_allocate_rev_ad(n, x, x_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, pointer :: p_ad(:)
     integer :: i
-
-    x_ad = 0.0
 
     if (.not. associated(mod_p_ad)) then
       allocate(mod_p_ad, mold=mod_p)
@@ -109,12 +107,10 @@ contains
   subroutine pointer_subarray_rev_ad(n, x, x_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, pointer :: p_ad(:)
     integer :: i
-
-    x_ad = 0.0
 
     if (.not. associated(mod_p_ad)) then
       allocate(mod_p_ad, mold=mod_p)
@@ -206,7 +202,7 @@ contains
   subroutine pointer_allsub_main_rev_ad(n, x, x_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x(n)
-    real, intent(out) :: x_ad(n)
+    real, intent(inout) :: x_ad(n)
     real, intent(inout) :: res_ad
     integer :: i
 
@@ -223,7 +219,7 @@ contains
     end do
     res_ad = 0.0 ! res = 0.0
     do i = n, 1, - 1
-      x_ad(i) = sub1_p_ad(i) ! sub1_p(i) = sub1_p(i) + x(i)
+      x_ad(i) = sub1_p_ad(i) + x_ad(i) ! sub1_p(i) = sub1_p(i) + x(i)
     end do
 
     return
@@ -279,9 +275,9 @@ contains
   subroutine pointer_swap_rev_ad(n, x, x_ad, y, y_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in), target  :: x(n)
-    real, intent(out), target :: x_ad(n)
+    real, intent(inout), target :: x_ad(n)
     real, intent(in), target  :: y(n)
-    real, intent(out), target :: y_ad(n)
+    real, intent(inout), target :: y_ad(n)
     real, intent(inout) :: res_ad
     real, pointer :: swap_ad(:)
     real, pointer :: work1_ad(:)
@@ -297,9 +293,6 @@ contains
       work1_ad => work2_ad ! work1 => work2
       work2_ad => swap_ad ! work2 => swap
     end do
-
-    x_ad(:) = 0.0
-    y_ad(:) = 0.0
 
     do j = 3, 1, - 1
       call fautodiff_stack_p%pop(work1_ad)

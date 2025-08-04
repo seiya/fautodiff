@@ -33,7 +33,7 @@ contains
   subroutine do_with_recurrent_scalar_rev_ad(n, x, x_ad, z_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x(n)
-    real, intent(out) :: x_ad(n)
+    real, intent(inout) :: x_ad(n)
     real, intent(inout) :: z_ad(n)
     real :: work_ad
     real :: work
@@ -59,7 +59,7 @@ contains
       work = x(i) * work
       work_ad = z_ad(i) * 2.0 * work + work_ad ! z(i) = work**2 + z(i)
       work = work_save_16_ad
-      x_ad(i) = work_ad * work ! work = x(i) * work
+      x_ad(i) = work_ad * work + x_ad(i) ! work = x(i) * work
       work_ad = work_ad * x(i) ! work = x(i) * work
     end do
     work = work_save_18_ad
@@ -105,7 +105,7 @@ contains
 
   subroutine do_while_rev_ad(x, x_ad, y_ad, z_ad)
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
     real, intent(inout) :: z_ad
     real :: a_ad
@@ -130,7 +130,6 @@ contains
     end do
 
     a_ad = 0.0
-    x_ad = 0.0
 
     z_ad = y_ad * y + z_ad ! y = z * y
     y_ad = y_ad * z ! y = z * y

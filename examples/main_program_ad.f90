@@ -23,13 +23,13 @@ contains
 
   subroutine simple_rev_ad(a, a_ad, b, b_ad, c_ad)
     real, intent(in)  :: a
-    real, intent(out) :: a_ad
+    real, intent(inout) :: a_ad
     real, intent(in)  :: b
-    real, intent(out) :: b_ad
+    real, intent(inout) :: b_ad
     real, intent(inout) :: c_ad
 
-    a_ad = c_ad ! c = a + b
-    b_ad = c_ad ! c = a + b
+    a_ad = c_ad + a_ad ! c = a + b
+    b_ad = c_ad + b_ad ! c = a + b
     c_ad = 0.0 ! c = a + b
 
     return

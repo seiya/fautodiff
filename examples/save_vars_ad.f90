@@ -32,9 +32,9 @@ contains
 
   subroutine simple_rev_ad(x, x_ad, y, y_ad, z_ad)
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(in)  :: y
-    real, intent(out) :: y_ad
+    real, intent(inout) :: y_ad
     real, intent(inout) :: z_ad
     real :: work_ad
     real :: work
@@ -48,7 +48,7 @@ contains
     work = x**2
 
     work_ad = z_ad * x ! z = work * x + z
-    x_ad = z_ad * work ! z = work * x + z
+    x_ad = z_ad * work + x_ad ! z = work * x + z
     work = work_save_15_ad
     x_ad = work_ad * 2.0 * x + x_ad ! work = x**2
     work_ad = z_ad * x ! z = work * x + z
@@ -56,7 +56,7 @@ contains
     work = work_save_13_ad
     work_ad = work_ad * 2.0 * work ! work = work**2
     work_ad = z_ad + work_ad ! z = work + y
-    y_ad = z_ad ! z = work + y
+    y_ad = z_ad + y_ad ! z = work + y
     z_ad = 0.0 ! z = work + y
     x_ad = work_ad + x_ad ! work = x + 1.0
 
@@ -103,9 +103,9 @@ contains
 
   subroutine if_example_rev_ad(x, x_ad, y, y_ad, z_ad)
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(in)  :: y
-    real, intent(out) :: y_ad
+    real, intent(inout) :: y_ad
     real, intent(inout) :: z_ad
     real :: work_ad
     real :: work
@@ -124,10 +124,8 @@ contains
     work_save_39_ad = work
     work = work * x
 
-    y_ad = 0.0
-
     work_ad = z_ad * x ! z = work * x + z
-    x_ad = z_ad * work ! z = work * x + z
+    x_ad = z_ad * work + x_ad ! z = work * x + z
     work = work_save_39_ad
     x_ad = work_ad * work + x_ad ! work = work * x
     work_ad = work_ad * x ! work = work * x
@@ -144,7 +142,7 @@ contains
       x_ad = work_ad * work + x_ad ! work = work * x
       work_ad = work_ad * x ! work = work * x
       work_ad = z_ad * y + work_ad ! z = work * y
-      y_ad = z_ad * work ! z = work * y
+      y_ad = z_ad * work + y_ad ! z = work * y
       z_ad = 0.0 ! z = work * y
       x_ad = work_ad + x_ad ! work = x
       work_ad = 0.0 ! work = x
@@ -206,9 +204,9 @@ contains
     integer, intent(in)  :: n
     integer, intent(in)  :: m
     real, intent(in)  :: x(n,m)
-    real, intent(out) :: x_ad(n,m)
+    real, intent(inout) :: x_ad(n,m)
     real, intent(in)  :: y(n,m)
-    real, intent(out) :: y_ad(n,m)
+    real, intent(inout) :: y_ad(n,m)
     real, intent(inout) :: z_ad(n,m)
     real :: ary_ad(n,m)
     real :: scalar_ad
@@ -238,11 +236,11 @@ contains
         z_ad(i,j) = z_ad(i,j) * scalar ! z(i,j) = z(i,j) * scalar
         scalar = scalar_save_64_ad
         z_ad(i,j) = scalar_ad * y(i,j) + z_ad(i,j) ! scalar = z(i,j) * y(i,j)
-        y_ad(i,j) = scalar_ad * z(i,j) ! scalar = z(i,j) * y(i,j)
+        y_ad(i,j) = scalar_ad * z(i,j) + y_ad(i,j) ! scalar = z(i,j) * y(i,j)
         y_ad(i,j) = z_ad(i,j) * scalar + y_ad(i,j) ! z(i,j) = y(i,j) * scalar + z(i,j)
         scalar_ad = z_ad(i,j) * y(i,j) ! z(i,j) = y(i,j) * scalar + z(i,j)
         z(i,j) = z_save_62_ad
-        x_ad(i,j) = z_ad(i,j) ! z(i,j) = x(i,j) + scalar
+        x_ad(i,j) = z_ad(i,j) + x_ad(i,j) ! z(i,j) = x(i,j) + scalar
         scalar_ad = z_ad(i,j) + scalar_ad ! z(i,j) = x(i,j) + scalar
         ary_ad(i,j) = scalar_ad * z(i,j) ! scalar = ary(i,j) * z(i,j)
         z_ad(i,j) = scalar_ad * ary(i,j) ! scalar = ary(i,j) * z(i,j)
@@ -306,9 +304,9 @@ contains
     integer, intent(in)  :: n
     integer, intent(in)  :: m
     real, intent(in)  :: x(n,m)
-    real, intent(out) :: x_ad(n,m)
+    real, intent(inout) :: x_ad(n,m)
     real, intent(in)  :: y(n,m)
-    real, intent(out) :: y_ad(n,m)
+    real, intent(inout) :: y_ad(n,m)
     real, intent(inout) :: z_ad(n,m)
     real :: ary_ad(n,m)
     integer :: i
@@ -333,9 +331,9 @@ contains
     do j = m, 1, - 1
       do i = n, 1, - 1
         ary_ad(i,j) = z_ad(i,j) ! z(i,j) = z(i,j) + ary(i,j)
-        y_ad(i,j) = ary_ad(i,j) * ary(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
+        y_ad(i,j) = ary_ad(i,j) * ary(i,j) + y_ad(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
         ary_ad(i,j) = ary_ad(i,j) * y(i,j) ! ary(i,j) = y(i,j) * ary(i,j)
-        x_ad(i,j) = z_ad(i,j) * z(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
+        x_ad(i,j) = z_ad(i,j) * z(i,j) + x_ad(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
         ary_ad(i,j) = z_ad(i,j) + ary_ad(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
         z_ad(i,j) = z_ad(i,j) * x(i,j) ! z(i,j) = z(i,j) * x(i,j) + ary(i,j)
       end do
@@ -419,9 +417,9 @@ contains
     integer, intent(in)  :: n
     integer, intent(in)  :: m
     real, intent(in)  :: x(n,m)
-    real, intent(out) :: x_ad(n,m)
+    real, intent(inout) :: x_ad(n,m)
     real, intent(in)  :: y(n,m)
-    real, intent(out) :: y_ad(n,m)
+    real, intent(inout) :: y_ad(n,m)
     real, intent(inout) :: z_ad(n,m)
     real :: work1_ad(2,n,m)
     real :: work2_ad(2,m)
@@ -462,9 +460,9 @@ contains
         work3_ad(1) = z_ad(i,j) * z(i,j) + work3_ad(1) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         work3_ad(2) = z_ad(i,j) * z(i,j) + work3_ad(2) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         work1_ad(1,i,j) = z_ad(i,j) * y(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
-        y_ad(i,j) = z_ad(i,j) * work1(1,i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+        y_ad(i,j) = z_ad(i,j) * work1(1,i,j) + y_ad(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         work1_ad(2,i,j) = z_ad(i,j) * x(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
-        x_ad(i,j) = z_ad(i,j) * work1(2,i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+        x_ad(i,j) = z_ad(i,j) * work1(2,i,j) + x_ad(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         z_ad(i,j) = z_ad(i,j) * (work3(1) + work3(2)) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         do k = 2, 1, - 1
           work1(k,i,j) = work1_save_132_ad(k)

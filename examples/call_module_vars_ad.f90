@@ -25,7 +25,7 @@ contains
 
   subroutine call_inc_and_use_rev_ad(x, x_ad, y_ad)
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
     real :: z_ad
     real :: z

@@ -52,7 +52,7 @@ contains
   subroutine do_exit_cycle_rev_ad(n, x, x_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real :: res
     integer :: exit_do_start_32_ad
@@ -95,7 +95,7 @@ contains
       res = res * x
     end do
 
-    x_ad = res_ad * res ! res = res * x
+    x_ad = res_ad * res + x_ad ! res = res * x
     res_ad = res_ad * x ! res = res * x
     exit_flag_19_ad = .true.
     exit_flag_29_ad = .true.
@@ -243,7 +243,7 @@ contains
   subroutine while_exit_cycle_rev_ad(n, x, x_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real :: res
     integer :: i
@@ -291,7 +291,7 @@ contains
       i = i + 1
     end do
 
-    x_ad = res_ad * res ! res = res * x
+    x_ad = res_ad * res + x_ad ! res = res * x
     res_ad = res_ad * x ! res = res * x
     exit_flag_54_ad = .true.
     exit_flag_65_ad = .true.
@@ -446,7 +446,7 @@ contains
   subroutine exit_cycle_with_labels_rev_ad(n, x, x_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real :: res
     integer :: i
@@ -498,8 +498,6 @@ contains
       end do middle
       res = res * x
     end do outer
-
-    x_ad = 0.0
 
     exit_flag_90_ad = .true.
     exit_flag_94_ad = .true.

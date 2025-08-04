@@ -66,7 +66,7 @@ contains
 
   subroutine math_intrinsics_rev_ad(x, x_ad, y, y_ad, z_ad)
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: y
     real, intent(inout) :: y_ad
     real, intent(inout) :: z_ad
@@ -97,7 +97,7 @@ contains
     p_ad = z_ad ! z = a + b + c + d + e + f + g + h + o + p + q
     q_ad = z_ad ! z = a + b + c + d + e + f + g + h + o + p + q
     z_ad = 0.0 ! z = a + b + c + d + e + f + g + h + o + p + q
-    x_ad = q_ad ! q = mod(x, y)
+    x_ad = q_ad + x_ad ! q = mod(x, y)
     y_ad = - q_ad * real(int(x / y), kind(x)) + y_ad ! q = mod(x, y)
     x_ad = p_ad * 2.0 / sqrt(acos(- 1.0)) * exp(- x**2) + x_ad ! p = erf(x) + erfc(y)
     y_ad = - p_ad * 2.0 / sqrt(acos(- 1.0)) * exp(- y**2) + y_ad ! p = erf(x) + erfc(y)
@@ -147,13 +147,13 @@ contains
 
   subroutine reduction_rev_ad(x, x_ad, a_ad, b_ad, c_ad, d_ad)
     real, intent(in)  :: x(:)
-    real, intent(out) :: x_ad(:)
+    real, intent(inout) :: x_ad(:)
     real, intent(inout) :: a_ad
     real, intent(inout) :: b_ad
     real, intent(inout) :: c_ad
     real, intent(inout) :: d_ad
 
-    x_ad = d_ad * merge(1.0, 0.0, x == maxval(x)) ! d = maxval(x)
+    x_ad = d_ad * merge(1.0, 0.0, x == maxval(x)) + x_ad ! d = maxval(x)
     d_ad = 0.0 ! d = maxval(x)
     x_ad = c_ad * merge(1.0, 0.0, x == minval(x)) + x_ad ! c = minval(x)
     c_ad = 0.0 ! c = minval(x)
@@ -201,15 +201,12 @@ contains
   subroutine non_differentiable_intrinsics_rev_ad(str, arr, arr_ad, x, x_ad, y_ad)
     character(len=*), intent(in)  :: str
     real, intent(in)  :: arr(:)
-    real, intent(out) :: arr_ad(:)
+    real, intent(inout) :: arr_ad(:)
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
 
-    arr_ad(:) = 0.0
-
     y_ad = 0.0 ! y = a + b + c
-    x_ad = 0.0 ! c = tiny(x)
 
     return
   end subroutine non_differentiable_intrinsics_rev_ad
@@ -230,11 +227,11 @@ contains
 
   subroutine special_intrinsics_rev_ad(mat_in, mat_in_ad, mat_out_ad)
     real, intent(in)  :: mat_in(:,:)
-    real, intent(out) :: mat_in_ad(:,:)
+    real, intent(inout) :: mat_in_ad(:,:)
     real, intent(inout) :: mat_out_ad(:,:)
 
     mat_out_ad = cshift(mat_out_ad, - 1, 2) ! mat_out = cshift(mat_out, 1, 2)
-    mat_in_ad = transpose(mat_out_ad) ! mat_out = transpose(mat_in)
+    mat_in_ad = transpose(mat_out_ad) + mat_in_ad ! mat_out = transpose(mat_in)
 
     return
   end subroutine special_intrinsics_rev_ad
@@ -261,11 +258,11 @@ contains
   subroutine casting_intrinsics_rev_ad(i, r, r_ad, d_ad, c)
     integer, intent(in)  :: i
     real, intent(in)  :: r
-    real, intent(out) :: r_ad
+    real, intent(inout) :: r_ad
     double precision, intent(inout) :: d_ad
     character(len=1), intent(inout) :: c
 
-    r_ad = d_ad ! d = dble(r) + dble(i2)
+    r_ad = d_ad + r_ad ! d = dble(r) + dble(i2)
     d_ad = 0.0d0 ! d = dble(r) + dble(i2)
 
     return

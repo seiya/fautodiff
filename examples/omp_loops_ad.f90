@@ -31,7 +31,7 @@ contains
   subroutine sum_loop_rev_ad(n, x, x_ad, y_ad, s_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x(n)
-    real, intent(out) :: x_ad(n)
+    real, intent(inout) :: x_ad(n)
     real, intent(inout) :: y_ad(n)
     real, intent(inout) :: s_ad
     integer :: i
@@ -39,7 +39,7 @@ contains
     !$omp parallel do
     do i = n, 1, - 1
       y_ad(i) = s_ad + y_ad(i) ! s = s + y(i)
-      x_ad(i) = y_ad(i) ! y(i) = x(i)
+      x_ad(i) = y_ad(i) + x_ad(i) ! y(i) = x(i)
     end do
     !$omp end parallel do
     s_ad = 0.0 ! s = 0.0
@@ -78,13 +78,11 @@ contains
   subroutine stencil_loop_rev_ad(n, x, x_ad, y_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x(n)
-    real, intent(out) :: x_ad(n)
+    real, intent(inout) :: x_ad(n)
     real, intent(inout) :: y_ad(n)
     integer :: i
     integer :: in
     integer :: ip
-
-    x_ad(:) = 0.0
 
     do i = n, 1, - 1
       in = i - 1

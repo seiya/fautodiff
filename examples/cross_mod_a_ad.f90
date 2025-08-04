@@ -20,9 +20,9 @@ contains
     real, intent(inout) :: a
     real, intent(inout) :: a_ad
     real, intent(in)  :: inc
-    real, intent(out) :: inc_ad
+    real, intent(inout) :: inc_ad
 
-    inc_ad = a_ad ! a = a + inc
+    inc_ad = a_ad + inc_ad ! a = a + inc
 
     return
   end subroutine incval_rev_ad

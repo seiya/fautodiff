@@ -37,7 +37,7 @@ contains
   subroutine allocate_and_sum_rev_ad(n, x, x_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, allocatable :: arr_ad(:)
     integer :: i
@@ -47,8 +47,6 @@ contains
     do i = 1, n
       arr(i) = i * x
     end do
-
-    x_ad = 0.0
 
     allocate(arr_ad(n))
     do i = n, 1, - 1
@@ -86,10 +84,8 @@ contains
   subroutine module_vars_init_rev_ad(n, x, x_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     integer :: i
-
-    x_ad = 0.0
 
     do i = n, 1, - 1
       x_ad = mod_arr_diff_ad(i) * i + x_ad ! mod_arr_diff(i) = i * x
