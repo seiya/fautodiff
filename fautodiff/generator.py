@@ -1206,11 +1206,8 @@ def _generate_ad_subroutine(
         )
         if reverse and not fw_block.is_effectively_empty():
             vars = fw_block.required_vars(vars)
-        for req_var in vars:
-            name = req_var.name
+        for name in vars.names():
             if not name.endswith(AD_SUFFIX):
-                continue
-            if req_var.is_module_var(mod_var_names, check_ad=True):
                 continue
             if not any(v for v in grad_args if v.name == name):
                 if subroutine.is_declared(name):
