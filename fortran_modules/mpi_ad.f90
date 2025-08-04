@@ -457,7 +457,7 @@ contains
   end subroutine mpi_allreduce_fwd_ad_r4
 
   subroutine mpi_allreduce_rev_ad_r4(sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
-    real, intent(out) :: sendbuf_ad(*)
+    real, intent(inout) :: sendbuf_ad(*)
     real, intent(inout) :: recvbuf_ad(*)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
@@ -479,7 +479,7 @@ contains
   end subroutine mpi_allreduce_fwd_ad_r8
 
   subroutine mpi_allreduce_rev_ad_r8(sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
-    real(8), intent(out) :: sendbuf_ad(*)
+    real(8), intent(inout) :: sendbuf_ad(*)
     real(8), intent(inout) :: recvbuf_ad(*)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
@@ -505,7 +505,7 @@ contains
   end subroutine mpi_allreduce_fwd_ad_scalar_r4
 
   subroutine mpi_allreduce_rev_ad_scalar_r4(sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
-    real, intent(out), target :: sendbuf_ad
+    real, intent(inout), target :: sendbuf_ad
     real, intent(inout), target :: recvbuf_ad
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
@@ -533,7 +533,7 @@ contains
   end subroutine mpi_allreduce_fwd_ad_scalar_r8
 
   subroutine mpi_allreduce_rev_ad_scalar_r8(sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
-    real(8), intent(out), target :: sendbuf_ad
+    real(8), intent(inout), target :: sendbuf_ad
     real(8), intent(inout), target :: recvbuf_ad
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
@@ -754,7 +754,7 @@ contains
   subroutine mpi_isend_rev_ad_r4(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
     real, intent(inout) :: buf_ad(*)
     integer, intent(in) :: count, datatype, dest, tag, comm
-    integer, intent(out) :: request_ad
+    integer, intent(inout) :: request_ad
     integer, intent(out), optional :: ierr
     integer :: idx
 
@@ -813,7 +813,7 @@ contains
   subroutine mpi_isend_rev_ad_r8(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
     real(8), intent(inout) :: buf_ad(*)
     integer, intent(in) :: count, datatype, dest, tag, comm
-    integer, intent(out) :: request_ad
+    integer, intent(inout) :: request_ad
     integer, intent(out), optional :: ierr
     integer :: idx
 
@@ -855,7 +855,7 @@ contains
   subroutine mpi_isend_rev_ad_scalar_r4(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
     real, intent(inout), target :: buf_ad
     integer, intent(in) :: count, datatype, dest, tag, comm
-    integer, intent(out) :: request_ad
+    integer, intent(inout) :: request_ad
     integer, intent(out), optional :: ierr
     real, pointer :: b_ad(:)
 
@@ -890,7 +890,7 @@ contains
   subroutine mpi_isend_rev_ad_scalar_r8(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
     real(8), intent(inout), target :: buf_ad
     integer, intent(in) :: count, datatype, dest, tag, comm
-    integer, intent(out) :: request_ad
+    integer, intent(inout) :: request_ad
     integer, intent(out), optional :: ierr
     real(8), pointer :: b_ad(:)
 
@@ -939,7 +939,7 @@ contains
   subroutine mpi_irecv_rev_ad_r4(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
     real, intent(inout), target :: buf_ad(*)
     integer, intent(in) :: count, datatype, source, tag, comm
-    integer, intent(out) :: request_ad
+    integer, intent(inout) :: request_ad
     integer, intent(out), optional :: ierr
     integer :: idx
 
@@ -996,7 +996,7 @@ contains
   subroutine mpi_irecv_rev_ad_r8(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
     real(8), intent(inout), target :: buf_ad(*)
     integer, intent(in) :: count, datatype, source, tag, comm
-    integer, intent(out) :: request_ad
+    integer, intent(inout) :: request_ad
     integer, intent(out), optional :: ierr
     integer :: idx
 
@@ -1041,7 +1041,7 @@ contains
   subroutine mpi_irecv_rev_ad_scalar_r4(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
     real, intent(inout), target :: buf_ad
     integer, intent(in) :: count, datatype, source, tag, comm
-    integer, intent(out) :: request_ad
+    integer, intent(inout) :: request_ad
     integer, intent(out), optional :: ierr
     real, pointer :: b_ad(:)
 
@@ -1076,7 +1076,7 @@ contains
   subroutine mpi_irecv_rev_ad_scalar_r8(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
     real(8), intent(inout), target :: buf_ad
     integer, intent(in) :: count, datatype, source, tag, comm
-    integer, intent(out) :: request_ad
+    integer, intent(inout) :: request_ad
     integer, intent(out), optional :: ierr
     real(8), pointer :: b_ad(:)
 

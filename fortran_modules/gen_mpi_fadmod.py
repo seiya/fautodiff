@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 # Ensure the package can be imported when running from the source tree
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
@@ -70,7 +70,7 @@ def _collect_routines(mod, routines: Dict[str, dict]) -> Dict[str, dict]:
 
 def _interfaces_to_generics(mod) -> Dict[str, List[str]]:
     generics: Dict[str, List[str]] = {}
-    for node in mod.body.iter_children():
+    for node in mod.decls.iter_children():
         if not isinstance(node, Interface):
             continue
         m = _MODE_RE.match(node.name)
@@ -168,7 +168,9 @@ decl_map = {}
 for name, v in variables.items():
     v.update(common)
     dims = tuple(v.get("dims")) if "dims" in v else None
-    decl_map[name] = Declaration(name=name, typename="integer", dims=dims, parameter=True)
+    decl_map[name] = Declaration(
+        name=name, typename="integer", dims=dims, parameter=True
+    )
 
 def main() -> None:
     here = Path(__file__).resolve().parent
