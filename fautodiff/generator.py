@@ -1030,6 +1030,7 @@ def _generate_ad_subroutine(
         if var.ad_target:
             mod_ad_vars.append(var.add_suffix(AD_SUFFIX))
             has_mod_grad_input = True
+    mod_var_names = [v.name for v in mod_vars]
 
     # SAVE variables behave like module variables and may carry gradients
     save_vars = []
@@ -1083,7 +1084,7 @@ def _generate_ad_subroutine(
             if name.endswith(AD_SUFFIX):
                 if any(arg.name == name for arg in grad_args):
                     continue
-                if any(v.name == name for v in mod_ad_vars):
+                if var.is_module_var(mod_var_names, check_ad=True):
                     continue
                 base_decl = routine_org.decls.find_by_name(name.removesuffix(AD_SUFFIX))
                 if base_decl is not None and not subroutine.is_declared(name):
@@ -1205,10 +1206,11 @@ def _generate_ad_subroutine(
         )
         if reverse and not fw_block.is_effectively_empty():
             vars = fw_block.required_vars(vars)
-        for name in vars.names():
+        for req_var in vars:
+            name = req_var.name
             if not name.endswith(AD_SUFFIX):
                 continue
-            if any(v for v in mod_ad_vars if v.name == name):
+            if req_var.is_module_var(mod_var_names, check_ad=True):
                 continue
             if not any(v for v in grad_args if v.name == name):
                 if subroutine.is_declared(name):

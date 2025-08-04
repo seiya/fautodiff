@@ -289,6 +289,8 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad(str(src), warn=False)
             self.assertIn("allocate(a(n))", generated)
             self.assertIn("deallocate(a)", generated)
+            self.assertIn("allocate(a_ad(n))", generated)
+            self.assertIn("deallocate(a_ad)", generated)
 
     def test_fadmod_includes_skip(self):
         code_tree.Node.reset()
