@@ -216,7 +216,13 @@ def gen_wrapper_push(tname):
     ]
     for r in ranks:
         lines.append(f"    rank({r})")
-        lines.append(f"      call fautodiff_stack_{tname}%push_{tname}_{r}d(data)")
+        # The rank of DATA is only known inside each SELECT RANK branch, so
+        # dispatch directly to the corresponding specific procedure and pass
+        # the stack instance explicitly. Using type-bound generics here would
+        # require compile-time rank knowledge.
+        lines.append(
+            f"      call push_{tname}_{r}d(fautodiff_stack_{tname}, data)"
+        )
     lines.extend(
         [
             "    rank default",
@@ -238,7 +244,11 @@ def gen_wrapper_pop(tname):
     ]
     for r in ranks:
         lines.append(f"    rank({r})")
-        lines.append(f"      call fautodiff_stack_{tname}%pop_{tname}_{r}d(data)")
+        # See GEN_WRAPPER_PUSH for an explanation of the explicit procedure
+        # calls with the stack instance passed as the first argument.
+        lines.append(
+            f"      call pop_{tname}_{r}d(fautodiff_stack_{tname}, data)"
+        )
     lines.extend(
         [
             "    rank default",
