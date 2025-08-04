@@ -243,12 +243,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
@@ -312,12 +312,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
@@ -381,12 +381,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
@@ -490,12 +490,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
@@ -559,12 +559,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
@@ -628,12 +628,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
@@ -737,12 +737,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
@@ -806,12 +806,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
@@ -875,12 +875,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
@@ -984,12 +984,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
@@ -1053,12 +1053,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
@@ -1122,12 +1122,12 @@ contains
     i1 = len
     do while (len > 0)
       if (self%pos == 1) then
-        self%pos = self%page_size
         self%page_num = self%page_num - 1
         if (self%page_num < 1) then
           print *, 'No stacked data'
           error stop 1
         end if
+        self%pos = self%page_size + 1
       end if
       i0 = i1 - min(len, self%pos - 1) + 1
       j0 = self%pos - int(i1 - i0) - 1
