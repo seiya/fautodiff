@@ -118,6 +118,7 @@ contains
     end if
 
     inner1 = a_ad**2 + b_ad**2 + c_ad**2 + d_ad**2
+    x_ad(:) = 0.0
     call reduction_rev_ad(x, x_ad, a_ad, b_ad, c_ad, d_ad)
     inner2 = sum(x_ad(:))
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -151,6 +152,8 @@ contains
     end if
 
     inner1 = y_ad**2
+    arr_ad = 0.0
+    x_ad = 0.0
     call non_differentiable_intrinsics_rev_ad(str, arr, arr_ad, 1.0, x_ad, y_ad)
     inner2 = x_ad
     if (abs(inner2 - inner1) > tol) then
@@ -195,6 +198,7 @@ contains
     end if
 
     inner1 = sum(mat_out_ad(:,:)**2)
+    mat_in_ad(:,:) = 0.0
     call special_intrinsics_rev_ad(mat_in, mat_in_ad, mat_out_ad)
     inner2 = sum(mat_in_ad(:,:))
     if (abs((inner2 - inner1) / inner1) > tol2) then
@@ -233,6 +237,7 @@ contains
     r = 4.5
     c = 'A'
     call casting_intrinsics(i, r, d, c, n)
+    r_ad = 0.0
     call casting_intrinsics_rev_ad(i, r, r_ad, d_ad, c)
     inner2 = r_ad
     if (abs((inner2 - inner1) / inner1) > tol) then

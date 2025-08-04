@@ -89,6 +89,8 @@ contains
     end if
 
     inner1 = sum(c_ad(:)**2)
+    a_ad(:) = 0.0
+    b_ad(:) = 0.0
     call elementwise_add_rev_ad(n, a, a_ad, b, b_ad, c_ad)
     inner2 = sum(a_ad) + sum(b_ad)
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -162,6 +164,9 @@ contains
     end if
 
     inner1 = sum(d_ad(:,:)**2)
+    a_ad(:,:) = 0.0
+    b_ad(:,:) = 0.0
+    c_ad = 0.0
     call multidimension_rev_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
     inner2 = sum(a_ad(:,:)) + sum(b_ad(:,:)) + c_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -195,6 +200,8 @@ contains
     end if
 
     inner1 = res_ad**2
+    a_ad(:) = 0.0
+    b_ad(:) = 0.0
     call dot_product_rev_ad(n, a, a_ad, b, b_ad, res_ad)
     inner2 = sum(a_ad(:)) + sum(b_ad(:))
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -236,6 +243,7 @@ contains
     end if
 
     inner1 = sum(b_ad(:)**2) + sum(c_ad(:)**2)
+    a_ad(:) = 0.0
     call indirect_rev_ad(n, a, a_ad, b_ad, c_ad, idx)
     inner2 = sum(a_ad(:))
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -270,6 +278,7 @@ contains
     end if
 
     inner1 = sum(b_ad(:)**2)
+    a_ad(:) = 0.0
     call stencil_rev_ad(n, a, a_ad, b_ad)
     inner2 = sum(a_ad(:))
     if (abs((inner2 - inner1) / inner1) > tol) then

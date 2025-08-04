@@ -1353,9 +1353,13 @@ class CallStatement(Node):
                 if arg_info["intents_fwd_ad"][i] in ("out", "inout"):
                     assigned_advars.push(arg)
         ad_nodes = []
+        init_nodes = []
         if tmp_vars:
             if reverse:
                 for lhs, rhs in tmp_vars:
+                    init_nodes.append(
+                        Assignment(lhs, OpReal("0.0", kind=lhs.kind))
+                    )
                     ad_nodes.extend(
                         self._generate_ad_reverse(
                             lhs,
@@ -1383,7 +1387,7 @@ class CallStatement(Node):
                     )
 
         if reverse:
-            ad_nodes.insert(0, ad_call)
+            ad_nodes = init_nodes + [ad_call] + ad_nodes
             loads = []
             blocks = []
             for var in ad_call.assigned_vars():

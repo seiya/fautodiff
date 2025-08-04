@@ -60,8 +60,10 @@ contains
        error stop 1
     end if
 
-    inner1 = y_ad**2 + a_ad**2
+    inner1 = y_ad**2
     a = 3.0
+    x_ad = 0.0
+    a_ad = 0.0
     call inc_and_use_rev_ad(x, x_ad, y_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then

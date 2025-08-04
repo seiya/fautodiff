@@ -124,6 +124,8 @@ contains
     end if
 
     inner1 = z_ad**2
+    x_ad = 0.0
+    y_ad = 0.0
     call if_example_rev_ad(x, x_ad, y, y_ad, z_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -157,6 +159,8 @@ contains
     end if
 
     inner1 = sum(z_ad(:,:)**2)
+    x_ad(:,:) = 0.0
+    y_ad(:,:) = 0.0
     call do_with_array_private_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
     inner2 = sum(x_ad(:,:)) + sum(y_ad(:,:))
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -190,6 +194,8 @@ contains
     end if
 
     inner1 = sum(z_ad(:,:)**2)
+    x_ad(:,:) = 0.0
+    y_ad(:,:) = 0.0
     call do_with_array_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
     inner2 = sum(x_ad(:,:)) + sum(y_ad(:,:))
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -223,6 +229,8 @@ contains
     end if
 
     inner1 = sum(z_ad(:,:)**2)
+    x_ad(:,:) = 0.0
+    y_ad(:,:) = 0.0
     call do_with_local_array_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
     inner2 = sum(x_ad(:,:)) + sum(y_ad(:,:))
     if (abs((inner2 - inner1) / inner1) > tol) then

@@ -114,6 +114,7 @@ contains
     real, intent(inout) :: y_ad
     real :: foo_arg1_save_45_ad
 
+    foo_arg1_save_45_ad = 0.0
     call foo_rev_ad(x, x_ad, y * 2.0, foo_arg1_save_45_ad) ! call foo(x, y * 2.0)
     y_ad = foo_arg1_save_45_ad * 2.0 + y_ad ! call foo(x, y * 2.0)
 
@@ -141,6 +142,7 @@ contains
     real, intent(inout) :: y_ad
     real :: foo_arg1_save_54_ad
 
+    foo_arg1_save_54_ad = 0.0
     call foo_rev_ad(x, x_ad, bar(y), foo_arg1_save_54_ad) ! call foo(x, bar(y))
     call bar_rev_ad(y, y_ad, foo_arg1_save_54_ad) ! call foo(x, bar(y))
 

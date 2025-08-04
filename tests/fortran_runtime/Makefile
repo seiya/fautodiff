@@ -51,7 +51,7 @@ $(OUTDIR)/arrays_ad.o: $(OUTDIR)/arrays.mod
 $(OUTDIR)/run_simple_math.o: $(OUTDIR)/simple_math.o $(OUTDIR)/simple_math_ad.o
 $(OUTDIR)/run_arrays.o: $(OUTDIR)/arrays.o $(OUTDIR)/arrays_ad.o
 $(OUTDIR)/run_call_example.o: $(OUTDIR)/call_example.o $(OUTDIR)/call_example_ad.o
-$(OUTDIR)/run_control_flow.o: $(OUTDIR)/control_flow.o $(OUTDIR)/control_flow_ad.o
+$(OUTDIR)/run_control_flow.o: $(OUTDIR)/control_flow.o $(OUTDIR)/control_flow_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_cross_mod.o: $(OUTDIR)/cross_mod_a.o $(OUTDIR)/cross_mod_a_ad.o $(OUTDIR)/cross_mod_b.o $(OUTDIR)/cross_mod_b_ad.o
 $(OUTDIR)/run_intrinsic_func.o: $(OUTDIR)/intrinsic_func.o $(OUTDIR)/intrinsic_func_ad.o
 $(OUTDIR)/run_real_kind.o: $(OUTDIR)/real_kind.o $(OUTDIR)/real_kind_ad.o
@@ -76,7 +76,7 @@ $(OUTDIR)/run_fautodiff_stack.o: $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_simple_math.out: $(OUTDIR)/run_simple_math.o $(OUTDIR)/simple_math.o $(OUTDIR)/simple_math_ad.o
 $(OUTDIR)/run_arrays.out: $(OUTDIR)/run_arrays.o $(OUTDIR)/arrays.o $(OUTDIR)/arrays_ad.o
 $(OUTDIR)/run_call_example.out: $(OUTDIR)/run_call_example.o $(OUTDIR)/call_example.o $(OUTDIR)/call_example_ad.o
-$(OUTDIR)/run_control_flow.out: $(OUTDIR)/run_control_flow.o $(OUTDIR)/control_flow.o $(OUTDIR)/control_flow_ad.o
+$(OUTDIR)/run_control_flow.out: $(OUTDIR)/run_control_flow.o $(OUTDIR)/control_flow.o $(OUTDIR)/control_flow_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_cross_mod.out: $(OUTDIR)/run_cross_mod.o $(OUTDIR)/cross_mod_a.o $(OUTDIR)/cross_mod_a_ad.o $(OUTDIR)/cross_mod_b.o $(OUTDIR)/cross_mod_b_ad.o
 $(OUTDIR)/run_intrinsic_func.out: $(OUTDIR)/run_intrinsic_func.o $(OUTDIR)/intrinsic_func.o $(OUTDIR)/intrinsic_func_ad.o
 $(OUTDIR)/run_real_kind.out: $(OUTDIR)/run_real_kind.o $(OUTDIR)/real_kind.o $(OUTDIR)/real_kind_ad.o

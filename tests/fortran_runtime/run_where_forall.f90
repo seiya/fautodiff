@@ -73,6 +73,7 @@ contains
     inner1 = sum(a_ad(:)**2)
     a = a0
     b = b0
+    b_ad(:) = 0.0
     call where_example_rev_ad(n, a, a_ad, b, b_ad)
     inner2 = sum(a_ad(:)) + sum(b_ad(:))
     if (abs((inner2 - inner1) / inner1) > tol) then
@@ -101,6 +102,7 @@ contains
     end if
 
     inner1 = sum(b_ad(:)**2)
+    a_ad(:) = 0.0
     call forall_example_rev_ad(n, a, a_ad, b_ad)
     inner2 = sum(a_ad(:))
     if (abs((inner2 - inner1) / inner1) > tol) then
