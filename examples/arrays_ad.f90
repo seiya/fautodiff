@@ -24,13 +24,13 @@ contains
   subroutine elementwise_add_rev_ad(n, a, a_ad, b, b_ad, c_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: a(n)
-    real, intent(out) :: a_ad(n)
+    real, intent(inout) :: a_ad(n)
     real, intent(in)  :: b(n)
-    real, intent(out) :: b_ad(n)
+    real, intent(inout) :: b_ad(n)
     real, intent(inout) :: c_ad(n)
 
-    b_ad(:n:1) = c_ad ! c = c(:) + b(:n:1)
-    a_ad = c_ad(:) ! c(:) = a + b
+    b_ad(:n:1) = c_ad + b_ad(:n:1) ! c = c(:) + b(:n:1)
+    a_ad = c_ad(:) + a_ad ! c(:) = a + b
     b_ad = c_ad(:) + b_ad ! c(:) = a + b
     c_ad(:) = 0.0 ! c(:) = a + b
 
@@ -92,21 +92,19 @@ contains
     integer, intent(in)  :: n
     integer, intent(in)  :: m
     real, intent(in)  :: a(n,m)
-    real, intent(out) :: a_ad(n,m)
+    real, intent(inout) :: a_ad(n,m)
     real, intent(in)  :: b(n,m)
-    real, intent(out) :: b_ad(n,m)
+    real, intent(inout) :: b_ad(n,m)
     real, intent(in)  :: c
-    real, intent(out) :: c_ad
+    real, intent(inout) :: c_ad
     real, intent(inout) :: d_ad(n,m)
     integer :: i
     integer :: j
 
-    c_ad = 0.0
-
     do j = m, 1, - 1
       do i = n, 1, - 1
-        a_ad(i,j) = d_ad(i,j) ! d(i,j) = a(i,j) + b(i,j) * c
-        b_ad(i,j) = d_ad(i,j) * c ! d(i,j) = a(i,j) + b(i,j) * c
+        a_ad(i,j) = d_ad(i,j) + a_ad(i,j) ! d(i,j) = a(i,j) + b(i,j) * c
+        b_ad(i,j) = d_ad(i,j) * c + b_ad(i,j) ! d(i,j) = a(i,j) + b(i,j) * c
         c_ad = d_ad(i,j) * b(i,j) + c_ad ! d(i,j) = a(i,j) + b(i,j) * c
         d_ad(i,j) = 0.0 ! d(i,j) = a(i,j) + b(i,j) * c
       end do
@@ -138,15 +136,15 @@ contains
   subroutine dot_product_rev_ad(n, a, a_ad, b, b_ad, res_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: a(n)
-    real, intent(out) :: a_ad(n)
+    real, intent(inout) :: a_ad(n)
     real, intent(in)  :: b(n)
-    real, intent(out) :: b_ad(n)
+    real, intent(inout) :: b_ad(n)
     real, intent(inout) :: res_ad
     integer :: i
 
     do i = n, 1, - 1
-      a_ad(i) = res_ad * b(i) ! res = res + a(i) * b(i)
-      b_ad(i) = res_ad * a(i) ! res = res + a(i) * b(i)
+      a_ad(i) = res_ad * b(i) + a_ad(i) ! res = res + a(i) * b(i)
+      b_ad(i) = res_ad * a(i) + b_ad(i) ! res = res + a(i) * b(i)
     end do
     res_ad = 0.0 ! res = 0.0
 
@@ -179,13 +177,11 @@ contains
   subroutine indirect_rev_ad(n, a, a_ad, b_ad, c_ad, idx)
     integer, intent(in)  :: n
     real, intent(in)  :: a(n)
-    real, intent(out) :: a_ad(n)
+    real, intent(inout) :: a_ad(n)
     real, intent(inout) :: b_ad(n)
     real, intent(inout) :: c_ad(n)
     integer, intent(in)  :: idx(n)
     integer :: i
-
-    a_ad(:) = 0.0
 
     do i = n, 1, - 1
       a_ad(idx(i)) = c_ad(idx(i)) * 2.0 * a(idx(i)) + a_ad(idx(i)) ! c(idx(i)) = a(idx(i))**2
@@ -225,13 +221,11 @@ contains
   subroutine stencil_rev_ad(n, a, a_ad, b_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: a(n)
-    real, intent(out) :: a_ad(n)
+    real, intent(inout) :: a_ad(n)
     real, intent(inout) :: b_ad(n)
     integer :: i
     integer :: in
     integer :: ip
-
-    a_ad(:) = 0.0
 
     do i = n, 1, - 1
       in = i - 1

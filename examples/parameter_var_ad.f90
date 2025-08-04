@@ -19,11 +19,11 @@ contains
 
   subroutine compute_area_rev_ad(r, r_ad, area_ad)
     real, intent(in)  :: r
-    real, intent(out) :: r_ad
+    real, intent(inout) :: r_ad
     real, intent(inout) :: area_ad
     real, parameter :: pi = 3.14159
 
-    r_ad = area_ad * (pi * r + pi * r) ! area = pi * r * r
+    r_ad = area_ad * (pi * r + pi * r) + r_ad ! area = pi * r * r
     area_ad = 0.0 ! area = pi * r * r
 
     return

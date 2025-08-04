@@ -27,6 +27,8 @@ contains
 
     inc = 1.0
 
+    inc_ad = 0.0
+
     call incval_rev_ad(b, b_ad, inc, inc_ad) ! call incval(b, inc)
 
     return
@@ -52,6 +54,8 @@ contains
     real :: inc
 
     inc = 1.0
+
+    inc_ad = 0.0
 
     call incval_rev_ad(b, b_ad, inc, inc_ad) ! call incval(inc=inc, a=b)
 

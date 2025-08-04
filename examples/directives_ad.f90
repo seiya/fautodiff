@@ -19,11 +19,11 @@ contains
 
   subroutine add_const_rev_ad(x, x_ad, y_ad, z)
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
     real, intent(in)  :: z
 
-    x_ad = y_ad ! y = x + z
+    x_ad = y_ad + x_ad ! y = x + z
     y_ad = 0.0 ! y = x + z
 
     return
@@ -47,13 +47,13 @@ contains
 
   subroutine worker_rev_ad(x, x_ad, z_ad)
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: z_ad
     real :: y_ad
 
     y_ad = z_ad ! z = y
     z_ad = 0.0 ! z = y
-    x_ad = y_ad ! y = x + 1.0
+    x_ad = y_ad + x_ad ! y = x + 1.0
 
     return
   end subroutine worker_rev_ad

@@ -107,7 +107,7 @@ contains
     integer, intent(in)  :: n
     integer, intent(in)  :: m
     real, intent(in)  :: x
-    real, intent(out) :: x_ad
+    real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     integer :: n0_ad
     integer :: i
@@ -123,8 +123,6 @@ contains
         obj(j)%arr(i) = obj(j)%arr(i) * x + j
       end do
     end do
-
-    x_ad = 0.0
 
     do j = m, 1, - 1
       do i = n, 1, - 1

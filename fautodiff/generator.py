@@ -892,21 +892,18 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                 args.append(var)
                 grad_args.append(var)
                 in_grad_args.append(var)
+                out_grad_args.append(var)
                 has_grad_input = True
         else:
             args.append(arg)
             if arg.ad_target and not arg.is_constant:
                 ad_name = f"{name}{AD_SUFFIX}"
-                grad_intent = {
-                    "in": "out",
-                    "inout": "inout",
-                }.get(intent)
                 var = OpVar(
                     ad_name,
                     typename=typ,
                     kind=kind,
                     dims=dims,
-                    intent=grad_intent,
+                    intent="inout",
                     ad_target=True,
                     is_constant=arg.is_constant,
                     allocatable=arg.allocatable,
@@ -920,9 +917,8 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
                 args.append(var)
                 grad_args.append(var)
                 out_grad_args.append(var)
-                if grad_intent == "inout":
-                    in_grad_args.append(var)
-                    has_grad_input = True
+                in_grad_args.append(var)
+                has_grad_input = True
 
     ad_name = f"{routine_org.name}{REV_SUFFIX}"
     subroutine = Subroutine(ad_name, [v.name for v in args])
@@ -1119,6 +1115,10 @@ def _generate_ad_subroutine(
 
         # Remove statements unrelated to derivative targets
         ad_code = ad_code.prune_for(targets, mod_vars + save_vars)
+
+        if reverse:
+            ad_code.check_initial(VarList(grad_args + mod_ad_vars + save_ad_vars))
+            ad_code = ad_code.prune_for(targets, mod_vars + save_vars)
 
     for node in ad_code:
         if not node.is_effectively_empty():
