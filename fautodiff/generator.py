@@ -63,7 +63,6 @@ code_tree.REV_SUFFIX = REV_SUFFIX
 operators.AD_SUFFIX = AD_SUFFIX
 
 from . import parser
-from .parser import INTRINSIC_MODULES
 from .var_list import VarList
 
 
@@ -588,8 +587,6 @@ def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, d
     variables = {}
     generics = {}
     for mod in mod_names:
-        if mod.lower() in INTRINSIC_MODULES:
-            continue
         found = False
         for d in search_dirs:
             path = Path(d) / f"{mod}.fadmod"

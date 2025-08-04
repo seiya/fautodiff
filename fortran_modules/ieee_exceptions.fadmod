@@ -1,0 +1,20 @@
+{
+  "routines": {
+    "ieee_get_flag": {
+      "module": "ieee_exceptions",
+      "args": ["flag", "value"],
+      "intents": ["in", "out"],
+      "dims": [null, null],
+      "type": ["integer", "logical"],
+      "kind": [null, null]
+    }
+  },
+  "variables": {
+    "ieee_all": {"typename": "integer", "parameter": true},
+    "ieee_invalid": {"typename": "integer", "parameter": true},
+    "ieee_overflow": {"typename": "integer", "parameter": true},
+    "ieee_divide_by_zero": {"typename": "integer", "parameter": true},
+    "ieee_underflow": {"typename": "integer", "parameter": true},
+    "ieee_inexact": {"typename": "integer", "parameter": true}
+  }
+}

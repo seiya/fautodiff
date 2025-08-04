@@ -1,0 +1,13 @@
+{
+  "variables": {
+    "int8": {"typename": "integer", "parameter": true},
+    "int16": {"typename": "integer", "parameter": true},
+    "int32": {"typename": "integer", "parameter": true},
+    "int64": {"typename": "integer", "parameter": true},
+    "real32": {"typename": "real", "parameter": true},
+    "real64": {"typename": "real", "parameter": true},
+    "stdin": {"typename": "integer", "parameter": true},
+    "stdout": {"typename": "integer", "parameter": true},
+    "stderr": {"typename": "integer", "parameter": true}
+  }
+}

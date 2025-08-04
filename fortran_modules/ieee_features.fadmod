@@ -1,0 +1,16 @@
+{
+  "routines": {
+    "ieee_get_underflow_mode": {
+      "module": "ieee_features",
+      "args": ["mode"],
+      "intents": ["out"],
+      "dims": [null],
+      "type": ["integer"],
+      "kind": [null]
+    }
+  },
+  "variables": {
+    "ieee_denorm": {"typename": "integer", "parameter": true},
+    "ieee_rounding": {"typename": "integer", "parameter": true}
+  }
+}
