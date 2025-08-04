@@ -30,7 +30,6 @@ class TestFortranRuntime(unittest.TestCase):
         exe = tmp / target_out
         return exe
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_stack_push_pop(self):
         base = Path(__file__).resolve().parents[1]
         src = base / 'fortran_modules' / 'fautodiff_stack.f90'

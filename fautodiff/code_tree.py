@@ -1358,7 +1358,7 @@ class CallStatement(Node):
             if reverse:
                 for lhs, rhs in tmp_vars:
                     init_nodes.append(
-                        Assignment(lhs, OpReal("0.0", kind=lhs.kind))
+                        Assignment(lhs.add_suffix(AD_SUFFIX), OpReal("0.0", kind=lhs.kind))
                     )
                     ad_nodes.extend(
                         self._generate_ad_reverse(
@@ -4136,6 +4136,8 @@ class OmpDirective(Node):
                 new_clauses.append({key: vars})
                 continue
             if low_key == "reduction":
+                if reverse:
+                    continue
                 op, vars = values[0], list(values[1])
                 for v in list(vars):
                     ad = f"{v}{AD_SUFFIX}"

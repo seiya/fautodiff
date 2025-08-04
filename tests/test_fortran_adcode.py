@@ -50,90 +50,69 @@ class TestFortranADCode(unittest.TestCase):
                 subprocess.run(cmd, check=True)
 
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_simple_math(self):
         self._run_test('simple_math', ['add_numbers', 'multiply_numbers', 'subtract_numbers', 'divide_numbers', 'power_numbers'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_arrays(self):
         self._run_test('arrays', ['elementwise_add', 'dot_product', 'multidimension',
                                   'scale_array', 'indirect', 'stencil'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_control_flow(self):
         self._run_test('control_flow', ['if_example', 'do_example', 'select_example',
                                        'do_while_example'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_intrinsic_func(self):
         self._run_test('intrinsic_func', ['casting', 'math', 'non_diff', 'special'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_save_vars(self):
         self._run_test('save_vars', ['simple', 'if_example', 'array_private',
                                      'array', 'local_array', 'stencil_array'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_cross_mod_call_inc(self):
         self._run_test('cross_mod', ['call_inc', 'incval', 'call_inc_kw'], deps=['cross_mod_a', 'cross_mod_b'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_call_example(self):
         self._run_test('call_example', ['call_subroutine', 'call_fucntion', 'arg_operation', 'arg_function',
                                        'foo', 'bar'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_real_kind(self):
         self._run_test('real_kind', ['scale_8', 'scale_rp', 'scale_dp'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_store_vars(self):
         self._run_test('store_vars', ['do_with_recurrent_scalar'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_directives(self):
         self._run_test('directives', ['add_const', 'worker'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_parameter_var(self):
         self._run_test('parameter_var', ['compute_area'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_module_vars(self):
         self._run_test('module_vars', ['inc_and_use'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_call_module_vars(self):
         self._run_test('call_module_vars', ['call_inc_and_use'], deps=['module_vars', 'call_module_vars'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_allocate(self):
         self._run_test('allocate_vars', ['allocate_and_sum', 'module_vars'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_exit_cycle(self):
         self._run_test('exit_cycle', ['do_exit_cycle', 'while_exit_cycle'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_pointer_arrays(self):
         self._run_test('pointer_arrays', ['pointer_allocate', 'pointer_subarray', 'pointer_allsub', 'pointer_swap'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_derived_alloc(self):
         self._run_test('derived_alloc', ['derived_alloc'])
 
     mpifort = shutil.which('mpifort')
 
-    @unittest.skipIf(compiler is None or mpirun is None or mpifort is None,
-                     'MPI compiler not available')
     def test_mpi_example(self):
         self._run_test('mpi_example', ['sum_reduce'], use_mpi=True)
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_where_forall(self):
         self._run_test('where_forall', ['where_example', 'forall_example'])
 
-    @unittest.skipIf(compiler is None, 'gfortran compiler not available')
     def test_omp_loops(self):
         self._run_test('omp_loops', ['sum_loop', 'stencil_loop'])
 

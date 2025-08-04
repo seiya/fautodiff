@@ -101,12 +101,17 @@ def _strip_sequential_omp(node: Node, warnings: Optional[List[str]], *, reverse:
         body = node.body
         if body is not None:
             body = _strip_sequential_omp(body, warnings, reverse=reverse)
-            if reverse and isinstance(body, DoLoop) and body.has_modified_indices():
+            check_body = body
+            if isinstance(body, Block):
+                children = list(body.iter_children())
+                if len(children) == 1 and isinstance(children[0], DoLoop):
+                    check_body = children[0]
+            if reverse and isinstance(check_body, DoLoop) and check_body.has_modified_indices():
                 if warnings is not None:
                     warnings.append(
                         "Dropped OpenMP directive: loop runs sequentially in reverse mode due to index dependency"
                     )
-                return body
+                return check_body
             node.body = body
         return node
 
