@@ -1,0 +1,20 @@
+{
+  "routines": {
+    "omp_get_num_threads": {
+      "module": "omp_lib",
+      "args": ["result"],
+      "intents": ["out"],
+      "dims": [null],
+      "type": ["integer"],
+      "kind": [null]
+    },
+    "omp_get_thread_num": {
+      "module": "omp_lib",
+      "args": ["result"],
+      "intents": ["out"],
+      "dims": [null],
+      "type": ["integer"],
+      "kind": [null]
+    }
+  }
+}

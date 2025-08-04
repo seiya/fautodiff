@@ -1,0 +1,18 @@
+{
+  "routines": {
+    "ieee_is_nan": {
+      "module": "ieee_arithmetic",
+      "args": ["x", "result"],
+      "intents": ["in", "out"],
+      "dims": [null, null],
+      "type": ["real", "logical"],
+      "kind": [null, null]
+    }
+  },
+  "variables": {
+    "ieee_positive_inf": {"typename": "real", "parameter": true},
+    "ieee_negative_inf": {"typename": "real", "parameter": true},
+    "ieee_signaling_nan": {"typename": "real", "parameter": true},
+    "ieee_quiet_nan": {"typename": "real", "parameter": true}
+  }
+}
