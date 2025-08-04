@@ -3,7 +3,7 @@ program run_data_storage
   implicit none
 
   integer, parameter :: n = 6
-  real :: val
+  real :: popped(2)
   real :: vals(n)
   integer :: i
   logical :: ok
@@ -24,9 +24,9 @@ program run_data_storage
   call fautodiff_stack_push_r(vals)
 
   ok = .true.
-  do i = 2 * n, 1, -1
-     call fautodiff_stack_pop_r(val)
-     ok = ok .and. abs(val - real(i)) < 1.0e-6
+  do i = 2 * n, 2, -2
+     call fautodiff_stack_pop_r(popped)
+     ok = ok .and. all(abs(popped - real([i - 1, i])) < 1.0e-6)
   end do
 
   if (ok) then
