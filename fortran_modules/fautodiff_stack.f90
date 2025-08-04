@@ -1355,16 +1355,16 @@ contains
   end subroutine pop_p_r8_3d
 
   subroutine fautodiff_stack_push_r4(data)
-    real, intent(in) :: data(..)
+    real, intent(in), target :: data(..)
     select rank(data)
     rank(0)
-      call fautodiff_stack_r4%push(data)
+      call push_r4_0d(fautodiff_stack_r4, data)
     rank(1)
-      call fautodiff_stack_r4%push(data)
+      call push_r4_1d(fautodiff_stack_r4, data)
     rank(2)
-      call fautodiff_stack_r4%push(data)
+      call push_r4_2d(fautodiff_stack_r4, data)
     rank(3)
-      call fautodiff_stack_r4%push(data)
+      call push_r4_3d(fautodiff_stack_r4, data)
     rank default
       print *, 'Rank larger than 3 is not supported'
       error stop 1
@@ -1372,16 +1372,16 @@ contains
   end subroutine fautodiff_stack_push_r4
 
   subroutine fautodiff_stack_pop_r4(data)
-    real, intent(out) :: data(..)
+    real, intent(out), target :: data(..)
     select rank(data)
     rank(0)
-      call fautodiff_stack_r4%pop(data)
+      call pop_r4_0d(fautodiff_stack_r4, data)
     rank(1)
-      call fautodiff_stack_r4%pop(data)
+      call pop_r4_1d(fautodiff_stack_r4, data)
     rank(2)
-      call fautodiff_stack_r4%pop(data)
+      call pop_r4_2d(fautodiff_stack_r4, data)
     rank(3)
-      call fautodiff_stack_r4%pop(data)
+      call pop_r4_3d(fautodiff_stack_r4, data)
     rank default
       print *, 'Rank larger than 3 is not supported'
       error stop 1
@@ -1389,16 +1389,16 @@ contains
   end subroutine fautodiff_stack_pop_r4
 
   subroutine fautodiff_stack_push_r8(data)
-    real(8), intent(in) :: data(..)
+    real(8), intent(in), target :: data(..)
     select rank(data)
     rank(0)
-      call fautodiff_stack_r8%push(data)
+      call push_r8_0d(fautodiff_stack_r8, data)
     rank(1)
-      call fautodiff_stack_r8%push(data)
+      call push_r8_1d(fautodiff_stack_r8, data)
     rank(2)
-      call fautodiff_stack_r8%push(data)
+      call push_r8_2d(fautodiff_stack_r8, data)
     rank(3)
-      call fautodiff_stack_r8%push(data)
+      call push_r8_3d(fautodiff_stack_r8, data)
     rank default
       print *, 'Rank larger than 3 is not supported'
       error stop 1
@@ -1406,16 +1406,16 @@ contains
   end subroutine fautodiff_stack_push_r8
 
   subroutine fautodiff_stack_pop_r8(data)
-    real(8), intent(out) :: data(..)
+    real(8), intent(out), target :: data(..)
     select rank(data)
     rank(0)
-      call fautodiff_stack_r8%pop(data)
+      call pop_r8_0d(fautodiff_stack_r8, data)
     rank(1)
-      call fautodiff_stack_r8%pop(data)
+      call pop_r8_1d(fautodiff_stack_r8, data)
     rank(2)
-      call fautodiff_stack_r8%pop(data)
+      call pop_r8_2d(fautodiff_stack_r8, data)
     rank(3)
-      call fautodiff_stack_r8%pop(data)
+      call pop_r8_3d(fautodiff_stack_r8, data)
     rank default
       print *, 'Rank larger than 3 is not supported'
       error stop 1

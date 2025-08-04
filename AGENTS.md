@@ -81,6 +81,12 @@ This file provides guidelines for contributors about the repository and develop 
   ``fautodiff_stack_push``.
 - For AD wrappers of external modules such as MPI, use ``<module>_ad.f90`` as the
   file name and name the module ``<module>_ad``.
+- The files ``fautodiff_stack.f90`` and ``mpi.fadmod`` are generated. Update
+  their respective generator scripts (``gen_fautodiff_stack.py`` and
+  ``gen_mpi_fadmod.py``) and regenerate the sources instead of editing the
+  generated files directly. In general, if a file has a corresponding
+  ``gen_*.py`` script, modify the generator and re-run it rather than editing
+  the generated output.
 
 ## 10. Runtime Verification in `tests/fortran_runtime`
 The programs under `tests/fortran_runtime` check that the generated AD code

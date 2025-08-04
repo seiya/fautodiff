@@ -209,45 +209,57 @@ def gen_get_function(tname):
 
 def gen_wrapper_push(tname):
     ftype = tmap[tname]
-    return (
-        f"  subroutine fautodiff_stack_push_{tname}(data)\n"
-        f"    {ftype}, intent(in) :: data(..)\n"
-        f"    select rank(data)\n"
-        f"    rank(0)\n"
-        f"      call fautodiff_stack_{tname}%push(data)\n"
-        f"    rank(1)\n"
-        f"      call fautodiff_stack_{tname}%push(data)\n"
-        f"    rank(2)\n"
-        f"      call fautodiff_stack_{tname}%push(data)\n"
-        f"    rank(3)\n"
-        f"      call fautodiff_stack_{tname}%push(data)\n"
-        f"    rank default\n"
-        f"      print *, 'Rank larger than 3 is not supported'\n"
-        f"      error stop 1\n"
-        f"    end select\n"
-        f"  end subroutine fautodiff_stack_push_{tname}\n"
+    lines = [
+        f"  subroutine fautodiff_stack_push_{tname}(data)",
+        f"    {ftype}, intent(in), target :: data(..)",
+        f"    select rank(data)",
+    ]
+    for r in ranks:
+        lines.append(f"    rank({r})")
+        # The rank of DATA is only known inside each SELECT RANK branch, so
+        # dispatch directly to the corresponding specific procedure and pass
+        # the stack instance explicitly. Using type-bound generics here would
+        # require compile-time rank knowledge.
+        lines.append(
+            f"      call push_{tname}_{r}d(fautodiff_stack_{tname}, data)"
+        )
+    lines.extend(
+        [
+            "    rank default",
+            "      print *, 'Rank larger than 3 is not supported'",
+            "      error stop 1",
+            "    end select",
+            f"  end subroutine fautodiff_stack_push_{tname}",
+            "",
+        ]
     )
+    return "\n".join(lines)
 
 def gen_wrapper_pop(tname):
     ftype = tmap[tname]
-    return (
-        f"  subroutine fautodiff_stack_pop_{tname}(data)\n"
-        f"    {ftype}, intent(out) :: data(..)\n"
-        f"    select rank(data)\n"
-        f"    rank(0)\n"
-        f"      call fautodiff_stack_{tname}%pop(data)\n"
-        f"    rank(1)\n"
-        f"      call fautodiff_stack_{tname}%pop(data)\n"
-        f"    rank(2)\n"
-        f"      call fautodiff_stack_{tname}%pop(data)\n"
-        f"    rank(3)\n"
-        f"      call fautodiff_stack_{tname}%pop(data)\n"
-        f"    rank default\n"
-        f"      print *, 'Rank larger than 3 is not supported'\n"
-        f"      error stop 1\n"
-        f"    end select\n"
-        f"  end subroutine fautodiff_stack_pop_{tname}\n"
+    lines = [
+        f"  subroutine fautodiff_stack_pop_{tname}(data)",
+        f"    {ftype}, intent(out), target :: data(..)",
+        f"    select rank(data)",
+    ]
+    for r in ranks:
+        lines.append(f"    rank({r})")
+        # See GEN_WRAPPER_PUSH for an explanation of the explicit procedure
+        # calls with the stack instance passed as the first argument.
+        lines.append(
+            f"      call pop_{tname}_{r}d(fautodiff_stack_{tname}, data)"
+        )
+    lines.extend(
+        [
+            "    rank default",
+            "      print *, 'Rank larger than 3 is not supported'",
+            "      error stop 1",
+            "    end select",
+            f"  end subroutine fautodiff_stack_pop_{tname}",
+            "",
+        ]
     )
+    return "\n".join(lines)
 
 def gen_module():
     lines = [
