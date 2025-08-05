@@ -4,6 +4,7 @@ contains
     real, intent(in) :: x
     real, intent(out) :: y
     y = x
+#define SCALE_TWO 2
 #ifdef USE_ADD
     y = y + 1.0
 #endif

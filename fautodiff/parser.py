@@ -39,6 +39,7 @@ from .code_tree import (
     OmpDirective,
     Statement,
     PreprocessorIfBlock,
+    PreprocessorLine,
     ExitStmt,
     CycleStmt,
     Subroutine,
@@ -1575,7 +1576,7 @@ def _parse_routine(content,
         def _parse_cpp_if(start_idx: int) -> Tuple[PreprocessorIfBlock, int]:
             line = _comment_to_cpp(body_list[start_idx])
             assert line is not None
-            cond = line[1:].strip()
+            cond = line[1:]
             cond_blocks: List[Tuple[str, Block]] = []
             current: List = []
             depth = 0
@@ -1596,7 +1597,7 @@ def _parse_routine(content,
                     elif (low.startswith("#elif") or low.startswith("#else")) and depth == 0:
                         block = _block(current, decl_map, type_map)
                         cond_blocks.append((cond, block))
-                        cond = line2[1:].strip()
+                        cond = line2[1:]
                         current = []
                         j += 1
                         continue
@@ -1619,6 +1620,7 @@ def _parse_routine(content,
                         node, i = _parse_cpp_if(i)
                         blk.append(node)
                         continue
+                    blk.append(PreprocessorLine(line))
                     i += 1
                     continue
                 text = st.items[0].strip()

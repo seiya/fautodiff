@@ -689,11 +689,13 @@ class Block(Node):
     ) -> List[Node]:
         """Generate AD code for each child node in the block."""
         ad_code: List[Node] = []
-        has_cpp = any(isinstance(n, PreprocessorIfBlock) for n in self._children)
+        has_cpp = any(
+            isinstance(n, (PreprocessorIfBlock, PreprocessorLine)) for n in self._children
+        )
         if reverse and has_cpp:
             groups: List[List[Node]] = [[] for _ in self._children]
             for idx, node in enumerate(self._children):
-                if isinstance(node, PreprocessorIfBlock):
+                if isinstance(node, (PreprocessorIfBlock, PreprocessorLine)):
                     groups[idx].extend(
                         node.generate_ad(
                             saved_vars,
@@ -708,7 +710,7 @@ class Block(Node):
                     )
             for idx_rev, node in enumerate(reversed(self._children)):
                 idx_orig = len(self._children) - 1 - idx_rev
-                if isinstance(node, PreprocessorIfBlock):
+                if isinstance(node, (PreprocessorIfBlock, PreprocessorLine)):
                     continue
                 if exitcycle_flags:
                     ec_flags = [ec.flag() for ec in node.collect_exitcycle()]
@@ -1034,6 +1036,59 @@ class Statement(Node):
 
     def is_effectively_empty(self) -> bool:
         return False
+
+
+@dataclass
+class PreprocessorLine(Node):
+    """A single preprocessor directive line."""
+
+    text: str
+
+    def copy(self) -> "PreprocessorLine":
+        return PreprocessorLine(self.text)
+
+    def deep_clone(self) -> "PreprocessorLine":
+        return PreprocessorLine(self.text)
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        return [f"{space}{self.text}\n"]
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List["Node"]:
+        return [PreprocessorLine(self.text)]
+
+    def set_for_exitcycle(
+        self,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        set_cond: bool = False,
+        keep: bool = False,
+    ) -> List[Node]:
+        return [PreprocessorLine(self.text)]
+
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+    ) -> "PreprocessorLine":
+        return self
 
 
 @dataclass
