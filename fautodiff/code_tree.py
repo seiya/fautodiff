@@ -139,35 +139,28 @@ class Node:
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
         """Return AD converted nodes."""
         return []
 
-    def set_for_exitcycle(self,
-                          exitcycle_flags: Optional[List[OpVar]] = None,
-                          set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-                          label: Optional[str] = None,
-                          label_map: Optional[List[Tuple[str,str]]] = None,
-                          set_cond: bool = False,
-                          keep: bool = False,
-                          ) -> List["Node"]:
-        """Return nodes adjusted for exit/cycle handling.
+    def set_for_returnexitcycle(self,
+                                return_flags: Optional[List[OpVar]] = None,
+                                exitcycle_flags: Optional[List[OpVar]] = None,
+                                set_return_cond: bool = False,
+                                set_exitcycle_cond: bool = False,
+                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+                                label: Optional[str] = None,
+                                label_map: Optional[List[Tuple[str,str]]] = None,
+                                keep: bool = False,
+                                ) -> List["Node"]:
+        """Return nodes adjusted for return/exit/cycle handling.
 
         The base implementation simply returns ``self`` unchanged; subclasses
         override this to insert conditional blocks around exit or cycle
         statements.
-        """
-        return [self]
-
-    def set_for_return(self,
-                       return_flags: Optional[List[OpVar]] = None,
-                       set_cond: bool = False) -> List["Node"]:
-        """Return nodes adjusted for ``return`` handling.
-
-        The base implementation simply returns ``self`` unchanged; subclasses
-        override this to insert conditional blocks around return statements.
         """
         return [self]
 
@@ -355,20 +348,14 @@ class Node:
         """Return ``exit`` and ``cycle`` nodes in this node."""
         nodes = []
         for child in self.iter_children():
-            if isinstance(child, (ExitStmt, CycleStmt)):
-                nodes.append(child)
-            else:
-                nodes.extend(child.collect_exitcycle())
+            nodes.extend(child.collect_exitcycle())
         return nodes
 
     def collect_return(self) -> List["ReturnStmt"]:
         """Return ``return`` statements in this node."""
         nodes: List[ReturnStmt] = []
         for child in self.iter_children():
-            if isinstance(child, ReturnStmt):
-                nodes.append(child)
-            else:
-                nodes.extend(child.collect_return())
+            nodes.extend(child.collect_return())
         return nodes
 
     def build_do_index_list(self, index_list: List[str]) -> None:
@@ -712,6 +699,7 @@ class Block(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[List[str]] = None,
     ) -> List[Node]:
@@ -722,7 +710,7 @@ class Block(Node):
         if reverse:
             iterator = reversed(iterator)
         for node in iterator:
-            if reverse and exitcycle_flags:
+            if reverse and (exitcycle_flags or return_flags):
                 ec_flags = [ec.flag() for ec in node.collect_exitcycle()]
                 ret_flags = [r.flag() for r in node.collect_return()]
             else:
@@ -736,11 +724,16 @@ class Block(Node):
                 generic_map,
                 mod_vars,
                 ec_flags,
+                ret_flags,
                 warnings,
             )
-            nodes = [node for node in nodes if node and not node.is_effectively_empty()]
-            if reverse and nodes and exitcycle_flags and not isinstance(node, (ExitStmt, CycleStmt, ReturnStmt)):
-                flags = exitcycle_flags
+            nodes = [n for n in nodes if node and not node.is_effectively_empty()]
+            if reverse and (exitcycle_flags or return_flags) and not isinstance(node, (ExitStmt, CycleStmt, ReturnStmt)):
+                flags = []
+                if exitcycle_flags:
+                    flags.extend(exitcycle_flags)
+                if return_flags:
+                    flags.extend(return_flags)
                 if ec_flags:
                     flags = [flag for flag in flags if flag not in ec_flags]
                 if ret_flags:
@@ -754,22 +747,38 @@ class Block(Node):
                 ad_code.extend(nodes)
         return ad_code
 
-    def set_for_exitcycle(self,
-                          exitcycle_flags: Optional[List[OpVar]] = None,
-                          set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-                          label: Optional[str] = None,
-                          label_map: Optional[List[Tuple[str,str]]] = None,
-                          set_cond: bool = False,
-                          keep: bool = False,
-                          ) -> List[Node]:
+    def set_for_returnexitcycle(self,
+                                return_flags: Optional[List[OpVar]] = None,
+                                exitcycle_flags: Optional[List[OpVar]] = None,
+                                set_return_cond: bool = False,
+                                set_exitcycle_cond: bool = False,
+                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+                                label: Optional[str] = None,
+                                label_map: Optional[List[Tuple[str,str]]] = None,
+                                keep: bool = False,
+                                ) -> List[Node]:
         nodes: List[Node] = []
-        if set_cond and exitcycle_flags:
-            cond = reduce(lambda x, y: x & y, exitcycle_flags)
+        if set_return_cond and return_flags:
+            flags = return_flags
+        else:
+            flags = []
+        if set_exitcycle_cond and exitcycle_flags:
+            flags = flags + exitcycle_flags
+        if flags:
+            cond = reduce(lambda x, y: x & y, flags)
             block = []
             for node in self.iter_children():
+                ret_flags = node.collect_return()
                 ce_flags = node.collect_exitcycle()
-                if ce_flags:
-                    node_new = node.set_for_exitcycle(exitcycle_flags, set_do_index, label, label_map, set_cond=False, keep=keep)
+                if ret_flags or ce_flags:
+                    node_new = node.set_for_returnexitcycle(return_flags,
+                                                            exitcycle_flags,
+                                                            set_return_cond=False,
+                                                            set_exitcycle_cond=False,
+                                                            set_do_index=set_do_index,
+                                                            label=label,
+                                                            label_map=label_map,
+                                                            keep=keep)
                     block.extend(node_new)
                     if block:
                         nodes.append(IfBlock([(cond, Block(block))]))
@@ -780,30 +789,14 @@ class Block(Node):
                 nodes.append(IfBlock([(cond, Block(block))]))
         else:
             for node in self.iter_children():
-                nodes.extend(node.set_for_exitcycle(exitcycle_flags, set_do_index, label, label_map, set_cond=False, keep=keep))
-        return nodes
-
-    def set_for_return(self,
-                       return_flags: Optional[List[OpVar]] = None,
-                       set_cond: bool = False) -> List[Node]:
-        nodes: List[Node] = []
-        if set_cond and return_flags:
-            cond = reduce(lambda x, y: x & y, return_flags)
-            block: List[Node] = []
-            for node in self.iter_children():
-                if isinstance(node, ReturnStmt):
-                    node_new = node.set_for_return(return_flags, set_cond=False)
-                    if block:
-                        nodes.append(IfBlock([(cond, Block(block))]))
-                        block = []
-                    nodes.extend(node_new)
-                    continue
-                block.extend(node.set_for_return(return_flags, set_cond=False))
-            if block:
-                nodes.append(IfBlock([(cond, Block(block))]))
-        else:
-            for node in self.iter_children():
-                nodes.extend(node.set_for_return(return_flags, set_cond=False))
+                nodes.extend(node.set_for_returnexitcycle(return_flags,
+                                                          exitcycle_flags,
+                                                          set_return_cond=False,
+                                                          set_exitcycle_cond=False,
+                                                          set_do_index=set_do_index,
+                                                          label=label,
+                                                          label_map=label_map,
+                                                          keep=keep))
         return nodes
 
     def find_by_name(self, name: str) -> Optional[Declaration]:
@@ -1014,10 +1007,10 @@ class Block(Node):
                                 continue
                     if (isinstance(last, Assignment) and isinstance(last.rhs, OpTrue) and
                         isinstance(child, IfBlock) and len(child.cond_blocks) == 1 and child.cond_blocks[0][0] == last.lhs):
-                        if not last.ad_info:
-                            new_children.remove(last)
+                        #if not last.ad_info:
+                        #    new_children.remove(last)
                         block = child.cond_blocks[0][1]
-                        block.remove_child(block[0])
+                        #block.remove_child(block[0])
                         if not block.is_effectively_empty():
                             for node in block.iter_children():
                                 new_children.append(node)
@@ -1082,6 +1075,7 @@ class PreprocessorLine(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
@@ -1089,13 +1083,15 @@ class PreprocessorLine(Node):
             return []
         return [PreprocessorLine(self.text)]
 
-    def set_for_exitcycle(
+    def set_for_returnexitcycle(
         self,
+        return_flags: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        set_return_cond: bool = False,
+        set_exitcycle_cond: bool = False,
         set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
         label: Optional[str] = None,
         label_map: Optional[List[Tuple[str, str]]] = None,
-        set_cond: bool = False,
         keep: bool = False,
     ) -> List[Node]:
         return []
@@ -1159,6 +1155,7 @@ class PreprocessorIfBlock(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
@@ -1173,6 +1170,7 @@ class PreprocessorIfBlock(Node):
                 generic_map,
                 mod_vars,
                 exitcycle_flags,
+                return_flags,
                 type_map,
                 warnings,
             )
@@ -1184,24 +1182,28 @@ class PreprocessorIfBlock(Node):
             return []
         return [PreprocessorIfBlock(cond_blocks)]
 
-    def set_for_exitcycle(
+    def set_for_returnexitcycle(
         self,
+        return_flags: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        set_return_cond: bool = False,
+        set_exitcycle_cond: bool = False,
         set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
         label: Optional[str] = None,
         label_map: Optional[List[Tuple[str, str]]] = None,
-        set_cond: bool = False,
         keep: bool = False,
     ) -> List[Node]:
         cond_blocks: List[Tuple[str, Block]] = []
         has_content = False
         for cond, block in self.cond_blocks:
-            nodes = block.set_for_exitcycle(
+            nodes = block.set_for_returnexitcycle(
+                return_flags,
                 exitcycle_flags,
+                set_return_cond,
+                set_exitcycle_cond,
                 set_do_index,
                 label,
                 label_map,
-                set_cond,
                 keep,
             )
             nodes = [n for n in nodes if n and not n.is_effectively_empty()]
@@ -1277,8 +1279,11 @@ class ExitCycle(Node):
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         return iter(())
 
-    def collect_return(self) -> List[Node]:
+    def collect_exitcycle(self) -> List[Node]:
         return [self]
+
+    def collect_return(self) -> List[ReturnStmt]:
+        return []
 
     def is_effectively_empty(self) -> bool:
         return False
@@ -1301,6 +1306,7 @@ class ExitCycle(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
@@ -1309,14 +1315,16 @@ class ExitCycle(Node):
             return [Assignment(self.flag(), OpTrue(), ad_info=f"{self.name}{label}")]
         return [self]
 
-    def set_for_exitcycle(self,
-                          exitcycle_flags: Optional[List[OpVar]] = None,
-                          set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-                          label: Optional[str] = None,
-                          label_map: Optional[List[Tuple[str,str]]] = None,
-                          set_cond: bool = False,
-                          keep: bool = False,
-                          ) -> List[Node]:
+    def set_for_returnexitcycle(self,
+                                return_flags: Optional[List[OpVar]] = None,
+                                exitcycle_flags: Optional[List[OpVar]] = None,
+                                set_return_cond: bool = False,
+                                set_exitcycle_cond: bool = False,
+                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+                                label: Optional[str] = None,
+                                label_map: Optional[List[Tuple[str,str]]] = None,
+                                keep: bool = False,
+                                ) -> List[Node]:
         nodes: List[Node] = []
         if set_do_index and isinstance(self, ExitStmt):
             nodes.append(Assignment(set_do_index[0], set_do_index[1]))
@@ -1364,8 +1372,21 @@ class ReturnStmt(Node):
         space = "  " * indent
         return [f"{space}{self.name}\n"]
 
-    def collect_return(self) -> List[Node]:
-        return [self]
+    def collect_exitcycle(self) -> List[Node]:
+        return []
+
+    def collect_return(self) -> List["ReturnStmt"]:
+        flag = False
+        parent = self.parent
+        while parent:
+            if isinstance(parent, BranchBlock):
+                flag = True
+                break
+            parent = parent.parent
+        if flag:
+            return [self]
+        else:
+            return []
 
     def is_effectively_empty(self) -> bool:
         return False
@@ -1388,30 +1409,34 @@ class ReturnStmt(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         if reverse:
-            return [Assignment(self.flag(), OpTrue(), ad_info=self.name)]
-        return []
+            flag = False
+            parent = self.parent
+            while parent:
+                if isinstance(parent, BranchBlock):
+                    flag = True
+                    break
+                parent = parent.parent
+            if flag:
+                return [Assignment(self.flag(), OpTrue(), ad_info=self.name)]
+            else:
+                return []
+        return [self]
 
-    def set_for_exitcycle(
-        self,
-        exitcycle_flags: Optional[List[OpVar]] = None,
-        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-        label: Optional[str] = None,
-        label_map: Optional[List[Tuple[str, str]]] = None,
-        set_cond: bool = False,
-        keep: bool = False,
-    ) -> List[Node]:
-        nodes: List[Node] = []
-        if exitcycle_flags:
-            nodes.append(Assignment(self.flag(), OpFalse()))
-        return nodes
-
-    def set_for_return(self,
-                       return_flags: Optional[List[OpVar]] = None,
-                       set_cond: bool = False) -> List[Node]:
+    def set_for_returnexitcycle(self,
+                                return_flags: Optional[List[OpVar]] = None,
+                                exitcycle_flags: Optional[List[OpVar]] = None,
+                                set_return_cond: bool = False,
+                                set_exitcycle_cond: bool = False,
+                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+                                label: Optional[str] = None,
+                                label_map: Optional[List[Tuple[str,str]]] = None,
+                                keep: bool = False,
+                                ) -> List[Node]:
         nodes: List[Node] = []
         if return_flags:
             nodes.append(Assignment(self.flag(), OpFalse()))
@@ -1615,6 +1640,7 @@ class CallStatement(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
@@ -1939,6 +1965,7 @@ class Routine(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Routine]:
@@ -2326,6 +2353,7 @@ class Declaration(Node):
                     generic_map: Optional[Dict] = None,
                     mod_vars: Optional[List[OpVar]] = None,
                     exitcycle_flags: Optional[List[OpVar]] = None,
+                    return_flags: Optional[List[OpVar]] = None,
                     type_map: Optional[dict] = None,
                     warnings: Optional[List[str]] = None) -> List[Node]:
         if self.constant or self.parameter or not self.ad_target():
@@ -2446,6 +2474,7 @@ class TypeDef(Node):
                     generic_map: Optional[Dict] = None,
                     mod_vars: Optional[List[OpVar]] = None,
                     exitcycle_flags: Optional[List[OpVar]] = None,
+                    return_flags: Optional[List[OpVar]] = None,
                     type_map: Optional[dict] = None,
                     warnings: Optional[List[str]] = None) -> List[Node]:
         if self.name.endswith("_t"):
@@ -2515,6 +2544,7 @@ class Assignment(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Assignment]:
@@ -2632,6 +2662,7 @@ class ClearAssignment(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Assignment]:
@@ -2974,6 +3005,7 @@ class Allocate(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
@@ -3094,6 +3126,7 @@ class Deallocate(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
@@ -3218,6 +3251,7 @@ class PointerAssignment(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
@@ -3325,6 +3359,7 @@ class PointerClear(Node):
                     generic_map: Optional[dict] = None,
                     mod_vars: Optional[List[OpVar]] = None,
                     exitcycle_flags: Optional[List[OpVar]] = None,
+                    return_flags: Optional[List[OpVar]] = None,
                     type_map: Optional[dict] = None,
                     warnings: Optional[List[str]] = None
                     ) -> List[Node]:
@@ -3426,17 +3461,29 @@ class BranchBlock(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         cond_blocks = []
         for cond, block in self.cond_blocks:
-            nodes = block.generate_ad(saved_vars, reverse, assigned_advars, routine_map, generic_map, mod_vars, exitcycle_flags, warnings)
+            nodes = block.generate_ad(saved_vars,
+                                      reverse,
+                                      assigned_advars,
+                                      routine_map,
+                                      generic_map,
+                                      mod_vars,
+                                      exitcycle_flags,
+                                      return_flags,
+                                      warnings)
             if reverse:
-                nodes_new = block.set_for_exitcycle(exitcycle_flags)
+                nodes_new = block.set_for_returnexitcycle(return_flags, exitcycle_flags)
                 if nodes_new:
                     if exitcycle_flags:
                         for flag in exitcycle_flags:
+                            nodes_new.insert(0, Assignment(flag, OpTrue()))
+                    if return_flags:
+                        for flag in return_flags:
                             nodes_new.insert(0, Assignment(flag, OpTrue()))
                     for node in nodes:
                         if not node.is_effectively_empty():
@@ -3465,32 +3512,26 @@ class BranchBlock(Node):
             blocks = [block]
         return blocks
 
-    def set_for_exitcycle(self,
-                          exitcycle_flags: Optional[List[OpVar]] = None,
-                          set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-                          label: Optional[str] = None,
-                          label_map: Optional[List[Tuple[str,str]]] = None,
-                          set_cond: bool = False,
-                          keep: bool = False,
-                          ) -> List[Node]:
+    def set_for_returnexitcycle(self,
+                                return_flags: Optional[List[OpVar]] = None,
+                                exitcycle_flags: Optional[List[OpVar]] = None,
+                                set_return_cond: bool = False,
+                                set_exitcycle_cond: bool = False,
+                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+                                label: Optional[str] = None,
+                                label_map: Optional[List[Tuple[str,str]]] = None,
+                                keep: bool = False,
+                                ) -> List[Node]:
         cond_blocks: List[tuple] = []
         for cond, block in self.cond_blocks:
-            nodes = block.set_for_exitcycle(exitcycle_flags, set_do_index, label, label_map, set_cond, keep)
-            body = Block(nodes)
-            cond_blocks.append((cond, body))
-        if isinstance(self, IfBlock):
-            return [IfBlock(cond_blocks)]
-        elif isinstance(self, SelectBlock):
-            return [SelectBlock(cond_blocks, expr=self.expr)]
-        else:  # WhereBlock
-            return [WhereBlock(cond_blocks)]
-
-    def set_for_return(self,
-                       return_flags: Optional[List[OpVar]] = None,
-                       set_cond: bool = False) -> List[Node]:
-        cond_blocks: List[tuple] = []
-        for cond, block in self.cond_blocks:
-            nodes = block.set_for_return(return_flags, set_cond)
+            nodes = block.set_for_returnexitcycle(return_flags,
+                                                  exitcycle_flags,
+                                                  set_return_cond,
+                                                  set_exitcycle_cond,
+                                                  set_do_index,
+                                                  label,
+                                                  label_map,
+                                                  keep)
             body = Block(nodes)
             cond_blocks.append((cond, body))
         if isinstance(self, IfBlock):
@@ -3741,15 +3782,6 @@ class DoAbst(Node):
                             vars.append(v)
         return vars
 
-    def collect_return(self) -> List[ReturnStmt]:
-        vars: List[ReturnStmt] = []
-        for var in self._body.iter_children():
-            if isinstance(var, ReturnStmt):
-                vars.append(var)
-            else:
-                vars.extend(var.collect_return())
-        return vars
-
     def generate_ad(
         self,
         saved_vars: List[OpVar],
@@ -3759,6 +3791,7 @@ class DoAbst(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
@@ -3772,7 +3805,7 @@ class DoAbst(Node):
             for vname in self.recurrent_vars():
                 assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
 
-        nodes = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, generic_map, mod_vars, exitcycle_flags, warnings)
+        nodes = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, generic_map, mod_vars, exitcycle_flags, return_flags, warnings)
         if self.do:
             range = self.range
         else:
@@ -3784,7 +3817,7 @@ class DoAbst(Node):
             if self.do:
                 range = range.reverse()
             new_body: List[Node] = []
-            fwd_body = self._body.set_for_exitcycle(exitcycle_flags, label=label, set_cond=True)
+            fwd_body = self._body.set_for_returnexitcycle(return_flags, exitcycle_flags, set_exitcycle_cond=True, label=label)
 
             if exitcycle_flags:
                 exit_flag = False
@@ -3889,18 +3922,6 @@ class DoAbst(Node):
         if increment:
             self.label_id += 1
         return f"label_{self.get_id()}_{self.label_id}{AD_SUFFIX}"
-
-    def set_for_return(self,
-                       return_flags: Optional[List[OpVar]] = None,
-                       set_cond: bool = False) -> List[Node]:
-        if return_flags is None:
-            return [self]
-        body = Block(self._body.set_for_return(return_flags, set_cond=True))
-        if self.do:
-            return [DoLoop(body, self.index, self.range, self.label)]
-        else:
-            cond = reduce(lambda x, y: x & y, return_flags) & self.cond
-            return [DoWhile(body, cond, self.label)]
 
 @dataclass
 class DoLoop(DoAbst):
@@ -4056,14 +4077,16 @@ class DoLoop(DoAbst):
                 var_names.append(name)
         return var_names
 
-    def set_for_exitcycle(self,
-                          exitcycle_flags: Optional[List[OpVar]] = None,
-                          set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-                          label: Optional[str] = None,
-                          label_map: Optional[List[Tuple[str,str]]] = None,
-                          set_cond: bool = False,
-                          keep: bool = False,
-                          ) -> List[Node]:
+    def set_for_returnexitcycle(self,
+                                return_flags: Optional[List[OpVar]] = None,
+                                exitcycle_flags: Optional[List[OpVar]] = None,
+                                set_return_cond: bool = False,
+                                set_exitcycle_cond: bool = False,
+                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+                                label: Optional[str] = None,
+                                label_map: Optional[List[Tuple[str,str]]] = None,
+                                keep: bool = False,
+                                ) -> List[Node]:
         exitcycles = self._body.collect_exitcycle()
         if exitcycles and any(isinstance(ec, ExitStmt) for ec in exitcycles):
             nodes: List[Node] = []
@@ -4083,7 +4106,14 @@ class DoLoop(DoAbst):
                     label_map = [label_pair]
             else:
                 label_map = None
-            body = Block(self._body.set_for_exitcycle(exitcycle_flags, set_do_index, self.label, label_map, set_cond, keep=True))
+            body = Block(self._body.set_for_returnexitcycle(return_flags,
+                                                            exitcycle_flags,
+                                                            set_return_cond,
+                                                            set_exitcycle_cond,
+                                                            set_do_index,
+                                                            self.label,
+                                                            label_map,
+                                                            keep=True))
             nodes.append(DoLoop(body, self.index, self.range, label))
             return nodes
         return [self]
@@ -4325,6 +4355,7 @@ class BlockConstruct(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[List[str]] = None,
     ) -> List[Node]:
@@ -4337,6 +4368,7 @@ class BlockConstruct(Node):
             generic_map,
             mod_vars,
             exitcycle_flags,
+            return_flags,
             type_map,
             warnings,
         ):
@@ -4349,6 +4381,7 @@ class BlockConstruct(Node):
             generic_map,
             mod_vars,
             exitcycle_flags,
+            return_flags,
             type_map,
             warnings,
         )
@@ -4599,6 +4632,7 @@ class OmpDirective(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
@@ -4612,6 +4646,7 @@ class OmpDirective(Node):
             generic_map,
             mod_vars,
             exitcycle_flags,
+            return_flags,
             warnings,
         )
         if not nodes:
@@ -4747,6 +4782,7 @@ class ForallBlock(Node):
         generic_map: Optional[dict] = None,
         mod_vars: Optional[List[OpVar]] = None,
         exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
@@ -4758,6 +4794,7 @@ class ForallBlock(Node):
             generic_map,
             mod_vars,
             exitcycle_flags,
+            return_flags,
             warnings,
         )
         body = Block(nodes)
