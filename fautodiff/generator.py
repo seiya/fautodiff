@@ -1196,7 +1196,6 @@ def _generate_ad_subroutine(
                     ad_block.remove_child(first)
                 continue
             flag = False
-
         if not fw_block.is_effectively_empty():
             subroutine.content.extend(fw_block)
 

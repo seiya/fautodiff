@@ -985,6 +985,204 @@ class Statement(Node):
 
 
 @dataclass
+class PreprocessorLine(Node):
+    """A single preprocessor directive line."""
+
+    text: str
+
+    def copy(self) -> "PreprocessorLine":
+        return PreprocessorLine(self.text)
+
+    def deep_clone(self) -> "PreprocessorLine":
+        return PreprocessorLine(self.text)
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        return [f"{space}{self.text}\n"]
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List["Node"]:
+        if reverse:
+            return []
+        return [PreprocessorLine(self.text)]
+
+    def set_for_exitcycle(
+        self,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        set_cond: bool = False,
+        keep: bool = False,
+    ) -> List[Node]:
+        return []
+
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+    ) -> "PreprocessorLine":
+        return self
+
+
+@dataclass
+class PreprocessorIfBlock(Node):
+    """Representation of ``#if`` style preprocessor conditionals."""
+
+    cond_blocks: List[Tuple[str, Block]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        for cond, block in self.cond_blocks:
+            if not isinstance(cond, str):
+                raise ValueError("condition must be a string")
+            if not isinstance(block, Block):
+                raise ValueError("body must be a Block")
+            block.set_parent(self)
+
+    def copy(self) -> "PreprocessorIfBlock":
+        return PreprocessorIfBlock(self.cond_blocks)
+
+    def deep_clone(self) -> "PreprocessorIfBlock":
+        cond_blocks: List[Tuple[str, Block]] = []
+        for cond, block in self.cond_blocks:
+            cond_blocks.append((cond, block.deep_clone()))
+        return PreprocessorIfBlock(cond_blocks)
+
+    def iter_children(self) -> Iterator[Node]:
+        for _, block in self.cond_blocks:
+            yield block
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        lines: List[str] = []
+        for cond, block in self.cond_blocks:
+            lines.append(f"{space}#{cond}\n")
+            lines.extend(block.render(indent))
+        lines.append(f"{space}#endif\n")
+        return lines
+
+    def is_effectively_empty(self) -> bool:
+        return all(block.is_effectively_empty() for _, block in self.cond_blocks)
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List["Node"]:
+        cond_blocks: List[Tuple[str, Block]] = []
+        has_content = False
+        for cond, block in self.cond_blocks:
+            nodes = block.generate_ad(
+                saved_vars,
+                reverse,
+                assigned_advars,
+                routine_map,
+                generic_map,
+                mod_vars,
+                exitcycle_flags,
+                type_map,
+                warnings,
+            )
+            nodes = [n for n in nodes if n and not n.is_effectively_empty()]
+            if nodes:
+                has_content = True
+            cond_blocks.append((cond, Block(nodes)))
+        if not has_content:
+            return []
+        return [PreprocessorIfBlock(cond_blocks)]
+
+    def set_for_exitcycle(
+        self,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        set_cond: bool = False,
+        keep: bool = False,
+    ) -> List[Node]:
+        cond_blocks: List[Tuple[str, Block]] = []
+        has_content = False
+        for cond, block in self.cond_blocks:
+            nodes = block.set_for_exitcycle(
+                exitcycle_flags,
+                set_do_index,
+                label,
+                label_map,
+                set_cond,
+                keep,
+            )
+            nodes = [n for n in nodes if n and not n.is_effectively_empty()]
+            if nodes:
+                has_content = True
+            cond_blocks.append((cond, Block(nodes)))
+        if not has_content:
+            return []
+        return [PreprocessorIfBlock(cond_blocks)]
+
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
+        vars_list = VarList()
+        for _, block in self.cond_blocks:
+            vars_list.merge(block.required_vars(vars, no_accumulate, without_savevar))
+        return vars_list
+
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        vars_list = VarList()
+        for _, block in self.cond_blocks:
+            vars_list.merge(block.unrefered_advars(vars))
+        return vars_list
+
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, Declaration]] = None,
+    ) -> Optional["PreprocessorIfBlock"]:
+        cond_blocks: List[Tuple[str, Block]] = []
+        flag = False
+        for cond, block in self.cond_blocks:
+            block = block.prune_for(targets, mod_vars, decl_map)
+            cond_blocks.append((cond, block))
+            if not block.is_effectively_empty():
+                flag = True
+        if not flag:
+            return None
+        return PreprocessorIfBlock(cond_blocks)
+
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        vars_list = VarList()
+        for _, block in self.cond_blocks:
+            vars_list.merge(block.check_initial(assigned_vars))
+        return vars_list
+
+
+@dataclass
 class ExitCycle(Node):
     """Abstract class for ExtiStmt and CycleStmt"""
 
@@ -3116,13 +3314,20 @@ class BranchBlock(Node):
                     vars_list.push(v)
         return vars_list
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Node:
+    def prune_for(self,
+                  targets: VarList,
+                  mod_vars: Optional[List[OpVar]] = None,
+                  decl_map: Optional[Dict[str, Declaration]] = None
+                  ) -> Optional[Node]:
         new_condblocks = []
+        flag = False
         for cond, block in self.cond_blocks:
             new_block = block.prune_for(targets, mod_vars, decl_map)
             new_condblocks.append((cond, new_block))
-        if len(new_condblocks) == 0:
-            return Block([])
+            if new_block is not None:
+                flag = True
+        if not flag or len(new_condblocks) == 0:
+            return None
         if isinstance(self, IfBlock):
             return IfBlock(new_condblocks)
         elif isinstance(self, SelectBlock):
