@@ -1126,11 +1126,11 @@ def _generate_ad_subroutine(
             targets = VarList(grad_args + out_args + mod_ad_vars + mod_vars + save_ad_vars + save_vars)
 
         # Remove statements unrelated to derivative targets
-        ad_code = ad_code.prune_for(targets, mod_vars + save_vars)
+        ad_code = ad_code.prune_for(targets, mod_vars + save_vars, base_targets=targets)
 
         if reverse:
             ad_code.check_initial(VarList(grad_args + mod_ad_vars + save_ad_vars))
-            ad_code = ad_code.prune_for(targets, mod_vars + save_vars)
+            ad_code = ad_code.prune_for(targets, mod_vars + save_vars, base_targets=targets)
 
     for node in ad_code:
         if not node.is_effectively_empty():
@@ -1147,7 +1147,7 @@ def _generate_ad_subroutine(
 
         _add_fwd_rev_calls(fw_block, routine_map, generic_map)
 
-        fw_block = fw_block.prune_for(targets, mod_vars + save_vars)
+        fw_block = fw_block.prune_for(targets, mod_vars + save_vars, base_targets=targets)
         if reverse:
             _strip_sequential_omp(fw_block, warnings, reverse=True)
             fw_block._children = [n for n in fw_block.iter_children() if not isinstance(n, ReturnStmt)]
@@ -1452,7 +1452,7 @@ def _generate_ad_subroutine(
 
     #print(render_program(subroutine))
     mod_vars_all = mod_vars + save_vars
-    subroutine = subroutine.prune_for(targets, mod_vars_all, decl_map=subroutine.decl_map)
+    subroutine = subroutine.prune_for(targets, mod_vars_all, decl_map=subroutine.decl_map, base_targets=targets)
 
     # update routine_map with pruned argument information
     arg_info = routine_map.get(routine_org.name)
