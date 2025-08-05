@@ -689,6 +689,58 @@ class Block(Node):
     ) -> List[Node]:
         """Generate AD code for each child node in the block."""
         ad_code: List[Node] = []
+        has_cpp = any(isinstance(n, Preprocessor) for n in self._children)
+        if reverse and has_cpp:
+            groups: List[List[Node]] = [[] for _ in self._children]
+            for idx, node in enumerate(self._children):
+                if isinstance(node, Preprocessor):
+                    groups[idx].extend(
+                        node.generate_ad(
+                            saved_vars,
+                            reverse,
+                            assigned_advars,
+                            routine_map,
+                            generic_map,
+                            mod_vars,
+                            None,
+                            warnings,
+                        )
+                    )
+            for idx_rev, node in enumerate(reversed(self._children)):
+                idx_orig = len(self._children) - 1 - idx_rev
+                if isinstance(node, Preprocessor):
+                    continue
+                if exitcycle_flags:
+                    ec_flags = [ec.flag() for ec in node.collect_exitcycle()]
+                else:
+                    ec_flags = None
+                nodes = node.generate_ad(
+                    saved_vars,
+                    reverse,
+                    assigned_advars,
+                    routine_map,
+                    generic_map,
+                    mod_vars,
+                    ec_flags,
+                    warnings,
+                )
+                nodes = [n for n in nodes if n and not n.is_effectively_empty()]
+                if nodes and exitcycle_flags and not isinstance(node, (ExitStmt, CycleStmt)):
+                    if ec_flags:
+                        flags = [flag for flag in exitcycle_flags if not flag in ec_flags]
+                    else:
+                        flags = exitcycle_flags
+                    if flags:
+                        cond = reduce(lambda x, y: x & y, flags)
+                        groups[idx_orig].append(IfBlock([(cond, Block(nodes))]))
+                    else:
+                        groups[idx_orig].extend(nodes)
+                else:
+                    groups[idx_orig].extend(nodes)
+            for grp in groups:
+                ad_code.extend(grp)
+            return ad_code
+
         iterator = self._children
         # Reverse mode processes statements in reverse order
         if reverse:
@@ -982,6 +1034,48 @@ class Statement(Node):
 
     def is_effectively_empty(self) -> bool:
         return False
+
+
+@dataclass
+class Preprocessor(Node):
+    """Representation of a preprocessor directive line."""
+
+    line: str
+
+    def copy(self) -> "Preprocessor":
+        return Preprocessor(self.line)
+
+    def deep_clone(self) -> "Preprocessor":
+        return self.copy()
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        return [f"{space}{self.line}\n"]
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List["Node"]:
+        return [self]
+
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, Declaration]] = None,
+    ) -> "Preprocessor":
+        return self
 
 
 @dataclass

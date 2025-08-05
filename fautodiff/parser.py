@@ -38,6 +38,7 @@ from .code_tree import (
     BlockConstruct,
     OmpDirective,
     Statement,
+    Preprocessor,
     ExitStmt,
     CycleStmt,
     Subroutine,
@@ -76,6 +77,33 @@ _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
 
 if parse(getattr(fparser, "__version__", "0")) < Version("0.2.0"):
     raise RuntimeError("fautodiff requires fparser version 0.2.0 or later")
+
+_CPP_PREFIX = "!$CPP"
+
+
+def _inject_cpp_lines(src: str) -> str:
+    """Replace preprocessor lines with marked comments."""
+    lines = []
+    for line in src.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            lines.append(f"{_CPP_PREFIX} {line}")
+        else:
+            lines.append(line)
+    if src.endswith("\n"):
+        return "\n".join(lines) + "\n"
+    return "\n".join(lines)
+
+
+def _comment_to_preproc(comment) -> Optional[Preprocessor]:
+    """Return a ``Preprocessor`` node if ``comment`` encodes one."""
+    text = comment.items[0]
+    if text.startswith(_CPP_PREFIX):
+        line = text[len(_CPP_PREFIX) :]
+        if line.startswith(" "):
+            line = line[1:]
+        return Preprocessor(line)
+    return None
 
 
 def _stmt_name(stmt):
@@ -342,18 +370,21 @@ __all__ = [
 
 def parse_file(path, *, search_dirs=None, decl_map=None, type_map=None):
     """Parse ``path`` and return a list of :class:`Module` nodes."""
-    reader = FortranFileReader(
-        path, ignore_comments=False, include_omp_conditional_lines=True
+    src = Path(path).read_text()
+    src = _inject_cpp_lines(src)
+    reader = FortranStringReader(
+        src, ignore_comments=False, include_omp_conditional_lines=True
     )
     return _parse_from_reader(reader, path, search_dirs=search_dirs, decl_map=decl_map, type_map=type_map)
 
 
-def parse_src(src, *, search_dirs=None, decl_map=None, type_map=None):
+def parse_src(src, *, search_dirs=None, decl_map=None, type_map=None, src_name: str = "<string>"):
     """Parse ``src`` and return a list of :class:`Module` nodes."""
+    src = _inject_cpp_lines(src)
     reader = FortranStringReader(
         src, ignore_comments=False, include_omp_conditional_lines=True
     )
-    return _parse_from_reader(reader, "<string>", search_dirs=search_dirs, decl_map=decl_map, type_map=type_map)
+    return _parse_from_reader(reader, src_name, search_dirs=search_dirs, decl_map=decl_map, type_map=type_map)
 
 
 def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
@@ -648,6 +679,10 @@ def _parse_decls(
         if isinstance(item, Fortran2003.Implicit_Part):
             for cnt in item.content:
                 if isinstance(cnt, Fortran2003.Comment):
+                    pre = _comment_to_preproc(cnt)
+                    if pre is not None:
+                        nodes.append(pre)
+                        continue
                     text = cnt.items[0].strip()
                     if text.startswith("!$FAD"):
                         _parse_directive(text, directives)
@@ -663,6 +698,11 @@ def _parse_decls(
                     continue
                 # if isinstance(cnt, Fortran2003.Implicit_Stmt):
                 #     decls.append(Statement(cnt.string))
+            continue
+        if isinstance(item, Fortran2003.Comment):
+            pre = _comment_to_preproc(item)
+            if pre is not None:
+                nodes.append(pre)
             continue
         if isinstance(item, Fortran2003.Use_Stmt):
             only = None
@@ -925,6 +965,9 @@ def _process_subprogram_part(
         if isinstance(c, Fortran2003.Contains_Stmt):
             continue
         if isinstance(c, Fortran2003.Comment):
+            pre = _comment_to_preproc(c)
+            if pre is not None:
+                node.routines.append(pre)
             continue
         if isinstance(
             c,
@@ -985,6 +1028,12 @@ def _parse_module_ast(
         if isinstance(part, Fortran2003.End_Module_Stmt):
             break
         if isinstance(part, Fortran2003.Comment):
+            pre = _comment_to_preproc(part)
+            if pre is not None:
+                if mod_node.body is None:
+                    mod_node.body = Block([pre])
+                else:
+                    mod_node.body.append(pre)
             continue
         if isinstance(part, Fortran2003.Specification_Part):
             _process_spec_part(
@@ -1045,6 +1094,12 @@ def _parse_program_ast(
         if isinstance(part, Fortran2003.End_Program_Stmt):
             break
         if isinstance(part, Fortran2003.Comment):
+            pre = _comment_to_preproc(part)
+            if pre is not None:
+                if prog_node.body is None:
+                    prog_node.body = Block([pre])
+                else:
+                    prog_node.body.append(pre)
             continue
         if isinstance(part, Fortran2003.Specification_Part):
             _process_spec_part(
@@ -1067,6 +1122,9 @@ def _parse_program_ast(
                 if isinstance(stmt, Fortran2003.Internal_Subprogram_Part):
                     continue
                 if isinstance(stmt, Fortran2003.Comment):
+                    pre = _comment_to_preproc(stmt)
+                    if pre is not None:
+                        stmts.append(pre)
                     continue
                 stmts.append(Statement(stmt.string))
             if stmts:
@@ -1156,6 +1214,9 @@ def _parse_routine(content,
 
     def _parse_stmt(stmt, decl_map: dict, type_map: dict) -> Optional[Node]:
         if isinstance(stmt, Fortran2003.Comment):
+            pre = _comment_to_preproc(stmt)
+            if pre is not None:
+                return pre
             text = stmt.items[0].strip()
             if text.lower().startswith("!$omp"):
                 # handled separately
@@ -1487,6 +1548,11 @@ def _parse_routine(content,
         while i < len(body_list):
             st = body_list[i]
             if isinstance(st, Fortran2003.Comment):
+                pre = _comment_to_preproc(st)
+                if pre is not None:
+                    sub.append(pre)
+                    i += 1
+                    continue
                 text = st.items[0].strip()
                 if text.lower().startswith("!$omp"):
                     end, dir2, _ = _parse_omp_directive(text)
@@ -1521,6 +1587,11 @@ def _parse_routine(content,
                 continue
             st = body_list[i]
             if isinstance(st, Fortran2003.Comment):
+                pre = _comment_to_preproc(st)
+                if pre is not None:
+                    blk.append(pre)
+                    i += 1
+                    continue
                 text = st.items[0].strip()
                 if text.lower().startswith("!$omp"):
                     end, directive, clauses = _parse_omp_directive(text)
