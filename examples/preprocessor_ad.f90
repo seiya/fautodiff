@@ -27,9 +27,9 @@ contains
     #ifdef USE_ADD
     #endif
 
-    #ifdef USE_ADD
     x_ad = y_ad + x_ad ! y = x
     y_ad = 0.0 ! y = x
+    #ifdef USE_ADD
     #endif
 
     return

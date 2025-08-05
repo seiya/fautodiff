@@ -689,11 +689,11 @@ class Block(Node):
     ) -> List[Node]:
         """Generate AD code for each child node in the block."""
         ad_code: List[Node] = []
-        has_cpp = any(isinstance(n, Preprocessor) for n in self._children)
+        has_cpp = any(isinstance(n, PreprocessorIfBlock) for n in self._children)
         if reverse and has_cpp:
             groups: List[List[Node]] = [[] for _ in self._children]
             for idx, node in enumerate(self._children):
-                if isinstance(node, Preprocessor):
+                if isinstance(node, PreprocessorIfBlock):
                     groups[idx].extend(
                         node.generate_ad(
                             saved_vars,
@@ -708,7 +708,7 @@ class Block(Node):
                     )
             for idx_rev, node in enumerate(reversed(self._children)):
                 idx_orig = len(self._children) - 1 - idx_rev
-                if isinstance(node, Preprocessor):
+                if isinstance(node, PreprocessorIfBlock):
                     continue
                 if exitcycle_flags:
                     ec_flags = [ec.flag() for ec in node.collect_exitcycle()]
@@ -1037,20 +1037,41 @@ class Statement(Node):
 
 
 @dataclass
-class Preprocessor(Node):
-    """Representation of a preprocessor directive line."""
+class PreprocessorIfBlock(Node):
+    """Representation of ``#if`` style preprocessor conditionals."""
 
-    line: str
+    cond_blocks: List[Tuple[str, Block]] = field(default_factory=list)
 
-    def copy(self) -> "Preprocessor":
-        return Preprocessor(self.line)
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        for cond, block in self.cond_blocks:
+            if not isinstance(cond, str):
+                raise ValueError("condition must be a string")
+            if not isinstance(block, Block):
+                raise ValueError("body must be a Block")
+            block.set_parent(self)
 
-    def deep_clone(self) -> "Preprocessor":
-        return self.copy()
+    def copy(self) -> "PreprocessorIfBlock":
+        return PreprocessorIfBlock(self.cond_blocks)
+
+    def deep_clone(self) -> "PreprocessorIfBlock":
+        cond_blocks: List[Tuple[str, Block]] = []
+        for cond, block in self.cond_blocks:
+            cond_blocks.append((cond, block.deep_clone()))
+        return PreprocessorIfBlock(cond_blocks)
+
+    def iter_children(self) -> Iterator[Node]:
+        for _, block in self.cond_blocks:
+            yield block
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        return [f"{space}{self.line}\n"]
+        lines: List[str] = []
+        for cond, block in self.cond_blocks:
+            lines.append(f"{space}#{cond}\n")
+            lines.extend(block.render(indent))
+        lines.append(f"{space}#endif\n")
+        return lines
 
     def is_effectively_empty(self) -> bool:
         return False
@@ -1067,15 +1088,77 @@ class Preprocessor(Node):
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
-        return [self]
+        cond_blocks: List[Tuple[str, Block]] = []
+        for cond, block in self.cond_blocks:
+            nodes = block.generate_ad(
+                saved_vars,
+                reverse,
+                assigned_advars,
+                routine_map,
+                generic_map,
+                mod_vars,
+                exitcycle_flags,
+                type_map,
+                warnings,
+            )
+            cond_blocks.append((cond, Block(nodes)))
+        return [PreprocessorIfBlock(cond_blocks)]
+
+    def set_for_exitcycle(
+        self,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        set_cond: bool = False,
+        keep: bool = False,
+    ) -> List[Node]:
+        cond_blocks: List[Tuple[str, Block]] = []
+        for cond, block in self.cond_blocks:
+            nodes = block.set_for_exitcycle(
+                exitcycle_flags,
+                set_do_index,
+                label,
+                label_map,
+                set_cond,
+                keep,
+            )
+            cond_blocks.append((cond, Block(nodes)))
+        return [PreprocessorIfBlock(cond_blocks)]
+
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
+        vars_list = VarList()
+        for _, block in self.cond_blocks:
+            vars_list.merge(block.required_vars(vars, no_accumulate, without_savevar))
+        return vars_list
+
+    def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        vars_list = VarList()
+        for _, block in self.cond_blocks:
+            vars_list.merge(block.unrefered_advars(vars))
+        return vars_list
 
     def prune_for(
         self,
         targets: VarList,
         mod_vars: Optional[List[OpVar]] = None,
         decl_map: Optional[Dict[str, Declaration]] = None,
-    ) -> "Preprocessor":
-        return self
+    ) -> "PreprocessorIfBlock":
+        cond_blocks: List[Tuple[str, Block]] = []
+        for cond, block in self.cond_blocks:
+            cond_blocks.append((cond, block.prune_for(targets, mod_vars, decl_map)))
+        return PreprocessorIfBlock(cond_blocks)
+
+    def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
+        vars_list = VarList()
+        for _, block in self.cond_blocks:
+            vars_list.merge(block.check_initial(assigned_vars))
+        return vars_list
 
 
 @dataclass
