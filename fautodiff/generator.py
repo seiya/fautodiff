@@ -56,6 +56,7 @@ from .operators import (
     OpRange,
     OpFunc,
     OpNot,
+    OpTrue,
 )
 
 code_tree.AD_SUFFIX = AD_SUFFIX
@@ -1067,6 +1068,12 @@ def _generate_ad_subroutine(
     else:
         assigned_advars = VarList(in_grad_args + mod_ad_vars + save_ad_vars)
     # Generate AD statements from the original routine body
+    if reverse:
+        exitcycles = routine_org.content.collect_exitcycle()
+        returns = routine_org.content.collect_return()
+        exitcycle_flags = [node.flag() for node in exitcycles + returns]
+    else:
+        exitcycle_flags = None
     nodes = routine_org.content.generate_ad(
         saved_vars,
         reverse=reverse,
@@ -1074,9 +1081,13 @@ def _generate_ad_subroutine(
         routine_map=routine_map,
         generic_map=generic_map,
         mod_vars=mod_vars,
+        exitcycle_flags=exitcycle_flags,
         warnings=warnings,
     )
     ad_code = Block()
+    if reverse and exitcycle_flags:
+        for flag in exitcycle_flags:
+            ad_code.append(Assignment(flag, OpTrue()))
     for node in nodes:
         if not node.is_effectively_empty():
             ad_code.append(node)
@@ -1142,7 +1153,12 @@ def _generate_ad_subroutine(
 
         #print(render_program(ad_block))
         #print("Targets:", targets)
-        fw_block = Block(routine_org.content.set_for_exitcycle(None))
+        return_flags = [r.flag() for r in returns]
+        fw_block = Block(routine_org.content.set_for_return(return_flags, set_cond=True))
+        fw_block = Block(fw_block.set_for_exitcycle(None))
+        if return_flags:
+            for flag in return_flags:
+                fw_block.insert_begin(Assignment(flag, OpTrue()))
         fw_block.build_parent()
 
         _add_fwd_rev_calls(fw_block, routine_map, generic_map)
@@ -1150,7 +1166,6 @@ def _generate_ad_subroutine(
         fw_block = fw_block.prune_for(targets, mod_vars + save_vars, base_targets=targets)
         if reverse:
             _strip_sequential_omp(fw_block, warnings, reverse=True)
-            fw_block._children = [n for n in fw_block.iter_children() if not isinstance(n, ReturnStmt)]
 
         assigned = fw_block.assigned_vars(without_savevar=True)
         assigned = ad_block.assigned_vars(assigned, without_savevar=True)
