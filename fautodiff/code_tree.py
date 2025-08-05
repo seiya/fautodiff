@@ -366,10 +366,18 @@ class Node:
     # optimization helpers
     # ------------------------------------------------------------------
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional["Node"]:
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional["Node"]:
         """Return a copy of this node with only code needed for ``targets``."""
         if any(node for node in self.iter_children()):
-            raise NotImplementedError(f"prune_for must be implemented for class having children")
+            raise NotImplementedError(
+                "prune_for must be implemented for class having children"
+            )
         for var in self.assigned_vars():
             if var in targets:
                 return self.deep_clone()
@@ -838,13 +846,29 @@ class Block(Node):
                 children_new.append(child)
         return Block(children_new)
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> "Block":
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> "Block":
+        if base_targets is None:
+            base_targets = targets.copy()
+        # Drop any statements following the first direct return
+        children_all: List[Node] = []
+        for child in self._children:
+            children_all.append(child)
+            if isinstance(child, ReturnStmt):
+                break
         new_children: List[Node] = []
-        for child in reversed(self._children):
-            pruned = child.prune_for(targets, mod_vars, decl_map)
+        for child in reversed(children_all):
+            pruned = child.prune_for(targets, mod_vars, decl_map, base_targets)
             if pruned is not None and not pruned.is_effectively_empty():
                 new_children.insert(0, pruned)
                 targets = pruned.required_vars(targets)
+                if isinstance(pruned, ReturnStmt) or getattr(pruned, "reset_targets", False):
+                    targets = base_targets.copy()
         children = new_children
         if len(children) >= 2:
             i = 0
@@ -1035,6 +1059,7 @@ class PreprocessorLine(Node):
         targets: VarList,
         mod_vars: Optional[List[OpVar]] = None,
         decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
     ) -> "PreprocessorLine":
         return self
 
@@ -1163,11 +1188,12 @@ class PreprocessorIfBlock(Node):
         targets: VarList,
         mod_vars: Optional[List[OpVar]] = None,
         decl_map: Optional[Dict[str, Declaration]] = None,
+        base_targets: Optional[VarList] = None,
     ) -> Optional["PreprocessorIfBlock"]:
         cond_blocks: List[Tuple[str, Block]] = []
         flag = False
         for cond, block in self.cond_blocks:
-            block = block.prune_for(targets, mod_vars, decl_map)
+            block = block.prune_for(targets, mod_vars, decl_map, base_targets)
             cond_blocks.append((cond, block))
             if not block.is_effectively_empty():
                 flag = True
@@ -1211,7 +1237,13 @@ class ExitCycle(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> "ExitCycle":
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> "ExitCycle":
         return self
 
     def generate_ad(
@@ -1297,6 +1329,7 @@ class ReturnStmt(Node):
         targets: VarList,
         mod_vars: Optional[List[OpVar]] = None,
         decl_map: Optional[Dict[str, Declaration]] = None,
+        base_targets: Optional[VarList] = None,
     ) -> "ReturnStmt":
         return self
 
@@ -1704,7 +1737,13 @@ class CallStatement(Node):
 
         return blocks
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional["CallStatement"]:
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional["CallStatement"]:
         if self.donot_prune:
             return self.deep_clone()
         for var in self.assigned_vars():
@@ -1956,23 +1995,33 @@ class Routine(Node):
             clone.decl_map = dict(self.decl_map)
         return clone
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> "Routine":
-        ad_content = self.ad_content.prune_for(targets, mod_vars, decl_map)
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> "Routine":
+        if base_targets is None:
+            base_targets = targets.copy()
+        ad_content = self.ad_content.prune_for(targets, mod_vars, decl_map, base_targets)
         targets = ad_content.required_vars(targets)
-        ad_init = self.ad_init.prune_for(targets, mod_vars, decl_map)
+        ad_init = self.ad_init.prune_for(targets, mod_vars, decl_map, base_targets)
         targets = ad_init.required_vars(targets)
-        content = self.content.prune_for(targets, mod_vars, decl_map)
+        content = self.content.prune_for(targets, mod_vars, decl_map, base_targets)
         all_vars = content.collect_vars()
         _extend_unique(all_vars, ad_init.collect_vars())
         _extend_unique(all_vars, ad_content.collect_vars())
-        decls = self.decls.prune_for(VarList(all_vars), mod_vars, decl_map)
-        return type(self)(name = self.name,
-                          args = self.args,
-                          result = self.result,
-                          decls = decls,
-                          content = content,
-                          ad_init = ad_init,
-                          ad_content = ad_content)
+        decls = self.decls.prune_for(VarList(all_vars), mod_vars, decl_map, base_targets)
+        return type(self)(
+            name=self.name,
+            args=self.args,
+            result=self.result,
+            decls=decls,
+            content=content,
+            ad_init=ad_init,
+            ad_content=ad_content,
+        )
 
 
 @dataclass
@@ -2254,7 +2303,13 @@ class Declaration(Node):
         return [decl]
 
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional["Declaration"]:
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional["Declaration"]:
         target_names = targets.names()
         if self.intent is not None or self.name in target_names:
             return self.deep_clone()
@@ -2668,11 +2723,13 @@ class SaveAssignment(Node):
                 vars.push(self.lhs)
         return vars
 
-    def prune_for(self,
-                  targets: VarList,
-                  mod_vars: Optional[List[OpVar]] = None,
-                  decl_map: Optional[Dict[str, Declaration]] = None
-                  ) -> Optional[SaveAssignment]:
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional[SaveAssignment]:
         if isinstance(self, PushPop) and self.pointer and self.load:
             return self
         found = False
@@ -2804,7 +2861,13 @@ class PushPopL(PushPop):
             return VarList([])
         return vars
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> "PushPopL":
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> "PushPopL":
         return self
 
     def to_load(self):
@@ -2896,7 +2959,13 @@ class Allocate(Node):
                     vars.push(idx)
         return vars
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[Allocate]:
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional[Allocate]:
         mod_var_names = [var.name for var in mod_vars] if mod_vars is not None else []
         vars = []
         for var in self.vars:
@@ -3019,7 +3088,13 @@ class Deallocate(Node):
             vars.remove(var.change_index(index))
         return vars
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional["Deallocate"]:
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional["Deallocate"]:
         if not self.ad_code:
             return None
         mod_var_names = [var.name for var in mod_vars] if mod_vars is not None else []
@@ -3125,7 +3200,13 @@ class PointerAssignment(Node):
             vars.push(var)
         return vars
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[Node]:
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional[Node]:
         target_names = targets.names()
         if self.lhs.name_ext() in target_names or self.rhs.name_ext() in target_names:
             return self.deep_clone()
@@ -3238,7 +3319,13 @@ class PointerClear(Node):
             vars.push(self.var)
         return vars
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[Node]:
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional[Node]:
         if isinstance(self.previous, OpVar) and self.previous.name_ext() in targets.names():
             return self.deep_clone()
         return None
@@ -3396,28 +3483,41 @@ class BranchBlock(Node):
                     vars_list.push(v)
         return vars_list
 
-    def prune_for(self,
-                  targets: VarList,
-                  mod_vars: Optional[List[OpVar]] = None,
-                  decl_map: Optional[Dict[str, Declaration]] = None
-                  ) -> Optional[Node]:
-        new_condblocks = []
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional[Node]:
+        if base_targets is None:
+            base_targets = targets.copy()
+        new_condblocks: List[tuple] = []
         flag = False
+        has_return = False
         for cond, block in self.cond_blocks:
-            new_block = block.prune_for(targets, mod_vars, decl_map)
+            block_targets = targets
+            exits = block.collect_exitcycle()
+            if any(isinstance(n, ReturnStmt) for n in exits):
+                block_targets = base_targets
+                has_return = True
+            new_block = block.prune_for(block_targets, mod_vars, decl_map, base_targets)
             new_condblocks.append((cond, new_block))
             if new_block is not None:
                 flag = True
         if not flag or len(new_condblocks) == 0:
             return None
         if isinstance(self, IfBlock):
-            return IfBlock(new_condblocks)
+            node = IfBlock(new_condblocks)
         elif isinstance(self, SelectBlock):
-            return SelectBlock(new_condblocks, expr=self.expr)
+            node = SelectBlock(new_condblocks, expr=self.expr)
         elif isinstance(self, WhereBlock):
-            return WhereBlock(new_condblocks)
+            node = WhereBlock(new_condblocks)
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
+        if has_return:
+            setattr(node, "reset_targets", True)
+        return node
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         vars_list = VarList()
@@ -3971,12 +4071,20 @@ class DoLoop(DoAbst):
         vars.update_index_upward(self._build_index_map(), range=self.range)
         return vars
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[Node]:
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional[Node]:
         targets = targets.copy()
         flag = True
+        if base_targets is None:
+            base_targets = targets.copy()
         while flag:
             flag = False
-            new_body = self._body.prune_for(targets, mod_vars, decl_map)
+            new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
             for var in new_body.required_vars(targets):
                 if var.name == self.index.name:
                     continue
@@ -3985,7 +4093,7 @@ class DoLoop(DoAbst):
                 if var not in targets:
                     targets.push(var)
                     flag = True
-        new_body = self._body.prune_for(targets, mod_vars, decl_map)
+        new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
 
         if new_body.is_effectively_empty():
             return None
@@ -4059,13 +4167,21 @@ class DoWhile(DoAbst):
         vars = self._body.unrefered_advars(vars)
         return vars
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Node:
-        new_body = self._body.prune_for(targets, mod_vars, decl_map)
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Node:
+        if base_targets is None:
+            base_targets = targets.copy()
+        new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
         targets = targets.copy()
         targets.merge(new_body.required_vars(targets))
         for var in self.cond.collect_vars():
             targets.push(var)
-        new_body = self._body.prune_for(targets, mod_vars, decl_map)
+        new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
         if new_body.is_effectively_empty():
             return Block([])
         return DoWhile(new_body, self.cond, self.label)
@@ -4241,15 +4357,18 @@ class BlockConstruct(Node):
         self,
         targets: VarList,
         mod_vars: Optional[List[OpVar]] = None,
-        decl_map: Optional[Dict[str, Declaration]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
     ) -> Optional[Node]:
+        if base_targets is None:
+            base_targets = targets.copy()
         local_names = self._local_names()
         t_local = targets.copy()
         self._remove_names(t_local, local_names)
-        body = self.body.prune_for(t_local, mod_vars, decl_map)
+        body = self.body.prune_for(t_local, mod_vars, decl_map, base_targets)
         targets_new = body.required_vars(t_local.copy())
         targets_new.merge(body.assigned_vars())
-        decls = self.decls.prune_for(targets_new, mod_vars, decl_map)
+        decls = self.decls.prune_for(targets_new, mod_vars, decl_map, base_targets)
         if decls.is_effectively_empty() and body.is_effectively_empty():
             return None
         return BlockConstruct(decls, body)
@@ -4440,14 +4559,16 @@ class OmpDirective(Node):
         node = OmpDirective(self.directive, new_clauses, body)
         return [node]
 
-    def prune_for(self,
-                  targets: VarList,
-                  mod_vars: Optional[List[OpVar]] = None,
-                  decl_map: Optional[Dict[str, Declaration]] = None
-                  ) -> Optional["Node"]:
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional["Node"]:
         if self.body is None:
             return self
-        body = self.body.prune_for(targets, mod_vars, decl_map)
+        body = self.body.prune_for(targets, mod_vars, decl_map, base_targets)
         if body is None:
             return None
 
@@ -4584,8 +4705,14 @@ class ForallBlock(Node):
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
         return self._body.unrefered_advars(vars)
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Optional[Node]:
-        new_body = self._body.prune_for(targets, mod_vars, decl_map)
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional[Node]:
+        new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
         if new_body.is_effectively_empty():
             return None
         return ForallBlock(new_body, self.index_specs, self.mask)
