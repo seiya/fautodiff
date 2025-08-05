@@ -1163,10 +1163,16 @@ class PreprocessorIfBlock(Node):
         targets: VarList,
         mod_vars: Optional[List[OpVar]] = None,
         decl_map: Optional[Dict[str, Declaration]] = None,
-    ) -> "PreprocessorIfBlock":
+    ) -> Optional["PreprocessorIfBlock"]:
         cond_blocks: List[Tuple[str, Block]] = []
+        flag = False
         for cond, block in self.cond_blocks:
-            cond_blocks.append((cond, block.prune_for(targets, mod_vars, decl_map)))
+            block = block.prune_for(targets, mod_vars, decl_map)
+            cond_blocks.append((cond, block))
+            if not block.is_effectively_empty():
+                flag = True
+        if not flag:
+            return None
         return PreprocessorIfBlock(cond_blocks)
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
@@ -3308,13 +3314,20 @@ class BranchBlock(Node):
                     vars_list.push(v)
         return vars_list
 
-    def prune_for(self, targets: VarList, mod_vars: Optional[List[OpVar]] = None, decl_map: Optional[Dict[str, Declaration]] = None) -> Node:
+    def prune_for(self,
+                  targets: VarList,
+                  mod_vars: Optional[List[OpVar]] = None,
+                  decl_map: Optional[Dict[str, Declaration]] = None
+                  ) -> Optional[Node]:
         new_condblocks = []
+        flag = False
         for cond, block in self.cond_blocks:
             new_block = block.prune_for(targets, mod_vars, decl_map)
             new_condblocks.append((cond, new_block))
-        if len(new_condblocks) == 0:
-            return Block([])
+            if new_block is not None:
+                flag = True
+        if not flag or len(new_condblocks) == 0:
+            return None
         if isinstance(self, IfBlock):
             return IfBlock(new_condblocks)
         elif isinstance(self, SelectBlock):
