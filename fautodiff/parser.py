@@ -42,6 +42,7 @@ from .code_tree import (
     PreprocessorLine,
     ExitStmt,
     CycleStmt,
+    ReturnStmt,
     Subroutine,
     Use,
     Allocate,
@@ -1522,7 +1523,7 @@ def _parse_routine(content,
                 return OmpDirective(omp_info[0], omp_info[1], loop)
             return loop
         if isinstance(stmt, Fortran2003.Return_Stmt):
-            return Statement("return")
+            return ReturnStmt()
         if isinstance(stmt, Fortran2003.Exit_Stmt):
             label = stmt.items[1].string if stmt.items[1] is not None else None
             return ExitStmt(label=label)
