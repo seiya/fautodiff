@@ -25,15 +25,8 @@ contains
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
 
-    #define SCALE_TWO 2
-    #ifdef USE_ADD
-    #endif
-
     x_ad = y_ad + x_ad ! y = x
     y_ad = 0.0 ! y = x
-    #define SCALE_TWO 2
-    #ifdef USE_ADD
-    #endif
 
     return
   end subroutine foo_rev_ad

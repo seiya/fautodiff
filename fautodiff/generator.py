@@ -1196,10 +1196,12 @@ def _generate_ad_subroutine(
                     ad_block.remove_child(first)
                 continue
             flag = False
-
+        fw_block = Block([n for n in fw_block.iter_children() if not n.is_effectively_empty()])
         if not fw_block.is_effectively_empty():
             subroutine.content.extend(fw_block)
 
+    ad_block = Block([n for n in ad_block.iter_children() if not n.is_effectively_empty()])
+    subroutine.ad_content = ad_block
     if (ad_block is not None) and (not ad_block.is_effectively_empty()):
         # initialize ad_var if necessary
         vars = ad_block.required_vars(
@@ -1288,6 +1290,13 @@ def _generate_ad_subroutine(
                     decl.intent = None
                 subroutine.decls.append(decl)
 
+    subroutine.build_parent()
+    subroutine.content = Block([
+        n for n in subroutine.content.iter_children() if not n.is_effectively_empty()
+    ])
+    subroutine.ad_content = Block([
+        n for n in subroutine.ad_content.iter_children() if not n.is_effectively_empty()
+    ])
     subroutine.build_parent()
 
     def _find_save_assign(node: Node, save_assigns: dict) -> None:

@@ -689,60 +689,6 @@ class Block(Node):
     ) -> List[Node]:
         """Generate AD code for each child node in the block."""
         ad_code: List[Node] = []
-        has_cpp = any(
-            isinstance(n, (PreprocessorIfBlock, PreprocessorLine)) for n in self._children
-        )
-        if reverse and has_cpp:
-            groups: List[List[Node]] = [[] for _ in self._children]
-            for idx, node in enumerate(self._children):
-                if isinstance(node, (PreprocessorIfBlock, PreprocessorLine)):
-                    groups[idx].extend(
-                        node.generate_ad(
-                            saved_vars,
-                            reverse,
-                            assigned_advars,
-                            routine_map,
-                            generic_map,
-                            mod_vars,
-                            None,
-                            warnings,
-                        )
-                    )
-            for idx_rev, node in enumerate(reversed(self._children)):
-                idx_orig = len(self._children) - 1 - idx_rev
-                if isinstance(node, (PreprocessorIfBlock, PreprocessorLine)):
-                    continue
-                if exitcycle_flags:
-                    ec_flags = [ec.flag() for ec in node.collect_exitcycle()]
-                else:
-                    ec_flags = None
-                nodes = node.generate_ad(
-                    saved_vars,
-                    reverse,
-                    assigned_advars,
-                    routine_map,
-                    generic_map,
-                    mod_vars,
-                    ec_flags,
-                    warnings,
-                )
-                nodes = [n for n in nodes if n and not n.is_effectively_empty()]
-                if nodes and exitcycle_flags and not isinstance(node, (ExitStmt, CycleStmt)):
-                    if ec_flags:
-                        flags = [flag for flag in exitcycle_flags if not flag in ec_flags]
-                    else:
-                        flags = exitcycle_flags
-                    if flags:
-                        cond = reduce(lambda x, y: x & y, flags)
-                        groups[idx_orig].append(IfBlock([(cond, Block(nodes))]))
-                    else:
-                        groups[idx_orig].extend(nodes)
-                else:
-                    groups[idx_orig].extend(nodes)
-            for grp in groups:
-                ad_code.extend(grp)
-            return ad_code
-
         iterator = self._children
         # Reverse mode processes statements in reverse order
         if reverse:
@@ -1069,6 +1015,8 @@ class PreprocessorLine(Node):
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
+        if reverse:
+            return []
         return [PreprocessorLine(self.text)]
 
     def set_for_exitcycle(
@@ -1080,7 +1028,7 @@ class PreprocessorLine(Node):
         set_cond: bool = False,
         keep: bool = False,
     ) -> List[Node]:
-        return [PreprocessorLine(self.text)]
+        return []
 
     def prune_for(
         self,
@@ -1129,7 +1077,7 @@ class PreprocessorIfBlock(Node):
         return lines
 
     def is_effectively_empty(self) -> bool:
-        return False
+        return all(block.is_effectively_empty() for _, block in self.cond_blocks)
 
     def generate_ad(
         self,
@@ -1144,6 +1092,7 @@ class PreprocessorIfBlock(Node):
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
         cond_blocks: List[Tuple[str, Block]] = []
+        has_content = False
         for cond, block in self.cond_blocks:
             nodes = block.generate_ad(
                 saved_vars,
@@ -1156,7 +1105,12 @@ class PreprocessorIfBlock(Node):
                 type_map,
                 warnings,
             )
+            nodes = [n for n in nodes if n and not n.is_effectively_empty()]
+            if nodes:
+                has_content = True
             cond_blocks.append((cond, Block(nodes)))
+        if not has_content:
+            return []
         return [PreprocessorIfBlock(cond_blocks)]
 
     def set_for_exitcycle(
@@ -1169,6 +1123,7 @@ class PreprocessorIfBlock(Node):
         keep: bool = False,
     ) -> List[Node]:
         cond_blocks: List[Tuple[str, Block]] = []
+        has_content = False
         for cond, block in self.cond_blocks:
             nodes = block.set_for_exitcycle(
                 exitcycle_flags,
@@ -1178,7 +1133,12 @@ class PreprocessorIfBlock(Node):
                 set_cond,
                 keep,
             )
+            nodes = [n for n in nodes if n and not n.is_effectively_empty()]
+            if nodes:
+                has_content = True
             cond_blocks.append((cond, Block(nodes)))
+        if not has_content:
+            return []
         return [PreprocessorIfBlock(cond_blocks)]
 
     def required_vars(
