@@ -41,6 +41,7 @@ from .code_tree import (
     ForallBlock,
     BlockConstruct,
     OmpDirective,
+    ReturnStmt,
     Allocate,
     Deallocate,
     Statement,
@@ -92,7 +93,10 @@ def _strip_sequential_omp(node: Node, warnings: Optional[List[str]], *, reverse:
         new_children = []
         for child in list(node.iter_children()):
             new_child = _strip_sequential_omp(child, warnings, reverse=reverse)
-            new_children.append(new_child)
+            if isinstance(new_child, Block):
+                new_children.extend(list(new_child.iter_children()))
+            else:
+                new_children.append(new_child)
         node._children = new_children
         return node
 
@@ -105,14 +109,20 @@ def _strip_sequential_omp(node: Node, warnings: Optional[List[str]], *, reverse:
                 children = list(body.iter_children())
                 if len(children) == 1 and isinstance(children[0], DoLoop):
                     check_body = children[0]
-            if reverse and isinstance(check_body, DoLoop) and check_body.has_modified_indices():
-                if warnings is not None:
-                    warnings.append(
-                        "Dropped OpenMP directive: loop runs sequentially in reverse mode due to index dependency"
-                    )
-                return check_body
+            if reverse:
+                if isinstance(check_body, DoLoop):
+                    if check_body.has_modified_indices():
+                        if warnings is not None:
+                            warnings.append(
+                                "Dropped OpenMP directive: loop runs sequentially in reverse mode due to index dependency",
+                            )
+                        return check_body
+                    node.body = body
+                    return node
+                return body
             node.body = body
-        return node
+            return node
+        return Block([]) if reverse else node
 
     for child in list(getattr(node, "iter_children", lambda: [])()):
         _strip_sequential_omp(child, warnings, reverse=reverse)
@@ -1138,6 +1148,9 @@ def _generate_ad_subroutine(
         _add_fwd_rev_calls(fw_block, routine_map, generic_map)
 
         fw_block = fw_block.prune_for(targets, mod_vars + save_vars)
+        if reverse:
+            _strip_sequential_omp(fw_block, warnings, reverse=True)
+            fw_block._children = [n for n in fw_block.iter_children() if not isinstance(n, ReturnStmt)]
 
         assigned = fw_block.assigned_vars(without_savevar=True)
         assigned = ad_block.assigned_vars(assigned, without_savevar=True)

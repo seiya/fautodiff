@@ -342,10 +342,10 @@ class Node:
         return vars
 
     def collect_exitcycle(self) -> List["Node"]:
-        """Return Exit and Cycle nodes in this node."""
+        """Return Exit, Cycle and Return nodes in this node."""
         nodes = []
         for child in self.iter_children():
-            if isinstance(child, (ExitStmt, CycleStmt)):
+            if isinstance(child, (ExitStmt, CycleStmt, ReturnStmt)):
                 nodes.append(child)
             else:
                 nodes.extend(child.collect_exitcycle())
@@ -709,7 +709,7 @@ class Block(Node):
                 warnings,
             )
             nodes = [node for node in nodes if node and not node.is_effectively_empty()]
-            if reverse and nodes and exitcycle_flags and not isinstance(node, (ExitStmt, CycleStmt)):
+            if reverse and nodes and exitcycle_flags and not isinstance(node, (ExitStmt, CycleStmt, ReturnStmt)):
                 if ec_flags:
                     flags = [flag for flag in exitcycle_flags if not flag in ec_flags]
                 else:
@@ -1271,6 +1271,78 @@ class CycleStmt(ExitCycle):
 
 
 @dataclass
+class ReturnStmt(Node):
+    """Representation of a ``return`` statement."""
+
+    name: ClassVar[str] = "return"
+
+    def copy(self) -> "ReturnStmt":
+        return ReturnStmt()
+
+    def deep_clone(self) -> "ReturnStmt":
+        return ReturnStmt()
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        return [f"{space}{self.name}\n"]
+
+    def collect_exitcycle(self) -> List[Node]:
+        return [self]
+
+    def is_effectively_empty(self) -> bool:
+        return False
+
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, Declaration]] = None,
+    ) -> "ReturnStmt":
+        return self
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List[Node]:
+        if reverse:
+            return [Assignment(self.flag(), OpTrue(), ad_info=self.name)]
+        return []
+
+    def set_for_exitcycle(
+        self,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        set_cond: bool = False,
+        keep: bool = False,
+    ) -> List[Node]:
+        nodes: List[Node] = []
+        if exitcycle_flags:
+            nodes.append(Assignment(self.flag(), OpFalse()))
+        return nodes
+
+    def iter_ref_vars(self) -> Iterator[OpVar]:
+        return iter(())
+
+    def iter_assign_vars(
+        self, without_savevar: bool = False
+    ) -> Iterator[OpVar]:
+        return iter(())
+
+    def flag(self) -> OpVar:
+        return OpVar(f"{self.name}_flag_{self.get_id()}_ad", typename="logical")
+
+
+@dataclass
 class Use(Node):
     """Representation of a Fortran use statement."""
     name: str
@@ -1785,16 +1857,26 @@ class Routine(Node):
         lines = [f"{space}{self.kind} {self.name}({args})\n"]
         lines.extend(self.decls.render(indent+1))
         lines.append("\n")
+        last_block: Optional[Block] = None
         if not self.content.is_effectively_empty():
             lines.extend(self.content.render(indent+1))
             lines.append("\n")
+            last_block = self.content
         if self.ad_init is not None and not self.ad_init.is_effectively_empty():
             lines.extend(self.ad_init.render(indent+1))
             lines.append("\n")
+            last_block = self.ad_init
         if self.ad_content is not None and not self.ad_content.is_effectively_empty():
             lines.extend(self.ad_content.render(indent+1))
             lines.append("\n")
-        lines.append(f"{space}  return\n")
+            last_block = self.ad_content
+        if last_block and last_block._children and isinstance(last_block._children[-1], ReturnStmt):
+            lines.pop()
+            ret_line = lines.pop()
+            lines.append("\n")
+            lines.append(ret_line)
+        else:
+            lines.append(f"{space}  return\n")
         lines.append(f"{space}end {self.kind} {self.name}\n")
         return lines
 
@@ -3477,16 +3559,20 @@ class DoAbst(Node):
         yield self._body
 
     def collect_exitcycle(self) -> List[Node]:
-        vars = []
+        vars: List[Node] = []
         for var in self._body.iter_children():
-            if isinstance(var, (ExitStmt, CycleStmt)):
+            if isinstance(var, ReturnStmt):
+                vars.append(var)
+            elif isinstance(var, (ExitStmt, CycleStmt)):
                 if var.label and self.label != var.label:
                     vars.append(var)
             else:
                 ec = var.collect_exitcycle()
                 if ec:
                     for v in ec:
-                        if v.label and self.label != v.label:
+                        if isinstance(v, ReturnStmt):
+                            vars.append(v)
+                        elif v.label and self.label != v.label:
                             vars.append(v)
         return vars
 
