@@ -161,6 +161,16 @@ class Node:
         """
         return [self]
 
+    def set_for_return(self,
+                       return_flags: Optional[List[OpVar]] = None,
+                       set_cond: bool = False) -> List["Node"]:
+        """Return nodes adjusted for ``return`` handling.
+
+        The base implementation simply returns ``self`` unchanged; subclasses
+        override this to insert conditional blocks around return statements.
+        """
+        return [self]
+
     def _save_vars(self, var: OpVar, saved_vars: List[OpVar]) -> SaveAssignment:
         """Insert a ``SaveAssignment`` before this node and return a loader.
 
@@ -342,13 +352,23 @@ class Node:
         return vars
 
     def collect_exitcycle(self) -> List["Node"]:
-        """Return Exit, Cycle and Return nodes in this node."""
+        """Return ``exit`` and ``cycle`` nodes in this node."""
         nodes = []
         for child in self.iter_children():
-            if isinstance(child, (ExitStmt, CycleStmt, ReturnStmt)):
+            if isinstance(child, (ExitStmt, CycleStmt)):
                 nodes.append(child)
             else:
                 nodes.extend(child.collect_exitcycle())
+        return nodes
+
+    def collect_return(self) -> List["ReturnStmt"]:
+        """Return ``return`` statements in this node."""
+        nodes: List[ReturnStmt] = []
+        for child in self.iter_children():
+            if isinstance(child, ReturnStmt):
+                nodes.append(child)
+            else:
+                nodes.extend(child.collect_return())
         return nodes
 
     def build_do_index_list(self, index_list: List[str]) -> None:
@@ -704,8 +724,10 @@ class Block(Node):
         for node in iterator:
             if reverse and exitcycle_flags:
                 ec_flags = [ec.flag() for ec in node.collect_exitcycle()]
+                ret_flags = [r.flag() for r in node.collect_return()]
             else:
                 ec_flags = None
+                ret_flags = None
             nodes = node.generate_ad(
                 saved_vars,
                 reverse,
@@ -718,10 +740,11 @@ class Block(Node):
             )
             nodes = [node for node in nodes if node and not node.is_effectively_empty()]
             if reverse and nodes and exitcycle_flags and not isinstance(node, (ExitStmt, CycleStmt, ReturnStmt)):
+                flags = exitcycle_flags
                 if ec_flags:
-                    flags = [flag for flag in exitcycle_flags if not flag in ec_flags]
-                else:
-                    flags = exitcycle_flags
+                    flags = [flag for flag in flags if flag not in ec_flags]
+                if ret_flags:
+                    flags = [flag for flag in flags if flag not in ret_flags]
                 if flags:
                     cond = reduce(lambda x, y: x & y, flags)
                     ad_code.append(IfBlock([(cond, Block(nodes))]))
@@ -758,6 +781,29 @@ class Block(Node):
         else:
             for node in self.iter_children():
                 nodes.extend(node.set_for_exitcycle(exitcycle_flags, set_do_index, label, label_map, set_cond=False, keep=keep))
+        return nodes
+
+    def set_for_return(self,
+                       return_flags: Optional[List[OpVar]] = None,
+                       set_cond: bool = False) -> List[Node]:
+        nodes: List[Node] = []
+        if set_cond and return_flags:
+            cond = reduce(lambda x, y: x & y, return_flags)
+            block: List[Node] = []
+            for node in self.iter_children():
+                if isinstance(node, ReturnStmt):
+                    node_new = node.set_for_return(return_flags, set_cond=False)
+                    if block:
+                        nodes.append(IfBlock([(cond, Block(block))]))
+                        block = []
+                    nodes.extend(node_new)
+                    continue
+                block.extend(node.set_for_return(return_flags, set_cond=False))
+            if block:
+                nodes.append(IfBlock([(cond, Block(block))]))
+        else:
+            for node in self.iter_children():
+                nodes.extend(node.set_for_return(return_flags, set_cond=False))
         return nodes
 
     def find_by_name(self, name: str) -> Optional[Declaration]:
@@ -1231,7 +1277,7 @@ class ExitCycle(Node):
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         return iter(())
 
-    def collect_exitcycle(self) -> List[Node]:
+    def collect_return(self) -> List[Node]:
         return [self]
 
     def is_effectively_empty(self) -> bool:
@@ -1318,7 +1364,7 @@ class ReturnStmt(Node):
         space = "  " * indent
         return [f"{space}{self.name}\n"]
 
-    def collect_exitcycle(self) -> List[Node]:
+    def collect_return(self) -> List[Node]:
         return [self]
 
     def is_effectively_empty(self) -> bool:
@@ -1360,6 +1406,14 @@ class ReturnStmt(Node):
     ) -> List[Node]:
         nodes: List[Node] = []
         if exitcycle_flags:
+            nodes.append(Assignment(self.flag(), OpFalse()))
+        return nodes
+
+    def set_for_return(self,
+                       return_flags: Optional[List[OpVar]] = None,
+                       set_cond: bool = False) -> List[Node]:
+        nodes: List[Node] = []
+        if return_flags:
             nodes.append(Assignment(self.flag(), OpFalse()))
         return nodes
 
@@ -3431,6 +3485,21 @@ class BranchBlock(Node):
         else:  # WhereBlock
             return [WhereBlock(cond_blocks)]
 
+    def set_for_return(self,
+                       return_flags: Optional[List[OpVar]] = None,
+                       set_cond: bool = False) -> List[Node]:
+        cond_blocks: List[tuple] = []
+        for cond, block in self.cond_blocks:
+            nodes = block.set_for_return(return_flags, set_cond)
+            body = Block(nodes)
+            cond_blocks.append((cond, body))
+        if isinstance(self, IfBlock):
+            return [IfBlock(cond_blocks)]
+        elif isinstance(self, SelectBlock):
+            return [SelectBlock(cond_blocks, expr=self.expr)]
+        else:  # WhereBlock
+            return [WhereBlock(cond_blocks)]
+
     def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
         if vars is None:
             vars = VarList()
@@ -3497,8 +3566,8 @@ class BranchBlock(Node):
         has_return = False
         for cond, block in self.cond_blocks:
             block_targets = targets
-            exits = block.collect_exitcycle()
-            if any(isinstance(n, ReturnStmt) for n in exits):
+            returns = block.collect_return()
+            if returns:
                 block_targets = base_targets
                 has_return = True
             new_block = block.prune_for(block_targets, mod_vars, decl_map, base_targets)
@@ -3661,19 +3730,24 @@ class DoAbst(Node):
     def collect_exitcycle(self) -> List[Node]:
         vars: List[Node] = []
         for var in self._body.iter_children():
-            if isinstance(var, ReturnStmt):
-                vars.append(var)
-            elif isinstance(var, (ExitStmt, CycleStmt)):
+            if isinstance(var, (ExitStmt, CycleStmt)):
                 if var.label and self.label != var.label:
                     vars.append(var)
             else:
                 ec = var.collect_exitcycle()
                 if ec:
                     for v in ec:
-                        if isinstance(v, ReturnStmt):
+                        if v.label and self.label != v.label:
                             vars.append(v)
-                        elif v.label and self.label != v.label:
-                            vars.append(v)
+        return vars
+
+    def collect_return(self) -> List[ReturnStmt]:
+        vars: List[ReturnStmt] = []
+        for var in self._body.iter_children():
+            if isinstance(var, ReturnStmt):
+                vars.append(var)
+            else:
+                vars.extend(var.collect_return())
         return vars
 
     def generate_ad(
@@ -3692,7 +3766,8 @@ class DoAbst(Node):
         exitcycle_flags = None
         if reverse:
             exitcycles = self._body.collect_exitcycle()
-            exitcycle_flags = [node.flag() for node in exitcycles]
+            returns = self._body.collect_return()
+            exitcycle_flags = [node.flag() for node in exitcycles + returns]
         else:
             for vname in self.recurrent_vars():
                 assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
@@ -3814,6 +3889,18 @@ class DoAbst(Node):
         if increment:
             self.label_id += 1
         return f"label_{self.get_id()}_{self.label_id}{AD_SUFFIX}"
+
+    def set_for_return(self,
+                       return_flags: Optional[List[OpVar]] = None,
+                       set_cond: bool = False) -> List[Node]:
+        if return_flags is None:
+            return [self]
+        body = Block(self._body.set_for_return(return_flags, set_cond=True))
+        if self.do:
+            return [DoLoop(body, self.index, self.range, self.label)]
+        else:
+            cond = reduce(lambda x, y: x & y, return_flags) & self.cond
+            return [DoWhile(body, cond, self.label)]
 
 @dataclass
 class DoLoop(DoAbst):
