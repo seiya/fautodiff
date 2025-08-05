@@ -3,16 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Tuple, Optional, Union, Iterator, ClassVar
+from typing import Iterator, List, Optional
 
-from .operators import (
-    AryIndex,
-    Operator,
-    OpInt,
-    OpVar,
-    OpNeg,
-    OpRange
-)
+from .operators import AryIndex, OpInt, OpNeg, OpRange, OpVar
 
 
 @dataclass
@@ -25,9 +18,9 @@ class VarList:
     understand which elements of an array are accessed.
     """
 
-    vars: Optional[dict[str, List[AryIndex]]] = field(default_factory=dict)
-    dims: Optional[dict[str, List[int]]] = field(default_factory=dict)
-    exclude: Optional[dict[str, List[AryIndex]]] = field(default_factory=dict)
+    vars: dict[str, List[AryIndex]] = field(default_factory=dict)
+    dims: dict[str, List[int]] = field(default_factory=dict)
+    exclude: dict[str, List[AryIndex]] = field(default_factory=dict)
 
     def __init__(self, vars: Optional[List[OpVar]] = None):
         """Initialise the container.
@@ -55,19 +48,13 @@ class VarList:
 
         # Duplicate index information for each variable name.
         for name in self.names():
-            list = []
-            for index in self.vars[name]:
-                list.append(index)
-            var_list.vars[name] = list
+            var_list.vars[name] = list(self.vars[name])
 
         # Copy recorded dimension and exclusion information.
-        for name in self.dims:
-            var_list.dims[name] = self.dims[name]
-        for name in self.exclude:
-            list = []
-            for index in self.exclude[name]:
-                list.append(index)
-            var_list.exclude[name] = list
+        for name, dims in self.dims.items():
+            var_list.dims[name] = list(dims)
+        for name, indices in self.exclude.items():
+            var_list.exclude[name] = list(indices)
         return var_list
 
     def __contains__(self, item: OpVar) -> bool:
@@ -211,11 +198,11 @@ class VarList:
                     if ndims_self[i] == 0:
                         self.dims[name][i] = ndims[i]
 
-    def merge(self, other) -> None:
+    def merge(self, other: VarList) -> None:
         """Merge variables from ``other`` into this list."""
 
         if not isinstance(other, VarList):
-            raise ValueError("Must be VarList: {type(other)}")
+            raise ValueError(f"Must be VarList: {type(other)}")
 
         processed: set[str] = set()
 
@@ -351,7 +338,7 @@ class VarList:
                     and i1 < j0
                 ) or (
                     isinstance(j1, int)
-                    and isinstance(j1, int)
+                    and isinstance(i0, int)
                     and j1 < i0
                 ):
                     continue  # no overlap
@@ -592,7 +579,7 @@ class VarList:
         if var_index not in self.exclude[name]:
             self.exclude[name].append(var_index)
 
-    def __and__(self, other) -> VarList:
+    def __and__(self, other: VarList) -> VarList:
         """Return intersection of this list with ``other``."""
 
         if not isinstance(other, VarList):
@@ -681,8 +668,16 @@ class VarList:
                     if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
                         if not((dim1[0] is None or isinstance(i0, int)) and (dim1[1] is None or isinstance(i1, int)) and (dim2[0] is None or isinstance(j0, int)) and (dim2[1] is None or isinstance(j1, int))):
                                 continue # assumue different
-                        if (isinstance(i1, int) and isinstance(j0, int) and i1 < j0) or (isinstance(j1, int) and isinstance(j1, int) and j1 < i0): # no overlap
-                            continue
+                        if (
+                            isinstance(i1, int)
+                            and isinstance(j0, int)
+                            and i1 < j0
+                        ) or (
+                            isinstance(j1, int)
+                            and isinstance(i0, int)
+                            and j1 < i0
+                        ):
+                            continue  # no overlap
                         if i0 is None:
                             i0 = j0
                         elif j0 is not None:
