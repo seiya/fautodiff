@@ -116,6 +116,9 @@ class TestFortranADCode(unittest.TestCase):
     def test_omp_loops(self):
         self._run_test('omp_loops', ['sum_loop', 'stencil_loop'])
 
+    def test_return_example(self):
+        self._run_test('return_example', ['conditional_return'])
+
 
 
 if __name__ == '__main__':
