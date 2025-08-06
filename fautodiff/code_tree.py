@@ -164,6 +164,12 @@ class Node:
         """
         return [self]
 
+    def has_returnexitcycle_flags(self) -> bool:
+        for child in self.iter_children():
+            if child.has_returnexitcycle_flags():
+                return True
+        return False
+
     def _save_vars(self, var: OpVar, saved_vars: List[OpVar]) -> SaveAssignment:
         """Insert a ``SaveAssignment`` before this node and return a loader.
 
@@ -906,7 +912,7 @@ class Block(Node):
             if pruned is not None and not pruned.is_effectively_empty():
                 new_children.insert(0, pruned)
                 targets = pruned.required_vars(targets)
-                if isinstance(pruned, ReturnStmt) or getattr(pruned, "reset_targets", False):
+                if isinstance(pruned, ReturnStmt):
                     targets = base_targets.copy()
         children = new_children
         if len(children) >= 2:
@@ -989,8 +995,9 @@ class Block(Node):
                                 item2 = last._body[-1]
                         if last.is_effectively_empty():
                             new_children.remove(last)
-                        if child.is_effectively_empty():
-                            continue
+                        if not child.is_effectively_empty():
+                            new_children.append(child)
+                        continue
                     if isinstance(child, IfBlock) and isinstance(last, IfBlock):
                         cb1 = child.cond_blocks[0]
                         cb2 = last.cond_blocks[0]
@@ -1003,14 +1010,18 @@ class Block(Node):
                             flag = True
                             if last.is_effectively_empty():
                                 new_children.remove(last)
-                            if child.is_effectively_empty():
-                                continue
+                            if not child.is_effectively_empty():
+                                new_children.append(child)
+                            continue
+                        if(cb1[0] == cb2[0] and
+                           len(child.cond_blocks) == 1 and len(last.cond_blocks) and
+                           not last.has_returnexitcycle_flags()
+                           ): # merge
+                            last.cond_blocks[0][1].extend(child.cond_blocks[0][1])
+                            continue
                     if (isinstance(last, Assignment) and isinstance(last.rhs, OpTrue) and
                         isinstance(child, IfBlock) and len(child.cond_blocks) == 1 and child.cond_blocks[0][0] == last.lhs):
-                        #if not last.ad_info:
-                        #    new_children.remove(last)
                         block = child.cond_blocks[0][1]
-                        #block.remove_child(block[0])
                         if not block.is_effectively_empty():
                             for node in block.iter_children():
                                 new_children.append(node)
@@ -2622,6 +2633,10 @@ class Assignment(Node):
             assigned_vars.push(self.lhs)
         return assigned_vars
 
+    def has_returnexitcycle_flags(self) -> bool:
+        if self.lhs.name.startswith(("return_flag", "exit_flag", "cycle_flag")):
+            return True
+        return False
 
 @dataclass
 class ClearAssignment(Node):
@@ -3604,13 +3619,11 @@ class BranchBlock(Node):
             base_targets = targets.copy()
         new_condblocks: List[tuple] = []
         flag = False
-        has_return = False
         for cond, block in self.cond_blocks:
             block_targets = targets
             returns = block.collect_return()
             if returns:
                 block_targets = base_targets
-                has_return = True
             new_block = block.prune_for(block_targets, mod_vars, decl_map, base_targets)
             new_condblocks.append((cond, new_block))
             if new_block is not None:
@@ -3625,8 +3638,6 @@ class BranchBlock(Node):
             node = WhereBlock(new_condblocks)
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
-        if has_return:
-            setattr(node, "reset_targets", True)
         return node
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
