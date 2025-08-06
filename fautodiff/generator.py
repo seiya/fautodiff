@@ -1583,9 +1583,9 @@ def _generate_ad_subroutine(
     uses_pushpop = _contains_pushpop(subroutine) if reverse else False
 
     if sub_fwd_rev is not None:
-        routine_info[
-            "fwd_rev_subroutine"
-        ] = sub_fwd_rev  # save to output this subroutine later
+        routine_info["fwd_rev_subroutine"] = (
+            sub_fwd_rev  # save to output this subroutine later
+        )
 
     called_mods = _collect_called_ad_modules(
         [subroutine.content, subroutine.ad_init, subroutine.ad_content],

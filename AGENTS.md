@@ -20,6 +20,7 @@ This file provides guidelines for contributors about the repository and develop 
 - When opening a PR, explain the changes and test steps.
 - Run the tests before pushing.
   Use ``python tests/test_generator.py`` to run the unit tests.
+- Run `black .` and `isort . --profile black` to format Python files before committing.
 - Messages such as commits and PRs should be in English.
 - Branch names **must** be in English (ASCII only) to avoid issues with non-English characters.
 - Do not disable or skip tests to work around failures. Ensure all tests run.

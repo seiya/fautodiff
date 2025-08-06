@@ -1450,7 +1450,7 @@ class OpDiv(OpBinary):
         arg1_dev = arg1.derivative(var, target, info, warnings)
         if isinstance(arg1_dev, OpInt) and arg1_dev.val == 0:
             return arg0_dev / arg1
-        return (arg0_dev * arg1 - arg0 * arg1_dev) / arg1 ** 2
+        return (arg0_dev * arg1 - arg0 * arg1_dev) / arg1**2
 
 
 @dataclass
@@ -1493,7 +1493,7 @@ class OpPow(OpBinary):
             expo2 = expo
         return (
             expo2 * base ** (expo - one) * dbase
-            + base ** expo * OpFunc("log", args=[base]) * dexpo
+            + base**expo * OpFunc("log", args=[base]) * dexpo
         )
 
 
@@ -1674,11 +1674,11 @@ class OpFunc(Operator):
         if self.name == "tan":
             return dvar0 / OpFunc("cos", args=[arg0]) ** 2
         if self.name == "asin":
-            return dvar0 / OpFunc("sqrt", args=[OpReal(1.0, kind=kind) - arg0 ** 2])
+            return dvar0 / OpFunc("sqrt", args=[OpReal(1.0, kind=kind) - arg0**2])
         if self.name == "acos":
-            return -dvar0 / OpFunc("sqrt", args=[OpReal(1.0, kind=kind) - arg0 ** 2])
+            return -dvar0 / OpFunc("sqrt", args=[OpReal(1.0, kind=kind) - arg0**2])
         if self.name == "atan":
-            return dvar0 / (OpReal(1.0, kind=kind) + arg0 ** 2)
+            return dvar0 / (OpReal(1.0, kind=kind) + arg0**2)
         if self.name == "sinh":
             return dvar0 * OpFunc("cosh", args=[arg0])
         if self.name == "cosh":
@@ -1686,26 +1686,26 @@ class OpFunc(Operator):
         if self.name == "tanh":
             return dvar0 / OpFunc("cosh", args=[arg0]) ** 2
         if self.name == "asinh":
-            return dvar0 / OpFunc("sqrt", args=[arg0 ** 2 + OpReal(1.0, kind=kind)])
+            return dvar0 / OpFunc("sqrt", args=[arg0**2 + OpReal(1.0, kind=kind)])
         if self.name == "acosh":
             return dvar0 / (
                 OpFunc("sqrt", args=[arg0 - one]) * OpFunc("sqrt", args=[arg0 + one])
             )
         if self.name == "atanh":
-            return dvar0 / (OpReal(1.0, kind=kind) - arg0 ** 2)
+            return dvar0 / (OpReal(1.0, kind=kind) - arg0**2)
         if self.name == "erf":
             return (
                 dvar0
                 * OpInt(2, target=target)
                 / _pi(target)
-                * OpFunc("exp", args=[-(arg0 ** 2)])
+                * OpFunc("exp", args=[-(arg0**2)])
             )
         if self.name == "erfc":
             return (
                 -dvar0
                 * OpInt(2, target=target)
                 / _pi(target)
-                * OpFunc("exp", args=[-(arg0 ** 2)])
+                * OpFunc("exp", args=[-(arg0**2)])
             )
         if self.name == "real":
             return dvar0
@@ -1761,7 +1761,7 @@ class OpFunc(Operator):
                 * OpFunc("sign", args=[one, arg1])
             )
         if self.name == "atan2":
-            return (dvar0 * arg1 - dvar1 * arg0) / (arg0 ** 2 + arg1 ** 2)
+            return (dvar0 * arg1 - dvar1 * arg0) / (arg0**2 + arg1**2)
         if self.name == "dot_product":
             return arg1 * dvar0 + arg0 * dvar1
         if self.name == "matmul":
