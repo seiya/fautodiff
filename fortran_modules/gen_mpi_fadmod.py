@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+
 # Ensure the package can be imported when running from the source tree
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
@@ -13,15 +14,13 @@ import json
 import re
 import tempfile
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
 
 from fautodiff import parser
-from fautodiff.code_tree import (
-    Declaration,
-    Interface,
-)
+from fautodiff.code_tree import Declaration, Interface
 
 _MODE_RE = re.compile(r"mpi_(.*?)(_fwd_rev_ad|_fwd_ad|_rev_ad)(?:_(.*))?$", re.I)
+
 
 def _collect_routines(mod, routines: Dict[str, dict]) -> Dict[str, dict]:
     for sub in mod.routines:
@@ -56,7 +55,9 @@ def _collect_routines(mod, routines: Dict[str, dict]) -> Dict[str, dict]:
                 else:
                     dim = None
                 dims.append(dim)
-                types.append(decls.get(arg).typename.lower() if decls.get(arg) else None)
+                types.append(
+                    decls.get(arg).typename.lower() if decls.get(arg) else None
+                )
                 kinds.append(decls.get(arg).kind)
             info["intents"] = intents
             info["dims"] = dims
@@ -64,7 +65,9 @@ def _collect_routines(mod, routines: Dict[str, dict]) -> Dict[str, dict]:
             info["kind"] = kinds
         info[f"name{mode}"] = f"{base_upper}{mode}"
         info[f"args{mode}"] = args
-        info[f"intents{mode}"] = [decls.get(a).intent if decls.get(a) else None for a in args]
+        info[f"intents{mode}"] = [
+            decls.get(a).intent if decls.get(a) else None for a in args
+        ]
     return routines
 
 
@@ -93,42 +96,19 @@ def _interfaces_to_generics(mod) -> Dict[str, List[str]]:
                 generics[name] = lst
     return generics
 
+
 # MPI routines
 routines_mpi: Dict[str, dict] = {
     "MPI_Comm_rank": {
-        "args": [
-            "comm",
-            "rank",
-            "ierror"
-        ],
-        "intents": [
-            "in",
-            "out",
-            "out"
-        ],
-        "type": [
-            "integer",
-            "integer",
-            "integer"
-        ]
+        "args": ["comm", "rank", "ierror"],
+        "intents": ["in", "out", "out"],
+        "type": ["integer", "integer", "integer"],
     },
     "MPI_Comm_size": {
-        "args": [
-            "comm",
-            "size",
-            "ierror"
-        ],
-        "intents": [
-            "in",
-            "out",
-            "out"
-        ],
-        "type": [
-            "integer",
-            "integer",
-            "integer"
-        ]
-    }
+        "args": ["comm", "size", "ierror"],
+        "intents": ["in", "out", "out"],
+        "type": ["integer", "integer", "integer"],
+    },
 }
 
 
@@ -171,6 +151,7 @@ for name, v in variables.items():
     decl_map[name] = Declaration(
         name=name, typename="integer", dims=dims, parameter=True
     )
+
 
 def main() -> None:
     here = Path(__file__).resolve().parent

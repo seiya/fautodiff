@@ -16,9 +16,7 @@ class TestGenerator(unittest.TestCase):
         generated = generator.generate_ad("examples/store_vars.f90", warn=False)
         lines = generated.splitlines()
         self.assertIn("use fautodiff_stack", lines[2])
-        idx_use = next(
-            i for i, l in enumerate(lines) if "use fautodiff_stack" in l
-        )
+        idx_use = next(i for i, l in enumerate(lines) if "use fautodiff_stack" in l)
         idx_imp = next(i for i, l in enumerate(lines) if "implicit none" in l)
         self.assertLess(idx_use, idx_imp)
 
@@ -81,6 +79,7 @@ class TestGenerator(unittest.TestCase):
         code_tree.Node.reset()
         import textwrap
         from tempfile import TemporaryDirectory
+
         import fautodiff.parser as parser
 
         src = textwrap.dedent(
@@ -467,6 +466,7 @@ class TestGenerator(unittest.TestCase):
         """Ensure OpenMP directives are kept and `_ad` variables added."""
         code_tree.Node.reset()
         import textwrap
+
         src = textwrap.dedent(
             """
             module t
@@ -487,10 +487,12 @@ class TestGenerator(unittest.TestCase):
             end module t
             """
         )
-        import fautodiff.parser as parser
         from unittest.mock import patch
+
+        import fautodiff.parser as parser
+
         modules = parser.parse_src(src)
-        with patch('fautodiff.generator.parser.parse_file', return_value=modules):
+        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
             generated = generator.generate_ad("omp.f90", warn=False)
         self.assertIn("!$omp parallel do reduction(+:x, x_ad)", generated)
 
@@ -542,18 +544,20 @@ class TestGenerator(unittest.TestCase):
             """
         )
 
-        fadmod = Path(__file__).resolve().parents[1] / 'fortran_modules' / 'mpi.fadmod'
+        fadmod = Path(__file__).resolve().parents[1] / "fortran_modules" / "mpi.fadmod"
         data = json.loads(fadmod.read_text())
-        routines = data.get('routines', {})
-        generics = data.get('generics', {})
-        self.assertIn('MPI_Start', routines)
-        self.assertEqual(routines['MPI_Start']['name_fwd_ad'], 'MPI_Start_fwd_ad')
-        self.assertIn('MPI_Wait', routines)
-        self.assertEqual(routines['MPI_Wait']['name_fwd_ad'], 'MPI_Wait_fwd_ad')
-        self.assertIn('MPI_Send_init_r4', routines)
-        self.assertEqual(routines['MPI_Send_init_r4']['name_fwd_rev_ad'], 'MPI_Send_init_fwd_rev_ad')
-        self.assertIn('MPI_Recv_init', generics)
-        for routine in generics['MPI_Recv_init']:
+        routines = data.get("routines", {})
+        generics = data.get("generics", {})
+        self.assertIn("MPI_Start", routines)
+        self.assertEqual(routines["MPI_Start"]["name_fwd_ad"], "MPI_Start_fwd_ad")
+        self.assertIn("MPI_Wait", routines)
+        self.assertEqual(routines["MPI_Wait"]["name_fwd_ad"], "MPI_Wait_fwd_ad")
+        self.assertIn("MPI_Send_init_r4", routines)
+        self.assertEqual(
+            routines["MPI_Send_init_r4"]["name_fwd_rev_ad"], "MPI_Send_init_fwd_rev_ad"
+        )
+        self.assertIn("MPI_Recv_init", generics)
+        for routine in generics["MPI_Recv_init"]:
             self.assertIn(routine, routines)
 
 

@@ -554,10 +554,7 @@ class TestParser(unittest.TestCase):
         decl = routine.decls.find_by_name("p")
         self.assertIsNotNone(decl)
         self.assertTrue(decl.pointer)
-        self.assertEqual(
-            render_program(Block([decl])).strip(),
-            "real, pointer :: p(:)"
-        )
+        self.assertEqual(render_program(Block([decl])).strip(), "real, pointer :: p(:)")
 
     def test_parse_pointer_assignment(self):
         src = textwrap.dedent(
@@ -629,7 +626,9 @@ class TestParser(unittest.TestCase):
         self.assertTrue(decls.find_by_name("b").value)
         self.assertTrue(decls.find_by_name("c").volatile)
         self.assertTrue(decls.find_by_name("d").asynchronous)
-        type_defs = [d for d in module.decls.iter_children() if isinstance(d, code_tree.TypeDef)]
+        type_defs = [
+            d for d in module.decls.iter_children() if isinstance(d, code_tree.TypeDef)
+        ]
         t = next(d for d in type_defs if d.name == "t")
         self.assertTrue(t.abstract)
         self.assertEqual(t.bind, "C")
@@ -757,12 +756,15 @@ class TestParser(unittest.TestCase):
         self.assertTrue(decls.find_by_name("b").value)
         self.assertTrue(decls.find_by_name("c").volatile)
         self.assertTrue(decls.find_by_name("d").asynchronous)
-        type_defs = [d for d in module.decls.iter_children() if isinstance(d, code_tree.TypeDef)]
+        type_defs = [
+            d for d in module.decls.iter_children() if isinstance(d, code_tree.TypeDef)
+        ]
         t = next(d for d in type_defs if d.name == "t")
         self.assertTrue(t.abstract)
         self.assertEqual(t.bind, "C")
         seq_t = next(d for d in type_defs if d.name == "seq_t")
         self.assertTrue(seq_t.sequence)
+
 
 if __name__ == "__main__":
     unittest.main()

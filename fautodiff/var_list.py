@@ -107,8 +107,7 @@ class VarList:
 
         return self.vars[key]
 
-    def _get_var(self, name: str, index: Optional[AryIndex],
-                 dims: List[int]) -> OpVar:
+    def _get_var(self, name: str, index: Optional[AryIndex], dims: List[int]) -> OpVar:
         """Construct an ``OpVar`` from stored data.
 
         Parameters
@@ -127,10 +126,10 @@ class VarList:
         pos = name.rfind("%")
         if pos >= 0:
             name_ref = name[:pos]
-            index_ref = index[:-dims[-1]] if index is not None else None
+            index_ref = index[: -dims[-1]] if index is not None else None
             var_ref = self._get_var(name_ref, index_ref, dims[:-1])
             name = name[pos + 1 :]
-            index = index[-dims[-1]:] if index is not None else None
+            index = index[-dims[-1] :] if index is not None else None
         else:
             var_ref = None
 
@@ -326,20 +325,11 @@ class VarList:
             if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
                 # both are range
                 if (
-                    i0 is None
-                    or i1 is None
-                    or j0 is None
-                    or j1 is None
+                    i0 is None or i1 is None or j0 is None or j1 is None
                 ):  # either is non-integer
                     continue
-                if (
-                    isinstance(i1, int)
-                    and isinstance(j0, int)
-                    and i1 < j0
-                ) or (
-                    isinstance(j1, int)
-                    and isinstance(i0, int)
-                    and j1 < i0
+                if (isinstance(i1, int) and isinstance(j0, int) and i1 < j0) or (
+                    isinstance(j1, int) and isinstance(i0, int) and j1 < i0
                 ):
                     continue  # no overlap
                 i0 = None if (i0 is None or j0 is None) else min(i0, j0)
@@ -454,19 +444,12 @@ class VarList:
                     or (dim2[1] is not None and j1 is None)
                 ):
                     continue  # either is variable, cannot judge overlap
-                if (
-                    i1 is not None
-                    and j0 is not None
-                    and i1 < j0
-                ) or (
-                    j1 is not None
-                    and i0 is not None
-                    and j1 < i0
+                if (i1 is not None and j0 is not None and i1 < j0) or (
+                    j1 is not None and i0 is not None and j1 < i0
                 ):
                     continue  # no overlap
-                if (
-                    (j0 is None or (i0 is not None and j0 <= i0))
-                    and (j1 is None or (i1 is not None and i1 <= j1))
+                if (j0 is None or (i0 is not None and j0 <= i0)) and (
+                    j1 is None or (i1 is not None and i1 <= j1)
                 ):
                     self.vars[name].remove(index)
                     continue
@@ -489,12 +472,8 @@ class VarList:
                         index_new[i] = OpRange([j1 + 1, dim1[1]])
                         self.vars[name].append(index_new)  # added
                     continue
-                if (
-                    (j0 is None or (i0 is not None and j0 <= i0))
-                    and (
-                        j1 is not None
-                        and ((i1 is None) or (i1 is not None and j1 < i1))
-                    )
+                if (j0 is None or (i0 is not None and j0 <= i0)) and (
+                    j1 is not None and ((i1 is None) or (i1 is not None and j1 < i1))
                 ):
                     if i1 is not None and j1 + 1 == i1:
                         index[i] = OpInt(i1)  # replaced
@@ -631,9 +610,9 @@ class VarList:
                         i0 = self._get_int(dim1[0])
                         i1 = self._get_int(dim1[1])
                         i2 = self._get_int(dim1[2])
-                        if not(isinstance(i2, int) and abs(i2) == 1):
-                            continue # assumes no overlap
-                        if not(isinstance(dim2, OpInt) or isinstance(dim2, OpRange)):
+                        if not (isinstance(i2, int) and abs(i2) == 1):
+                            continue  # assumes no overlap
+                        if not (isinstance(dim2, OpInt) or isinstance(dim2, OpRange)):
                             index[i] = dim2
                             index_list.append(index)
                             continue
@@ -641,42 +620,41 @@ class VarList:
                         j0 = self._get_int(dim2[0])
                         j1 = self._get_int(dim2[1])
                         j2 = self._get_int(dim2[2])
-                        if not(isinstance(j2, int) and abs(j2) == 1):
-                            continue # assumes no overlap
-                        if not(isinstance(dim1, OpInt) or isinstance(dim1, OpRange)):
+                        if not (isinstance(j2, int) and abs(j2) == 1):
+                            continue  # assumes no overlap
+                        if not (isinstance(dim1, OpInt) or isinstance(dim1, OpRange)):
                             index[i] = dim1
                             index_list.append(index)
                             continue
 
                     v1 = self._get_int(dim1)
                     v2 = self._get_int(dim2)
-                    if not(isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
+                    if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
                         # both are not range
-                        if v1 is not None and v2 is not None: # both are int
-                            continue # different
-                        if v1 is None and v2 is None: # neither is int
-                            continue # different
-                        if v1 is None: # dim1 is int and dim2 is not int
+                        if v1 is not None and v2 is not None:  # both are int
+                            continue  # different
+                        if v1 is None and v2 is None:  # neither is int
+                            continue  # different
+                        if v1 is None:  # dim1 is int and dim2 is not int
                             index[i] = dim1
                             index_list.append(index)
                             continue
-                        if v2 is None: # dim2 is int and dim1 is not int
+                        if v2 is None:  # dim2 is int and dim1 is not int
                             index[i] = dim2
                             index_list.append(index)
                             continue
 
                     if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
-                        if not((dim1[0] is None or isinstance(i0, int)) and (dim1[1] is None or isinstance(i1, int)) and (dim2[0] is None or isinstance(j0, int)) and (dim2[1] is None or isinstance(j1, int))):
-                                continue # assumue different
-                        if (
-                            isinstance(i1, int)
-                            and isinstance(j0, int)
-                            and i1 < j0
-                        ) or (
-                            isinstance(j1, int)
-                            and isinstance(i0, int)
-                            and j1 < i0
+                        if not (
+                            (dim1[0] is None or isinstance(i0, int))
+                            and (dim1[1] is None or isinstance(i1, int))
+                            and (dim2[0] is None or isinstance(j0, int))
+                            and (dim2[1] is None or isinstance(j1, int))
                         ):
+                            continue  # assumue different
+                        if (
+                            isinstance(i1, int) and isinstance(j0, int) and i1 < j0
+                        ) or (isinstance(j1, int) and isinstance(i0, int) and j1 < i0):
                             continue  # no overlap
                         if i0 is None:
                             i0 = j0
@@ -701,7 +679,9 @@ class VarList:
                     i0 = self._get_int(range[0])
                     i1 = self._get_int(range[1])
 
-                    if (i0 is not None and v < i0) or (i1 is not None and i1 < v): # outside
+                    if (i0 is not None and v < i0) or (
+                        i1 is not None and i1 < v
+                    ):  # outside
                         continue
                     index[i] = OpInt(v)
                     index_list.append(index)
