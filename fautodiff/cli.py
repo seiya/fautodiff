@@ -1,4 +1,5 @@
 """Command line interface for the fautodiff generator."""
+
 import argparse
 import sys
 
