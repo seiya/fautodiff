@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 class VarDict:
     """Ordered dictionary with a minimal API.
 

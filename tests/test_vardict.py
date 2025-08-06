@@ -1,6 +1,6 @@
 import sys
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -10,30 +10,30 @@ from fautodiff.var_dict import VarDict
 class TestVarDict(unittest.TestCase):
     def test_basic_operations(self):
         vd = VarDict()
-        vd['a'] = 1
-        vd['b'] = 2
-        self.assertEqual(vd['a'], 1)
-        self.assertEqual(vd['b'], 2)
-        self.assertIn('a', vd)
-        self.assertIn('b', vd)
+        vd["a"] = 1
+        vd["b"] = 2
+        self.assertEqual(vd["a"], 1)
+        self.assertEqual(vd["b"], 2)
+        self.assertIn("a", vd)
+        self.assertIn("b", vd)
         self.assertEqual(len(vd), 2)
-        self.assertEqual(set(vd.keys()), {'a', 'b'})
+        self.assertEqual(set(vd.keys()), {"a", "b"})
         self.assertEqual(set(vd.values()), {1, 2})
-        self.assertEqual(set(vd.items()), {('a', 1), ('b', 2)})
+        self.assertEqual(set(vd.items()), {("a", 1), ("b", 2)})
         collected = [k for k in vd]
-        self.assertEqual(set(collected), {'a', 'b'})
+        self.assertEqual(set(collected), {"a", "b"})
 
         copy = vd.copy()
         self.assertEqual(set(copy.items()), set(vd.items()))
 
-        del vd['a']
-        self.assertNotIn('a', vd)
+        del vd["a"]
+        self.assertNotIn("a", vd)
         with self.assertRaises(KeyError):
-            _ = vd['a']
+            _ = vd["a"]
 
-        vd.remove('b')
+        vd.remove("b")
         self.assertEqual(len(vd), 0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

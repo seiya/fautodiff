@@ -1,6 +1,6 @@
 import itertools
 
-TEMPLATE_PUSH_SCALAR = '''
+TEMPLATE_PUSH_SCALAR = """
   subroutine push_{tname}_0d(self, data)
     use iso_c_binding
     implicit none
@@ -21,9 +21,9 @@ TEMPLATE_PUSH_SCALAR = '''
     end if
     return
   end subroutine push_{tname}_0d
-'''
+"""
 
-TEMPLATE_PUSH_ARRAY = '''
+TEMPLATE_PUSH_ARRAY = """
   subroutine push_{tname}_{rank}d(self, data)
     use iso_c_binding
     implicit none
@@ -58,9 +58,9 @@ TEMPLATE_PUSH_ARRAY = '''
     end do
     return
   end subroutine push_{tname}_{rank}d
-'''
+"""
 
-TEMPLATE_POP_SCALAR = '''
+TEMPLATE_POP_SCALAR = """
   subroutine pop_{tname}_0d(self, data)
     implicit none
     class(fautodiff_stack_{tname}_t), intent(inout) :: self
@@ -77,9 +77,9 @@ TEMPLATE_POP_SCALAR = '''
     data = self%ary(self%page_num)%data(self%pos)
     return
   end subroutine pop_{tname}_0d
-'''
+"""
 
-TEMPLATE_POP_ARRAY = '''
+TEMPLATE_POP_ARRAY = """
   subroutine pop_{tname}_{rank}d(self, data)
     use iso_c_binding
     implicit none
@@ -111,17 +111,17 @@ TEMPLATE_POP_ARRAY = '''
     end do
     return
   end subroutine pop_{tname}_{rank}d
-'''
+"""
 
-TEMPLATE_GET_SCALAR = '''
+TEMPLATE_GET_SCALAR = """
   function get_{tname}(self) result(res)
     class(fautodiff_stack_{tname}_t), intent(inout) :: self
     {ftype} :: res
     call self%pop(res)
   end function get_{tname}
-'''
+"""
 
-TEMPLATE_PUSH_PTR = '''
+TEMPLATE_PUSH_PTR = """
   subroutine push_p_{tname}_{rank}d(self, data)
     use iso_c_binding
     class(fautodiff_stack_p_t), intent(inout) :: self
@@ -135,9 +135,9 @@ TEMPLATE_PUSH_PTR = '''
     end if
     return
   end subroutine push_p_{tname}_{rank}d
-'''
+"""
 
-TEMPLATE_POP_PTR = '''
+TEMPLATE_POP_PTR = """
   subroutine pop_p_{tname}_{rank}d(self, data)
     use iso_c_binding
     class(fautodiff_stack_p_t), intent(inout) :: self
@@ -151,7 +151,7 @@ TEMPLATE_POP_PTR = '''
     call c_f_pointer(self%ary(self%pos), data, {shape})
     return
   end subroutine pop_p_{tname}_{rank}d
-'''
+"""
 
 types = ["r4", "r8", "i", "l"]
 ranks = [0, 1, 2, 3]
@@ -165,13 +165,14 @@ max_page_num = {
     "r4": "MAX_PAGE_NUM_LARGE",
     "r8": "MAX_PAGE_NUM_LARGE",
     "i": "MAX_PAGE_NUM_SMALL",
-    "l": "MAX_PAGE_NUM_SMALL"
+    "l": "MAX_PAGE_NUM_SMALL",
 }
 shape_expr = {
     1: "[self%dims(1, self%pos)]",
     2: "[self%dims(1, self%pos), self%dims(2, self%pos)]",
-    3: "[self%dims(1, self%pos), self%dims(2, self%pos), self%dims(3, self%pos)]"
+    3: "[self%dims(1, self%pos), self%dims(2, self%pos), self%dims(3, self%pos)]",
 }
+
 
 def gen_push_subroutine(tname, rank):
     ftype = tmap[tname]
@@ -179,7 +180,10 @@ def gen_push_subroutine(tname, rank):
     if rank == 0:
         return TEMPLATE_PUSH_SCALAR.format(tname=tname, ftype=ftype)
     else:
-        return TEMPLATE_PUSH_ARRAY.format(tname=tname, ftype=ftype, rank=rank, dims=dims)
+        return TEMPLATE_PUSH_ARRAY.format(
+            tname=tname, ftype=ftype, rank=rank, dims=dims
+        )
+
 
 def gen_push_ptr_subroutine(tname, rank):
     ftype = tmap[tname]
@@ -188,7 +192,10 @@ def gen_push_ptr_subroutine(tname, rank):
     for i in range(rank):
         set_dims.append(f"    self%dims({i+1}, self%pos) = size(data, {i+1})")
     set_dims = "\n".join(set_dims)
-    return TEMPLATE_PUSH_PTR.format(tname=tname, ftype=ftype, rank=rank, dims=dims, set_dims=set_dims)
+    return TEMPLATE_PUSH_PTR.format(
+        tname=tname, ftype=ftype, rank=rank, dims=dims, set_dims=set_dims
+    )
+
 
 def gen_pop_subroutine(tname, rank):
     ftype = tmap[tname]
@@ -198,14 +205,19 @@ def gen_pop_subroutine(tname, rank):
     else:
         return TEMPLATE_POP_ARRAY.format(tname=tname, ftype=ftype, rank=rank, dims=dims)
 
+
 def gen_pop_ptr_subroutine(tname, rank):
     ftype = tmap[tname]
     dims = "(" + ", ".join([":" for _ in range(rank)]) + ")"
-    return TEMPLATE_POP_PTR.format(tname=tname, ftype=ftype, rank=rank, dims=dims, shape=shape_expr[rank])
+    return TEMPLATE_POP_PTR.format(
+        tname=tname, ftype=ftype, rank=rank, dims=dims, shape=shape_expr[rank]
+    )
+
 
 def gen_get_function(tname):
     ftype = tmap[tname]
     return TEMPLATE_GET_SCALAR.format(tname=tname, ftype=ftype)
+
 
 def gen_wrapper_push(tname):
     ftype = tmap[tname]
@@ -220,9 +232,7 @@ def gen_wrapper_push(tname):
         # dispatch directly to the corresponding specific procedure and pass
         # the stack instance explicitly. Using type-bound generics here would
         # require compile-time rank knowledge.
-        lines.append(
-            f"      call push_{tname}_{r}d(fautodiff_stack_{tname}, data)"
-        )
+        lines.append(f"      call push_{tname}_{r}d(fautodiff_stack_{tname}, data)")
     lines.extend(
         [
             "    rank default",
@@ -235,6 +245,7 @@ def gen_wrapper_push(tname):
     )
     return "\n".join(lines)
 
+
 def gen_wrapper_pop(tname):
     ftype = tmap[tname]
     lines = [
@@ -246,9 +257,7 @@ def gen_wrapper_pop(tname):
         lines.append(f"    rank({r})")
         # See GEN_WRAPPER_PUSH for an explanation of the explicit procedure
         # calls with the stack instance passed as the first argument.
-        lines.append(
-            f"      call pop_{tname}_{r}d(fautodiff_stack_{tname}, data)"
-        )
+        lines.append(f"      call pop_{tname}_{r}d(fautodiff_stack_{tname}, data)")
     lines.extend(
         [
             "    rank default",
@@ -261,13 +270,14 @@ def gen_wrapper_pop(tname):
     )
     return "\n".join(lines)
 
+
 def gen_module():
     lines = [
         "module fautodiff_stack",
         "  use iso_c_binding",
         "  implicit none",
         "  private",
-        ""
+        "",
     ]
     for t in types:
         lines.append(f"  public :: fautodiff_stack_{t}_t")
@@ -277,33 +287,39 @@ def gen_module():
     lines.append(f"  public :: fautodiff_stack_p")
     lines.append(f"  public :: fautodiff_stack_push_r")
     lines.append(f"  public :: fautodiff_stack_pop_r")
-    lines.extend([
-        "",
-        "  integer, parameter :: DEFAULT_PAGE_SIZE = 1024 * 1024",
-        "  integer, parameter :: MAX_PAGE_NUM_LARGE = 1024 * 1024",
-        "  integer, parameter :: MAX_PAGE_NUM_SMALL = 1",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "  integer, parameter :: DEFAULT_PAGE_SIZE = 1024 * 1024",
+            "  integer, parameter :: MAX_PAGE_NUM_LARGE = 1024 * 1024",
+            "  integer, parameter :: MAX_PAGE_NUM_SMALL = 1",
+            "",
+        ]
+    )
     for t in types:
-        lines.extend([
-            f"  type :: data_{t}_t",
-            f"    {tmap[t]}, allocatable :: data(:)",
-            f"  end type data_{t}_t",
-            ""
-        ])
+        lines.extend(
+            [
+                f"  type :: data_{t}_t",
+                f"    {tmap[t]}, allocatable :: data(:)",
+                f"  end type data_{t}_t",
+                "",
+            ]
+        )
     for t in types:
-        lines.extend([
-            f"  type :: fautodiff_stack_{t}_t",
-            f"    integer :: max_page_num = {max_page_num[t]}",
-            f"    type(data_{t}_t) :: ary({max_page_num[t]})",
+        lines.extend(
+            [
+                f"  type :: fautodiff_stack_{t}_t",
+                f"    integer :: max_page_num = {max_page_num[t]}",
+                f"    type(data_{t}_t) :: ary({max_page_num[t]})",
                 "    integer :: page_num = 1",
                 "    integer :: pos = 1",
                 "    integer :: page_size = DEFAULT_PAGE_SIZE",
-                "  contains"
-        ])
+                "  contains",
+            ]
+        )
         push = []
         for r in ranks:
-            if t == "p" and r==0:
+            if t == "p" and r == 0:
                 continue
             push.append(f"push_{t}_{r}d")
             lines.append(f"    procedure :: push_{t}_{r}d")
@@ -315,24 +331,26 @@ def gen_module():
         lines.append(f"    generic :: pop => {', '.join(pop)}")
         lines.append(f"    procedure :: get => get_{t}")
         lines.append(f"  end type fautodiff_stack_{t}_t\n")
-    lines.extend([
-        f"  type :: fautodiff_stack_p_t",
+    lines.extend(
+        [
+            f"  type :: fautodiff_stack_p_t",
             "    type(c_ptr) :: ary(DEFAULT_PAGE_SIZE)",
-        f"    integer :: dims({max(ranks)}, DEFAULT_PAGE_SIZE)",
+            f"    integer :: dims({max(ranks)}, DEFAULT_PAGE_SIZE)",
             "    integer :: pos = 1",
             "    integer :: page_size = DEFAULT_PAGE_SIZE",
-            "  contains"
-    ])
+            "  contains",
+        ]
+    )
     push = []
     pop = []
     for t in ("r4", "r8"):
         for r in ranks:
-            if r==0:
+            if r == 0:
                 continue
             push.append(f"push_p_{t}_{r}d")
             lines.append(f"    procedure :: push_p_{t}_{r}d")
         for r in ranks:
-            if r==0:
+            if r == 0:
                 continue
             pop.append(f"pop_p_{t}_{r}d")
             lines.append(f"    procedure :: pop_p_{t}_{r}d")
@@ -372,6 +390,7 @@ def gen_module():
         lines.append(gen_wrapper_pop(t))
     lines.append("end module fautodiff_stack")
     return "\n".join(lines)
+
 
 if __name__ == "__main__":
     print(gen_module())

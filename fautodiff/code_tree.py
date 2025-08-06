@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Iterable, List, Tuple, Dict, Optional, Iterator, Pattern, ClassVar, Union, Any
-import re
-from functools import reduce
 import copy
+import re
+from dataclasses import dataclass, field
+from functools import reduce
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Pattern,
+    Tuple,
+    Union,
+)
 
 AD_SUFFIX = "_ad"
 FWD_SUFFIX = "_fwd_ad"
@@ -15,23 +26,20 @@ REV_SUFFIX = "_rev_ad"
 from .operators import (
     AryIndex,
     Operator,
-    OpLeaf,
-    OpInt,
-    OpReal,
-    OpVar,
-    OpTrue,
     OpFalse,
-    OpNeg,
-    OpRange,
     OpFunc,
     OpFuncUser,
-    OpNot,
+    OpInt,
+    OpLeaf,
     OpLogic,
+    OpNeg,
+    OpNot,
+    OpRange,
+    OpReal,
+    OpTrue,
+    OpVar,
 )
-
-from .var_list import (
-    VarList
-)
+from .var_list import VarList
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -104,10 +112,18 @@ class Node:
     def has_partial_access_to(self, var: str) -> bool:
         """Return ``True`` if ``var`` is accessed with index within this node."""
         for v in self.iter_ref_vars():
-            if v.name==var and v.index is not None and any(i is not None for i in v.index):
+            if (
+                v.name == var
+                and v.index is not None
+                and any(i is not None for i in v.index)
+            ):
                 return True
         for v in self.iter_assign_vars():
-            if v.name==var and v.index is not None and any(i is not None for i in v.index):
+            if (
+                v.name == var
+                and v.index is not None
+                and any(i is not None for i in v.index)
+            ):
                 return True
         for child in self.iter_children():
             if child.has_partial_access_to(var):
@@ -146,16 +162,17 @@ class Node:
         """Return AD converted nodes."""
         return []
 
-    def set_for_returnexitcycle(self,
-                                return_flags: Optional[List[OpVar]] = None,
-                                exitcycle_flags: Optional[List[OpVar]] = None,
-                                set_return_cond: bool = False,
-                                set_exitcycle_cond: bool = False,
-                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-                                label: Optional[str] = None,
-                                label_map: Optional[List[Tuple[str,str]]] = None,
-                                keep: bool = False,
-                                ) -> List["Node"]:
+    def set_for_returnexitcycle(
+        self,
+        return_flags: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_return_cond: bool = False,
+        set_exitcycle_cond: bool = False,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        keep: bool = False,
+    ) -> List["Node"]:
         """Return nodes adjusted for return/exit/cycle handling.
 
         The base implementation simply returns ``self`` unchanged; subclasses
@@ -229,7 +246,7 @@ class Node:
         return None
 
     def find_decl(self, var: OpVar) -> Optional[Declaration]:
-        if not(isinstance(self, Module) or isinstance(self, Routine)):
+        if not (isinstance(self, Module) or isinstance(self, Routine)):
             raise NotImplementedError(f"class: {type(self)}")
         name = var.name
         if var.ref_var is not None:
@@ -285,15 +302,20 @@ class Node:
     # variable analysis helpers
     # ------------------------------------------------------------------
 
-    def assigned_vars(self,
-                      vars: Optional[VarList] = None,
-                      without_savevar: bool = False,
-                      check_init_advars: bool = False
-                      ) -> VarList:
+    def assigned_vars(
+        self,
+        vars: Optional[VarList] = None,
+        without_savevar: bool = False,
+        check_init_advars: bool = False,
+    ) -> VarList:
         """Return variables assigned within this node and children."""
         flag = False
         for child in self.iter_children():
-            vars = child.assigned_vars(vars, without_savevar=without_savevar, check_init_advars=check_init_advars)
+            vars = child.assigned_vars(
+                vars,
+                without_savevar=without_savevar,
+                check_init_advars=check_init_advars,
+            )
             flag = True
         if not flag:
             if vars is None:
@@ -306,7 +328,12 @@ class Node:
             vars.push(var)
         return vars
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         """Return variables needed before executing this node.
 
         ``vars`` is the ```VarList`` which consists of variables that must be defined *after* this
@@ -336,14 +363,18 @@ class Node:
             vars = child.unrefered_advars(vars)
         return vars
 
-    def collect_vars(self,
-                     without_refvar: bool = False,
-                     without_index: bool = False
-                     ) -> List[OpVar]:
+    def collect_vars(
+        self, without_refvar: bool = False, without_index: bool = False
+    ) -> List[OpVar]:
         """Return variables used in this node."""
         vars = []
         for child in self.iter_children():
-            _extend_unique(vars, child.collect_vars(without_refvar=without_refvar, without_index=without_index))
+            _extend_unique(
+                vars,
+                child.collect_vars(
+                    without_refvar=without_refvar, without_index=without_index
+                ),
+            )
         for var in self.iter_ref_vars():
             _append_unique(vars, var)
         for var in self.iter_assign_vars():
@@ -401,13 +432,17 @@ class Node:
         This method is for only AD variables.
         """
         if any(node for node in self.iter_children()):
-            raise NotImplementedError(f"check_initial must be implemented for class having children")
+            raise NotImplementedError(
+                f"check_initial must be implemented for class having children"
+            )
         return assigned_vars
 
     # ------------------------------------------------------------------
     # other helpers
     # ------------------------------------------------------------------
-    def _save_var_name(self, name: str, id: int, no_suffix: bool = False, pushpop: bool = False) -> str:
+    def _save_var_name(
+        self, name: str, id: int, no_suffix: bool = False, pushpop: bool = False
+    ) -> str:
         if pushpop:
             ext = "_pushpop"
         else:
@@ -418,13 +453,21 @@ class Node:
         else:
             return f"{name}_save_{id}{ext}{AD_SUFFIX}"
 
-    _pattern: ClassVar[Pattern[str]] = re.compile(r"([a-zA-Z][a-zA-Z0-9_]*)_save_([0-9]+)")
+    _pattern: ClassVar[Pattern[str]] = re.compile(
+        r"([a-zA-Z][a-zA-Z0-9_]*)_save_([0-9]+)"
+    )
+
     @classmethod
     def is_savevar(cls, name: str) -> bool:
         return bool(cls._pattern.match(name))
 
     @classmethod
-    def get_arg_info(cls, routine: Union[OpFuncUser, CallStatement], routine_map: Optional[dict] = None, generic_map: Optional[dict] = None) -> Optional[dict]:
+    def get_arg_info(
+        cls,
+        routine: Union[OpFuncUser, CallStatement],
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+    ) -> Optional[dict]:
         """Return argument information for the given name."""
         if routine_map is None:
             return None
@@ -434,7 +477,9 @@ class Node:
             nargs = len(routine.args)
             if isinstance(routine, OpFuncUser) or routine.result is not None:
                 nargs += 1
-            if not arg_info.get("skip") and (arg_info["args"] is None or len(arg_info["args"]) != nargs):
+            if not arg_info.get("skip") and (
+                arg_info["args"] is None or len(arg_info["args"]) != nargs
+            ):
                 raise RuntimeError(
                     f"Argument length mismatch for {name}: "
                     f"{len(arg_info['args'])} != {len(routine.args)} "
@@ -451,7 +496,11 @@ class Node:
                 arg_info = routine_map[cand]
                 if "type" in arg_info and arg_info["type"] == argtypes:
                     if "kind" in arg_info and arg_info["kind"] == argkinds:
-                        if "dims" in arg_info and [(arg and len(arg)) for arg in arg_info["dims"]] == argdims:
+                        if (
+                            "dims" in arg_info
+                            and [(arg and len(arg)) for arg in arg_info["dims"]]
+                            == argdims
+                        ):
                             return arg_info
         return None
 
@@ -481,7 +530,9 @@ class Node:
                 result = lhs
             else:
                 # Save the intermediate result of the function call
-                name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
+                name = self._save_var_name(
+                    f"{ufunc.name}{n}", self.get_id(), no_suffix=True
+                )
                 result = OpVar(name, typename=arg_info["type"][-1])
                 saved_vars.append(result)
                 saved_vars.append(
@@ -585,7 +636,9 @@ class Node:
             else:
                 # Save intermediate function results so they can be reused in
                 # the reverse sweep
-                name = self._save_var_name(f"{ufunc.name}{n}", self.get_id(), no_suffix=True)
+                name = self._save_var_name(
+                    f"{ufunc.name}{n}", self.get_id(), no_suffix=True
+                )
                 result = OpVar(name, typename=arg_info["type"][-1])
                 saved_vars.append(result)
                 saved_vars.append(
@@ -648,7 +701,9 @@ class Node:
             for var in vars:
                 if not var.ad_target:
                     continue
-                dev = rhs.derivative(var, target=grad_lhs, info=self.info, warnings=warnings)
+                dev = rhs.derivative(
+                    var, target=grad_lhs, info=self.info, warnings=warnings
+                )
                 v = var.add_suffix(AD_SUFFIX)
                 res = grad_lhs * dev
                 if not v.is_array() and res.is_array():
@@ -734,7 +789,11 @@ class Block(Node):
                 warnings,
             )
             nodes = [n for n in nodes if node and not node.is_effectively_empty()]
-            if reverse and (exitcycle_flags or return_flags) and not isinstance(node, (ExitStmt, CycleStmt, ReturnStmt)):
+            if (
+                reverse
+                and (exitcycle_flags or return_flags)
+                and not isinstance(node, (ExitStmt, CycleStmt, ReturnStmt))
+            ):
                 flags = []
                 if exitcycle_flags:
                     flags.extend(exitcycle_flags)
@@ -753,16 +812,17 @@ class Block(Node):
                 ad_code.extend(nodes)
         return ad_code
 
-    def set_for_returnexitcycle(self,
-                                return_flags: Optional[List[OpVar]] = None,
-                                exitcycle_flags: Optional[List[OpVar]] = None,
-                                set_return_cond: bool = False,
-                                set_exitcycle_cond: bool = False,
-                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-                                label: Optional[str] = None,
-                                label_map: Optional[List[Tuple[str,str]]] = None,
-                                keep: bool = False,
-                                ) -> List[Node]:
+    def set_for_returnexitcycle(
+        self,
+        return_flags: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_return_cond: bool = False,
+        set_exitcycle_cond: bool = False,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        keep: bool = False,
+    ) -> List[Node]:
         nodes: List[Node] = []
         if set_return_cond and return_flags:
             flags = return_flags
@@ -777,14 +837,16 @@ class Block(Node):
                 ret_flags = node.collect_return()
                 ce_flags = node.collect_exitcycle()
                 if ret_flags or ce_flags:
-                    node_new = node.set_for_returnexitcycle(return_flags,
-                                                            exitcycle_flags,
-                                                            set_return_cond=False,
-                                                            set_exitcycle_cond=False,
-                                                            set_do_index=set_do_index,
-                                                            label=label,
-                                                            label_map=label_map,
-                                                            keep=keep)
+                    node_new = node.set_for_returnexitcycle(
+                        return_flags,
+                        exitcycle_flags,
+                        set_return_cond=False,
+                        set_exitcycle_cond=False,
+                        set_do_index=set_do_index,
+                        label=label,
+                        label_map=label_map,
+                        keep=keep,
+                    )
                     block.extend(node_new)
                     if block:
                         nodes.append(IfBlock([(cond, Block(block))]))
@@ -795,14 +857,18 @@ class Block(Node):
                 nodes.append(IfBlock([(cond, Block(block))]))
         else:
             for node in self.iter_children():
-                nodes.extend(node.set_for_returnexitcycle(return_flags,
-                                                          exitcycle_flags,
-                                                          set_return_cond=False,
-                                                          set_exitcycle_cond=False,
-                                                          set_do_index=set_do_index,
-                                                          label=label,
-                                                          label_map=label_map,
-                                                          keep=keep))
+                nodes.extend(
+                    node.set_for_returnexitcycle(
+                        return_flags,
+                        exitcycle_flags,
+                        set_return_cond=False,
+                        set_exitcycle_cond=False,
+                        set_do_index=set_do_index,
+                        label=label,
+                        label_map=label_map,
+                        keep=keep,
+                    )
+                )
         return nodes
 
     def find_by_name(self, name: str) -> Optional[Declaration]:
@@ -844,7 +910,7 @@ class Block(Node):
         for node in nodes:
             self.append(node)
 
-    def insert_before(self, id: int, node:Node) -> None:
+    def insert_before(self, id: int, node: Node) -> None:
         for i, child in enumerate(self._children):
             if child.get_id() == id:
                 node.build_do_index_list(self.do_index_list)
@@ -857,10 +923,10 @@ class Block(Node):
             if child.get_id() == id:
                 node.build_do_index_list(self.do_index_list)
                 self._set_parent(node)
-                return self._children.insert(i+1, node)
+                return self._children.insert(i + 1, node)
         raise ValueError("id is not found")
 
-    def insert_begin(self, node:Node) -> None:
+    def insert_begin(self, node: Node) -> None:
         node.build_do_index_list(self.do_index_list)
         self._set_parent(node)
         return self._children.insert(0, node)
@@ -877,7 +943,12 @@ class Block(Node):
             lines.extend(child.render(indent))
         return lines
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         for child in reversed(self._children):
             vars = child.required_vars(vars, no_accumulate, without_savevar)
         if vars is None:
@@ -917,13 +988,22 @@ class Block(Node):
         children = new_children
         if len(children) >= 2:
             i = 0
-            while i < len(children)-1:
+            while i < len(children) - 1:
                 child1 = children[i]
-                if isinstance(child1, SaveAssignment) and not child1.load and not child1.pushpop:
+                if (
+                    isinstance(child1, SaveAssignment)
+                    and not child1.load
+                    and not child1.pushpop
+                ):
                     var = child1.var
                     flag = False
-                    for child2 in children[i+1:]:
-                        if isinstance(child2, SaveAssignment) and child2.var == var and child2.id == child1.id and child2.load:
+                    for child2 in children[i + 1 :]:
+                        if (
+                            isinstance(child2, SaveAssignment)
+                            and child2.var == var
+                            and child2.id == child1.id
+                            and child2.load
+                        ):
                             children.remove(child2)
                             children.remove(child1)
                             flag = True
@@ -938,7 +1018,7 @@ class Block(Node):
                     lhs = child1.lhs
                     lhs_name = lhs.name_ext()
                     flag = False
-                    for child2 in children[i+1:]:
+                    for child2 in children[i + 1 :]:
                         if isinstance(child2, PointerClear):
                             if child2.var == lhs:
                                 children.remove(child1)
@@ -960,13 +1040,13 @@ class Block(Node):
                 i += 1
 
             i = 0
-            while i < len(children)-1:
+            while i < len(children) - 1:
                 child1 = children[i]
                 if isinstance(child1, PushPop) and child1.pointer and child1.load:
                     var = child1.var
                     name = var.name_ext()
                     flag = False
-                    for child2 in children[i+1:]:
+                    for child2 in children[i + 1 :]:
                         if any(v.name_ext() == name for v in child2.collect_vars()):
                             i += 1
                             flag = True
@@ -984,15 +1064,24 @@ class Block(Node):
                     if isinstance(child, DoLoop) and isinstance(last, DoLoop):
                         item1 = child._body[0]
                         item2 = last._body[-1]
-                        while (isinstance(item1, SaveAssignment) and not item1.pushpop and
-                               isinstance(item2, SaveAssignment) and not item2.pushpop and
-                               item1.var.name == item2.var.name and item1.id == item2.id and item1.load != item2.load):
-                                child._body.remove_child(item1)
-                                last._body.remove_child(item2)
-                                if child._body.is_effectively_empty() or last._body.is_effectively_empty():
-                                    break
-                                item1 = child._body[0]
-                                item2 = last._body[-1]
+                        while (
+                            isinstance(item1, SaveAssignment)
+                            and not item1.pushpop
+                            and isinstance(item2, SaveAssignment)
+                            and not item2.pushpop
+                            and item1.var.name == item2.var.name
+                            and item1.id == item2.id
+                            and item1.load != item2.load
+                        ):
+                            child._body.remove_child(item1)
+                            last._body.remove_child(item2)
+                            if (
+                                child._body.is_effectively_empty()
+                                or last._body.is_effectively_empty()
+                            ):
+                                break
+                            item1 = child._body[0]
+                            item2 = last._body[-1]
                         if last.is_effectively_empty():
                             new_children.remove(last)
                         if not child.is_effectively_empty():
@@ -1001,10 +1090,18 @@ class Block(Node):
                     if isinstance(child, IfBlock) and isinstance(last, IfBlock):
                         cb1 = child.cond_blocks[0]
                         cb2 = last.cond_blocks[0]
-                        if (cb1[0] == cb2[0] and
-                            cb1[1][0]  and isinstance(cb1[1][0],  SaveAssignment) and not cb1[1][0].pushpop and
-                            cb2[1][-1] and isinstance(cb2[1][-1], SaveAssignment) and not cb2[1][-1].pushpop and
-                            cb1[1][0].var.name == cb2[1][-1].var.name and cb1[1][0].id == cb2[1][-1].id and cb1[1][0].load != cb2[1][-1].load):
+                        if (
+                            cb1[0] == cb2[0]
+                            and cb1[1][0]
+                            and isinstance(cb1[1][0], SaveAssignment)
+                            and not cb1[1][0].pushpop
+                            and cb2[1][-1]
+                            and isinstance(cb2[1][-1], SaveAssignment)
+                            and not cb2[1][-1].pushpop
+                            and cb1[1][0].var.name == cb2[1][-1].var.name
+                            and cb1[1][0].id == cb2[1][-1].id
+                            and cb1[1][0].load != cb2[1][-1].load
+                        ):
                             cb1[1].remove_child(cb1[1][0])
                             cb2[1].remove_child(cb2[1][-1])
                             flag = True
@@ -1013,14 +1110,21 @@ class Block(Node):
                             if not child.is_effectively_empty():
                                 new_children.append(child)
                             continue
-                        if(cb1[0] == cb2[0] and
-                           len(child.cond_blocks) == 1 and len(last.cond_blocks) and
-                           not last.has_returnexitcycle_flags()
-                           ): # merge
+                        if (
+                            cb1[0] == cb2[0]
+                            and len(child.cond_blocks) == 1
+                            and len(last.cond_blocks)
+                            and not last.has_returnexitcycle_flags()
+                        ):  # merge
                             last.cond_blocks[0][1].extend(child.cond_blocks[0][1])
                             continue
-                    if (isinstance(last, Assignment) and isinstance(last.rhs, OpTrue) and
-                        isinstance(child, IfBlock) and len(child.cond_blocks) == 1 and child.cond_blocks[0][0] == last.lhs):
+                    if (
+                        isinstance(last, Assignment)
+                        and isinstance(last.rhs, OpTrue)
+                        and isinstance(child, IfBlock)
+                        and len(child.cond_blocks) == 1
+                        and child.cond_blocks[0][0] == last.lhs
+                    ):
                         block = child.cond_blocks[0][1]
                         if not block.is_effectively_empty():
                             for node in block.iter_children():
@@ -1041,6 +1145,7 @@ class Block(Node):
 @dataclass
 class Statement(Node):
     """Representation of a Fortran statement."""
+
     body: str
 
     def copy(self) -> "Statement":
@@ -1326,16 +1431,17 @@ class ExitCycle(Node):
             return [Assignment(self.flag(), OpTrue(), ad_info=f"{self.name}{label}")]
         return [self]
 
-    def set_for_returnexitcycle(self,
-                                return_flags: Optional[List[OpVar]] = None,
-                                exitcycle_flags: Optional[List[OpVar]] = None,
-                                set_return_cond: bool = False,
-                                set_exitcycle_cond: bool = False,
-                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-                                label: Optional[str] = None,
-                                label_map: Optional[List[Tuple[str,str]]] = None,
-                                keep: bool = False,
-                                ) -> List[Node]:
+    def set_for_returnexitcycle(
+        self,
+        return_flags: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_return_cond: bool = False,
+        set_exitcycle_cond: bool = False,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        keep: bool = False,
+    ) -> List[Node]:
         nodes: List[Node] = []
         if set_do_index and isinstance(self, ExitStmt):
             nodes.append(Assignment(set_do_index[0], set_do_index[1]))
@@ -1343,7 +1449,14 @@ class ExitCycle(Node):
             nodes.append(Assignment(self.flag(), OpFalse()))
         if exitcycle_flags is None or keep:
             if label and label_map:
-                label = next((label_new for label_org, label_new in label_map if label_org == self.label), label_map[0][1])
+                label = next(
+                    (
+                        label_new
+                        for label_org, label_new in label_map
+                        if label_org == self.label
+                    ),
+                    label_map[0][1],
+                )
                 nodes.append(self.__class__(label))
             else:
                 nodes.append(self)
@@ -1438,16 +1551,17 @@ class ReturnStmt(Node):
                 return []
         return [self]
 
-    def set_for_returnexitcycle(self,
-                                return_flags: Optional[List[OpVar]] = None,
-                                exitcycle_flags: Optional[List[OpVar]] = None,
-                                set_return_cond: bool = False,
-                                set_exitcycle_cond: bool = False,
-                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-                                label: Optional[str] = None,
-                                label_map: Optional[List[Tuple[str,str]]] = None,
-                                keep: bool = False,
-                                ) -> List[Node]:
+    def set_for_returnexitcycle(
+        self,
+        return_flags: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_return_cond: bool = False,
+        set_exitcycle_cond: bool = False,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        keep: bool = False,
+    ) -> List[Node]:
         nodes: List[Node] = []
         if return_flags:
             nodes.append(Assignment(self.flag(), OpFalse()))
@@ -1456,9 +1570,7 @@ class ReturnStmt(Node):
     def iter_ref_vars(self) -> Iterator[OpVar]:
         return iter(())
 
-    def iter_assign_vars(
-        self, without_savevar: bool = False
-    ) -> Iterator[OpVar]:
+    def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         return iter(())
 
     def flag(self) -> OpVar:
@@ -1468,6 +1580,7 @@ class ReturnStmt(Node):
 @dataclass
 class Use(Node):
     """Representation of a Fortran use statement."""
+
     name: str
     only: Optional[List[str]] = field(default=None)
 
@@ -1490,9 +1603,9 @@ class Use(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
-NONDIFF_STD_ROUTINES = {
-    "get_command_argument"
-}
+
+NONDIFF_STD_ROUTINES = {"get_command_argument"}
+
 
 @dataclass
 class CallStatement(Node):
@@ -1511,7 +1624,7 @@ class CallStatement(Node):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        #if not _NAME_RE.fullmatch(self.name):
+        # if not _NAME_RE.fullmatch(self.name):
         #    raise ValueError(f"invalid Fortran routine name: {self.name}")
         if not isinstance(self.args, list):
             raise ValueError(f"args must be a list: {type(self.args)}")
@@ -1534,28 +1647,36 @@ class CallStatement(Node):
                     raise ValueError(f"invalid intent: {intent}")
 
     def copy(self) -> "CallStatement":
-        return CallStatement(self.name, self.args, self.arg_keys, self.intents, self.result, self.info, self.ad_info)
+        return CallStatement(
+            self.name,
+            self.args,
+            self.arg_keys,
+            self.intents,
+            self.result,
+            self.info,
+            self.ad_info,
+        )
 
     def deep_clone(self) -> "CallStatement":
         args = [arg.deep_clone() for arg in self.args]
         arg_keys = list(self.arg_keys) if self.arg_keys else None
         intents = list(self.intents) if self.intents else None
         result = self.result.deep_clone() if self.result else None
-        return CallStatement(name=self.name,
-                             args=args,
-                             arg_keys=arg_keys,
-                             intents=intents,
-                             result=result,
-                             info=self.info,
-                             ad_info=self.ad_info,
-                             associated_vars=self.associated_vars,
-                             donot_prune=self.donot_prune)
+        return CallStatement(
+            name=self.name,
+            args=args,
+            arg_keys=arg_keys,
+            intents=intents,
+            result=result,
+            info=self.info,
+            ad_info=self.ad_info,
+            associated_vars=self.associated_vars,
+            donot_prune=self.donot_prune,
+        )
 
-    def _iter_vars(self,
-                   intents: List[str],
-                   kinds: Tuple[str],
-                   without_index: bool = False
-                   ) -> Iterator[OpVar]:
+    def _iter_vars(
+        self, intents: List[str], kinds: Tuple[str], without_index: bool = False
+    ) -> Iterator[OpVar]:
         for arg, intent in zip(self.args, intents):
             if intent in kinds:
                 for var in arg.collect_vars(without_index=without_index):
@@ -1591,7 +1712,12 @@ class CallStatement(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         intents = self.intents or ["inout"] * len(self.args)
         if vars is None:
             vars = VarList()
@@ -1614,13 +1740,14 @@ class CallStatement(Node):
         return vars
 
     @classmethod
-    def rename_args(cls,
-                    vars_org: List[Operator],
-                    args_org: List[str],
-                    args_target: List[str],
-                    vars_tmp: Optional[List[OpVar]] = None,
-                    reverse: bool = False,
-                    ) -> List[OpVar]:
+    def rename_args(
+        cls,
+        vars_org: List[Operator],
+        args_org: List[str],
+        args_target: List[str],
+        vars_tmp: Optional[List[OpVar]] = None,
+        reverse: bool = False,
+    ) -> List[OpVar]:
         if len(vars_org) != len(args_org):
             raise ValueError(f"length of vars_org and args_org must be the same")
         vars_target = []
@@ -1662,7 +1789,7 @@ class CallStatement(Node):
         name = self.name
         arg_info = Node.get_arg_info(self, routine_map, generic_map)
         if arg_info is None:
-            #print(routine_map)
+            # print(routine_map)
             raise RuntimeError(f"Not found in routime_map: {name}")
 
         name_key = "name_rev_ad" if reverse else "name_fwd_ad"
@@ -1670,7 +1797,7 @@ class CallStatement(Node):
             if reverse:
                 return [Statement(f"! {name} is skiped")]
             else:
-                return[self]
+                return [self]
 
         tmp_vars = []
         call_args = list(self.args)
@@ -1705,7 +1832,9 @@ class CallStatement(Node):
         args_new = []
         for i, arg in enumerate(ordered):
             if not isinstance(arg, OpLeaf) and arg_info["type"][i] == "real":
-                name = self._save_var_name(f"{self.name}_arg{i}", self.get_id(), no_suffix=True)
+                name = self._save_var_name(
+                    f"{self.name}_arg{i}", self.get_id(), no_suffix=True
+                )
                 tmp = OpVar(name, typename="real")
                 tmp_vars.append((tmp, arg))
                 args_new.append(tmp)
@@ -1731,7 +1860,9 @@ class CallStatement(Node):
             name_key = "name_fwd_ad"
             args_key = "args_fwd_ad"
             intents_key = "intents_fwd_ad"
-        ad_args = CallStatement.rename_args(ordered, arg_info["args"], arg_info[args_key], args_new, reverse)
+        ad_args = CallStatement.rename_args(
+            ordered, arg_info["args"], arg_info[args_key], args_new, reverse
+        )
         if self.associated_vars is None:
             associated_vars = None
         else:
@@ -1741,7 +1872,13 @@ class CallStatement(Node):
                     associated_vars.append(var)
                 associated_vars.append(var.add_suffix(AD_SUFFIX))
 
-        ad_call = CallStatement(name=arg_info[name_key], args=ad_args, intents=arg_info[intents_key], ad_info=self.info["code"], associated_vars=associated_vars)
+        ad_call = CallStatement(
+            name=arg_info[name_key],
+            args=ad_args,
+            intents=arg_info[intents_key],
+            ad_info=self.info["code"],
+            associated_vars=associated_vars,
+        )
         if not reverse:
             for i, arg in enumerate(ad_args):
                 if arg_info["intents_fwd_ad"][i] in ("out", "inout"):
@@ -1752,7 +1889,9 @@ class CallStatement(Node):
             if reverse:
                 for lhs, rhs in tmp_vars:
                     init_nodes.append(
-                        Assignment(lhs.add_suffix(AD_SUFFIX), OpReal("0.0", kind=lhs.kind))
+                        Assignment(
+                            lhs.add_suffix(AD_SUFFIX), OpReal("0.0", kind=lhs.kind)
+                        )
                     )
                     ad_nodes.extend(
                         self._generate_ad_reverse(
@@ -1861,9 +2000,11 @@ class CallStatement(Node):
             assigned_vars.push(self.result)
         return assigned_vars
 
+
 @dataclass
 class Module(Node):
     """Representation of a Fortran module."""
+
     name: str
     uses: Optional[Block] = None
     body: Optional[Block] = None
@@ -1885,19 +2026,19 @@ class Module(Node):
         space = "  " * indent
         lines = [f"{space}module {self.name}\n"]
         if self.uses is not None:
-            lines.extend(self.uses.render(indent+1))
+            lines.extend(self.uses.render(indent + 1))
         lines.extend(f"{space}  implicit none\n")
         if self.decls is not None:
             lines.append("\n")
-            lines.extend(self.decls.render(indent+1))
+            lines.extend(self.decls.render(indent + 1))
         if self.body is not None:
             lines.append("\n")
-            lines.extend(self.body.render(indent+1))
+            lines.extend(self.body.render(indent + 1))
         lines.append("\n")
         lines.append(f"{space}contains\n")
         lines.append("\n")
         for routine in self.routines:
-            lines.extend(routine.render(indent+1))
+            lines.extend(routine.render(indent + 1))
             lines.append("\n")
         lines.append(f"{space}end module {self.name}\n")
         return lines
@@ -1935,6 +2076,7 @@ class Program(Module):
             lines.append("\n")
         lines.append(f"{space}end program {self.name}\n")
         return lines
+
 
 @dataclass
 class Routine(Node):
@@ -1986,22 +2128,26 @@ class Routine(Node):
         space = "  " * indent
         args = ", ".join(self.args)
         lines = [f"{space}{self.kind} {self.name}({args})\n"]
-        lines.extend(self.decls.render(indent+1))
+        lines.extend(self.decls.render(indent + 1))
         lines.append("\n")
         last_block: Optional[Block] = None
         if not self.content.is_effectively_empty():
-            lines.extend(self.content.render(indent+1))
+            lines.extend(self.content.render(indent + 1))
             lines.append("\n")
             last_block = self.content
         if self.ad_init is not None and not self.ad_init.is_effectively_empty():
-            lines.extend(self.ad_init.render(indent+1))
+            lines.extend(self.ad_init.render(indent + 1))
             lines.append("\n")
             last_block = self.ad_init
         if self.ad_content is not None and not self.ad_content.is_effectively_empty():
-            lines.extend(self.ad_content.render(indent+1))
+            lines.extend(self.ad_content.render(indent + 1))
             lines.append("\n")
             last_block = self.ad_content
-        if last_block and last_block._children and isinstance(last_block._children[-1], ReturnStmt):
+        if (
+            last_block
+            and last_block._children
+            and isinstance(last_block._children[-1], ReturnStmt)
+        ):
             lines.pop()
             ret_line = lines.pop()
             lines.append("\n")
@@ -2057,7 +2203,12 @@ class Routine(Node):
             return True
         return False
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         for block in reversed(self._all_blocks()):
             vars = block.required_vars(vars, no_accumulate, without_savevar)
         if vars is None:
@@ -2072,7 +2223,9 @@ class Routine(Node):
         decls = self.decls.deep_clone()
         content = self.content.deep_clone()
         ad_init = self.ad_init.deep_clone() if self.ad_init is not None else None
-        ad_content = self.ad_content.deep_clone() if self.ad_content is not None else None
+        ad_content = (
+            self.ad_content.deep_clone() if self.ad_content is not None else None
+        )
         clone = type(self)(
             name=self.name,
             args=list(self.args),
@@ -2096,7 +2249,9 @@ class Routine(Node):
     ) -> "Routine":
         if base_targets is None:
             base_targets = targets.copy()
-        ad_content = self.ad_content.prune_for(targets, mod_vars, decl_map, base_targets)
+        ad_content = self.ad_content.prune_for(
+            targets, mod_vars, decl_map, base_targets
+        )
         targets = ad_content.required_vars(targets)
         ad_init = self.ad_init.prune_for(targets, mod_vars, decl_map, base_targets)
         targets = ad_init.required_vars(targets)
@@ -2104,7 +2259,9 @@ class Routine(Node):
         all_vars = content.collect_vars()
         _extend_unique(all_vars, ad_init.collect_vars())
         _extend_unique(all_vars, ad_content.collect_vars())
-        decls = self.decls.prune_for(VarList(all_vars), mod_vars, decl_map, base_targets)
+        decls = self.decls.prune_for(
+            VarList(all_vars), mod_vars, decl_map, base_targets
+        )
         return type(self)(
             name=self.name,
             args=self.args,
@@ -2139,7 +2296,7 @@ class Declaration(Node):
     typename: str
     kind: Optional[str] = None
     char_len: Optional[str] = None
-    dims: Optional[Union[Tuple[str],str]] = None
+    dims: Optional[Union[Tuple[str], str]] = None
     intent: Optional[str] = None
     parameter: bool = False
     constant: bool = False
@@ -2162,8 +2319,13 @@ class Declaration(Node):
             raise ValueError(f"kind must be str: {type(self.kind)}")
         if self.char_len is not None and not isinstance(self.char_len, str):
             raise ValueError(f"char_len must be str: {type(self.char_len)}")
-        if self.dims is not None and (not (isinstance(self.dims, tuple) or self.dims == "*") or any(not isinstance(dim, str) for dim in self.dims)):
-            raise ValueError(f"dims must be tuple of str or '*': {type(self.dims)} {self.dims}")
+        if self.dims is not None and (
+            not (isinstance(self.dims, tuple) or self.dims == "*")
+            or any(not isinstance(dim, str) for dim in self.dims)
+        ):
+            raise ValueError(
+                f"dims must be tuple of str or '*': {type(self.dims)} {self.dims}"
+            )
         if self.intent is not None and not isinstance(self.intent, str):
             raise ValueError(f"intent must be str: {type(self.intent)}")
 
@@ -2239,10 +2401,11 @@ class Declaration(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
-    def collect_vars(self,
-                     without_refvar: bool = False,
-                     without_index: bool = False,
-                     ) -> List[OpVar]:
+    def collect_vars(
+        self,
+        without_refvar: bool = False,
+        without_index: bool = False,
+    ) -> List[OpVar]:
         var = OpVar(
             name=self.name,
             typename=self.typename,
@@ -2314,7 +2477,11 @@ class Declaration(Node):
         if self.constant or self.parameter:
             return False
         typename = self.typename.lower()
-        if typename.startswith("real") or typename.startswith("double") or typename.startswith("complex"):
+        if (
+            typename.startswith("real")
+            or typename.startswith("double")
+            or typename.startswith("complex")
+        ):
             return True
         if self.type_def is not None:
             for decl in self.type_def.iter_children():
@@ -2322,8 +2489,12 @@ class Declaration(Node):
                     return True
         return False
 
-
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         if vars is None:
             return VarList()
         if self.intent in ("in", "inout") or self.save:
@@ -2356,17 +2527,19 @@ class Declaration(Node):
                 )
         return vars
 
-    def generate_ad(self,
-                    saved_vars: List[OpVar],
-                    reverse: bool = False,
-                    assigned_advars: Optional[VarList] = None,
-                    routine_map: Optional[Dict] = None,
-                    generic_map: Optional[Dict] = None,
-                    mod_vars: Optional[List[OpVar]] = None,
-                    exitcycle_flags: Optional[List[OpVar]] = None,
-                    return_flags: Optional[List[OpVar]] = None,
-                    type_map: Optional[dict] = None,
-                    warnings: Optional[List[str]] = None) -> List[Node]:
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[Dict] = None,
+        generic_map: Optional[Dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[List[str]] = None,
+    ) -> List[Node]:
         if self.constant or self.parameter or not self.ad_target():
             return []
         name = f"{self.name}{AD_SUFFIX}"
@@ -2376,7 +2549,11 @@ class Declaration(Node):
         else:
             type_def = type_map[self.type_def.name]
             typename = f"type({type_def.name})"
-        init_val = str(OpReal("0.0", kind=self.kind)) if not (self.allocatable or self.pointer) else None
+        init_val = (
+            str(OpReal("0.0", kind=self.kind))
+            if not (self.allocatable or self.pointer)
+            else None
+        )
         decl = Declaration(
             name=name,
             typename=typename,
@@ -2394,7 +2571,6 @@ class Declaration(Node):
             declared_in=self.declared_in,
         )
         return [decl]
-
 
     def prune_for(
         self,
@@ -2414,7 +2590,7 @@ class Interface(Node):
     """Class for interface"""
 
     name: str
-    module_procs: Optional[List[str]] = field(default=None) # module procedures
+    module_procs: Optional[List[str]] = field(default=None)  # module procedures
 
     def __post_init__(self):
         super().__post_init__()
@@ -2442,7 +2618,9 @@ class TypeDef(Node):
         self.map = {}
         for decl in self.components:
             if not isinstance(decl, Declaration):
-                raise ValueError(f"components must be a list of Declaration: {self.components}")
+                raise ValueError(
+                    f"components must be a list of Declaration: {self.components}"
+                )
             self.map[decl.name] = decl
 
     def __getitem__(self, name: str) -> Optional[Declaration]:
@@ -2452,7 +2630,15 @@ class TypeDef(Node):
         return iter(self.components)
 
     def copy(self) -> "TypeDef":
-        return TypeDef(self.name, self.components, self.procs, self.access, bind=self.bind, abstract=self.abstract, sequence=self.sequence)
+        return TypeDef(
+            self.name,
+            self.components,
+            self.procs,
+            self.access,
+            bind=self.bind,
+            abstract=self.abstract,
+            sequence=self.sequence,
+        )
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -2467,27 +2653,28 @@ class TypeDef(Node):
         if self.sequence:
             lines.append(f"{space}  sequence\n")
         for decl in self.components:
-            lines.extend(decl.render(indent+1))
+            lines.extend(decl.render(indent + 1))
         lines.append(f"{space}end type {self.name}\n")
         return lines
 
-    def collect_vars(self,
-                     without_refvar: bool = False,
-                     without_index: bool = False
-                     ) -> List[OpVar]:
+    def collect_vars(
+        self, without_refvar: bool = False, without_index: bool = False
+    ) -> List[OpVar]:
         return []
 
-    def generate_ad(self,
-                    saved_vars: List[OpVar],
-                    reverse: bool = False,
-                    assigned_advars: Optional[VarList] = None,
-                    routine_map: Optional[Dict] = None,
-                    generic_map: Optional[Dict] = None,
-                    mod_vars: Optional[List[OpVar]] = None,
-                    exitcycle_flags: Optional[List[OpVar]] = None,
-                    return_flags: Optional[List[OpVar]] = None,
-                    type_map: Optional[dict] = None,
-                    warnings: Optional[List[str]] = None) -> List[Node]:
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[Dict] = None,
+        generic_map: Optional[Dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[List[str]] = None,
+    ) -> List[Node]:
         if self.name.endswith("_t"):
             name = f"{self.name.removesuffix('_t')}{AD_SUFFIX}_t"
         else:
@@ -2501,7 +2688,17 @@ class TypeDef(Node):
         for proc in self.procs:
             procs.append(list(proc))
         access = self.access
-        return [TypeDef(name=name, components=components, procs=procs, access=access, bind=self.bind, abstract=self.abstract, sequence=self.sequence)]
+        return [
+            TypeDef(
+                name=name,
+                components=components,
+                procs=procs,
+                access=access,
+                bind=self.bind,
+                abstract=self.abstract,
+                sequence=self.sequence,
+            )
+        ]
 
 
 @dataclass
@@ -2604,7 +2801,12 @@ class Assignment(Node):
             ad_comment = f" ! {self.ad_info}"
         return [f"{space}{self.lhs} = {rhs}{ad_comment}\n"]
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         lhs = self.lhs
         if vars is None:
             vars = VarList()
@@ -2613,7 +2815,7 @@ class Assignment(Node):
                 raise ValueError(f"Must be VarList: {type(vars)}")
             vars = vars.copy()
             vars.remove(lhs)
-        for var in lhs.collect_vars(without_refvar=True): # variables in indexes
+        for var in lhs.collect_vars(without_refvar=True):  # variables in indexes
             if var != lhs:
                 vars.push(var)
         for var in self._rhs_vars:
@@ -2637,6 +2839,7 @@ class Assignment(Node):
         if self.lhs.name.startswith(("return_flag", "exit_flag", "cycle_flag")):
             return True
         return False
+
 
 @dataclass
 class ClearAssignment(Node):
@@ -2691,11 +2894,12 @@ class ClearAssignment(Node):
         zero = OpReal("0.0", kind=self.lhs.kind)
         return [f"{space}{self.lhs} = {zero}{ad_comment}\n"]
 
-    def assigned_vars(self,
-                      vars: Optional[VarList] = None,
-                      without_savevar: bool = False,
-                      check_init_advars: bool = False
-                      ) -> VarList:
+    def assigned_vars(
+        self,
+        vars: Optional[VarList] = None,
+        without_savevar: bool = False,
+        check_init_advars: bool = False,
+    ) -> VarList:
         if vars is None:
             vars = VarList()
         else:
@@ -2706,7 +2910,12 @@ class ClearAssignment(Node):
             vars.push(self.lhs)
         return vars
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         lhs = self.lhs
         if vars is None:
             vars = VarList()
@@ -2715,7 +2924,7 @@ class ClearAssignment(Node):
                 raise ValueError(f"Must be VarList: {type(vars)}")
             vars = vars.copy()
             vars.remove(lhs)
-        for var in lhs.collect_vars(): # variables in indexes
+        for var in lhs.collect_vars():  # variables in indexes
             if var != lhs:
                 vars.push(var)
         return vars
@@ -2786,7 +2995,7 @@ class SaveAssignment(Node):
         yield self.rhs
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
-        #if without_savevar and self.lhs == self.tmpvar:
+        # if without_savevar and self.lhs == self.tmpvar:
         if without_savevar:
             return iter(())
         else:
@@ -2799,14 +3008,19 @@ class SaveAssignment(Node):
     def is_effectively_empty(self) -> bool:
         return False
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         if vars is None:
             vars = VarList()
         else:
             vars = vars.copy()
             vars.remove(self.lhs)
         rhs = self.rhs
-        if (not without_savevar) or rhs == self.var: # if rhs is not saved var
+        if (not without_savevar) or rhs == self.var:  # if rhs is not saved var
             vars.push(rhs)
         return vars
 
@@ -2864,7 +3078,11 @@ class SaveAssignment(Node):
                 raise RuntimeError
             index_new = []
             for i, idx in enumerate(self.tmpvar.index):
-                if isinstance(idx, OpInt) or (isinstance(idx, OpRange) and isinstance(idx[0], OpInt) and idx[0]==idx[1]):
+                if isinstance(idx, OpInt) or (
+                    isinstance(idx, OpRange)
+                    and isinstance(idx[0], OpInt)
+                    and idx[0] == idx[1]
+                ):
                     if self.tmpvar.reduced_dims is None:
                         self.tmpvar.reduced_dims = []
                     self.tmpvar.reduced_dims.append(i)
@@ -2924,12 +3142,13 @@ class PushPop(SaveAssignment):
         return "fautodiff_stack_r"
 
     def to_load(self) -> "PushPop":
-        return PushPop(self.var, id=self.id, tmpvar=self.tmpvar, pointer=self.pointer, load=True)
+        return PushPop(
+            self.var, id=self.id, tmpvar=self.tmpvar, pointer=self.pointer, load=True
+        )
 
 
 @dataclass
 class PushPopL(PushPop):
-
     def __init__(self, flag: str):
         Node.__init__(self)
         self.flag = flag
@@ -2956,7 +3175,12 @@ class PushPopL(PushPop):
     def iter_children(self):
         return iter(())
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         if vars is None:
             return VarList([])
         return vars
@@ -3031,14 +3255,22 @@ class Allocate(Node):
             ad_var = var.add_suffix(AD_SUFFIX)
             if reverse:
                 if var.ad_target:
-                    nodes.append(Allocate._add_if(Deallocate([ad_var.change_index(None)], ad_code=True), ad_var, is_mod_var))
+                    nodes.append(
+                        Allocate._add_if(
+                            Deallocate([ad_var.change_index(None)], ad_code=True),
+                            ad_var,
+                            is_mod_var,
+                        )
+                    )
                 if not is_mod_var:
                     nodes.append(Deallocate([var.change_index(None)], ad_code=True))
             else:
                 if not is_mod_var:
                     nodes.append(Allocate([var]))
                 if var.ad_target:
-                    nodes.append(Allocate._add_if(Allocate([ad_var]), ad_var, is_mod_var))
+                    nodes.append(
+                        Allocate._add_if(Allocate([ad_var]), ad_var, is_mod_var)
+                    )
                     if not var.typename.startswith(("type", "class")):
                         nodes.append(ClearAssignment(ad_var.change_index(None)))
 
@@ -3047,7 +3279,12 @@ class Allocate(Node):
     def is_effectively_empty(self) -> bool:
         return not self.vars
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         if vars is None:
             vars = VarList()
         else:
@@ -3072,7 +3309,9 @@ class Allocate(Node):
         for var in self.vars:
             is_base_mod = var.is_module_var(mod_var_names)
             is_any_mod = var.is_module_var(mod_var_names, check_ad=True)
-            if not is_base_mod and (is_any_mod or (decl_map is None or var.name in decl_map)):
+            if not is_base_mod and (
+                is_any_mod or (decl_map is None or var.name in decl_map)
+            ):
                 vars.append(var)
         if vars:
             return Allocate(vars, mold=self.mold)
@@ -3086,7 +3325,9 @@ class Allocate(Node):
         # allocated/associated outside of the current routine.  Guard the
         # (de)allocation so we do not operate on them twice.  Local pointer
         # variables have a well defined state so do not require this check.
-        check = is_mod_var or (var.intent in ("in", "inout") and (var.allocatable or var.pointer))
+        check = is_mod_var or (
+            var.intent in ("in", "inout") and (var.allocatable or var.pointer)
+        )
         if check:
             func = "associated" if var.pointer else "allocated"
             cond = OpFunc(func, args=[var.change_index(None)])
@@ -3095,7 +3336,13 @@ class Allocate(Node):
                 cond = OpNot([cond])
             else:
                 if var.ref_var is not None and var.ref_var.allocatable:
-                    cond = OpLogic(".and.", args=[OpFunc(func, args=[var.ref_var.change_index(None)]), cond])
+                    cond = OpLogic(
+                        ".and.",
+                        args=[
+                            OpFunc(func, args=[var.ref_var.change_index(None)]),
+                            cond,
+                        ],
+                    )
             return IfBlock([(cond, body)])
         return node
 
@@ -3159,7 +3406,7 @@ class Deallocate(Node):
                             ndim = len(var.index)
                             var = var.change_index(None)
                             for n in range(ndim):
-                                index.append(OpFunc("size", args=[var, OpInt(n+1)]))
+                                index.append(OpFunc("size", args=[var, OpInt(n + 1)]))
                             index = AryIndex(index)
                         else:
                             mold = var
@@ -3167,7 +3414,11 @@ class Deallocate(Node):
                         ad_var = ad_var.change_index(index)
                     elif self.index is not None:
                         ad_var = ad_var.change_index(self.index)
-                    nodes.append(Allocate._add_if(Allocate([ad_var], mold=mold), ad_var, is_mod_var))
+                    nodes.append(
+                        Allocate._add_if(
+                            Allocate([ad_var], mold=mold), ad_var, is_mod_var
+                        )
+                    )
                     if not var.typename.startswith(("type", "class")):
                         nodes.append(ClearAssignment(ad_var.change_index(None)))
 
@@ -3180,7 +3431,12 @@ class Deallocate(Node):
     def is_effectively_empty(self) -> bool:
         return not self.vars
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         if vars is None:
             vars = VarList()
         else:
@@ -3204,7 +3460,9 @@ class Deallocate(Node):
         for var in self.vars:
             is_base_mod = var.is_module_var(mod_var_names)
             is_any_mod = var.is_module_var(mod_var_names, check_ad=True)
-            if not is_base_mod and (is_any_mod or (decl_map is None or var.name in decl_map)):
+            if not is_base_mod and (
+                is_any_mod or (decl_map is None or var.name in decl_map)
+            ):
                 vars.append(var)
         if vars:
             return Deallocate(vars, ad_code=True)
@@ -3240,7 +3498,7 @@ class PointerAssignment(Node):
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self._rhs_vars:
             yield var
-        for var in  self.lhs.collect_vars():
+        for var in self.lhs.collect_vars():
             if var != self.lhs:
                 yield var
 
@@ -3279,18 +3537,34 @@ class PointerAssignment(Node):
             rhs_ad = self.rhs.add_suffix(AD_SUFFIX)
             if reverse:
                 id = self.get_id()
-                self.parent.insert_before(id, PointerAssignment(lhs_ad, rhs_ad, info=self.info, ad_info=ad_info))
-                nodes.append(PointerClear(lhs, previous=rhs, info=self.info, ad_info=ad_info))
-                nodes.append(PointerClear(lhs_ad, previous=rhs_ad, info=self.info, ad_info=ad_info))
+                self.parent.insert_before(
+                    id,
+                    PointerAssignment(lhs_ad, rhs_ad, info=self.info, ad_info=ad_info),
+                )
+                nodes.append(
+                    PointerClear(lhs, previous=rhs, info=self.info, ad_info=ad_info)
+                )
+                nodes.append(
+                    PointerClear(
+                        lhs_ad, previous=rhs_ad, info=self.info, ad_info=ad_info
+                    )
+                )
             else:
-                nodes.append(PointerAssignment(lhs_ad, rhs_ad, info=self.info, ad_info=ad_info))
+                nodes.append(
+                    PointerAssignment(lhs_ad, rhs_ad, info=self.info, ad_info=ad_info)
+                )
                 nodes.append(self)
                 if isinstance(rhs_ad, OpVar) and assigned_advars is not None:
                     if rhs_ad in assigned_advars:
                         assigned_advars.push(lhs_ad)
         return nodes
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         lhs = self.lhs
         if vars is None:
             vars = VarList()
@@ -3366,18 +3640,19 @@ class PointerClear(Node):
             ad_comment = f" ! {self.ad_info}"
         return [f"{space}{self.var} => null(){ad_comment}\n"]
 
-    def generate_ad(self,
-                    saved_vars: List[OpVar],
-                    reverse: bool = False,
-                    assigned_advars: Optional[VarList] = None,
-                    routine_map: Optional[dict] = None,
-                    generic_map: Optional[dict] = None,
-                    mod_vars: Optional[List[OpVar]] = None,
-                    exitcycle_flags: Optional[List[OpVar]] = None,
-                    return_flags: Optional[List[OpVar]] = None,
-                    type_map: Optional[dict] = None,
-                    warnings: Optional[List[str]] = None
-                    ) -> List[Node]:
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[List[str]] = None,
+    ) -> List[Node]:
         nodes: List[Node] = []
         if self.var.ad_target:
             ad_info = self.info.get("code") if self.info is not None else None
@@ -3390,30 +3665,80 @@ class PointerClear(Node):
             if isinstance(self.previous, OpVar):
                 previous_ad = self.previous.add_suffix(AD_SUFFIX)
             else:
-                previous_ad = self.previous # None
+                previous_ad = self.previous  # None
             if reverse:
                 id = self.get_id()
                 if self.previous is None:
-                    tmpvar = OpVar(self._save_var_name(var.name, id), typename=typename, kind=kind, index=index, dims=dims, pointer=True, reference=var)
-                    self.parent.insert_before(id, PointerAssignment(tmpvar, var, info=self.info, ad_info=ad_info))
+                    tmpvar = OpVar(
+                        self._save_var_name(var.name, id),
+                        typename=typename,
+                        kind=kind,
+                        index=index,
+                        dims=dims,
+                        pointer=True,
+                        reference=var,
+                    )
+                    self.parent.insert_before(
+                        id,
+                        PointerAssignment(tmpvar, var, info=self.info, ad_info=ad_info),
+                    )
                     saved_vars.append(tmpvar)
-                    tmpvar_ad = OpVar(self._save_var_name(var_ad.name, id), typename=typename, kind=kind, index=index, dims=dims, pointer=True, reference=var_ad)
-                    self.parent.insert_before(id, PointerAssignment(tmpvar_ad, var_ad, info=self.info, ad_info=ad_info))
+                    tmpvar_ad = OpVar(
+                        self._save_var_name(var_ad.name, id),
+                        typename=typename,
+                        kind=kind,
+                        index=index,
+                        dims=dims,
+                        pointer=True,
+                        reference=var_ad,
+                    )
+                    self.parent.insert_before(
+                        id,
+                        PointerAssignment(
+                            tmpvar_ad, var_ad, info=self.info, ad_info=ad_info
+                        ),
+                    )
                     saved_vars.append(tmpvar_ad)
-                    nodes.append(PointerAssignment(var_ad, tmpvar_ad, info=self.info, ad_info=ad_info))
-                    nodes.append(PointerAssignment(var, tmpvar, info=self.info, ad_info=ad_info))
+                    nodes.append(
+                        PointerAssignment(
+                            var_ad, tmpvar_ad, info=self.info, ad_info=ad_info
+                        )
+                    )
+                    nodes.append(
+                        PointerAssignment(var, tmpvar, info=self.info, ad_info=ad_info)
+                    )
                 else:
-                    self.parent.insert_after(id, PointerClear(var_ad, previous_ad, info=self.info, ad_info=ad_info))
-                    nodes.append(PointerAssignment(var_ad, previous_ad, info=self.info, ad_info=ad_info))
-                    nodes.append(PointerAssignment(var, self.previous, info=self.info, ad_info=ad_info))
+                    self.parent.insert_after(
+                        id,
+                        PointerClear(
+                            var_ad, previous_ad, info=self.info, ad_info=ad_info
+                        ),
+                    )
+                    nodes.append(
+                        PointerAssignment(
+                            var_ad, previous_ad, info=self.info, ad_info=ad_info
+                        )
+                    )
+                    nodes.append(
+                        PointerAssignment(
+                            var, self.previous, info=self.info, ad_info=ad_info
+                        )
+                    )
             else:
-                nodes.append(PointerClear(var_ad, previous_ad, info=self.info, ad_info=ad_info))
+                nodes.append(
+                    PointerClear(var_ad, previous_ad, info=self.info, ad_info=ad_info)
+                )
                 nodes.append(self)
                 if assigned_advars is not None:
                     assigned_advars.remove(var_ad)
         return nodes
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         if vars is None:
             vars = VarList()
         else:
@@ -3430,7 +3755,10 @@ class PointerClear(Node):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Optional[Node]:
-        if isinstance(self.previous, OpVar) and self.previous.name_ext() in targets.names():
+        if (
+            isinstance(self.previous, OpVar)
+            and self.previous.name_ext() in targets.names()
+        ):
             return self.deep_clone()
         return None
 
@@ -3439,7 +3767,9 @@ class PointerClear(Node):
 class BranchBlock(Node):
     """An abstract class for ``if`` and ``select case`` branch stracture."""
 
-    cond_blocks: List[Tuple[Union[Operator,Tuple[Operator]], Block]] = field(default_factory=list)
+    cond_blocks: List[Tuple[Union[Operator, Tuple[Operator]], Block]] = field(
+        default_factory=list
+    )
 
     def __post_init__(self):
         super().__post_init__()
@@ -3482,15 +3812,17 @@ class BranchBlock(Node):
     ) -> List[Node]:
         cond_blocks = []
         for cond, block in self.cond_blocks:
-            nodes = block.generate_ad(saved_vars,
-                                      reverse,
-                                      assigned_advars,
-                                      routine_map,
-                                      generic_map,
-                                      mod_vars,
-                                      exitcycle_flags,
-                                      return_flags,
-                                      warnings)
+            nodes = block.generate_ad(
+                saved_vars,
+                reverse,
+                assigned_advars,
+                routine_map,
+                generic_map,
+                mod_vars,
+                exitcycle_flags,
+                return_flags,
+                warnings,
+            )
             if reverse:
                 nodes_new = block.set_for_returnexitcycle(return_flags, exitcycle_flags)
                 if nodes_new:
@@ -3527,26 +3859,29 @@ class BranchBlock(Node):
             blocks = [block]
         return blocks
 
-    def set_for_returnexitcycle(self,
-                                return_flags: Optional[List[OpVar]] = None,
-                                exitcycle_flags: Optional[List[OpVar]] = None,
-                                set_return_cond: bool = False,
-                                set_exitcycle_cond: bool = False,
-                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-                                label: Optional[str] = None,
-                                label_map: Optional[List[Tuple[str,str]]] = None,
-                                keep: bool = False,
-                                ) -> List[Node]:
+    def set_for_returnexitcycle(
+        self,
+        return_flags: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_return_cond: bool = False,
+        set_exitcycle_cond: bool = False,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        keep: bool = False,
+    ) -> List[Node]:
         cond_blocks: List[tuple] = []
         for cond, block in self.cond_blocks:
-            nodes = block.set_for_returnexitcycle(return_flags,
-                                                  exitcycle_flags,
-                                                  set_return_cond,
-                                                  set_exitcycle_cond,
-                                                  set_do_index,
-                                                  label,
-                                                  label_map,
-                                                  keep)
+            nodes = block.set_for_returnexitcycle(
+                return_flags,
+                exitcycle_flags,
+                set_return_cond,
+                set_exitcycle_cond,
+                set_do_index,
+                label,
+                label_map,
+                keep,
+            )
             body = Block(nodes)
             cond_blocks.append((cond, body))
         if isinstance(self, IfBlock):
@@ -3556,27 +3891,38 @@ class BranchBlock(Node):
         else:  # WhereBlock
             return [WhereBlock(cond_blocks)]
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         if vars is None:
             vars = VarList()
         else:
             vars = vars.copy()
         vars_new = VarList()
-        cover_all = False # if else or case default exists
+        cover_all = False  # if else or case default exists
         to_remove = set()
         origin_savevars = {name for name in vars.names() if Node.is_savevar(name)}
+
         def _check(cond: Operator) -> bool:
             if isinstance(cond, OpLogic):
                 return _check(cond.args[0]) and _check(cond.args[1])
             if isinstance(cond, OpFunc) and cond.name in ("allocated", "associated"):
                 return True
             return False
+
         for cond, block in self.cond_blocks:
             vs = block.required_vars(vars, no_accumulate, without_savevar)
             vars_new.merge(vs)
             advars = {name for name in vs.names() if Node.is_savevar(name)}
             to_remove = to_remove | (origin_savevars - advars)
-            if isinstance(self, (IfBlock, WhereBlock)) and len(block) > 0 and isinstance(block[0], Deallocate):
+            if (
+                isinstance(self, (IfBlock, WhereBlock))
+                and len(block) > 0
+                and isinstance(block[0], Deallocate)
+            ):
                 if cond is not None and _check(cond):
                     to_remove = to_remove | {v.name_ext() for v in block[0].vars}
             if cond is None:
@@ -3679,7 +4025,7 @@ class IfBlock(BranchBlock):
                     lines.append(f"{space}else\n")
                 else:
                     lines.append(f"{space}else if ({cond}) then\n")
-                lines.extend(block.render(indent+1))
+                lines.extend(block.render(indent + 1))
             first = False
         lines.append(f"{space}end if\n")
         return lines
@@ -3720,11 +4066,11 @@ class SelectBlock(BranchBlock):
         case = "type is" if self.select_type else "case"
         for cond, block in self.cond_blocks:
             if cond is not None:
-                conds = ', '.join([str(co) for co in cond])
+                conds = ", ".join([str(co) for co in cond])
                 lines.append(f"{space}{case} ({conds})\n")
             else:
                 lines.append(f"{space}{case} default\n")
-            lines.extend(block.render(indent+1))
+            lines.extend(block.render(indent + 1))
         lines.append(f"{space}end select\n")
         return lines
 
@@ -3771,7 +4117,6 @@ class DoAbst(Node):
     _body: Block
     label_id: int = field(init=False, default=0)
 
-
     def __post_init__(self):
         super().__post_init__()
         self._body.set_parent(self)
@@ -3816,7 +4161,17 @@ class DoAbst(Node):
             for vname in self.recurrent_vars():
                 assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
 
-        nodes = self._body.generate_ad(saved_vars, reverse, assigned_advars, routine_map, generic_map, mod_vars, exitcycle_flags, return_flags, warnings)
+        nodes = self._body.generate_ad(
+            saved_vars,
+            reverse,
+            assigned_advars,
+            routine_map,
+            generic_map,
+            mod_vars,
+            exitcycle_flags,
+            return_flags,
+            warnings,
+        )
         if self.do:
             range = self.range
         else:
@@ -3828,7 +4183,9 @@ class DoAbst(Node):
             if self.do:
                 range = range.reverse()
             new_body: List[Node] = []
-            fwd_body = self._body.set_for_returnexitcycle(return_flags, exitcycle_flags, set_exitcycle_cond=True, label=label)
+            fwd_body = self._body.set_for_returnexitcycle(
+                return_flags, exitcycle_flags, set_exitcycle_cond=True, label=label
+            )
 
             if exitcycle_flags:
                 exit_flag = False
@@ -3850,7 +4207,11 @@ class DoAbst(Node):
             if self.do:
                 conflict_vars = self.conflict_vars()
                 for cvar in common_vars:
-                    if cvar.name.endswith(AD_SUFFIX) or cvar == self.index or cvar.name in conflict_vars:
+                    if (
+                        cvar.name.endswith(AD_SUFFIX)
+                        or cvar == self.index
+                        or cvar.name in conflict_vars
+                    ):
                         continue
                     save = SaveAssignment(cvar, self._body.get_id())
                     self._body.insert_begin(save)
@@ -3875,17 +4236,24 @@ class DoAbst(Node):
                 if isinstance(node, PointerAssignment):
                     continue
                 for var in node.assigned_vars():
-                    if var.name in recurrent_vars and (not self.do or var.name in conflict_vars):
+                    if var.name in recurrent_vars and (
+                        not self.do or var.name in conflict_vars
+                    ):
                         if not var in pushed:
                             save = PushPop(var, node.get_id())
                             self._body.insert_begin(save)
                             new_body.append(save.to_load())
                             pushed.append(var)
 
-            if (isinstance(fwd_body[-1], IfBlock) and isinstance(nodes[0], IfBlock) and
-                len(fwd_body[-1].cond_blocks) == 1 and len(nodes[0].cond_blocks) == 1 and
-                fwd_body[-1].cond_blocks[0][0] == nodes[0].cond_blocks[0][0] and
-                not fwd_body[-1].collect_exitcycle() and not nodes[0].collect_exitcycle()):
+            if (
+                isinstance(fwd_body[-1], IfBlock)
+                and isinstance(nodes[0], IfBlock)
+                and len(fwd_body[-1].cond_blocks) == 1
+                and len(nodes[0].cond_blocks) == 1
+                and fwd_body[-1].cond_blocks[0][0] == nodes[0].cond_blocks[0][0]
+                and not fwd_body[-1].collect_exitcycle()
+                and not nodes[0].collect_exitcycle()
+            ):
                 last = fwd_body.pop()
                 rev = []
                 for node in last.cond_blocks[0][1].iter_children():
@@ -3934,6 +4302,7 @@ class DoAbst(Node):
             self.label_id += 1
         return f"label_{self.get_id()}_{self.label_id}{AD_SUFFIX}"
 
+
 @dataclass
 class DoLoop(DoAbst):
     """A ``do`` loop."""
@@ -3953,7 +4322,12 @@ class DoLoop(DoAbst):
         return DoLoop(self._body, self.index, self.range, self.label)
 
     def deep_clone(self) -> "DoLoop":
-        return DoLoop(self._body.deep_clone(), self.index.deep_clone(), self.range.deep_clone(), self.label)
+        return DoLoop(
+            self._body.deep_clone(),
+            self.index.deep_clone(),
+            self.range.deep_clone(),
+            self.label,
+        )
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.range.collect_vars():
@@ -4049,18 +4423,20 @@ class DoLoop(DoAbst):
     def recurrent_vars(self) -> List[str]:
         required_vars = self._body.required_vars()
         assigned_vars = self._body.assigned_vars()
-        common_var_names = sorted(set(required_vars.names()) & set(assigned_vars.names()))
+        common_var_names = sorted(
+            set(required_vars.names()) & set(assigned_vars.names())
+        )
         do_index_list = set(self.do_index_list)
         var_names = []
         for name in common_var_names:
             flag = False
             for index in required_vars[name]:
-                if not(index is not None and do_index_list <= set(index.list())):
+                if not (index is not None and do_index_list <= set(index.list())):
                     flag = True
                     break
             if not flag:
                 for index in assigned_vars[name]:
-                    if not(index is not None and do_index_list <= set(index.list())):
+                    if not (index is not None and do_index_list <= set(index.list())):
                         flag = True
                         break
             if flag:
@@ -4070,7 +4446,9 @@ class DoLoop(DoAbst):
     def conflict_vars(self) -> List[str]:
         required_vars = self._body.required_vars()
         assigned_vars = self._body.assigned_vars()
-        common_var_names = sorted(set(required_vars.names()) & set(assigned_vars.names()))
+        common_var_names = sorted(
+            set(required_vars.names()) & set(assigned_vars.names())
+        )
         do_index_list = set(self.do_index_list)
         var_names = []
         for name in common_var_names:
@@ -4088,16 +4466,17 @@ class DoLoop(DoAbst):
                 var_names.append(name)
         return var_names
 
-    def set_for_returnexitcycle(self,
-                                return_flags: Optional[List[OpVar]] = None,
-                                exitcycle_flags: Optional[List[OpVar]] = None,
-                                set_return_cond: bool = False,
-                                set_exitcycle_cond: bool = False,
-                                set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
-                                label: Optional[str] = None,
-                                label_map: Optional[List[Tuple[str,str]]] = None,
-                                keep: bool = False,
-                                ) -> List[Node]:
+    def set_for_returnexitcycle(
+        self,
+        return_flags: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_return_cond: bool = False,
+        set_exitcycle_cond: bool = False,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        keep: bool = False,
+    ) -> List[Node]:
         exitcycles = self._body.collect_exitcycle()
         if exitcycles and any(isinstance(ec, ExitStmt) for ec in exitcycles):
             nodes: List[Node] = []
@@ -4105,7 +4484,7 @@ class DoLoop(DoAbst):
             if set_do_index is None:
                 nodes.append(Assignment(exit_do_start, self.range[1]))
                 set_do_index = (exit_do_start, self.index)
-            if label: # this means that this node is in ad_code
+            if label:  # this means that this node is in ad_code
                 label = self.label_new(increment=True)
             else:
                 label = self.label
@@ -4117,14 +4496,18 @@ class DoLoop(DoAbst):
                     label_map = [label_pair]
             else:
                 label_map = None
-            body = Block(self._body.set_for_returnexitcycle(return_flags,
-                                                            exitcycle_flags,
-                                                            set_return_cond,
-                                                            set_exitcycle_cond,
-                                                            set_do_index,
-                                                            self.label,
-                                                            label_map,
-                                                            keep=True))
+            body = Block(
+                self._body.set_for_returnexitcycle(
+                    return_flags,
+                    exitcycle_flags,
+                    set_return_cond,
+                    set_exitcycle_cond,
+                    set_do_index,
+                    self.label,
+                    label_map,
+                    keep=True,
+                )
+            )
             nodes.append(DoLoop(body, self.index, self.range, label))
             return nodes
         return [self]
@@ -4139,12 +4522,17 @@ class DoLoop(DoAbst):
         if self.range[2] is not None:
             header = f"{header}, {self.range[2]}"
         lines = [f"{header}\n"]
-        lines.extend(self._body.render(indent+1))
+        lines.extend(self._body.render(indent + 1))
         label = f" {self.label}" if self.label else ""
         lines.append(f"{space}end do{label}\n")
         return lines
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         if vars is None:
             vars = VarList()
         else:
@@ -4155,9 +4543,14 @@ class DoLoop(DoAbst):
         if self.index in vars:
             vars.remove(self.index)
         index_map = self._build_index_map()
-        if (self.range[2] is None or
-            (isinstance(self.range[2], OpInt) and self.range[2].val==1) or
-            (isinstance(self.range[2], OpNeg) and isinstance(self.range[2].args[0], OpInt) and self.range[2].args[0].val==1)
+        if (
+            self.range[2] is None
+            or (isinstance(self.range[2], OpInt) and self.range[2].val == 1)
+            or (
+                isinstance(self.range[2], OpNeg)
+                and isinstance(self.range[2].args[0], OpInt)
+                and self.range[2].args[0].val == 1
+            )
         ):
             step = 1 if self.range[2] is None else self.range[2]
             plusOne = self.index + step
@@ -4183,12 +4576,15 @@ class DoLoop(DoAbst):
             vars.push(var)
         return vars
 
-    def assigned_vars(self,
-                      vars: Optional[VarList] = None,
-                      without_savevar: bool = False,
-                      check_init_advars: bool = False
-                      ) -> VarList:
-        vars = self._body.assigned_vars(vars, without_savevar=without_savevar, check_init_advars=check_init_advars)
+    def assigned_vars(
+        self,
+        vars: Optional[VarList] = None,
+        without_savevar: bool = False,
+        check_init_advars: bool = False,
+    ) -> VarList:
+        vars = self._body.assigned_vars(
+            vars, without_savevar=without_savevar, check_init_advars=check_init_advars
+        )
         vars.update_index_upward(self._build_index_map(), range=self.range)
         if not check_init_advars:
             vars.push(self.index)
@@ -4216,7 +4612,9 @@ class DoLoop(DoAbst):
             for var in new_body.required_vars(targets):
                 if var.name == self.index.name:
                     continue
-                if var.index is not None and set(self.do_index_list) <= set(var.index_list()):
+                if var.index is not None and set(self.do_index_list) <= set(
+                    var.index_list()
+                ):
                     continue
                 if var not in targets:
                     targets.push(var)
@@ -4232,14 +4630,17 @@ class DoLoop(DoAbst):
             assigned_vars = VarList()
         else:
             assigned_vars = assigned_vars.copy()
-        assigned_vars.update_index_downward(self._build_index_map(), do_index_var=self.index)
-        #assigned_vars.merge(self._body.assigned_vars(check_init_advars = True))
-        for var in self._body.assigned_vars(check_init_advars = True):
+        assigned_vars.update_index_downward(
+            self._build_index_map(), do_index_var=self.index
+        )
+        # assigned_vars.merge(self._body.assigned_vars(check_init_advars = True))
+        for var in self._body.assigned_vars(check_init_advars=True):
             if not set(self.do_index_list) <= set(var.index_list()):
                 assigned_vars.push(var)
         assigned_vars = self._body.check_initial(assigned_vars)
         assigned_vars.update_index_upward(self._build_index_map(), range=self.range)
         return assigned_vars
+
 
 @dataclass
 class DoWhile(DoAbst):
@@ -4274,12 +4675,17 @@ class DoWhile(DoAbst):
         space = "  " * indent
         label = f"{self.label}: " if self.label else ""
         lines = [f"{space}{label}do while ({self.cond})\n"]
-        lines.extend(self._body.render(indent+1))
+        lines.extend(self._body.render(indent + 1))
         label = f" {self.label}" if self.label else ""
         lines.append(f"{space}end do{label}\n")
         return lines
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         if vars is None:
             vars = VarList()
         else:
@@ -4319,7 +4725,7 @@ class DoWhile(DoAbst):
             assigned_vars = VarList()
         else:
             assigned_vars = assigned_vars.copy()
-        assigned_vars.merge(self._body.assigned_vars(check_init_advars = True))
+        assigned_vars.merge(self._body.assigned_vars(check_init_advars=True))
         assigned_vars = self._body.check_initial(assigned_vars)
         return assigned_vars
 
@@ -4550,7 +4956,9 @@ class OmpDirective(Node):
 
     def __post_init__(self):
         super().__post_init__()
-        self.clauses = [self._parse_clause(c) if isinstance(c, str) else c for c in self.clauses]
+        self.clauses = [
+            self._parse_clause(c) if isinstance(c, str) else c for c in self.clauses
+        ]
         if self.body is not None:
             self.body.set_parent(self)
 
@@ -4566,11 +4974,18 @@ class OmpDirective(Node):
             m2 = re.match(r"([^:]+):(.*)", body)
             if m2:
                 op = m2.group(1).strip()
-                vars = [v.strip() for v in m2.group(2).split(',') if v.strip()]
+                vars = [v.strip() for v in m2.group(2).split(",") if v.strip()]
                 return {key: [op, vars]}
             return clause.strip()
-        if low_key in {"private", "firstprivate", "lastprivate", "shared", "copyin", "copyprivate"}:
-            vars = [v.strip() for v in body.split(',') if v.strip()]
+        if low_key in {
+            "private",
+            "firstprivate",
+            "lastprivate",
+            "shared",
+            "copyin",
+            "copyprivate",
+        }:
+            vars = [v.strip() for v in body.split(",") if v.strip()]
             return {key: vars}
         return clause.strip()
 
@@ -4718,8 +5133,14 @@ class OmpDirective(Node):
                 if vars:
                     new_clauses.append({key: [op, vars]})
                 continue
-            elif low_key in {"private", "firstprivate", "lastprivate",
-                              "shared", "copyin", "copyprivate"}:
+            elif low_key in {
+                "private",
+                "firstprivate",
+                "lastprivate",
+                "shared",
+                "copyin",
+                "copyprivate",
+            }:
                 vars = [v for v in values if v in used]
                 if vars:
                     new_clauses.append({key: vars})
@@ -4811,7 +5232,12 @@ class ForallBlock(Node):
         body = Block(nodes)
         return [ForallBlock(body, self.index_specs, self.mask)]
 
-    def required_vars(self, vars: Optional[VarList] = None, no_accumulate: bool = False, without_savevar: bool = False) -> VarList:
+    def required_vars(
+        self,
+        vars: Optional[VarList] = None,
+        no_accumulate: bool = False,
+        without_savevar: bool = False,
+    ) -> VarList:
         vars = self._body.required_vars(vars, no_accumulate, without_savevar)
         for idx, _ in self.index_specs:
             if idx in vars:
@@ -4824,12 +5250,15 @@ class ForallBlock(Node):
                 vars.push(var)
         return vars
 
-    def assigned_vars(self,
-                      vars: Optional[VarList] = None,
-                      without_savevar: bool = False,
-                      check_init_advars: bool = False,
-                      ) -> VarList:
-        vars = self._body.assigned_vars(vars, without_savevar=without_savevar, check_init_advars=check_init_advars)
+    def assigned_vars(
+        self,
+        vars: Optional[VarList] = None,
+        without_savevar: bool = False,
+        check_init_advars: bool = False,
+    ) -> VarList:
+        vars = self._body.assigned_vars(
+            vars, without_savevar=without_savevar, check_init_advars=check_init_advars
+        )
         for idx, rng in self.index_specs:
             for var in rng.collect_vars(without_refvar=True, without_index=True):
                 vars.push(var)
@@ -4854,6 +5283,7 @@ class ForallBlock(Node):
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         return self._body.check_initial(assigned_vars)
+
 
 def render_program(node: Node, indent: int = 0) -> str:
     """Return formatted Fortran code for the entire ``node`` tree."""

@@ -1,16 +1,11 @@
 import sys
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from fautodiff.operators import AryIndex, OpInt, OpRange, OpVar
 from fautodiff.var_list import VarList
-from fautodiff.operators import (
-    AryIndex,
-    OpInt,
-    OpVar,
-    OpRange
-)
 
 
 class TestVarList(unittest.TestCase):
@@ -32,7 +27,7 @@ class TestVarList(unittest.TestCase):
         i = OpVar("i")
         v1 = OpVar("v", index=[i, one])
         v2 = OpVar("v", index=[i, two])
-        v3 = OpVar("v", index=[i, OpRange([one,two])])
+        v3 = OpVar("v", index=[i, OpRange([one, two])])
         vl = VarList()
         vl.push(v1)
         vl.push(v2)
@@ -45,8 +40,8 @@ class TestVarList(unittest.TestCase):
     def test_exclude(self):
         i = OpVar("i")
         j = OpVar("j")
-        v = OpVar("v", index=[None,j])
-        vi = OpVar("v", index=[i,j])
+        v = OpVar("v", index=[None, j])
+        vi = OpVar("v", index=[i, j])
         vl = VarList([v])
         vl.push(vi)
         self.assertEqual(str(vl), "v(:,j)")
@@ -64,9 +59,9 @@ class TestVarList(unittest.TestCase):
         i = OpVar("i")
         j = OpVar("j")
         n = OpVar("n")
-        v1 = OpVar("v", index=[OpRange([1, 2]),OpRange([1, n])])
-        v2 = OpVar("v", index=[OpRange([1, 2]),j])
-        vi = OpVar("v", index=[i,j])
+        v1 = OpVar("v", index=[OpRange([1, 2]), OpRange([1, n])])
+        v2 = OpVar("v", index=[OpRange([1, 2]), j])
+        vi = OpVar("v", index=[i, j])
         vl = VarList([v1, v2])
         self.assertEqual(str(vl), "v(1:2,1:n), v(1:2,j)")
         vl.push(vi)
@@ -90,7 +85,7 @@ class TestVarList(unittest.TestCase):
         self.assertIn("vref%ary", vl.names())
         self.assertIn(var, vl)
         self.assertEqual(str(vl), "vref(n)%ary(m)")
-        self.assertEqual(AryIndex([n,m]), vl.vars["vref%ary"][0])
+        self.assertEqual(AryIndex([n, m]), vl.vars["vref%ary"][0])
         self.assertEqual([var], list(v for v in vl))
 
     def test_merge(self):
@@ -117,6 +112,5 @@ class TestVarList(unittest.TestCase):
         self.assertEqual(inter.names(), ["v"])
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

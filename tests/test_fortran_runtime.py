@@ -1,28 +1,31 @@
 import os
-import sys
 import shutil
 import subprocess
+import sys
 import tempfile
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+
 class TestFortranRuntime(unittest.TestCase):
-    compiler = shutil.which('gfortran')
+    compiler = shutil.which("gfortran")
 
     def _build(self, tmp: Path, target: str) -> Path:
         """Compile runtime driver using the Makefile."""
-        makefile = Path(__file__).resolve().parent / 'fortran_runtime' / 'Makefile'
+        makefile = Path(__file__).resolve().parent / "fortran_runtime" / "Makefile"
         env = os.environ.copy()
-        env['VPATH'] = str(tmp)
+        env["VPATH"] = str(tmp)
         target_out = f"{target}.out"
         subprocess.check_call(
             [
-                'make',
-                '-C', str(makefile.parent),
-                '-f', str(makefile),
-                f'OUTDIR={tmp}',
+                "make",
+                "-C",
+                str(makefile.parent),
+                "-f",
+                str(makefile),
+                f"OUTDIR={tmp}",
                 target_out,
             ],
             env=env,
@@ -32,19 +35,25 @@ class TestFortranRuntime(unittest.TestCase):
 
     def test_stack_push_pop(self):
         base = Path(__file__).resolve().parents[1]
-        src = base / 'fortran_modules' / 'fautodiff_stack.f90'
-        driver = Path(__file__).resolve().parent / 'fortran_runtime' / 'run_fautodiff_stack.f90'
+        src = base / "fortran_modules" / "fautodiff_stack.f90"
+        driver = (
+            Path(__file__).resolve().parent
+            / "fortran_runtime"
+            / "run_fautodiff_stack.f90"
+        )
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
-            exe = self._build(tmp, 'run_fautodiff_stack')
+            exe = self._build(tmp, "run_fautodiff_stack")
             try:
-                run = subprocess.run([str(exe)], stdout=subprocess.PIPE, text=True, check=True)
+                run = subprocess.run(
+                    [str(exe)], stdout=subprocess.PIPE, text=True, check=True
+                )
             except subprocess.CalledProcessError as e:
                 if e.stdout:
                     print(e.stdout)
                 raise
-            self.assertEqual(run.stdout.strip(), 'OK')
+            self.assertEqual(run.stdout.strip(), "OK")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

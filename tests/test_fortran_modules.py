@@ -1,7 +1,7 @@
 import subprocess
 import sys
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FMOD_DIR = ROOT / "fortran_modules"
@@ -10,7 +10,7 @@ FMOD_DIR = ROOT / "fortran_modules"
 class TestFortranModuleGenerators(unittest.TestCase):
     def test_generated_files_are_up_to_date(self):
         for gen in sorted(FMOD_DIR.glob("gen_*.py")):
-            base = gen.name[len("gen_"):-3]
+            base = gen.name[len("gen_") : -3]
             if base.endswith("_fadmod"):
                 out = FMOD_DIR / f"{base[:-7]}.fadmod"
             else:

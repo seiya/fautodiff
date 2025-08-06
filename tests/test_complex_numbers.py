@@ -1,6 +1,6 @@
 import sys
-import textwrap
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 
@@ -50,4 +50,3 @@ class TestComplexNumbers(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
-

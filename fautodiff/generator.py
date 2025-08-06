@@ -9,54 +9,54 @@ REV_SUFFIX = "_rev_ad"
 import json
 import sys
 from pathlib import Path
-from typing import Optional, Union, List, Tuple, Dict, Set
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 # Ensure other modules use the same AD suffix
 from . import code_tree as code_tree
 from . import operators as operators
 from .code_tree import (
-    Node,
-    Module,
-    Program,
-    Routine,
-    Subroutine,
-    Function,
-    Use,
-    Declaration,
-    TypeDef,
-    Block,
-    CallStatement,
+    Allocate,
     Assignment,
-    SaveAssignment,
-    PushPop,
+    Block,
+    BlockConstruct,
+    CallStatement,
     ClearAssignment,
-    PointerAssignment,
-    PointerClear,
+    Deallocate,
+    Declaration,
     DoAbst,
     DoLoop,
     DoWhile,
-    IfBlock,
-    SelectBlock,
-    WhereBlock,
     ForallBlock,
-    BlockConstruct,
+    Function,
+    IfBlock,
+    Module,
+    Node,
     OmpDirective,
+    PointerAssignment,
+    PointerClear,
+    Program,
+    PushPop,
     ReturnStmt,
-    Allocate,
-    Deallocate,
+    Routine,
+    SaveAssignment,
+    SelectBlock,
     Statement,
+    Subroutine,
+    TypeDef,
+    Use,
+    WhereBlock,
     render_program,
 )
 from .operators import (
     AryIndex,
-    OpInt,
-    OpReal,
     OpComplex,
-    OpVar,
-    OpRange,
     OpFunc,
+    OpInt,
     OpNot,
+    OpRange,
+    OpReal,
     OpTrue,
+    OpVar,
 )
 
 code_tree.AD_SUFFIX = AD_SUFFIX
@@ -87,7 +87,9 @@ def _contains_pushpop(node) -> bool:
     return False
 
 
-def _strip_sequential_omp(node: Node, warnings: Optional[List[str]], *, reverse: bool) -> Node:
+def _strip_sequential_omp(
+    node: Node, warnings: Optional[List[str]], *, reverse: bool
+) -> Node:
     """Remove OpenMP directives for loops with modified indices in reverse mode."""
 
     if isinstance(node, Block):
@@ -130,17 +132,21 @@ def _strip_sequential_omp(node: Node, warnings: Optional[List[str]], *, reverse:
     return node
 
 
-def _add_fwd_rev_calls(node, routine_map: dict, generic_map:dict, donot_prune: bool = False) -> None:
+def _add_fwd_rev_calls(
+    node, routine_map: dict, generic_map: dict, donot_prune: bool = False
+) -> None:
     """Add *_fwd_rev_ad wrapper routine before the call when available."""
     if isinstance(node, CallStatement):
         arg_info = Node.get_arg_info(node, routine_map, generic_map)
         if arg_info is not None and arg_info.get("name_fwd_rev_ad"):
-            #print(node.name)
+            # print(node.name)
             args = node.args
             if node.result is not None:
                 args = args.copy()
                 args.append(node.result)
-            args = CallStatement.rename_args(args, arg_info["args"], arg_info["args_fwd_rev_ad"])
+            args = CallStatement.rename_args(
+                args, arg_info["args"], arg_info["args_fwd_rev_ad"]
+            )
             if node.associated_vars is None:
                 associated_vars = None
             else:
@@ -152,20 +158,22 @@ def _add_fwd_rev_calls(node, routine_map: dict, generic_map:dict, donot_prune: b
                 args=args,
                 intents=arg_info["intents_fwd_rev_ad"],
                 associated_vars=associated_vars,
-                donot_prune=True)
+                donot_prune=True,
+            )
             node.parent.insert_before(node.get_id(), call)
-            #print(node.parent.get_id())
+            # print(node.parent.get_id())
             return
     for child in list(getattr(node, "iter_children", lambda: [])()):
         _add_fwd_rev_calls(child, routine_map, generic_map, donot_prune)
 
 
-def _module_var_fwd_rev(routine_org: Routine,
-                        subroutine: Subroutine,
-                        mod_vars: List[OpVar],
-                        assigned: VarList,
-                        required: VarList,
-                        ) -> Optional[Subroutine]:
+def _module_var_fwd_rev(
+    routine_org: Routine,
+    subroutine: Subroutine,
+    mod_vars: List[OpVar],
+    assigned: VarList,
+    required: VarList,
+) -> Optional[Subroutine]:
     """Return a forward wrapper for module variables and pointers.
 
     The wrapper stores required module variable values to the stack before
@@ -204,8 +212,8 @@ def _module_var_fwd_rev(routine_org: Routine,
                     idx.append(OpVar(f"n{len(index)+n}_ad", typename="integer"))
                     if dim == ":":
                         vv = var_ref.change_index(None)
-                        i0 = OpFunc("lbound", args=[vv, OpInt(n+1)])
-                        i1 = OpFunc("ubound", args=[vv, OpInt(n+1)])
+                        i0 = OpFunc("lbound", args=[vv, OpInt(n + 1)])
+                        i1 = OpFunc("ubound", args=[vv, OpInt(n + 1)])
                     else:
                         i0 = OpInt(1)
                         i1 = OpVar(dim)
@@ -246,11 +254,12 @@ def _module_var_fwd_rev(routine_org: Routine,
         subroutine.decls.append(decl)
 
     # pointer variables
-    def _search_pointer(node: Node,
-                        sub_fwd_rev: Optional[Subroutine],
-                        map: Optional[Dict[str, Tuple[OpVar, OpVar, bool]]] = None,
-                        allocated: Optional[Dict[str, bool]] = None,
-                        ) -> Optional[Subroutine]:
+    def _search_pointer(
+        node: Node,
+        sub_fwd_rev: Optional[Subroutine],
+        map: Optional[Dict[str, Tuple[OpVar, OpVar, bool]]] = None,
+        allocated: Optional[Dict[str, bool]] = None,
+    ) -> Optional[Subroutine]:
         """Locate pointer assignments and record their associations.
 
         Traverses ``node`` collecting pointer targets so that forward mode can
@@ -269,8 +278,12 @@ def _module_var_fwd_rev(routine_org: Routine,
             lhs = node.lhs
             rhs = node.rhs
             lhs_name = lhs.name_ext()
-            if (lhs.pointer and lhs.is_module_var(mod_var_names) and
-                isinstance(rhs, OpVar) and rhs.is_module_var(mod_var_names)):
+            if (
+                lhs.pointer
+                and lhs.is_module_var(mod_var_names)
+                and isinstance(rhs, OpVar)
+                and rhs.is_module_var(mod_var_names)
+            ):
                 rhs_name = rhs.name_ext()
                 if rhs.allocatable and rhs_name not in allocated:
                     allocated[rhs_name] = True
@@ -288,24 +301,29 @@ def _module_var_fwd_rev(routine_org: Routine,
                 if allocate:
                     v = rhs_ad.change_index(None)
                     cond = OpNot([OpFunc("allocated", [v])])
-                    block = Block([
-                        Allocate([v], mold=rhs),
-                        ClearAssignment(v),
-                        ])
+                    block = Block(
+                        [
+                            Allocate([v], mold=rhs),
+                            ClearAssignment(v),
+                        ]
+                    )
                     sub_fwd_rev.ad_content.append(IfBlock([(cond, block)]))
                 pa = PointerAssignment(lhs.add_suffix(AD_SUFFIX), rhs_ad)
                 sub_fwd_rev.ad_content.append(pa)
         return sub_fwd_rev
+
     mod_var_names = [v.name for v in mod_vars]
     sub_fwd_rev = _search_pointer(routine_org.content, sub_fwd_rev)
 
     return sub_fwd_rev
 
-def _parse_allocate(node: Node,
-                    mod_vars: List[OpVar],
-                    map: Optional[Dict[str, List[AryIndex]]] = None,
-                    local: Optional[Set[str]] = None
-                    ) -> None:
+
+def _parse_allocate(
+    node: Node,
+    mod_vars: List[OpVar],
+    map: Optional[Dict[str, List[AryIndex]]] = None,
+    local: Optional[Set[str]] = None,
+) -> None:
     """Record indices of allocated arrays for later deallocation.
 
     The function walks ``node`` collecting indices used in ``Allocate`` and
@@ -351,12 +369,14 @@ def _parse_allocate(node: Node,
                     var = OpVar(name, index=map[name][0])
                     node.append(Deallocate([var]))
 
-def _parse_pointer(node: Node,
-                   mod_vars: List[OpVar],
-                   map_ptr: Optional[Dict[str, OpVar]] = None,
-                   map_ref: Optional[Dict[str, Optional[Union[OpVar, OpNull]]]] = None,
-                   inloop: bool = False,
-                   ) -> Tuple[Dict[str, OpVar], Dict[str, Optional[Union[OpVar, OpNull]]]]:
+
+def _parse_pointer(
+    node: Node,
+    mod_vars: List[OpVar],
+    map_ptr: Optional[Dict[str, OpVar]] = None,
+    map_ref: Optional[Dict[str, Optional[Union[OpVar, OpNull]]]] = None,
+    inloop: bool = False,
+) -> Tuple[Dict[str, OpVar], Dict[str, Optional[Union[OpVar, OpNull]]]]:
     """Insert ``PointerClear`` nodes and track pointer associations.
 
     ``map_ptr`` keeps the latest pointer variables while ``map_ref`` remembers
@@ -373,13 +393,15 @@ def _parse_pointer(node: Node,
         top = False
     if isinstance(node, SelectBlock):
         for child in node.iter_children():
-            map_ptr, map_ref_new = _parse_pointer(child, mod_vars, map_ptr, map_ref.copy(), inloop)
+            map_ptr, map_ref_new = _parse_pointer(
+                child, mod_vars, map_ptr, map_ref.copy(), inloop
+            )
             for key, value in map_ref.items():
-                if value != map_ref_new[key]: # pointer is updated in the branch
+                if value != map_ref_new[key]:  # pointer is updated in the branch
                     map_ref[key] = None
     elif isinstance(node, DoAbst):
         map_ptr, map_ref_new = _parse_pointer(node._body, mod_vars, map_ptr, {}, True)
-        for key in map_ref_new: # pointer is updated in the loop
+        for key in map_ref_new:  # pointer is updated in the loop
             map_ref[key] = None
     elif isinstance(node, ForallBlock):
         map_ptr, map_ref_new = _parse_pointer(node._body, mod_vars, map_ptr, {}, True)
@@ -393,23 +415,30 @@ def _parse_pointer(node: Node,
         rhs = node.rhs
         map_ptr[lhs_name] = node.lhs
         if lhs_name in map_ref:
-            node.parent.insert_before(node.get_id(), PointerClear(node.lhs, previous=map_ref[lhs_name], info=node.info))
+            node.parent.insert_before(
+                node.get_id(),
+                PointerClear(node.lhs, previous=map_ref[lhs_name], info=node.info),
+            )
         else:
-            node.parent.insert_before(node.get_id(), PointerClear(node.lhs, previous=None, info=node.info))
+            node.parent.insert_before(
+                node.get_id(), PointerClear(node.lhs, previous=None, info=node.info)
+            )
         if isinstance(rhs, OpVar):
             rhs_name = rhs.name_ext()
             if rhs_name in map_ref:
                 map_ref[lhs_name] = map_ref[rhs_name]
             else:
                 map_ref[lhs_name] = rhs
-        elif isinstance(rhs, OpFunc) and rhs.name=="null":
+        elif isinstance(rhs, OpFunc) and rhs.name == "null":
             map_ref[lhs_name] = OpNull()
     if isinstance(node, Deallocate):
         for var in node.vars:
             name = var.name_ext()
             for ptr_name, tgt in map_ref.items():
                 if isinstance(tgt, OpVar) and name == tgt.name_ext():
-                    node.parent.insert_before(node.get_id(), PointerClear(map_ptr[ptr_name], previous=tgt))
+                    node.parent.insert_before(
+                        node.get_id(), PointerClear(map_ptr[ptr_name], previous=tgt)
+                    )
                     map_ref[ptr_name] = None
     if top:
         mod_var_names = [v.name for v in mod_vars]
@@ -420,7 +449,10 @@ def _parse_pointer(node: Node,
 
     return (map_ptr, map_ref)
 
-def _parse_mpi_calls(node: Node, calls: Optional[Dict[str, List[CallStatement]]] = None) -> None:
+
+def _parse_mpi_calls(
+    node: Node, calls: Optional[Dict[str, List[CallStatement]]] = None
+) -> None:
     """Collect MPI calls that should not be pruned.
 
     MPI routines may have side effects even if their results are unused.  The
@@ -534,6 +566,7 @@ def _collect_calls(node: Node, calls: Optional[set] = None) -> set:
         _collect_calls(child, calls)
     return calls
 
+
 def _dependency_graph(routines: List[Routine]) -> Dict[str, set]:
     """Return dependency graph mapping routine names to called routine names."""
 
@@ -545,7 +578,9 @@ def _dependency_graph(routines: List[Routine]) -> Dict[str, set]:
     return deps
 
 
-def _dependency_groups(routines: List[Routine]) -> tuple[List[List[str]], Dict[str, set]]:
+def _dependency_groups(
+    routines: List[Routine],
+) -> tuple[List[List[str]], Dict[str, set]]:
     """Return SCCs of routines and their dependency graph.
 
     Returns
@@ -591,7 +626,9 @@ def _dependency_groups(routines: List[Routine]) -> tuple[List[List[str]], Dict[s
     return comps, deps
 
 
-def _load_fadmods(mod_names: list[str], search_dirs: list[str]) -> tuple[dict, dict, dict]:
+def _load_fadmods(
+    mod_names: list[str], search_dirs: list[str]
+) -> tuple[dict, dict, dict]:
     """Load routine, variable and generic maps from ``mod_names`` using ``search_dirs``."""
 
     routines = {}
@@ -706,7 +743,7 @@ def _has_modified_module_grad_var(routine_org: Routine, mod_vars: List[OpVar]) -
         if var.ad_target:
             if var.name.endswith(AD_SUFFIX):
                 grad_names.add(var.name)
-                target_names.add(var.name[:-len(AD_SUFFIX)])
+                target_names.add(var.name[: -len(AD_SUFFIX)])
             else:
                 grad_names.add(f"{var.name}{AD_SUFFIX}")
                 target_names.add(var.name)
@@ -837,7 +874,9 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
     subroutine.ad_init = Block([])
     subroutine.ad_content = Block([])
 
-    skip = bool(routine_org.directives.get("SKIP")) or (len(out_grad_args) == 0 and not has_mod_grad_var)
+    skip = bool(routine_org.directives.get("SKIP")) or (
+        len(out_grad_args) == 0 and not has_mod_grad_var
+    )
     if skip:
         arg_info["name_fwd_ad"] = None
 
@@ -964,7 +1003,9 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
     subroutine.ad_init.set_parent(subroutine)
     subroutine.ad_content.set_parent(subroutine)
 
-    skip = bool(routine_org.directives.get("SKIP")) or (len(out_grad_args) == 0 and not has_mod_grad_var)
+    skip = bool(routine_org.directives.get("SKIP")) or (
+        len(out_grad_args) == 0 and not has_mod_grad_var
+    )
     if skip:
         arg_info["name_rev_ad"] = None
 
@@ -1021,7 +1062,7 @@ def _generate_ad_subroutine(
     if routine_info.get("skip"):
         return None, False, set()
 
-    if len(routine_org.content)>0 and isinstance(routine_org.content[-1], ReturnStmt):
+    if len(routine_org.content) > 0 and isinstance(routine_org.content[-1], ReturnStmt):
         routine_org.content.remove_child(routine_org.content[-1])
 
     subroutine = routine_info["subroutine"].deep_clone()
@@ -1030,7 +1071,11 @@ def _generate_ad_subroutine(
     out_grad_args = [v.deep_clone() for v in routine_info["out_grad_args"]]
     has_grad_input = routine_info["has_grad_input"]
     # list of original intent(out) arguments
-    out_args = [var for var in routine_org.arg_vars() if (var.intent is None or var.intent in ("out", "inout"))]
+    out_args = [
+        var
+        for var in routine_org.arg_vars()
+        if (var.intent is None or var.intent in ("out", "inout"))
+    ]
     ad_block = subroutine.ad_content
 
     sub_fwd_rev: Optional[Subroutine] = None
@@ -1054,11 +1099,20 @@ def _generate_ad_subroutine(
             if var.ad_target:
                 save_ad_vars.append(var.add_suffix(AD_SUFFIX))
                 has_save_grad_input = True
-    if reverse and not has_grad_input and not has_mod_grad_input and not has_save_grad_input:
+    if (
+        reverse
+        and not has_grad_input
+        and not has_mod_grad_input
+        and not has_save_grad_input
+    ):
         for arg in out_grad_args:
             lhs = OpVar(arg.name, kind=arg.kind)
             if arg.is_complex_type:
-                zero = OpComplex(OpReal("0.0", kind=arg.kind), OpReal("0.0", kind=arg.kind), kind=arg.kind)
+                zero = OpComplex(
+                    OpReal("0.0", kind=arg.kind),
+                    OpReal("0.0", kind=arg.kind),
+                    kind=arg.kind,
+                )
             else:
                 zero = OpReal("0.0", kind=arg.kind)
             ad_block.append(Assignment(lhs, zero))
@@ -1091,9 +1145,9 @@ def _generate_ad_subroutine(
         if not node.is_effectively_empty():
             ad_code.append(node)
 
-    #print(subroutine.name)
-    #print(render_program(ad_code)) # for debugging
-    #print(render_program(routine_org))
+    # print(subroutine.name)
+    # print(render_program(ad_code)) # for debugging
+    # print(render_program(routine_org))
 
     if not ad_code.is_effectively_empty():
         # Declare any temporary gradient variables introduced by AD code
@@ -1133,15 +1187,19 @@ def _generate_ad_subroutine(
         if reverse:
             targets = VarList(grad_args + mod_ad_vars + save_ad_vars)
         else:
-            targets = VarList(grad_args + out_args + mod_ad_vars + mod_vars + save_ad_vars + save_vars)
+            targets = VarList(
+                grad_args + out_args + mod_ad_vars + mod_vars + save_ad_vars + save_vars
+            )
 
         # Remove statements unrelated to derivative targets
         ad_code = ad_code.prune_for(targets, mod_vars + save_vars, base_targets=targets)
-        #print(render_program(ad_code))
+        # print(render_program(ad_code))
 
         if reverse:
             ad_code.check_initial(VarList(grad_args + mod_ad_vars + save_ad_vars))
-            ad_code = ad_code.prune_for(targets, mod_vars + save_vars, base_targets=targets)
+            ad_code = ad_code.prune_for(
+                targets, mod_vars + save_vars, base_targets=targets
+            )
 
     for node in ad_code:
         if not node.is_effectively_empty():
@@ -1151,7 +1209,11 @@ def _generate_ad_subroutine(
         _strip_sequential_omp(ad_block, warnings, reverse=True)
         targets = ad_block.required_vars()
 
-        fw_block = Block(routine_org.content.set_for_returnexitcycle(return_flags, None, set_return_cond=True, set_exitcycle_cond=False))
+        fw_block = Block(
+            routine_org.content.set_for_returnexitcycle(
+                return_flags, None, set_return_cond=True, set_exitcycle_cond=False
+            )
+        )
         if return_flags:
             for flag in return_flags:
                 fw_block.insert_begin(Assignment(flag, OpTrue()))
@@ -1159,7 +1221,9 @@ def _generate_ad_subroutine(
 
         _add_fwd_rev_calls(fw_block, routine_map, generic_map)
 
-        fw_block = fw_block.prune_for(targets, mod_vars + save_vars, base_targets=targets)
+        fw_block = fw_block.prune_for(
+            targets, mod_vars + save_vars, base_targets=targets
+        )
         if reverse:
             _strip_sequential_omp(fw_block, warnings, reverse=True)
 
@@ -1167,7 +1231,9 @@ def _generate_ad_subroutine(
         assigned = ad_block.assigned_vars(assigned, without_savevar=True)
         required = ad_block.required_vars(without_savevar=True)
         required = fw_block.required_vars(required, without_savevar=True)
-        sub_fwd_rev = _module_var_fwd_rev(routine_org, subroutine, mod_vars, assigned, required)
+        sub_fwd_rev = _module_var_fwd_rev(
+            routine_org, subroutine, mod_vars, assigned, required
+        )
         if sub_fwd_rev:
             name_org = routine_org.name
             name_fwd_rev = f"{name_org}_fwd_rev_ad"
@@ -1190,13 +1256,22 @@ def _generate_ad_subroutine(
         while flag:
             last = fw_block.last()
             first = ad_block.first()
-            if (isinstance(last, SaveAssignment) and isinstance(first, SaveAssignment) and
-                last.var.name == first.var.name and last.id == first.id and last.load != first.load):
+            if (
+                isinstance(last, SaveAssignment)
+                and isinstance(first, SaveAssignment)
+                and last.var.name == first.var.name
+                and last.id == first.id
+                and last.load != first.load
+            ):
                 fw_block.remove_child(last)
                 ad_block.remove_child(first)
                 continue
-            if (isinstance(last, PointerAssignment) and isinstance(first, PointerAssignment) and
-                last.lhs.name_ext() == first.rhs.name_ext() and last.rhs.name_ext() == first.lhs.name_ext()):
+            if (
+                isinstance(last, PointerAssignment)
+                and isinstance(first, PointerAssignment)
+                and last.lhs.name_ext() == first.rhs.name_ext()
+                and last.rhs.name_ext() == first.lhs.name_ext()
+            ):
                 fw_block.remove_child(last)
                 ad_block.remove_child(first)
                 continue
@@ -1204,13 +1279,22 @@ def _generate_ad_subroutine(
                 item1 = first._body[0]
                 item2 = last._body[-1]
                 flag = False
-                while (isinstance(item1, SaveAssignment) and not item1.pushpop and
-                       isinstance(item2, SaveAssignment) and not item2.pushpop and
-                       item1.var.name == item2.var.name and item1.id == item2.id and item1.load != item2.load):
+                while (
+                    isinstance(item1, SaveAssignment)
+                    and not item1.pushpop
+                    and isinstance(item2, SaveAssignment)
+                    and not item2.pushpop
+                    and item1.var.name == item2.var.name
+                    and item1.id == item2.id
+                    and item1.load != item2.load
+                ):
                     first._body.remove_child(item1)
                     last._body.remove_child(item2)
                     flag = True
-                    if first._body.is_effectively_empty() or last._body.is_effectively_empty():
+                    if (
+                        first._body.is_effectively_empty()
+                        or last._body.is_effectively_empty()
+                    ):
                         break
                     item1 = first._body[0]
                     item2 = last._body[-1]
@@ -1226,8 +1310,7 @@ def _generate_ad_subroutine(
     if (ad_block is not None) and (not ad_block.is_effectively_empty()):
         # initialize ad_var if necessary
         vars = ad_block.required_vars(
-            VarList(out_grad_args + save_ad_vars),
-            without_savevar=True
+            VarList(out_grad_args + save_ad_vars), without_savevar=True
         )
         if reverse and not fw_block.is_effectively_empty():
             vars = fw_block.required_vars(vars)
@@ -1249,12 +1332,14 @@ def _generate_ad_subroutine(
                 else:
                     index = None
                 if var.is_complex_type:
-                    zero = OpComplex(OpReal("0.0", kind=var.kind), OpReal("0.0", kind=var.kind), kind=var.kind)
+                    zero = OpComplex(
+                        OpReal("0.0", kind=var.kind),
+                        OpReal("0.0", kind=var.kind),
+                        kind=var.kind,
+                    )
                 else:
                     zero = OpReal(0.0, kind=var.kind)
-                subroutine.ad_init.append(
-                    Assignment(OpVar(name, index=index), zero)
-                )
+                subroutine.ad_init.append(Assignment(OpVar(name, index=index), zero))
 
     var_names = []
     for var in subroutine.collect_vars():
@@ -1290,19 +1375,11 @@ def _generate_ad_subroutine(
                     )
                 elif name.startswith(("cycle_flag", "exit_flag", "return_flag")):
                     subroutine.decls.append(
-                        Declaration(
-                            name,
-                            typename="logical",
-                            declared_in="routine"
-                        )
+                        Declaration(name, typename="logical", declared_in="routine")
                     )
                 elif name.startswith(("exit_do_start")):
                     subroutine.decls.append(
-                        Declaration(
-                            name,
-                            typename="integer",
-                            declared_in="routine"
-                        )
+                        Declaration(name, typename="integer", declared_in="routine")
                     )
                 continue
             if decl is not None:
@@ -1323,9 +1400,10 @@ def _generate_ad_subroutine(
             save_assigns[name].append(node)
         for child in node.iter_children():
             _find_save_assign(child, save_assigns)
+
     save_assigns = dict()
     _find_save_assign(subroutine, save_assigns)
-    #print(render_program(subroutine))
+    # print(render_program(subroutine))
 
     def _find_loop(parent: Node, index_list: List[str]):
         """Return nearest ``DoLoop`` whose index appears in ``index_list``."""
@@ -1390,14 +1468,16 @@ def _generate_ad_subroutine(
         allocatable = False
         if base_decl is not None:
             allocatable = base_decl.allocatable
-            if allocatable and base_decl.declared_in != "routine": # module or use variable
+            if (
+                allocatable and base_decl.declared_in != "routine"
+            ):  # module or use variable
                 allocatable = False
                 vname = str(var.change_index(None))
                 if var.index:
                     dims = []
                     for n, idx in enumerate(var.index):
                         if isinstance(idx, OpRange):
-                            if idx[0]==OpInt(1) and idx[1] is not None:
+                            if idx[0] == OpInt(1) and idx[1] is not None:
                                 dims.append(str(idx[1]))
                                 continue
                             elif idx[0] is not None and idx[1] is not None:
@@ -1459,11 +1539,15 @@ def _generate_ad_subroutine(
     if reverse:
         targets = VarList(grad_args + mod_ad_vars + save_ad_vars)
     else:
-        targets = VarList(grad_args + mod_vars + mod_ad_vars + out_args + save_vars + save_ad_vars)
+        targets = VarList(
+            grad_args + mod_vars + mod_ad_vars + out_args + save_vars + save_ad_vars
+        )
 
-    #print(render_program(subroutine))
+    # print(render_program(subroutine))
     mod_vars_all = mod_vars + save_vars
-    subroutine = subroutine.prune_for(targets, mod_vars_all, decl_map=subroutine.decl_map, base_targets=targets)
+    subroutine = subroutine.prune_for(
+        targets, mod_vars_all, decl_map=subroutine.decl_map, base_targets=targets
+    )
 
     # update routine_map with pruned argument information
     arg_info = routine_map.get(routine_org.name)
@@ -1483,7 +1567,11 @@ def _generate_ad_subroutine(
     mod_all_var_names = [v.name_ext() for v in mod_vars]
     for v in mod_ad_vars:
         mod_all_var_names.append(v.name_ext())
-    required_vnames = [str(var) for var in subroutine.required_vars() if var.name not in mod_all_var_names]
+    required_vnames = [
+        str(var)
+        for var in subroutine.required_vars()
+        if var.name not in mod_all_var_names
+    ]
     if len(required_vnames) > 0:
         _warn(
             warnings,
@@ -1495,7 +1583,9 @@ def _generate_ad_subroutine(
     uses_pushpop = _contains_pushpop(subroutine) if reverse else False
 
     if sub_fwd_rev is not None:
-        routine_info["fwd_rev_subroutine"] = sub_fwd_rev # save to output this subroutine later
+        routine_info[
+            "fwd_rev_subroutine"
+        ] = sub_fwd_rev  # save to output this subroutine later
 
     called_mods = _collect_called_ad_modules(
         [subroutine.content, subroutine.ad_init, subroutine.ad_content],
@@ -1504,6 +1594,7 @@ def _generate_ad_subroutine(
     )
 
     return subroutine, uses_pushpop, called_mods
+
 
 def generate_ad(
     in_file,
@@ -1561,7 +1652,11 @@ def generate_ad(
                     for node in ad_code:
                         mod.decls.append(node)
 
-        mod_vars = [var for var in mod_org.decls.collect_vars()] if mod_org.decls is not None else []
+        mod_vars = (
+            [var for var in mod_org.decls.collect_vars()]
+            if mod_org.decls is not None
+            else []
+        )
 
         routine_info_fwd = {}
         routine_info_rev = {}
@@ -1659,11 +1754,17 @@ def generate_ad(
                 for n in group:
                     info_prev = prev_args[n]
                     info_curr = routine_map.get(n, {})
-                    if mode in ("forward", "both") and info_prev["fwd"] != info_curr.get("args_fwd_ad", []):
+                    if mode in ("forward", "both") and info_prev[
+                        "fwd"
+                    ] != info_curr.get("args_fwd_ad", []):
                         changed = True
-                    if mode in ("reverse", "both") and info_prev["rev"] != info_curr.get("args_rev_ad", []):
+                    if mode in ("reverse", "both") and info_prev[
+                        "rev"
+                    ] != info_curr.get("args_rev_ad", []):
                         changed = True
-                    if mode in ("reverse", "both") and info_prev["fwd_rev"] != info_curr.get("args_fwd_rev_ad", []):
+                    if mode in ("reverse", "both") and info_prev[
+                        "fwd_rev"
+                    ] != info_curr.get("args_fwd_rev_ad", []):
                         changed = True
                 if not changed:
                     break
@@ -1686,7 +1787,6 @@ def generate_ad(
             mod.uses.append(Use("fautodiff_stack"))
 
         modules.append(render_program(mod))
-
 
     code = "\n".join(modules)
     if out_file:

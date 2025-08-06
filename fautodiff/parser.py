@@ -7,6 +7,7 @@ rest of the package does not rely on the underlying parser implementation.
 import json
 import re
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
 
 import fparser
 from fparser.common.readfortran import FortranFileReader, FortranStringReader
@@ -14,54 +15,53 @@ from fparser.two import Fortran2003, Fortran2008
 from fparser.two.parser import ParserFactory
 from fparser.two.utils import walk
 from packaging.version import Version, parse
-from typing import List, Tuple, Dict, Optional, Union
 
 from .code_tree import (
+    Allocate,
     Assignment,
-    PointerAssignment,
-    PointerClear,
     Block,
+    BlockConstruct,
     CallStatement,
+    CycleStmt,
+    Deallocate,
     Declaration,
-    Interface,
-    TypeDef,
     DoLoop,
     DoWhile,
+    ExitStmt,
+    ForallBlock,
     Function,
     IfBlock,
+    Interface,
     Module,
-    Program,
     Node,
-    SelectBlock,
-    WhereBlock,
-    ForallBlock,
-    BlockConstruct,
     OmpDirective,
-    Statement,
+    PointerAssignment,
+    PointerClear,
     PreprocessorIfBlock,
     PreprocessorLine,
-    ExitStmt,
-    CycleStmt,
+    Program,
     ReturnStmt,
+    SelectBlock,
+    Statement,
     Subroutine,
+    TypeDef,
     Use,
-    Allocate,
-    Deallocate,
+    WhereBlock,
 )
 from .operators import (
     INTRINSIC_FUNCTIONS,
     NONDIFF_INTRINSICS,
     AryIndex,
     OpAdd,
+    OpAry,
     OpChar,
+    OpComplex,
     OpDiv,
     Operator,
+    OpFalse,
     OpFunc,
     OpFuncUser,
     OpInt,
-    OpAry,
-    OpFalse,
-    OpTrue,
     OpLogic,
     OpMul,
     OpNeg,
@@ -69,10 +69,10 @@ from .operators import (
     OpPow,
     OpRange,
     OpReal,
-    OpComplex,
     OpSub,
-    OpVar,
+    OpTrue,
     OpType,
+    OpVar,
 )
 
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
@@ -124,7 +124,7 @@ def _stmt_name(stmt):
     raise AttributeError("Could not determine statement name")
 
 
-def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
+def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
     """Return Operator from statement."""
 
     if isinstance(stmt, Fortran2003.Actual_Arg_Spec):
@@ -281,7 +281,10 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Mult_Operand):
         if stmt.items[1] == "**":
-            args = [_stmt2op(stmt.items[0], decl_map, type_map), _stmt2op(stmt.items[2], decl_map, type_map)]
+            args = [
+                _stmt2op(stmt.items[0], decl_map, type_map),
+                _stmt2op(stmt.items[2], decl_map, type_map),
+            ]
             return OpPow(args)
         else:
             raise ValueError(f"Unsupported Mult_operand type: {stmt}")
@@ -296,7 +299,10 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Level_2_Expr):
         op = stmt.items[1]
-        args = [_stmt2op(stmt.items[0], decl_map, type_map), _stmt2op(stmt.items[2], decl_map, type_map)]
+        args = [
+            _stmt2op(stmt.items[0], decl_map, type_map),
+            _stmt2op(stmt.items[2], decl_map, type_map),
+        ]
         if op == "+":
             return OpAdd(args)
         elif op == "-":
@@ -306,7 +312,10 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Add_Operand):
         op = stmt.items[1]
-        args = [_stmt2op(stmt.items[0], decl_map, type_map), _stmt2op(stmt.items[2], decl_map, type_map)]
+        args = [
+            _stmt2op(stmt.items[0], decl_map, type_map),
+            _stmt2op(stmt.items[2], decl_map, type_map),
+        ]
         if op == "*":
             return OpMul(args)
         elif op == "/":
@@ -316,7 +325,10 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
 
     if isinstance(stmt, (Fortran2003.Equiv_Operand, Fortran2003.Or_Operand)):
         op = stmt.items[1].lower()
-        args = [_stmt2op(stmt.items[0], decl_map, type_map), _stmt2op(stmt.items[2], decl_map, type_map)]
+        args = [
+            _stmt2op(stmt.items[0], decl_map, type_map),
+            _stmt2op(stmt.items[2], decl_map, type_map),
+        ]
         if op == ".and." or op == ".or.":
             return OpLogic(op, args)
 
@@ -334,7 +346,10 @@ def _stmt2op(stmt, decl_map:dict, type_map:dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Level_4_Expr):
         op = stmt.items[1]
-        args = [_stmt2op(stmt.items[0], decl_map, type_map), _stmt2op(stmt.items[2], decl_map, type_map)]
+        args = [
+            _stmt2op(stmt.items[0], decl_map, type_map),
+            _stmt2op(stmt.items[2], decl_map, type_map),
+        ]
         return OpLogic(op=op, args=args)
 
     if isinstance(stmt, Fortran2003.Array_Constructor):
@@ -377,16 +392,22 @@ def parse_file(path, *, search_dirs=None, decl_map=None, type_map=None):
     reader = FortranStringReader(
         src, ignore_comments=False, include_omp_conditional_lines=True
     )
-    return _parse_from_reader(reader, path, search_dirs=search_dirs, decl_map=decl_map, type_map=type_map)
+    return _parse_from_reader(
+        reader, path, search_dirs=search_dirs, decl_map=decl_map, type_map=type_map
+    )
 
 
-def parse_src(src, *, search_dirs=None, decl_map=None, type_map=None, src_name: str = "<string>"):
+def parse_src(
+    src, *, search_dirs=None, decl_map=None, type_map=None, src_name: str = "<string>"
+):
     """Parse ``src`` and return a list of :class:`Module` nodes."""
     src = _inject_cpp_lines(src)
     reader = FortranStringReader(
         src, ignore_comments=False, include_omp_conditional_lines=True
     )
-    return _parse_from_reader(reader, src_name, search_dirs=search_dirs, decl_map=decl_map, type_map=type_map)
+    return _parse_from_reader(
+        reader, src_name, search_dirs=search_dirs, decl_map=decl_map, type_map=type_map
+    )
 
 
 def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
@@ -442,13 +463,15 @@ def _parse_decl_stmt(
         elif isinstance(selector, Fortran2003.Length_Selector):
             char_len = selector.items[1].string
         else:
-            raise RuntimeError(f"selector is not supported: {type(selector)} {selector}")
+            raise RuntimeError(
+                f"selector is not supported: {type(selector)} {selector}"
+            )
     elif isinstance(type_spec, Fortran2003.Declaration_Type_Spec):
         name = type_spec.items[1].string
         base_type = type_spec.string
         if type_map is not None and name in type_map:
             type_def = type_map[name]
-        elif name == "c_ptr": # tentative
+        elif name == "c_ptr":  # tentative
             type_def = TypeDef(name=name, components=[], procs=[])
         else:
             raise RuntimeError(f"type definition not found: {name}")
@@ -505,7 +528,9 @@ def _parse_decl_stmt(
                     asynchronous = True
                     continue
                 raise RuntimeError(f"Unsupported attribute: {type(attr)} {attr}")
-            if isinstance(attr, Fortran2008.component_attr_spec_r437.Component_Attr_Spec):
+            if isinstance(
+                attr, Fortran2008.component_attr_spec_r437.Component_Attr_Spec
+            ):
                 allocatable = True
                 continue
             if isinstance(attr, Fortran2003.Dimension_Attr_Spec):
@@ -541,14 +566,23 @@ def _parse_decl_stmt(
         if isinstance(entity, (Fortran2003.Entity_Decl, Fortran2003.Component_Decl)):
             name = entity.items[0].string
             dim_spec = entity.items[1]
-            if isinstance(dim_spec, (Fortran2003.Explicit_Shape_Spec_List, Fortran2003.Assumed_Shape_Spec_List, Fortran2003.Deferred_Shape_Spec_List)):
+            if isinstance(
+                dim_spec,
+                (
+                    Fortran2003.Explicit_Shape_Spec_List,
+                    Fortran2003.Assumed_Shape_Spec_List,
+                    Fortran2003.Deferred_Shape_Spec_List,
+                ),
+            ):
                 dims = tuple(v.string for v in dim_spec.items)
             elif isinstance(dim_spec, Fortran2003.Assumed_Size_Spec):
                 dims = "*"
             elif dim_spec is None:
                 dims = dim_attr
             else:
-                raise RuntimeError(f"Unsupported dimension spec: {type(dim_spec)} {dim_spec}")
+                raise RuntimeError(
+                    f"Unsupported dimension spec: {type(dim_spec)} {dim_spec}"
+                )
             if entity.items[3] is not None:
                 init_val = entity.items[3].items[1].string
         else:
@@ -584,6 +618,7 @@ def _parse_decl_stmt(
         )
 
     return decls
+
 
 def _parse_directive(text: str, directives: dict) -> None:
     body = text[5:].strip()
@@ -628,7 +663,7 @@ def _parse_omp_directive(text: str) -> Tuple[bool, str, List[str]]:
         if directive_tokens and ("(" in tok or "=" in tok or low in clause_keys):
             break
         directive_tokens.append(tok)
-    clauses = tokens[len(directive_tokens):]
+    clauses = tokens[len(directive_tokens) :]
     directive = " ".join(directive_tokens)
     return end, directive, clauses
 
@@ -654,13 +689,14 @@ _OMP_FOLLOWS_STMT_DIRECTIVES = {
     "single",
 }
 
+
 def _parse_decls(
     spec,
     *,
     directives: dict,
     decl_map: dict,
     type_map: Dict[str, TypeDef],
-    declared_in: str ="routine",
+    declared_in: str = "routine",
     allow_intent: bool = True,
     allow_access: bool = False,
     default_access: Optional[str] = None,
@@ -772,7 +808,9 @@ def _parse_decls(
                         for proc in cnt.items[0].items:
                             procs.append(proc.string)
                         continue
-                    raise RuntimeError(f"Unsupported statement: {type(cnt.items[0])} {cnt.items}")
+                    raise RuntimeError(
+                        f"Unsupported statement: {type(cnt.items[0])} {cnt.items}"
+                    )
                 if isinstance(cnt, Fortran2003.End_Interface_Stmt):
                     if name is not None and procs:
                         decls.append(Interface(name, module_procs=procs))
@@ -796,7 +834,9 @@ def _parse_decls(
                                 if key == "EXTENDS":
                                     parent = spec.items[1].string
                                     if not parent in type_map:
-                                        raise RuntimeError(f"Type definition not found: {parent}")
+                                        raise RuntimeError(
+                                            f"Type definition not found: {parent}"
+                                        )
                                     for decl in type_map[parent].iter_children():
                                         components.append(decl)
                                     continue
@@ -824,7 +864,14 @@ def _parse_decls(
                     continue
                 if isinstance(cnt, Fortran2003.Component_Part):
                     for c in cnt.content:
-                        components.extend(_parse_decl_stmt(c, allow_intent=False, allow_access=False, declared_in=declared_in))
+                        components.extend(
+                            _parse_decl_stmt(
+                                c,
+                                allow_intent=False,
+                                allow_access=False,
+                                declared_in=declared_in,
+                            )
+                        )
                     continue
                 if isinstance(cnt, Fortran2003.Type_Bound_Procedure_Part):
                     for c in cnt.content:
@@ -841,7 +888,15 @@ def _parse_decls(
 
                 if isinstance(cnt, Fortran2003.End_Type_Stmt):
                     if type_name is not None:
-                        type_def = TypeDef(name=type_name, components=components, procs=procs, access=access, bind=bind, abstract=abstract, sequence=sequence)
+                        type_def = TypeDef(
+                            name=type_name,
+                            components=components,
+                            procs=procs,
+                            access=access,
+                            bind=bind,
+                            abstract=abstract,
+                            sequence=sequence,
+                        )
                         decls.append(type_def)
                         type_map[type_name] = type_def
                         continue
@@ -850,6 +905,7 @@ def _parse_decls(
 
         raise RuntimeError(f"Unsupported statement: {type(item)} {item}")
     return (uses, decls, nodes)
+
 
 def _search_use(
     name: str,
@@ -887,9 +943,7 @@ def _search_use(
                     info["typename"],
                     info.get("kind"),
                     dims=(
-                        tuple(info["dims"])
-                        if info.get("dims") is not None
-                        else None
+                        tuple(info["dims"]) if info.get("dims") is not None else None
                     ),
                     intent=None,
                     parameter=info.get("parameter", False),
@@ -1004,7 +1058,11 @@ def _parse_module_ast(
     module_asts: Optional[dict] = None,
 ) -> Module:
     name = _stmt_name(module.content[0])
-    if module_map is not None and name in module_map and module_map[name].decls is not None:
+    if (
+        module_map is not None
+        and name in module_map
+        and module_map[name].decls is not None
+    ):
         return module_map[name]
     mod_node = module_map.get(name) if module_map is not None else None
     if mod_node is None:
@@ -1146,12 +1204,15 @@ def _parse_program_ast(
     prog_node.directives = program_directives
     return prog_node
 
-def _parse_from_reader(reader, src_name, *, search_dirs=None, decl_map=None, type_map=None) -> List[Module]:
+
+def _parse_from_reader(
+    reader, src_name, *, search_dirs=None, decl_map=None, type_map=None
+) -> List[Module]:
     factory = ParserFactory().create(std="f2008")
     ast = factory(reader)
     module_list = list(walk(ast, Fortran2003.Module))
     program_list = list(walk(ast, Fortran2003.Main_Program))
-    module_asts = { _stmt_name(m.content[0]): m for m in module_list }
+    module_asts = {_stmt_name(m.content[0]): m for m in module_list}
     output: List[Module] = []
     module_map: dict = {}
     for m in module_list:
@@ -1194,15 +1255,16 @@ def find_subroutines(modules: List[Module]) -> List[str]:
     return names
 
 
-def _parse_routine(content,
-                   src_name: str,
-                   allocate_vars: List[OpVar],
-                   decl_map_mod: dict,
-                   type_map_mod: dict,
-                   module_map: dict,
-                   module_asts: Optional[dict] = None,
-                   search_dirs: Optional[List[str]] = None
-                   ):
+def _parse_routine(
+    content,
+    src_name: str,
+    allocate_vars: List[OpVar],
+    decl_map_mod: dict,
+    type_map_mod: dict,
+    module_map: dict,
+    module_asts: Optional[dict] = None,
+    search_dirs: Optional[List[str]] = None,
+):
     """Return node tree correspoinding to the input AST"""
 
     pending_omp: List[OmpDirective] = []
@@ -1281,11 +1343,13 @@ def _parse_routine(content,
                                     dims.append(_stmt2op(ub, decl_map, type_map))
                                 else:
                                     dims.append(
-                                        OpRange([
-                                            _stmt2op(lb, decl_map, type_map),
-                                            _stmt2op(ub, decl_map, type_map),
-                                            None,
-                                        ])
+                                        OpRange(
+                                            [
+                                                _stmt2op(lb, decl_map, type_map),
+                                                _stmt2op(ub, decl_map, type_map),
+                                                None,
+                                            ]
+                                        )
                                     )
                         elif isinstance(shape, Fortran2003.Section_Subscript_List):
                             for spec in shape.items:
@@ -1326,7 +1390,14 @@ def _parse_routine(content,
             seg = []
             while i < len(stmt.content):
                 itm = stmt.content[i]
-                if isinstance(itm, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt,)):
+                if isinstance(
+                    itm,
+                    (
+                        Fortran2003.Else_If_Stmt,
+                        Fortran2003.Else_Stmt,
+                        Fortran2003.End_If_Stmt,
+                    ),
+                ):
                     break
                 seg.append(itm)
                 i += 1
@@ -1340,7 +1411,14 @@ def _parse_routine(content,
                     seg = []
                     while i < len(stmt.content):
                         j = stmt.content[i]
-                        if isinstance(j, (Fortran2003.Else_If_Stmt, Fortran2003.Else_Stmt, Fortran2003.End_If_Stmt,)):
+                        if isinstance(
+                            j,
+                            (
+                                Fortran2003.Else_If_Stmt,
+                                Fortran2003.Else_Stmt,
+                                Fortran2003.End_If_Stmt,
+                            ),
+                        ):
                             break
                         seg.append(j)
                         i += 1
@@ -1424,7 +1502,9 @@ def _parse_routine(content,
             seg = []
             while i < len(stmt.content):
                 itm = stmt.content[i]
-                if isinstance(itm, (Fortran2003.Elsewhere_Stmt, Fortran2003.End_Where_Stmt)):
+                if isinstance(
+                    itm, (Fortran2003.Elsewhere_Stmt, Fortran2003.End_Where_Stmt)
+                ):
                     blk = _block(seg, decl_map, type_map)
                     cond_blocks.append((cond, blk))
                     seg = []
@@ -1558,12 +1638,17 @@ def _parse_routine(content,
             i += 1
         body_block = _block(sub, decl_map, type_map)
         body: Node
-        if (
-            len(body_block) == 1
-            and isinstance(
-                body_block[0],
-                (DoLoop, DoWhile, BlockConstruct, IfBlock, SelectBlock, WhereBlock, ForallBlock),
-            )
+        if len(body_block) == 1 and isinstance(
+            body_block[0],
+            (
+                DoLoop,
+                DoWhile,
+                BlockConstruct,
+                IfBlock,
+                SelectBlock,
+                WhereBlock,
+                ForallBlock,
+            ),
         ):
             body = body_block[0]
         else:
@@ -1584,7 +1669,11 @@ def _parse_routine(content,
             j = start_idx + 1
             while j < len(body_list):
                 st2 = body_list[j]
-                line2 = _comment_to_cpp(st2) if isinstance(st2, Fortran2003.Comment) else None
+                line2 = (
+                    _comment_to_cpp(st2)
+                    if isinstance(st2, Fortran2003.Comment)
+                    else None
+                )
                 if line2 is not None:
                     low = line2.lstrip().lower()
                     if low.startswith("#if"):
@@ -1595,7 +1684,9 @@ def _parse_routine(content,
                             cond_blocks.append((cond, block))
                             return PreprocessorIfBlock(cond_blocks), j + 1
                         depth -= 1
-                    elif (low.startswith("#elif") or low.startswith("#else")) and depth == 0:
+                    elif (
+                        low.startswith("#elif") or low.startswith("#else")
+                    ) and depth == 0:
                         block = _block(current, decl_map, type_map)
                         cond_blocks.append((cond, block))
                         cond = line2[1:]
@@ -1622,7 +1713,9 @@ def _parse_routine(content,
                         i += 1
                     blk.append(omp)
                     continue
-                body, i = _parse_omp_region(body_list, i, decl_map, type_map, omp.directive)
+                body, i = _parse_omp_region(
+                    body_list, i, decl_map, type_map, omp.directive
+                )
                 omp.body = body
                 omp.body.set_parent(omp)
                 blk.append(omp)
@@ -1659,7 +1752,9 @@ def _parse_routine(content,
                         else:
                             blk.append(OmpDirective(directive, clauses))
                         continue
-                    body, i = _parse_omp_region(body_list, i + 1, decl_map, type_map, directive)
+                    body, i = _parse_omp_region(
+                        body_list, i + 1, decl_map, type_map, directive
+                    )
                     blk.append(OmpDirective(directive, clauses, body))
                     continue
                 i += 1

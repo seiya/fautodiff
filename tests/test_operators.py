@@ -1,15 +1,10 @@
 import sys
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff.operators import (
-    OpInt,
-    OpVar,
-    OpRange,
-    OpFunc
-)
+from fautodiff.operators import OpFunc, OpInt, OpRange, OpVar
 
 
 class TestOperatorsBasic(unittest.TestCase):
@@ -48,7 +43,7 @@ class TestOperatorsBasic(unittest.TestCase):
         t = OpVar("t")
         zero = OpInt(0)
         one = OpInt(1)
-        none = - one
+        none = -one
         two = OpInt(2, target=x)
         self.assertIs(x + zero, x)
         self.assertIs(zero + x, x)
@@ -67,22 +62,22 @@ class TestOperatorsBasic(unittest.TestCase):
         self.assertEqual(str(two * (x + two)), "2.0 * (x + 2.0)")
         self.assertEqual(str(two * (x * two)), "4.0 * x")
         self.assertEqual(str(two * (x * y)), "2.0 * x * y")
-        self.assertEqual(str((x/y) / z), "x / (y * z)")
-        self.assertEqual(str((x/y) / (z/t)), "x * t / (y * z)")
+        self.assertEqual(str((x / y) / z), "x / (y * z)")
+        self.assertEqual(str((x / y) / (z / t)), "x * t / (y * z)")
 
     def test_sub(self):
         n = OpVar("n")
         zero = OpInt(0)
         one = OpInt(1)
-        self.assertEqual(n-n, zero)
-        self.assertEqual((n+1)-n, one)
-        self.assertEqual((n-1)-n, -one)
-        self.assertEqual(n-(n-1), one)
-        self.assertEqual(n-(n+1), -one)
-        self.assertEqual((one-n)+n, one)
-        self.assertEqual((-one-n)+n, -one)
-        self.assertEqual(n+(one-n), one)
-        self.assertEqual(n+(-one-n), -one)
+        self.assertEqual(n - n, zero)
+        self.assertEqual((n + 1) - n, one)
+        self.assertEqual((n - 1) - n, -one)
+        self.assertEqual(n - (n - 1), one)
+        self.assertEqual(n - (n + 1), -one)
+        self.assertEqual((one - n) + n, one)
+        self.assertEqual((-one - n) + n, -one)
+        self.assertEqual(n + (one - n), one)
+        self.assertEqual(n + (-one - n), -one)
 
     def test_power_special_cases(self):
         x = OpVar("x")
@@ -142,8 +137,8 @@ class TestOperatorsBasic(unittest.TestCase):
         self.assertTrue(two in rng)
         self.assertTrue(three in rng)
         self.assertTrue(n in rng)
-        self.assertTrue(n-1 in rng)
-        self.assertFalse(n+1 in rng)
+        self.assertTrue(n - 1 in rng)
+        self.assertFalse(n + 1 in rng)
 
     def test_derivative_dot_product(self):
         x = OpVar("x")

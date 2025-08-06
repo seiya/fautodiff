@@ -1,7 +1,7 @@
 """Public API for fautodiff."""
 
-from packaging.version import Version, parse
 import fparser
+from packaging.version import Version, parse
 
 if parse(getattr(fparser, "__version__", "0")) < Version("0.2.0"):
     raise RuntimeError("fautodiff requires fparser version 0.2.0 or later")
