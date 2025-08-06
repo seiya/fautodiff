@@ -20,6 +20,7 @@ from fautodiff.code_tree import (
     IfBlock,
     BlockConstruct,
     OmpDirective,
+    ReturnStmt,
     render_program
 )
 from fautodiff.operators import (
@@ -249,6 +250,35 @@ class TestNodeMethods(unittest.TestCase):
         self.assertEqual(
             render_program(pruned),
             "a = 1\n" "b = a\n",
+        )
+
+    def test_prune_after_return(self):
+        a = OpVar("a")
+        b = OpVar("b")
+        blk = Block([
+            Assignment(a, OpInt(1)),
+            ReturnStmt(),
+            Assignment(b, OpInt(2)),
+        ])
+        pruned = blk.prune_for(VarList([a]))
+        self.assertEqual(
+            render_program(pruned),
+            "a = 1\n" "return\n",
+        )
+
+    def test_conditional_return_resets_targets(self):
+        a = OpVar("a")
+        b = OpVar("b")
+        cond = OpVar("flag")
+        blk = Block([
+            Assignment(b, OpInt(2)),
+            IfBlock([(cond, Block([ReturnStmt()]))]),
+            Assignment(a, b),
+        ])
+        pruned = blk.prune_for(VarList([a]))
+        self.assertEqual(
+            render_program(pruned),
+            "if (flag) then\n" "  return\n" "end if\n" "a = b\n",
         )
 
     def test_assignment_accumulate(self):

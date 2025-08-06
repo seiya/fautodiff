@@ -1021,6 +1021,9 @@ def _generate_ad_subroutine(
     if routine_info.get("skip"):
         return None, False, set()
 
+    if len(routine_org.content)>0 and isinstance(routine_org.content[-1], ReturnStmt):
+        routine_org.content.remove_child(routine_org.content[-1])
+
     subroutine = routine_info["subroutine"].deep_clone()
     grad_args = [v.deep_clone() for v in routine_info["grad_args"]]
     in_grad_args = [v.deep_clone() for v in routine_info["in_grad_args"]]
@@ -1067,13 +1070,12 @@ def _generate_ad_subroutine(
         assigned_advars = None
     else:
         assigned_advars = VarList(in_grad_args + mod_ad_vars + save_ad_vars)
+    return_flags = [node.flag() for node in routine_org.content.collect_return()]
     # Generate AD statements from the original routine body
     if reverse:
-        exitcycles = routine_org.content.collect_exitcycle()
-        returns = routine_org.content.collect_return()
-        exitcycle_flags = [node.flag() for node in exitcycles + returns]
+        return_flags = [node.flag() for node in routine_org.content.collect_return()]
     else:
-        exitcycle_flags = None
+        return_flags = None
     nodes = routine_org.content.generate_ad(
         saved_vars,
         reverse=reverse,
@@ -1081,13 +1083,10 @@ def _generate_ad_subroutine(
         routine_map=routine_map,
         generic_map=generic_map,
         mod_vars=mod_vars,
-        exitcycle_flags=exitcycle_flags,
+        return_flags=return_flags,
         warnings=warnings,
     )
     ad_code = Block()
-    if reverse and exitcycle_flags:
-        for flag in exitcycle_flags:
-            ad_code.append(Assignment(flag, OpTrue()))
     for node in nodes:
         if not node.is_effectively_empty():
             ad_code.append(node)
@@ -1151,11 +1150,7 @@ def _generate_ad_subroutine(
         _strip_sequential_omp(ad_block, warnings, reverse=True)
         targets = ad_block.required_vars()
 
-        #print(render_program(ad_block))
-        #print("Targets:", targets)
-        return_flags = [r.flag() for r in returns]
-        fw_block = Block(routine_org.content.set_for_return(return_flags, set_cond=True))
-        fw_block = Block(fw_block.set_for_exitcycle(None))
+        fw_block = Block(routine_org.content.set_for_returnexitcycle(return_flags, None, set_return_cond=True, set_exitcycle_cond=False))
         if return_flags:
             for flag in return_flags:
                 fw_block.insert_begin(Assignment(flag, OpTrue()))
@@ -1292,7 +1287,7 @@ def _generate_ad_subroutine(
                             declared_in="routine",
                         )
                     )
-                elif name.startswith(("cycle_flag", "exit_flag")):
+                elif name.startswith(("cycle_flag", "exit_flag", "return_flag")):
                     subroutine.decls.append(
                         Declaration(
                             name,

@@ -1609,8 +1609,22 @@ def _parse_routine(content,
         while i < len(body_list):
             if pending_omp:
                 omp = pending_omp.pop(0)
+                dir_norm = omp.directive.split("(")[0].strip().lower()
+                if dir_norm in _OMP_STANDALONE_DIRECTIVES:
+                    blk.append(omp)
+                    continue
+                if dir_norm in _OMP_FOLLOWS_STMT_DIRECTIVES:
+                    if i < len(body_list):
+                        st2 = body_list[i]
+                        node = _parse_stmt(st2, decl_map, type_map)
+                        omp.body = node
+                        omp.body.set_parent(omp)
+                        i += 1
+                    blk.append(omp)
+                    continue
                 body, i = _parse_omp_region(body_list, i, decl_map, type_map, omp.directive)
                 omp.body = body
+                omp.body.set_parent(omp)
                 blk.append(omp)
                 continue
             st = body_list[i]
