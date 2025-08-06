@@ -1137,6 +1137,7 @@ def _generate_ad_subroutine(
 
         # Remove statements unrelated to derivative targets
         ad_code = ad_code.prune_for(targets, mod_vars + save_vars, base_targets=targets)
+        #print(render_program(ad_code))
 
         if reverse:
             ad_code.check_initial(VarList(grad_args + mod_ad_vars + save_ad_vars))
