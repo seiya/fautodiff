@@ -1363,8 +1363,10 @@ class OpBinary(Operator):
 
     def __str__(self) -> str:
         a0 = self._paren(self.args[0])
-        eq = isinstance(self.args[1], OpNeg) or (
-            isinstance(self, OpDiv) and isinstance(self.args[1], OpMul)
+        eq = (
+            isinstance(self.args[1], OpNeg)
+            or (isinstance(self, OpDiv) and isinstance(self.args[1], (OpMul, OpDiv)))
+            or (isinstance(self, OpSub) and isinstance(self.args[1], (OpAdd, OpSub)))
         )
         a1 = self._paren(self.args[1], eq=eq)
         return f"{a0} {self.OP} {a1}"
