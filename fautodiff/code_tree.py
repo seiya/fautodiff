@@ -26,18 +26,19 @@ REV_SUFFIX = "_rev_ad"
 from .operators import (
     AryIndex,
     Operator,
-    OpFalse,
     OpFunc,
     OpFuncUser,
-    OpInt,
     OpLeaf,
+    OpInt,
+    OpReal,
+    OpTrue,
+    OpFalse,
+    OpChar,
+    OpVar,
     OpLogic,
     OpNeg,
     OpNot,
     OpRange,
-    OpReal,
-    OpTrue,
-    OpVar,
 )
 from .var_list import VarList
 
@@ -486,9 +487,32 @@ class Node:
                     f"({arg_info['args']}) ({[v.name for v in routine.args]})"
                 )
             return arg_info
-        argtypes = [arg.typename for arg in routine.args]
-        argkinds = [arg.kind for arg in routine.args]
-        argdims = [(arg.dims and len(arg.dims)) for arg in routine.args]
+        argtypes: List[str] = []
+        argkinds: List[Optional[str]] = []
+        argdims: List[Optional[int]] = []
+        for arg in routine.args:
+            if isinstance(arg, OpVar):
+                argtypes.append(arg.typename)
+                argkinds.append(arg.kind)
+                argdims.append(len(arg.dims))
+                continue
+            if isinstance(arg, OpLeaf):
+                argkinds.append(arg.kind)
+                argdims.append(None)
+                if isinstance(arg, OpReal):
+                    argtypes.append("real")
+                    continue
+                if isinstance(arg, OpInt):
+                    argtypes.append("integer")
+                    continue
+                if isinstance(arg, OpChar):
+                    argtypes.append("character")
+                    continue
+                if isinstance(arg, (OpTrue, OpFalse)):
+                    argtypes.append("logical")
+                    continue
+            raise ValueError(f"Unsupported argument type: {type(arg)}")
+
         if arg_info is None and generic_map and name in generic_map:
             for cand in generic_map[name]:
                 if not cand in routine_map:
