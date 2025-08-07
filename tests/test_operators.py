@@ -79,6 +79,14 @@ class TestOperatorsBasic(unittest.TestCase):
         self.assertEqual(n + (one - n), one)
         self.assertEqual(n + (-one - n), -one)
 
+    def test_sub_with_addition(self):
+        a = OpVar("a")
+        b = OpVar("b")
+        c = OpVar("c")
+        d = OpVar("d")
+        expr = (a + b) - (c + d)
+        self.assertEqual(str(expr), "a + b - (c + d)")
+
     def test_power_special_cases(self):
         x = OpVar("x")
         self.assertEqual(str(x ** OpInt(0)), "1")
