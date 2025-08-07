@@ -494,7 +494,10 @@ class Node:
             if isinstance(arg, OpVar):
                 argtypes.append(arg.typename)
                 argkinds.append(arg.kind)
-                argdims.append(len(arg.dims))
+                if arg.dims:
+                    argdims.append(len(arg.dims))
+                else:
+                    argdims.append(None)
                 continue
             if isinstance(arg, OpLeaf):
                 argkinds.append(arg.kind)
