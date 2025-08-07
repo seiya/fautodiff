@@ -9,7 +9,7 @@ REV_SUFFIX = "_rev_ad"
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 # Ensure other modules use the same AD suffix
 from . import code_tree as code_tree
@@ -68,7 +68,12 @@ from . import parser
 from .var_list import VarList
 
 
-def _warn(warnings, info, code, reason):
+def _warn(
+    warnings: Optional[List[str]],
+    info: Optional[Dict[str, Any]],
+    code: str,
+    reason: str,
+) -> None:
     """Append a formatted warning message to ``warnings`` list."""
     if warnings is not None and info is not None:
         filename = info.get("file", "<unknown>")
@@ -77,8 +82,8 @@ def _warn(warnings, info, code, reason):
         warnings.append(msg)
 
 
-def _contains_pushpop(node) -> bool:
-    """Return True if ``node`` or any child is a ``PushPop``."""
+def _contains_pushpop(node: Node) -> bool:
+    """Return ``True`` if ``node`` or any child is a ``PushPop``."""
     if isinstance(node, PushPop):
         return True
     for child in getattr(node, "iter_children", lambda: [])():
@@ -133,7 +138,10 @@ def _strip_sequential_omp(
 
 
 def _add_fwd_rev_calls(
-    node, routine_map: dict, generic_map: dict, donot_prune: bool = False
+    node: Node,
+    routine_map: Dict[str, Any],
+    generic_map: Dict[str, Any],
+    donot_prune: bool = False,
 ) -> None:
     """Add *_fwd_rev_ad wrapper routine before the call when available."""
     if isinstance(node, CallStatement):
@@ -193,9 +201,9 @@ def _module_var_fwd_rev(
             if cross_var is not None and cross_var not in cross_vars:
                 cross_vars.append(cross_var)
     cross_vars = sorted(cross_vars, key=lambda v: v.name_ext())
-    args = []
-    sub_fwd_rev = None
-    index = []
+    args: List[str] = []
+    sub_fwd_rev: Optional[Subroutine] = None
+    index: List[OpVar] = []
     for var in cross_vars:
         block_fwd = Block([])
         block_rev = Block([])
@@ -374,9 +382,9 @@ def _parse_pointer(
     node: Node,
     mod_vars: List[OpVar],
     map_ptr: Optional[Dict[str, OpVar]] = None,
-    map_ref: Optional[Dict[str, Optional[Union[OpVar, OpNull]]]] = None,
+    map_ref: Optional[Dict[str, Optional[OpVar]]] = None,
     inloop: bool = False,
-) -> Tuple[Dict[str, OpVar], Dict[str, Optional[Union[OpVar, OpNull]]]]:
+) -> Tuple[Dict[str, OpVar], Dict[str, Optional[OpVar]]]:
     """Insert ``PointerClear`` nodes and track pointer associations.
 
     ``map_ptr`` keeps the latest pointer variables while ``map_ref`` remembers
@@ -430,7 +438,7 @@ def _parse_pointer(
             else:
                 map_ref[lhs_name] = rhs
         elif isinstance(rhs, OpFunc) and rhs.name == "null":
-            map_ref[lhs_name] = OpNull()
+            map_ref[lhs_name] = None
     if isinstance(node, Deallocate):
         for var in node.vars:
             name = var.name_ext()
@@ -505,7 +513,9 @@ def _parse_mpi_calls(
                             node.associated_vars = vars
 
 
-def _set_call_intents(node, routine_map, generic_map):
+def _set_call_intents(
+    node: Node, routine_map: Dict[str, Any], generic_map: Dict[str, Any]
+) -> None:
     """Populate ``CallStatement.intents`` using ``routine_map`` recursively."""
     if isinstance(node, CallStatement):
         arg_info = Node.get_arg_info(node, routine_map, generic_map)
@@ -684,7 +694,7 @@ def _load_fadmods(
     return routines, variables, generics
 
 
-def _write_fadmod(mod: Module, routine_map: dict, directory: Path) -> None:
+def _write_fadmod(mod: Module, routine_map: Dict[str, Any], directory: Path) -> None:
     """Write routine and variable info for ``mod`` to ``<mod.name>.fadmod``."""
 
     mod_name = mod.name
@@ -780,7 +790,9 @@ def _has_modified_module_grad_var(routine_org: Routine, mod_vars: List[OpVar]) -
     return _scan(routine_org.content)
 
 
-def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
+def _prepare_fwd_ad_header(
+    routine_org: Routine, has_mod_grad_var: bool
+) -> Dict[str, Any]:
     """Create forward-mode AD subroutine header and argument info.
 
     The function duplicates the original arguments, appends gradient
@@ -891,8 +903,10 @@ def _prepare_fwd_ad_header(routine_org, has_mod_grad_var):
     }
 
 
-def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
-    """Prepare AD subroutine header and returns argument info."""
+def _prepare_rev_ad_header(
+    routine_org: Routine, has_mod_grad_var: bool
+) -> Dict[str, Any]:
+    """Prepare AD subroutine header and return argument info."""
 
     args = []
     grad_args = []
@@ -1020,7 +1034,11 @@ def _prepare_rev_ad_header(routine_org, has_mod_grad_var):
     }
 
 
-def _collect_called_ad_modules(blocks, routine_map, reverse):
+def _collect_called_ad_modules(
+    blocks: List[Block],
+    routine_map: Dict[str, Dict[str, Any]],
+    reverse: bool,
+) -> Set[str]:
     """Return a set of modules whose AD routines are called within ``blocks``."""
 
     modules = set()
@@ -1044,14 +1062,14 @@ def _collect_called_ad_modules(blocks, routine_map, reverse):
 def _generate_ad_subroutine(
     mod_org: Module,
     routine_org: Routine,
-    routine_map: dict,
-    generic_map: dict,
+    routine_map: Dict[str, Any],
+    generic_map: Dict[str, Any],
     mod_vars: List[OpVar],
-    routine_info: dict,
+    routine_info: Dict[str, Any],
     warnings: List[str],
     *,
     reverse: bool,
-) -> tuple[Optional[Subroutine], bool, set]:
+) -> tuple[Optional[Subroutine], bool, Set[str]]:
     """Generate forward or reverse AD subroutine.
 
     Returns the generated ``Subroutine`` (or ``None`` when skipped), a flag
@@ -1597,14 +1615,14 @@ def _generate_ad_subroutine(
 
 
 def generate_ad(
-    in_file,
-    out_file=None,
-    warn=True,
-    search_dirs=None,
-    write_fadmod=True,
-    fadmod_dir=None,
-    mode="both",
-):
+    in_file: Union[str, Path],
+    out_file: Optional[Union[str, Path]] = None,
+    warn: bool = True,
+    search_dirs: Optional[List[Union[str, Path]]] = None,
+    write_fadmod: bool = True,
+    fadmod_dir: Optional[Union[str, Path]] = None,
+    mode: str = "both",
+) -> Optional[str]:
     """Generate an AD version of ``in_file``.
 
     If ``out_file`` is ``None`` the generated code is returned as a string.

@@ -7,7 +7,7 @@ rest of the package does not rely on the underlying parser implementation.
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import fparser
 from fparser.common.readfortran import FortranFileReader, FortranStringReader
@@ -385,7 +385,13 @@ __all__ = [
 ]
 
 
-def parse_file(path, *, search_dirs=None, decl_map=None, type_map=None):
+def parse_file(
+    path: Union[str, Path],
+    *,
+    search_dirs: Optional[List[str]] = None,
+    decl_map: Optional[Dict[str, Any]] = None,
+    type_map: Optional[Dict[str, Any]] = None,
+) -> List[Module]:
     """Parse ``path`` and return a list of :class:`Module` nodes."""
     src = Path(path).read_text()
     src = _inject_cpp_lines(src)
@@ -398,8 +404,13 @@ def parse_file(path, *, search_dirs=None, decl_map=None, type_map=None):
 
 
 def parse_src(
-    src, *, search_dirs=None, decl_map=None, type_map=None, src_name: str = "<string>"
-):
+    src: str,
+    *,
+    search_dirs: Optional[List[str]] = None,
+    decl_map: Optional[Dict[str, Any]] = None,
+    type_map: Optional[Dict[str, Any]] = None,
+    src_name: str = "<string>",
+) -> List[Module]:
     """Parse ``src`` and return a list of :class:`Module` nodes."""
     src = _inject_cpp_lines(src)
     reader = FortranStringReader(

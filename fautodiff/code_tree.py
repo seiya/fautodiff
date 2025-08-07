@@ -67,7 +67,7 @@ class Node:
 
     _id_counter = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Assign a unique id and initialise the loop index tracking list."""
         self.__id = Node._id_counter
         Node._id_counter += 1
@@ -272,12 +272,12 @@ class Node:
                 return found
         return None
 
-    def insert_before(self, id: int, node: "Node"):
-        """Insert node to the before of node with id"""
+    def insert_before(self, id: int, node: "Node") -> None:
+        """Insert ``node`` before the node with ``id``."""
         raise NotImplementedError(f"class: {type(self)}")
 
-    def insert_begin(self, node: "Node"):
-        """Insert node to the before of node with id"""
+    def insert_begin(self, node: "Node") -> None:
+        """Insert ``node`` at the beginning of this node's children."""
         raise NotImplementedError(f"class: {type(self)}")
 
     def remove_by_id(self, node_id: int) -> bool:

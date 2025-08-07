@@ -6,7 +6,7 @@ import copy
 import re
 from dataclasses import dataclass, field
 from fractions import Fraction
-from typing import ClassVar, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import Any, ClassVar, Iterable, Iterator, List, Optional, Tuple, Union
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")  # pattern for valid variable names
 
@@ -19,7 +19,7 @@ AD_SUFFIX = "_ad"
 class AryIndex:
     """Class to represent index of fortran array"""
 
-    dims: Optional[List[Optional["Operator"]]] = field(default_factory=list)
+    dims: List[Optional["Operator"]] = field(default_factory=list)
 
     def __post_init__(self):
         """Validate and normalise the dimension list."""
@@ -51,7 +51,7 @@ class AryIndex:
 
     def deep_clone(self) -> "AryIndex":
         """Return a deep copy where nested operators are cloned."""
-        dims = None
+        dims: List[Optional[Operator]] | None = None
         if self.dims is not None:
             dims = []
             for dim in self.dims:
@@ -230,7 +230,7 @@ class AryIndex:
     def __le__(self, other) -> bool:
         """Return True if ``self`` is covered by ``other``."""
         if other is not None and not isinstance(other, AryIndex):
-            raise NotImplemented
+            raise NotImplementedError
         if other is None:
             return True
         return AryIndex._check_cover(other, self)
@@ -238,7 +238,7 @@ class AryIndex:
     def __ge__(self, other) -> bool:
         """Return True if ``self`` covers ``other``."""
         if other is not None and not isinstance(other, AryIndex):
-            raise NotImplemented
+            raise NotImplementedError
         if other is None:
             return self.dims is None or all(
                 [dim is None or isinstance(dim, OpRange) for dim in self.dims]
@@ -313,7 +313,7 @@ class Operator:
         without_checkfunc: bool = False,
     ) -> List[OpVar]:
         """Gather variables referenced by this operator and its children."""
-        vars = []
+        vars: List[OpVar] = []
         if self.args is None:
             return vars
         for arg in self.args:
@@ -330,7 +330,7 @@ class Operator:
 
     def find_userfunc(self) -> List[OpFuncUser]:
         """Return a list of user-defined functions referenced."""
-        funcs = []
+        funcs: List[OpFuncUser] = []
         if self.args is None:
             return funcs
         for arg in self.args:
@@ -344,7 +344,7 @@ class Operator:
             return dest
         if self.args is None:
             return self
-        args_new = []
+        args_new: List[Any] = []
         for arg in self.args:
             if arg is src:
                 args_new.append(dest)
@@ -1857,7 +1857,7 @@ class OpRange(Operator):
         without_checkfunc: bool = False,
     ) -> List[OpVar]:
         """Collect variables from the range operator."""
-        vars = []
+        vars: List[OpVar] = []
         if not without_index:
             for arg in self.args:
                 if arg is not None:
