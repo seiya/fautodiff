@@ -215,7 +215,10 @@ class VarList:
             if name not in self.exclude:
                 self.exclude[name] = []
             for index in other.exclude[name]:
-                self.exclude[name].append(index)
+                if index not in self.exclude[name]:
+                    self.exclude[name].append(index)
+            if len(self.exclude[name]) > 100:
+                raise RuntimeError(name)
             processed.add(name)
 
         # Reorganise merged names and update dimension information.
