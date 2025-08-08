@@ -1040,6 +1040,15 @@ class OpVar(OpLeaf):
             name = f"{self.ref_var.name_ext()}%{name}"
         return name
 
+    def is_same_var(self, other: OpVar) -> bool:
+        if self.name != other.name:
+            return False
+        if self.ref_var is not None:
+            if other.ref_var is None:
+                return False
+            return self.ref_var.is_save_var(other.ref_var)
+        return True
+
     def get_dims(self) -> Optional[List[str]]:
         if self.index is None and self.dims is None:
             return None
@@ -1306,7 +1315,8 @@ class OpVar(OpLeaf):
             return NotImplemented
         if self.name == other.name:
             if self.index == other.index:
-                return True
+                if self.ref_var == other.ref_var:
+                    return True
         return False
 
 

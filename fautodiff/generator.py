@@ -1148,6 +1148,19 @@ def _generate_ad_subroutine(
         return_flags = [node.flag() for node in routine_org.content.collect_return()]
     else:
         return_flags = None
+
+    # Collect potential pointer-target alias pairs for self-referential
+    # assignment detection.
+    ptr_pairs: Set[Tuple[str, str]] = set()
+
+    def _collect_ptr_pairs(node: Node) -> None:
+        if isinstance(node, PointerAssignment):
+            ptr_pairs.add((node.lhs.name_ext(), node.rhs.name_ext()))
+        for child in getattr(node, "iter_children", lambda: [])():
+            _collect_ptr_pairs(child)
+
+    _collect_ptr_pairs(routine_org.content)
+    Assignment.pointer_alias_pairs = ptr_pairs
     nodes = routine_org.content.generate_ad(
         saved_vars,
         reverse=reverse,
@@ -1322,15 +1335,39 @@ def _generate_ad_subroutine(
                     ad_block.remove_child(first)
                 continue
             flag = False
+        fw_nodes = [n for n in fw_block.iter_children()]
+        for i, node_fw in enumerate(fw_nodes):
+            if isinstance(node_fw, SaveAssignment) and not node_fw.pushpop:
+                var = node_fw.var
+                if i < len(fw_nodes)-1:
+                    flag = False
+                    for node in fw_nodes[i+1:]:
+                        if node.has_assignment_to(var):
+                            flag = True
+                            break
+                    if flag:
+                        break
+                for node_ad in ad_block.iter_children():
+                    if (
+                        isinstance(node_ad, SaveAssignment)
+                        and node_ad.load
+                        and node_fw.id == node_ad.id
+                    ):
+                        fw_block.remove_child(node_fw)
+                        ad_block.remove_child(node_ad)
+                        break
+                    if node_ad.has_assignment_to(var):
+                        break
+
         if not fw_block.is_effectively_empty():
             subroutine.content.extend(fw_block)
 
-    if (ad_block is not None) and (not ad_block.is_effectively_empty()):
+    if reverse and (ad_block is not None) and (not ad_block.is_effectively_empty()):
         # initialize ad_var if necessary
         vars = ad_block.required_vars(
             VarList(out_grad_args + save_ad_vars), without_savevar=True
         )
-        if reverse and not fw_block.is_effectively_empty():
+        if not fw_block.is_effectively_empty():
             vars = fw_block.required_vars(vars)
         for name in vars.names():
             if not name.endswith(AD_SUFFIX):
@@ -1344,7 +1381,7 @@ def _generate_ad_subroutine(
                 if any(v for v in in_grad_args if v.name == name):
                     continue
                 var = next(v for v in out_grad_args if v.name == name)
-            if var is not None and not var.save:
+            if var is not None and not var.save and not var.pointer:
                 if var.dims is not None and len(var.dims) > 0:
                     index = AryIndex((None,) * len(var.dims))
                 else:

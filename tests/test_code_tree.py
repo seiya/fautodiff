@@ -102,8 +102,8 @@ class TestNodeMethods(unittest.TestCase):
                 Assignment(OpVar("a"), OpInt(1)),
             ]
         )
-        self.assertTrue(blk.has_assignment_to("a"))
-        self.assertFalse(blk.has_assignment_to("b"))
+        self.assertTrue(blk.has_assignment_to(OpVar("a")))
+        self.assertFalse(blk.has_assignment_to(OpVar("b")))
 
         inner = DoLoop(
             Block(
@@ -120,9 +120,9 @@ class TestNodeMethods(unittest.TestCase):
         outer = DoLoop(
             Block([inner]), index=OpVar("j"), range=OpRange([OpInt(1), OpVar("m")])
         )
-        self.assertTrue(outer.has_assignment_to("a"))
-        self.assertFalse(outer.has_assignment_to("b"))
-        self.assertFalse(outer.has_assignment_to("c"))
+        self.assertTrue(outer.has_assignment_to(OpVar("a")))
+        self.assertFalse(outer.has_assignment_to(OpVar("b")))
+        self.assertFalse(outer.has_assignment_to(OpVar("c")))
 
     def test_has_reference_to(self):
         inner = Block(
@@ -132,9 +132,9 @@ class TestNodeMethods(unittest.TestCase):
         )
         loop = DoLoop(inner, index=OpVar("i"), range=OpRange([OpInt(1), OpInt(10)]))
         outer = Block([loop])
-        self.assertTrue(outer.has_reference_to("a"))
-        self.assertFalse(outer.has_reference_to("c"))
-        self.assertFalse(outer.has_reference_to("b"))
+        self.assertTrue(outer.has_reference_to(OpVar("a")))
+        self.assertFalse(outer.has_reference_to(OpVar("c")))
+        self.assertFalse(outer.has_reference_to(OpVar("b")))
 
     def test_ids_and_clone(self):
         blk = Block([Assignment(OpVar("a"), OpInt(1))])
@@ -198,9 +198,9 @@ class TestNodeMethods(unittest.TestCase):
         decls = Block([Declaration(name="a", typename="real")])
         body = Block([Assignment(OpVar("b"), OpVar("a"))])
         blk = BlockConstruct(decls, body)
-        self.assertFalse(blk.has_reference_to("a"))
-        self.assertFalse(blk.has_assignment_to("a"))
-        self.assertTrue(blk.has_assignment_to("b"))
+        self.assertFalse(blk.has_reference_to(OpVar("a")))
+        self.assertFalse(blk.has_assignment_to(OpVar("a")))
+        self.assertTrue(blk.has_assignment_to(OpVar("b")))
         vars = VarList([OpVar("a")])
         vars = blk.required_vars(vars)
         self.assertEqual({str(v) for v in vars}, {"a"})

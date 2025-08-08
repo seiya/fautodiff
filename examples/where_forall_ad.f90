@@ -46,8 +46,6 @@ contains
     real, intent(out) :: b_ad(n)
     integer :: i
 
-    b_ad(:) = 0.0
-
     forall (i=1:n)
       b_ad(i) = a_ad(i) * 2.0 ! b(i) = 2.0 * a(i)
       b(i) = 2.0 * a(i)
