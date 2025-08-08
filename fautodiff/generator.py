@@ -1498,6 +1498,8 @@ def _generate_ad_subroutine(
         if var.index is not None and var.name in save_assigns:
             if len(save_assigns[var.name]) < 2:
                 raise RuntimeError(f"Unexpected: {var.name}")
+
+            # find reduced_dims
             index_list = var.index_list()
             loops = []
             for save in save_assigns[var.name]:
@@ -1519,6 +1521,7 @@ def _generate_ad_subroutine(
         if var.reference is not None:
             ref = var.reference.remove_suffix(AD_SUFFIX)
             base_decl = routine_org.find_decl(ref)
+
 
         allocatable = False
         if base_decl is not None:
@@ -1547,6 +1550,16 @@ def _generate_ad_subroutine(
                 dims = base_decl.dims
         else:
             dims = var.dims
+
+        if dims is not None and var.reference is not None:
+            dims_new = []
+            for i, dim in enumerate(dims):
+                if dim.endswith(":"):
+                    dim = f"{dim}ubound({var.reference.name},{i+1})"
+                if dim.startswith(":"):
+                    dim = f"lbound({var.reference.name},{i+1}){dim}"
+                dims_new.append(dim)
+            dims = tuple(dims_new)
 
         dims_new = []
         if dims is not None and var.reduced_dims is not None:
