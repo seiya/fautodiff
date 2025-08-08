@@ -773,9 +773,9 @@ class Node:
                     ldim0 = ldim[0]
                     ldim1 = ldim[1]
                     if ldim0 is None:
-                        ldim0 = OpFunc("lbound", [lhs.change_index(None), OpInt(dim+1)])
+                        ldim0 = OpFunc("lbound", [grad_lhs.change_index(None), OpInt(dim+1)])
                     if ldim1 is None:
-                        ldim1 = OpFunc("ubound", [lhs.change_index(None), OpInt(dim+1)])
+                        ldim1 = OpFunc("ubound", [grad_lhs.change_index(None), OpInt(dim+1)])
                     idx_var = OpVar(f"n{dim+1}_{self.get_id()}_ad", typename="integer")
                     saved_vars.append(idx_var)
                     index_vars.append((idx_var, (ldim0, ldim1)))
@@ -803,7 +803,7 @@ class Node:
                         idx += 1
                         rdim0 = rdim[0]
                         if rdim0 is None:
-                            rdim0 = OpFunc("lbound", [var.change_index(None), OpInt(dim+1)])
+                            rdim0 = OpFunc("lbound", [var.add_suffix(AD_SUFFIX).change_index(None), OpInt(dim+1)])
                         index = idx_var
                         if rdim0 == ldim[0]:
                             index = idx_var
