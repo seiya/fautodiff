@@ -1148,6 +1148,19 @@ def _generate_ad_subroutine(
         return_flags = [node.flag() for node in routine_org.content.collect_return()]
     else:
         return_flags = None
+
+    # Collect potential pointer-target alias pairs for self-referential
+    # assignment detection.
+    ptr_pairs: Set[Tuple[str, str]] = set()
+
+    def _collect_ptr_pairs(node: Node) -> None:
+        if isinstance(node, PointerAssignment):
+            ptr_pairs.add((node.lhs.name_ext(), node.rhs.name_ext()))
+        for child in getattr(node, "iter_children", lambda: [])():
+            _collect_ptr_pairs(child)
+
+    _collect_ptr_pairs(routine_org.content)
+    Assignment.pointer_alias_pairs = ptr_pairs
     nodes = routine_org.content.generate_ad(
         saved_vars,
         reverse=reverse,

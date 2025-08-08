@@ -15,6 +15,7 @@ from typing import (
     List,
     Optional,
     Pattern,
+    Set,
     Tuple,
     Union,
 )
@@ -25,20 +26,20 @@ REV_SUFFIX = "_rev_ad"
 
 from .operators import (
     AryIndex,
+    OpChar,
     Operator,
+    OpFalse,
     OpFunc,
     OpFuncUser,
-    OpLeaf,
     OpInt,
-    OpReal,
-    OpTrue,
-    OpFalse,
-    OpChar,
-    OpVar,
+    OpLeaf,
     OpLogic,
     OpNeg,
     OpNot,
     OpRange,
+    OpReal,
+    OpTrue,
+    OpVar,
 )
 from .var_list import VarList
 
@@ -650,6 +651,60 @@ class Node:
     ) -> List["Node"]:
         rhs = rhs.deep_clone()
         extras: List[Node] = []
+
+        # Special handling for assignments between slices of the same array or
+        # potentially aliased arrays (e.g., pointer associations).  Copy each
+        # element of the adjoint of the left-hand slice to a temporary scalar,
+        # clear the source element, and accumulate it into the destination
+        # element inside explicit loops.
+        if (
+            isinstance(rhs, OpVar)
+            and isinstance(lhs, OpVar)
+            and self._may_alias(lhs, rhs)
+            and lhs.index is not None
+            and rhs.index is not None
+        ):
+            grad_lhs = lhs.add_suffix(AD_SUFFIX)
+            grad_rhs = rhs.add_suffix(AD_SUFFIX)
+            ad_info = self.info.get("code") if self.info is not None else None
+            tmp = OpVar(
+                self._save_var_name("tmp", self.get_id()),
+                typename=grad_lhs.typename,
+                kind=grad_lhs.kind,
+            )
+            saved_vars.append(tmp)
+
+            lhs_idx = lhs.index.deep_clone()
+            rhs_idx = rhs.index.deep_clone()
+            gl = grad_lhs.deep_clone()
+            gr = grad_rhs.deep_clone()
+            gl.index = lhs_idx
+            gr.index = rhs_idx
+
+            body: Block = Block(
+                [
+                    Assignment(tmp, gl, ad_info=ad_info),
+                    ClearAssignment(gl, ad_info=ad_info),
+                    Assignment(gr, tmp + gr, ad_info=ad_info),
+                ]
+            )
+
+            for dim in reversed(range(len(lhs_idx))):
+                ldim = lhs_idx[dim]
+                rdim = rhs_idx[dim]
+                if not isinstance(ldim, OpRange) or not isinstance(rdim, OpRange):
+                    break
+                idx_var = OpVar(f"i{dim}_{self.get_id()}", typename="integer")
+                saved_vars.append(idx_var)
+                length = ldim[1] - ldim[0] + OpInt(1)
+                lhs_idx[dim] = ldim[0] + idx_var - OpInt(1)
+                rhs_idx[dim] = rdim[0] + idx_var - OpInt(1)
+                rng = OpRange([OpInt(1), length])
+                body = Block([DoLoop(body, idx_var, rng)])
+
+            assigns = list(body.iter_children())
+            assigns.extend(extras)
+            return assigns
         # Handle user defined functions appearing in the expression first
         funcs = rhs.find_userfunc()
         for n, ufunc in enumerate(funcs):
@@ -2732,6 +2787,8 @@ class TypeDef(Node):
 class Assignment(Node):
     """An assignment statement ``lhs = rhs``."""
 
+    pointer_alias_pairs: ClassVar[Set[Tuple[str, str]]] = set()
+
     lhs: OpVar
     rhs: Operator
     accumulate: bool = False
@@ -2756,6 +2813,19 @@ class Assignment(Node):
         lhs = self.lhs.deep_clone()
         rhs = self.rhs.deep_clone()
         return Assignment(lhs, rhs, self.accumulate, self.info, self.ad_info)
+
+    @staticmethod
+    def _may_alias(lhs: OpVar, rhs: OpVar) -> bool:
+        name_l = lhs.name_ext()
+        name_r = rhs.name_ext()
+        if name_l == name_r:
+            return True
+        if lhs.pointer and rhs.pointer:
+            return True
+        pairs = Assignment.pointer_alias_pairs
+        if (name_l, name_r) in pairs or (name_r, name_l) in pairs:
+            return True
+        return False
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self._rhs_vars:
