@@ -54,6 +54,20 @@ class TestFortranRuntime(unittest.TestCase):
                 raise
             self.assertEqual(run.stdout.strip(), "OK")
 
+    def test_self_reference(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            exe = self._build(tmp, "run_self_reference")
+            try:
+                run = subprocess.run(
+                    [str(exe)], stdout=subprocess.PIPE, text=True, check=True
+                )
+            except subprocess.CalledProcessError as e:
+                if e.stdout:
+                    print(e.stdout)
+                raise
+            self.assertEqual(run.stdout.strip(), "OK")
+
 
 if __name__ == "__main__":
     unittest.main()

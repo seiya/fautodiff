@@ -175,6 +175,12 @@ class TestFortranADCode(unittest.TestCase):
     def test_return_example(self):
         self._run_test("return_example", ["conditional_return"])
 
+    def test_self_reference(self):
+        self._run_test(
+            "self_reference",
+            ["slice", "slice_ptr", "slice_expr"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
