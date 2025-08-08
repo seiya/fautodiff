@@ -35,7 +35,7 @@ class AryIndex:
             if dim is None:
                 continue
             if not isinstance(dim, Operator):
-                raise ValueError("dim must be either None, int, or Operator")
+                raise ValueError(f"dim must be either None, int, or Operator] {type(dim)}")
 
     def list(self) -> List[str]:
         """Return list of dimension strings, using ':' for undefined."""

@@ -762,7 +762,7 @@ class Node:
                 )
                 saved_vars.append(tmp_var)
                 lhs_index: List[Operator] = []
-                index_vars: List[Tuple[OpVar, OpRange]] = []
+                index_vars: List[Tuple[OpVar, Tuple[Operation]]] = []
                 for dim in range(len(lhs.index)):
                     ldim = lhs.index[dim]
                     if not isinstance(ldim, OpRange):
@@ -770,9 +770,15 @@ class Node:
                         continue
                     if ldim[2] is not None and ldim[2] != OpInt(1):
                         raise NotImplementedError(f"stride access is not supported: {lhs}")
+                    ldim0 = ldim[0]
+                    ldim1 = ldim[1]
+                    if ldim0 is None:
+                        ldim0 = OpFunc("lbound", [lhs.change_index(None), OpInt(dim+1)])
+                    if ldim1 is None:
+                        ldim1 = OpFunc("ubound", [lhs.change_index(None), OpInt(dim+1)])
                     idx_var = OpVar(f"n{dim+1}_{self.get_id()}_ad", typename="integer")
                     saved_vars.append(idx_var)
-                    index_vars.append((idx_var, ldim))
+                    index_vars.append((idx_var, (ldim0, ldim1)))
                     lhs_index.append(idx_var)
                 gl = grad_lhs.change_index(lhs_index)
                 body: Block = Block(
@@ -795,7 +801,15 @@ class Node:
                             raise NotImplementedError(f"stride access is not supported: {var}")
                         idx_var, ldim = index_vars[idx]
                         idx += 1
-                        rhs_index.append(rdim[0] + idx_var - ldim[0])
+                        rdim0 = rdim[0]
+                        if rdim0 is None:
+                            rdim0 = OpFunc("lbound", [var.change_index(None), OpInt(dim+1)])
+                        index = idx_var
+                        if rdim0 == ldim[0]:
+                            index = idx_var
+                        else:
+                            index = rdim0 + idx_var - ldim[0]
+                        rhs_index.append(index)
                     if idx != len(index_vars):
                         raise RuntimeError(f"The number of range index is different: {lhs} {var} {len(index_vars)} {idx}")
                     var.index = AryIndex(rhs_index) # override variables in rhs
