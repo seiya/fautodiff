@@ -1,17 +1,17 @@
 
-module array_slice
+module self_reference
 
 contains
-  subroutine slice_copy(u, n, m, i, j)
+  subroutine self_ref_slice(u, n, m, i, j)
     integer, intent(in) :: n, m, i, j
     real, intent(inout) :: u(:)
 
     u(n:m) = u(i:j)
 
     return
-  end subroutine slice_copy
+  end subroutine self_ref_slice
 
-  subroutine slice_copy_ptr(u, v, n, m, i, j)
+  subroutine self_ref_slice_ptr(u, v, n, m, i, j)
     integer, intent(in) :: n, m, i, j
     real, intent(inout), target :: u(:), v(:)
     real, pointer :: p(:), q(:)
@@ -26,9 +26,9 @@ contains
     u(n:m) = u(n:m) + q(i:j)
 
     return
-  end subroutine slice_copy_ptr
+  end subroutine self_ref_slice_ptr
 
-  subroutine slice_copy_expr(u, v, w, n, m, i, j, l1, l2)
+  subroutine self_ref_slice_expr(u, v, w, n, m, i, j, l1, l2)
     integer, intent(in) :: n, m, i, j, l1, l2
     real, intent(inout) :: u(:,:)
     real, intent(in) :: v(:,:)
@@ -43,5 +43,5 @@ contains
     end do
 
     return
-  end subroutine slice_copy_expr
-end module array_slice
+  end subroutine self_ref_slice_expr
+end module self_reference

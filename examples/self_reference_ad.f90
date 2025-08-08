@@ -1,10 +1,10 @@
-module array_slice_ad
-  use array_slice
+module self_reference_ad
+  use self_reference
   implicit none
 
 contains
 
-  subroutine slice_copy_fwd_ad(u, u_ad, n, m, i, j)
+  subroutine self_ref_slice_fwd_ad(u, u_ad, n, m, i, j)
     real, intent(inout) :: u(:)
     real, intent(inout) :: u_ad(:)
     integer, intent(in)  :: n
@@ -16,9 +16,9 @@ contains
     u(n:m) = u(i:j)
 
     return
-  end subroutine slice_copy_fwd_ad
+  end subroutine self_ref_slice_fwd_ad
 
-  subroutine slice_copy_rev_ad(u, u_ad, n, m, i, j)
+  subroutine self_ref_slice_rev_ad(u, u_ad, n, m, i, j)
     real, intent(inout) :: u(:)
     real, intent(inout) :: u_ad(:)
     integer, intent(in)  :: n
@@ -35,9 +35,9 @@ contains
     end do
 
     return
-  end subroutine slice_copy_rev_ad
+  end subroutine self_ref_slice_rev_ad
 
-  subroutine slice_copy_ptr_fwd_ad(u, u_ad, v, v_ad, n, m, i, j)
+  subroutine self_ref_slice_ptr_fwd_ad(u, u_ad, v, v_ad, n, m, i, j)
     real, intent(inout), target :: u(:)
     real, intent(inout), target :: u_ad(:)
     real, intent(inout), target :: v(:)
@@ -66,9 +66,9 @@ contains
     u(n:m) = u(n:m) + q(i:j)
 
     return
-  end subroutine slice_copy_ptr_fwd_ad
+  end subroutine self_ref_slice_ptr_fwd_ad
 
-  subroutine slice_copy_ptr_rev_ad(u, u_ad, v, v_ad, n, m, i, j)
+  subroutine self_ref_slice_ptr_rev_ad(u, u_ad, v, v_ad, n, m, i, j)
     real, intent(inout), target :: u(:)
     real, intent(inout), target :: u_ad(:)
     real, intent(inout), target :: v(:)
@@ -102,9 +102,9 @@ contains
     p_ad => null() ! p => u
 
     return
-  end subroutine slice_copy_ptr_rev_ad
+  end subroutine self_ref_slice_ptr_rev_ad
 
-  subroutine slice_copy_expr_fwd_ad(u, u_ad, v, v_ad, w, w_ad, n, m, i, j, l1, l2)
+  subroutine self_ref_slice_expr_fwd_ad(u, u_ad, v, v_ad, w, w_ad, n, m, i, j, l1, l2)
     real, intent(inout) :: u(:,:)
     real, intent(inout) :: u_ad(:,:)
     real, intent(in)  :: v(:,:)
@@ -130,9 +130,9 @@ contains
     end do
 
     return
-  end subroutine slice_copy_expr_fwd_ad
+  end subroutine self_ref_slice_expr_fwd_ad
 
-  subroutine slice_copy_expr_rev_ad(u, u_ad, v, v_ad, w, w_ad, n, m, i, j, l1, l2)
+  subroutine self_ref_slice_expr_rev_ad(u, u_ad, v, v_ad, w, w_ad, n, m, i, j, l1, l2)
     real, intent(inout) :: u(:,:)
     real, intent(inout) :: u_ad(:,:)
     real, intent(in)  :: v(:,:)
@@ -170,6 +170,6 @@ contains
     end do
 
     return
-  end subroutine slice_copy_expr_rev_ad
+  end subroutine self_ref_slice_expr_rev_ad
 
-end module array_slice_ad
+end module self_reference_ad
