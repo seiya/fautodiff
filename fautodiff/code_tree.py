@@ -93,17 +93,17 @@ class Node:
 
     def has_reference_to(self, var: str) -> bool:
         """Return ``True`` if ``var`` is refered within this node."""
-        if any(var == v.name for v in self.iter_ref_vars()):
+        if any(var.is_same_var(v) for v in self.iter_ref_vars()):
             return True
         return any(child.has_reference_to(var) for child in self.iter_children())
 
-    def has_assignment_to(self, var: str) -> bool:
+    def has_assignment_to(self, var: OpVar) -> bool:
         """Return ``True`` if ``var`` is assigned within this node."""
-        if any(var == v.name for v in self.iter_assign_vars()):
+        if any(var.is_same_var(v) for v in self.iter_assign_vars()):
             return True
         return any(child.has_assignment_to(var) for child in self.iter_children())
 
-    def has_access_to(self, var: str) -> bool:
+    def has_access_to(self, var: OpVar) -> bool:
         """Return ``True`` if ``var`` is accessed within this node."""
         if self.has_assignment_to(var):
             return True
@@ -652,59 +652,6 @@ class Node:
         rhs = rhs.deep_clone()
         extras: List[Node] = []
 
-        # Special handling for assignments between slices of the same array or
-        # potentially aliased arrays (e.g., pointer associations).  Copy each
-        # element of the adjoint of the left-hand slice to a temporary scalar,
-        # clear the source element, and accumulate it into the destination
-        # element inside explicit loops.
-        if (
-            isinstance(rhs, OpVar)
-            and isinstance(lhs, OpVar)
-            and self._may_alias(lhs, rhs)
-            and lhs.index is not None
-            and rhs.index is not None
-        ):
-            grad_lhs = lhs.add_suffix(AD_SUFFIX)
-            grad_rhs = rhs.add_suffix(AD_SUFFIX)
-            ad_info = self.info.get("code") if self.info is not None else None
-            tmp = OpVar(
-                self._save_var_name("tmp", self.get_id()),
-                typename=grad_lhs.typename,
-                kind=grad_lhs.kind,
-            )
-            saved_vars.append(tmp)
-
-            lhs_idx = lhs.index.deep_clone()
-            rhs_idx = rhs.index.deep_clone()
-            gl = grad_lhs.deep_clone()
-            gr = grad_rhs.deep_clone()
-            gl.index = lhs_idx
-            gr.index = rhs_idx
-
-            body: Block = Block(
-                [
-                    Assignment(tmp, gl, ad_info=ad_info),
-                    ClearAssignment(gl, ad_info=ad_info),
-                    Assignment(gr, tmp + gr, ad_info=ad_info),
-                ]
-            )
-
-            for dim in reversed(range(len(lhs_idx))):
-                ldim = lhs_idx[dim]
-                rdim = rhs_idx[dim]
-                if not isinstance(ldim, OpRange) or not isinstance(rdim, OpRange):
-                    break
-                idx_var = OpVar(f"i{dim}_{self.get_id()}", typename="integer")
-                saved_vars.append(idx_var)
-                length = ldim[1] - ldim[0] + OpInt(1)
-                lhs_idx[dim] = ldim[0] + idx_var - OpInt(1)
-                rhs_idx[dim] = rdim[0] + idx_var - OpInt(1)
-                rng = OpRange([OpInt(1), length])
-                body = Block([DoLoop(body, idx_var, rng)])
-
-            assigns = list(body.iter_children())
-            assigns.extend(extras)
-            return assigns
         # Handle user defined functions appearing in the expression first
         funcs = rhs.find_userfunc()
         for n, ufunc in enumerate(funcs):
@@ -775,25 +722,121 @@ class Node:
                     assigns.extend(extras)
                     return assigns
 
-            vars = rhs.collect_vars(without_index=True, without_refvar=True)
-            if lhs in vars:
+            rhs_vars = rhs.collect_vars(without_index=True, without_refvar=True)
+
+            # Special handling for assignments between slices of the same array or
+            # potentially aliased arrays (e.g., pointer associations).  Copy each
+            # element of the adjoint of the left-hand slice to a temporary scalar,
+            # clear the source element, and accumulate it into the destination
+            # element inside explicit loops.
+            flag = False
+            if lhs.index is not None:
+                for var in rhs_vars:
+                    if not var.ad_target:
+                        continue
+                    if (
+                        isinstance(var, OpVar)
+                        and self._may_alias(lhs, var)
+                        and var.index is not None
+                        and not lhs == var
+                    ):
+                        if lhs.name == var.name:
+                            for dim in range(len(lhs.index)):
+                                idx1 = lhs.index[dim]
+                                idx2 = var.index[dim]
+                                if isinstance(idx1, OpRange) or isinstance(idx2, OpRange):
+                                    flag = True
+                                    break
+                                diff = idx1 - idx2
+                                if not (isinstance(diff, OpInt) or (isinstance(diff, OpNeg) and isinstance(diff.args[0], OpInt))):
+                                    flag = True
+                                    break
+                            break
+                        flag = True
+                        break
+            if flag:
+                tmp_var = OpVar(
+                    self._save_var_name("tmp", self.get_id()),
+                    typename=grad_lhs.typename,
+                    kind=grad_lhs.kind,
+                )
+                saved_vars.append(tmp_var)
+                lhs_index: List[Operator] = []
+                index_vars: List[Tuple[OpVar, OpRange]] = []
+                for dim in range(len(lhs.index)):
+                    ldim = lhs.index[dim]
+                    if not isinstance(ldim, OpRange):
+                        lhs_index.append(ldim)
+                        continue
+                    if ldim[2] is not None and ldim[2] != OpInt(1):
+                        raise NotImplementedError(f"stride access is not supported: {lhs}")
+                    idx_var = OpVar(f"n{dim+1}_{self.get_id()}_ad", typename="integer")
+                    saved_vars.append(idx_var)
+                    index_vars.append((idx_var, ldim))
+                    lhs_index.append(idx_var)
+                gl = grad_lhs.change_index(lhs_index)
+                body: Block = Block(
+                    [
+                        Assignment(tmp_var, gl, ad_info=ad_info),
+                        ClearAssignment(gl, ad_info=ad_info),
+                    ]
+                )
+                for var in rhs_vars:
+                    if not var.ad_target:
+                        continue
+                    rhs_index: List[Operator] = []
+                    idx = 0
+                    for dim in range(len(var.index)):
+                        rdim = var.index[dim]
+                        if not isinstance(rdim, OpRange):
+                            rhs_index.append(rdim)
+                            continue
+                        if rdim[2] is not None and rdim[2] != OpInt(1):
+                            raise NotImplementedError(f"stride access is not supported: {var}")
+                        idx_var, ldim = index_vars[idx]
+                        idx += 1
+                        rhs_index.append(rdim[0] + idx_var - ldim[0])
+                    if idx != len(index_vars):
+                        raise RuntimeError(f"The number of range index is different: {lhs} {var} {len(index_vars)} {idx}")
+                    var.index = AryIndex(rhs_index) # override variables in rhs
+                for var in rhs_vars:
+                    grad_rhs = var.add_suffix(AD_SUFFIX)
+                    dev = rhs.derivative(
+                       var, target=grad_lhs, info=self.info, warnings=warnings
+                    )
+                    assig = Assignment(grad_rhs, tmp_var * dev, accumulate=(grad_rhs != grad_lhs), ad_info=ad_info)
+                    body.append(assig)
+
+                for idx_var, ldim in index_vars:
+                    rng = OpRange([ldim[0], ldim[1]])
+                    body = Block([DoLoop(body, idx_var, rng)])
+
+                assigns = list(body.iter_children())
+                assigns.extend(extras)
+                return assigns
+
+            # not the special case
+            grad_lhs = lhs.add_suffix(AD_SUFFIX)
+            ad_info = self.info.get("code") if self.info is not None else None
+
+            if lhs in rhs_vars:
                 # Ensure the derivative for lhs is computed last
-                vars.remove(lhs)
-                vars.append(lhs)
-            for var in vars:
+                rhs_vars.remove(lhs)
+                rhs_vars.append(lhs)
+            for var in rhs_vars:
                 if not var.ad_target:
                     continue
                 dev = rhs.derivative(
                     var, target=grad_lhs, info=self.info, warnings=warnings
                 )
-                v = var.add_suffix(AD_SUFFIX)
+                grad_rhs = var.add_suffix(AD_SUFFIX)
                 res = grad_lhs * dev
-                if not v.is_array() and res.is_array():
+                if not grad_rhs.is_array() and res.is_array():
                     res = OpFunc("sum", args=[res])
                 assigns.append(
-                    Assignment(v, res, accumulate=(v != grad_lhs), ad_info=ad_info)
+                    Assignment(grad_rhs, res, accumulate=(grad_rhs != grad_lhs), ad_info=ad_info)
                 )
-            if lhs not in vars:
+            if lhs not in rhs_vars:
                 # If lhs does not appear in rhs, its gradient is cleared
                 assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
         assigns.extend(extras)
@@ -5023,22 +5066,34 @@ class BlockConstruct(Node):
     def iter_ref_vars(self) -> Iterator[OpVar]:
         local_names = self._local_names()
         for var in self.decls.iter_ref_vars():
-            if var.name not in local_names:
+            v = var
+            while v.ref_var:
+                v = v.ref_var
+            if v.name not in local_names:
                 yield var
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         local_names = self._local_names()
         for var in self.decls.iter_assign_vars(without_savevar=without_savevar):
-            if var.name not in local_names:
+            v = var
+            while v.ref_var:
+                v = v.ref_var
+            if v.name not in local_names:
                 yield var
 
-    def has_reference_to(self, var: str) -> bool:
-        if var in self._local_names():
+    def has_reference_to(self, var: OpVar) -> bool:
+        v = var
+        while v.ref_var:
+            v = v.ref_var
+        if v.name in self._local_names():
             return False
         return self.decls.has_reference_to(var) or self.body.has_reference_to(var)
 
-    def has_assignment_to(self, var: str) -> bool:
-        if var in self._local_names():
+    def has_assignment_to(self, var: OpVar) -> bool:
+        v = var
+        while v.ref_var:
+            v = v.ref_var
+        if v.name in self._local_names():
             return False
         return self.decls.has_assignment_to(var) or self.body.has_assignment_to(var)
 

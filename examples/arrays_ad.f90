@@ -162,8 +162,6 @@ contains
     integer, intent(in)  :: idx(n)
     integer :: i
 
-    c_ad(:) = 0.0
-
     do i = 1, n
       b_ad(i) = a_ad(idx(i)) ! b(i) = a(idx(i)) + 1.0
       b(i) = a(idx(i)) + 1.0
