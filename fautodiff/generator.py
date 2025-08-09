@@ -1339,9 +1339,9 @@ def _generate_ad_subroutine(
         for i, node_fw in enumerate(fw_nodes):
             if isinstance(node_fw, SaveAssignment) and not node_fw.pushpop:
                 var = node_fw.var
-                if i < len(fw_nodes)-1:
+                if i < len(fw_nodes) - 1:
                     flag = False
-                    for node in fw_nodes[i+1:]:
+                    for node in fw_nodes[i + 1 :]:
                         if node.has_assignment_to(var):
                             flag = True
                             break
@@ -1522,7 +1522,6 @@ def _generate_ad_subroutine(
             ref = var.reference.remove_suffix(AD_SUFFIX)
             base_decl = routine_org.find_decl(ref)
 
-
         allocatable = False
         if base_decl is not None:
             allocatable = base_decl.allocatable
@@ -1616,6 +1615,19 @@ def _generate_ad_subroutine(
     subroutine = subroutine.prune_for(
         targets, mod_vars_all, decl_map=subroutine.decl_map, base_targets=targets
     )
+
+    # Remove arguments that are no longer used after pruning
+    used = {v.name for v in subroutine.content.collect_vars()}
+    used.update(v.name for v in subroutine.ad_init.collect_vars())
+    used.update(v.name for v in subroutine.ad_content.collect_vars())
+    for name in list(subroutine.args):
+        if name not in used:
+            decl = subroutine.decls.find_by_name(name)
+            if decl is not None:
+                subroutine.decls.remove_child(decl)
+            if subroutine.decl_map is not None and name in subroutine.decl_map:
+                del subroutine.decl_map[name]
+            subroutine.args.remove(name)
 
     # update routine_map with pruned argument information
     arg_info = routine_map.get(routine_org.name)

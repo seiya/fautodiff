@@ -21,10 +21,8 @@ contains
     return
   end subroutine simple_fwd_ad
 
-  subroutine simple_rev_ad(a, a_ad, b, b_ad, c_ad)
-    real, intent(in)  :: a
+  subroutine simple_rev_ad(a_ad, b_ad, c_ad)
     real, intent(inout) :: a_ad
-    real, intent(in)  :: b
     real, intent(inout) :: b_ad
     real, intent(inout) :: c_ad
 

@@ -5,11 +5,10 @@ module control_flow_ad
 
 contains
 
-  subroutine if_example_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
+  subroutine if_example_fwd_ad(x, x_ad, y, z, z_ad)
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
     real, intent(inout) :: y
-    real, intent(inout) :: y_ad
     real, intent(out) :: z
     real, intent(out) :: z_ad
 
@@ -29,11 +28,9 @@ contains
     return
   end subroutine if_example_fwd_ad
 
-  subroutine if_example_rev_ad(x, x_ad, y, y_ad, z_ad)
+  subroutine if_example_rev_ad(x, x_ad, z_ad)
     real, intent(in)  :: x
     real, intent(inout) :: x_ad
-    real, intent(inout) :: y
-    real, intent(inout) :: y_ad
     real, intent(inout) :: z_ad
 
     if (x > 0.0) then
@@ -71,9 +68,8 @@ contains
     return
   end subroutine select_example_fwd_ad
 
-  subroutine select_example_rev_ad(i, x, x_ad, z_ad)
+  subroutine select_example_rev_ad(i, x_ad, z_ad)
     integer, intent(in)  :: i
-    real, intent(in)  :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: z_ad
 
@@ -109,9 +105,8 @@ contains
     return
   end subroutine do_example_fwd_ad
 
-  subroutine do_example_rev_ad(n, x, x_ad, sum_ad)
+  subroutine do_example_rev_ad(n, x_ad, sum_ad)
     integer, intent(in)  :: n
-    real, intent(in)  :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: sum_ad
     integer :: i
@@ -124,11 +119,10 @@ contains
     return
   end subroutine do_example_rev_ad
 
-  subroutine do_while_example_rev_ad(x, x_ad, limit, limit_ad)
+  subroutine do_while_example_rev_ad(x, x_ad, limit)
     real, intent(in)  :: x
     real, intent(inout) :: x_ad
     real, intent(in)  :: limit
-    real, intent(inout) :: limit_ad
     real :: y_ad
     real :: y
 

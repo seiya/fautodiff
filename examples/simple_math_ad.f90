@@ -24,10 +24,8 @@ contains
     return
   end subroutine add_numbers_fwd_ad
 
-  subroutine add_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
-    real, intent(in)  :: a
+  subroutine add_numbers_rev_ad(a_ad, b_ad, c_ad)
     real, intent(inout) :: a_ad
-    real, intent(in)  :: b
     real, intent(inout) :: b_ad
     real, intent(inout) :: c_ad
     real :: work_ad
@@ -57,10 +55,8 @@ contains
     return
   end subroutine subtract_numbers_fwd_ad
 
-  subroutine subtract_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
-    real, intent(in)  :: a
+  subroutine subtract_numbers_rev_ad(a_ad, b_ad, c_ad)
     real, intent(inout) :: a_ad
-    real, intent(in)  :: b
     real, intent(inout) :: b_ad
     real, intent(inout) :: c_ad
 

@@ -18,13 +18,11 @@ contains
     return
   end subroutine self_ref_slice_fwd_ad
 
-  subroutine self_ref_slice_rev_ad(u, u_ad, n, m, i, j)
-    real, intent(inout) :: u(:)
+  subroutine self_ref_slice_rev_ad(u_ad, n, m, i)
     real, intent(inout) :: u_ad(:)
     integer, intent(in)  :: n
     integer, intent(in)  :: m
     integer, intent(in)  :: i
-    integer, intent(in)  :: j
     integer :: n1_12_ad
     real :: tmp_save_12_ad
 
@@ -68,10 +66,8 @@ contains
     return
   end subroutine self_ref_slice_ptr_fwd_ad
 
-  subroutine self_ref_slice_ptr_rev_ad(u, u_ad, v, v_ad, n, m, i, j)
-    real, intent(inout), target :: u(:)
+  subroutine self_ref_slice_ptr_rev_ad(u_ad, v_ad, n, m, i, j)
     real, intent(inout), target :: u_ad(:)
-    real, intent(inout), target :: v(:)
     real, intent(inout), target :: v_ad(:)
     integer, intent(in)  :: n
     integer, intent(in)  :: m
