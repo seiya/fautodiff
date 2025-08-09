@@ -28,9 +28,8 @@ contains
     return
   end subroutine sum_loop_fwd_ad
 
-  subroutine sum_loop_rev_ad(n, x, x_ad, y_ad, s_ad)
+  subroutine sum_loop_rev_ad(n, x_ad, y_ad, s_ad)
     integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
     real, intent(inout) :: x_ad(n)
     real, intent(inout) :: y_ad(n)
     real, intent(inout) :: s_ad
@@ -75,9 +74,8 @@ contains
     return
   end subroutine stencil_loop_fwd_ad
 
-  subroutine stencil_loop_rev_ad(n, x, x_ad, y_ad)
+  subroutine stencil_loop_rev_ad(n, x_ad, y_ad)
     integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
     real, intent(inout) :: x_ad(n)
     real, intent(inout) :: y_ad(n)
     integer :: i

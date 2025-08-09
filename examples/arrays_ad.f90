@@ -21,11 +21,9 @@ contains
     return
   end subroutine elementwise_add_fwd_ad
 
-  subroutine elementwise_add_rev_ad(n, a, a_ad, b, b_ad, c_ad)
+  subroutine elementwise_add_rev_ad(n, a_ad, b_ad, c_ad)
     integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
     real, intent(inout) :: a_ad(n)
-    real, intent(in)  :: b(n)
     real, intent(inout) :: b_ad(n)
     real, intent(inout) :: c_ad(n)
 
@@ -51,9 +49,8 @@ contains
     return
   end subroutine scale_array_fwd_ad
 
-  subroutine scale_array_rev_ad(n, a, a_ad)
+  subroutine scale_array_rev_ad(n, a_ad)
     integer, intent(in)  :: n
-    real, intent(inout) :: a(n)
     real, intent(inout) :: a_ad(n)
     integer :: i
 
@@ -88,10 +85,9 @@ contains
     return
   end subroutine multidimension_fwd_ad
 
-  subroutine multidimension_rev_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
+  subroutine multidimension_rev_ad(n, m, a_ad, b, b_ad, c, c_ad, d_ad)
     integer, intent(in)  :: n
     integer, intent(in)  :: m
-    real, intent(in)  :: a(n,m)
     real, intent(inout) :: a_ad(n,m)
     real, intent(in)  :: b(n,m)
     real, intent(inout) :: b_ad(n,m)
@@ -216,9 +212,8 @@ contains
     return
   end subroutine stencil_fwd_ad
 
-  subroutine stencil_rev_ad(n, a, a_ad, b_ad)
+  subroutine stencil_rev_ad(n, a_ad, b_ad)
     integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
     real, intent(inout) :: a_ad(n)
     real, intent(inout) :: b_ad(n)
     integer :: i

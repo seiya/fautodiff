@@ -30,10 +30,9 @@ contains
     return
   end subroutine simple_fwd_ad
 
-  subroutine simple_rev_ad(x, x_ad, y, y_ad, z_ad)
+  subroutine simple_rev_ad(x, x_ad, y_ad, z_ad)
     real, intent(in)  :: x
     real, intent(inout) :: x_ad
-    real, intent(in)  :: y
     real, intent(inout) :: y_ad
     real, intent(inout) :: z_ad
     real :: work_ad

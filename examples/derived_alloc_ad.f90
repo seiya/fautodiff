@@ -29,8 +29,7 @@ contains
     return
   end subroutine derived_alloc_init_fwd_ad
 
-  subroutine derived_alloc_init_rev_ad(n, m)
-    integer, intent(in)  :: n
+  subroutine derived_alloc_init_rev_ad(m)
     integer, intent(in)  :: m
     integer :: j
 

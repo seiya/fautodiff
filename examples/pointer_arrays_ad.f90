@@ -44,9 +44,8 @@ contains
     return
   end subroutine pointer_allocate_fwd_ad
 
-  subroutine pointer_allocate_rev_ad(n, x, x_ad, res_ad)
+  subroutine pointer_allocate_rev_ad(n, x_ad, res_ad)
     integer, intent(in)  :: n
-    real, intent(in)  :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, pointer :: p_ad(:)
@@ -104,9 +103,8 @@ contains
     return
   end subroutine pointer_subarray_fwd_ad
 
-  subroutine pointer_subarray_rev_ad(n, x, x_ad, res_ad)
+  subroutine pointer_subarray_rev_ad(n, x_ad, res_ad)
     integer, intent(in)  :: n
-    real, intent(in)  :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, pointer :: p_ad(:)
@@ -154,8 +152,7 @@ contains
     return
   end subroutine pointer_allsub_init_fwd_ad
 
-  subroutine pointer_allsub_init_rev_ad(n)
-    integer, intent(in)  :: n
+  subroutine pointer_allsub_init_rev_ad()
 
     if (allocated(all_p_ad)) then
       deallocate(all_p_ad)
@@ -272,11 +269,9 @@ contains
     return
   end subroutine pointer_swap_fwd_ad
 
-  subroutine pointer_swap_rev_ad(n, x, x_ad, y, y_ad, res_ad)
+  subroutine pointer_swap_rev_ad(n, x_ad, y_ad, res_ad)
     integer, intent(in)  :: n
-    real, intent(in), target  :: x(n)
     real, intent(inout), target :: x_ad(n)
-    real, intent(in), target  :: y(n)
     real, intent(inout), target :: y_ad(n)
     real, intent(inout) :: res_ad
     real, pointer :: swap_ad(:)

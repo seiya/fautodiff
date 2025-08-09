@@ -17,11 +17,9 @@ contains
     return
   end subroutine add_const_fwd_ad
 
-  subroutine add_const_rev_ad(x, x_ad, y_ad, z)
-    real, intent(in)  :: x
+  subroutine add_const_rev_ad(x_ad, y_ad)
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
-    real, intent(in)  :: z
 
     x_ad = y_ad + x_ad ! y = x + z
     y_ad = 0.0 ! y = x + z
@@ -45,8 +43,7 @@ contains
     return
   end subroutine worker_fwd_ad
 
-  subroutine worker_rev_ad(x, x_ad, z_ad)
-    real, intent(in)  :: x
+  subroutine worker_rev_ad(x_ad, z_ad)
     real, intent(inout) :: x_ad
     real, intent(inout) :: z_ad
     real :: y_ad

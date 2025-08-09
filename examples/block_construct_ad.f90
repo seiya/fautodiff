@@ -16,8 +16,7 @@ contains
     return
   end subroutine compute_module_fwd_ad
 
-  subroutine compute_module_rev_ad(val, val_ad)
-    real, intent(in)  :: val
+  subroutine compute_module_rev_ad(val_ad)
     real, intent(inout) :: val_ad
 
     val_ad = z_ad + val_ad ! z = val + 1.0
@@ -51,8 +50,7 @@ contains
     return
   end subroutine use_block_fwd_ad
 
-  subroutine use_block_rev_ad(x, x_ad, y_ad)
-    real, intent(in)  :: x
+  subroutine use_block_rev_ad(x_ad, y_ad)
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
     real :: z_ad

@@ -16,10 +16,8 @@ contains
     return
   end subroutine foo_fwd_ad
 
-  subroutine foo_rev_ad(a, a_ad, b, b_ad)
-    real, intent(inout) :: a
+  subroutine foo_rev_ad(a_ad, b_ad)
     real, intent(inout) :: a_ad
-    real, intent(in)  :: b
     real, intent(inout) :: b_ad
 
     b_ad = a_ad + b_ad ! a = a * 2.0 + b

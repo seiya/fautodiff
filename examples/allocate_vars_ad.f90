@@ -81,9 +81,8 @@ contains
     return
   end subroutine module_vars_init_fwd_ad
 
-  subroutine module_vars_init_rev_ad(n, x, x_ad)
+  subroutine module_vars_init_rev_ad(n, x_ad)
     integer, intent(in)  :: n
-    real, intent(in)  :: x
     real, intent(inout) :: x_ad
     integer :: i
 

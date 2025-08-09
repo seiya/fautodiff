@@ -21,8 +21,7 @@ contains
     return
   end subroutine sum_reduce_fwd_ad
 
-  subroutine sum_reduce_rev_ad(x, x_ad, comm)
-    real, intent(inout) :: x
+  subroutine sum_reduce_rev_ad(x_ad, comm)
     real, intent(inout) :: x_ad
     integer, intent(in)  :: comm
     real :: tmp_ad
@@ -69,8 +68,7 @@ contains
     return
   end subroutine isend_irecv_fwd_ad
 
-  subroutine isend_irecv_rev_ad(x, x_ad, y_ad, comm)
-    real, intent(inout) :: x(2)
+  subroutine isend_irecv_rev_ad(x_ad, y_ad, comm)
     real, intent(inout) :: x_ad(2)
     real, intent(inout) :: y_ad
     integer, intent(in)  :: comm

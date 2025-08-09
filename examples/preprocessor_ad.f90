@@ -20,8 +20,7 @@ contains
     return
   end subroutine foo_fwd_ad
 
-  subroutine foo_rev_ad(x, x_ad, y_ad)
-    real, intent(in)  :: x
+  subroutine foo_rev_ad(x_ad, y_ad)
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
 

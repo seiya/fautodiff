@@ -165,15 +165,13 @@ contains
     return
   end subroutine reduction_rev_ad
 
-  subroutine non_differentiable_intrinsics_fwd_ad(str, arr, arr_ad, idx, lb, ub, x, x_ad, y, y_ad)
+  subroutine non_differentiable_intrinsics_fwd_ad(str, arr, idx, lb, ub, x, y, y_ad)
     character(len=*), intent(in)  :: str
     real, intent(in)  :: arr(:)
-    real, intent(in)  :: arr_ad(:)
     integer, intent(out) :: idx
     integer, intent(out) :: lb
     integer, intent(out) :: ub
     real, intent(in)  :: x
-    real, intent(in)  :: x_ad
     real, intent(out) :: y
     real, intent(out) :: y_ad
     real :: a_ad
@@ -198,11 +196,7 @@ contains
     return
   end subroutine non_differentiable_intrinsics_fwd_ad
 
-  subroutine non_differentiable_intrinsics_rev_ad(str, arr, arr_ad, x, x_ad, y_ad)
-    character(len=*), intent(in)  :: str
-    real, intent(in)  :: arr(:)
-    real, intent(inout) :: arr_ad(:)
-    real, intent(in)  :: x
+  subroutine non_differentiable_intrinsics_rev_ad(x_ad, y_ad)
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
 
@@ -225,8 +219,7 @@ contains
     return
   end subroutine special_intrinsics_fwd_ad
 
-  subroutine special_intrinsics_rev_ad(mat_in, mat_in_ad, mat_out_ad)
-    real, intent(in)  :: mat_in(:,:)
+  subroutine special_intrinsics_rev_ad(mat_in_ad, mat_out_ad)
     real, intent(inout) :: mat_in_ad(:,:)
     real, intent(inout) :: mat_out_ad(:,:)
 
@@ -236,8 +229,7 @@ contains
     return
   end subroutine special_intrinsics_rev_ad
 
-  subroutine casting_intrinsics_fwd_ad(i, r, r_ad, d, d_ad, c, n)
-    integer, intent(in)  :: i
+  subroutine casting_intrinsics_fwd_ad(r, r_ad, d, d_ad, c, n)
     real, intent(in)  :: r
     real, intent(in)  :: r_ad
     double precision, intent(out) :: d
@@ -255,12 +247,9 @@ contains
     return
   end subroutine casting_intrinsics_fwd_ad
 
-  subroutine casting_intrinsics_rev_ad(i, r, r_ad, d_ad, c)
-    integer, intent(in)  :: i
-    real, intent(in)  :: r
+  subroutine casting_intrinsics_rev_ad(r_ad, d_ad)
     real, intent(inout) :: r_ad
     double precision, intent(inout) :: d_ad
-    character(len=1), intent(inout) :: c
 
     r_ad = d_ad + r_ad ! d = dble(r) + dble(i2)
     d_ad = 0.0d0 ! d = dble(r) + dble(i2)
