@@ -35,7 +35,9 @@ class AryIndex:
             if dim is None:
                 continue
             if not isinstance(dim, Operator):
-                raise ValueError(f"dim must be either None, int, or Operator] {type(dim)}")
+                raise ValueError(
+                    f"dim must be either None, int, or Operator] {type(dim)}"
+                )
 
     def list(self) -> List[str]:
         """Return list of dimension strings, using ':' for undefined."""
@@ -1046,7 +1048,7 @@ class OpVar(OpLeaf):
         if self.ref_var is not None:
             if other.ref_var is None:
                 return False
-            return self.ref_var.is_save_var(other.ref_var)
+            return self.ref_var.is_same_var(other.ref_var)
         return True
 
     def get_dims(self) -> Optional[List[str]]:
