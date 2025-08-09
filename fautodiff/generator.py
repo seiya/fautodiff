@@ -1258,8 +1258,7 @@ def _generate_ad_subroutine(
         if reverse:
             _strip_sequential_omp(fw_block, warnings, reverse=True)
 
-        assigned = fw_block.assigned_vars(without_savevar=True)
-        assigned = ad_block.assigned_vars(assigned, without_savevar=True)
+        assigned = routine_org.content.assigned_vars(without_savevar=True)
         required = ad_block.required_vars(without_savevar=True)
         required = fw_block.required_vars(required, without_savevar=True)
         sub_fwd_rev = _module_var_fwd_rev(
