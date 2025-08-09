@@ -78,7 +78,7 @@ contains
     else
       call MPI_reduce(inner1, inner1, 1, MPI_REAL, MPI_SUM, 0, comm, ierr)
     end if
-    call sum_reduce_rev_ad(x, x_ad, comm)
+    call sum_reduce_rev_ad(x_ad, comm)
     inner2 = x_ad
     if (rank == 0) then
       call MPI_reduce(MPI_IN_PLACE, inner2, 1, MPI_REAL, MPI_SUM, 0, comm, ierr)
@@ -122,7 +122,7 @@ contains
     else
       call MPI_reduce(inner1, inner1, 1, MPI_REAL, MPI_SUM, 0, comm, ierr)
     end if
-    call isend_irecv_rev_ad(x, x_ad, y_ad, comm)
+    call isend_irecv_rev_ad(x_ad, y_ad, comm)
     inner2 = sum(x_ad)
     if (rank == 0) then
       call MPI_reduce(MPI_IN_PLACE, inner2, 1, MPI_REAL, MPI_SUM, 0, comm, ierr)

@@ -36,13 +36,11 @@ contains
     return
   end subroutine do_inc_fwd_ad
 
-  subroutine do_inc_rev_ad(x, x_ad, y, y_ad)
-    real, intent(inout) :: x
+  subroutine do_inc_rev_ad(x_ad, y_ad)
     real, intent(inout) :: x_ad
-    real, intent(in)  :: y
     real, intent(inout) :: y_ad
 
-    call inc_rev_ad(x, x_ad, y, y_ad) ! call inc(a=x, b=y)
+    call inc_rev_ad(x_ad, y_ad) ! call inc(a=x, b=y)
 
     return
   end subroutine do_inc_rev_ad

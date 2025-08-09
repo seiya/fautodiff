@@ -145,7 +145,7 @@ contains
     call non_differentiable_intrinsics(str, arr, idx, lb, ub, 1.0, y)
     call non_differentiable_intrinsics(str, arr, idx, lb, ub, 1.0 + eps, y_eps)
     fd = (y_eps - y) / eps
-    call non_differentiable_intrinsics_fwd_ad(str, arr, arr_ad, idx, lb, ub, 1.0, 1.0, y, y_ad)
+    call non_differentiable_intrinsics_fwd_ad(str, arr, idx, lb, ub, 1.0, y, y_ad)
     if (abs(y_ad - fd) > tol) then
        print *, 'test_non_diff_fwd failed', y_ad, fd
        error stop 1
@@ -154,7 +154,7 @@ contains
     inner1 = y_ad**2
     arr_ad = 0.0
     x_ad = 0.0
-    call non_differentiable_intrinsics_rev_ad(str, arr, arr_ad, 1.0, x_ad, y_ad)
+    call non_differentiable_intrinsics_rev_ad(x_ad, y_ad)
     inner2 = x_ad
     if (abs(inner2 - inner1) > tol) then
        print *, 'test_non_diff_rev failed', inner1, inner2
@@ -199,7 +199,7 @@ contains
 
     inner1 = sum(mat_out_ad(:,:)**2)
     mat_in_ad(:,:) = 0.0
-    call special_intrinsics_rev_ad(mat_in, mat_in_ad, mat_out_ad)
+    call special_intrinsics_rev_ad(mat_in_ad, mat_out_ad)
     inner2 = sum(mat_in_ad(:,:))
     if (abs((inner2 - inner1) / inner1) > tol2) then
        print *, 'test_special_rev failed', inner1, inner2
@@ -226,7 +226,7 @@ contains
     call casting_intrinsics(i, r + eps, d_eps, c, n)
     fd = (d_eps - d) / eps
     r_ad = 1.0
-    call casting_intrinsics_fwd_ad(i, r, r_ad, d, d_ad, c, n)
+    call casting_intrinsics_fwd_ad(r, r_ad, d, d_ad, c, n)
     if (abs((d_ad - fd) / fd) > tol) then
        print *, 'test_casting_fwd failed', d_ad, fd
        error stop 1
@@ -238,7 +238,7 @@ contains
     c = 'A'
     call casting_intrinsics(i, r, d, c, n)
     r_ad = 0.0
-    call casting_intrinsics_rev_ad(i, r, r_ad, d_ad, c)
+    call casting_intrinsics_rev_ad(r_ad, d_ad)
     inner2 = r_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_casting failed', inner1, inner2

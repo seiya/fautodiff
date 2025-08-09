@@ -105,7 +105,7 @@ contains
     inner1 = x_ad**2
     call module_vars_finalize_rev_ad(n, x_ad)
     call module_vars_main_rev_ad(n, x_ad)
-    call module_vars_init_rev_ad(n, x, x_ad)
+    call module_vars_init_rev_ad(n, x_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_module_vars_rev faile', inner1, inner2

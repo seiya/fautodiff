@@ -60,13 +60,11 @@ contains
     return
   end subroutine call_subroutine_fwd_ad
 
-  subroutine call_subroutine_rev_ad(x, x_ad, y, y_ad)
-    real, intent(inout) :: x
+  subroutine call_subroutine_rev_ad(x_ad, y_ad)
     real, intent(inout) :: x_ad
-    real, intent(in)  :: y
     real, intent(inout) :: y_ad
 
-    call foo_rev_ad(x, x_ad, y, y_ad) ! call foo(x, y)
+    call foo_rev_ad(x_ad, y_ad) ! call foo(x, y)
 
     return
   end subroutine call_subroutine_rev_ad
@@ -105,15 +103,13 @@ contains
     return
   end subroutine arg_operation_fwd_ad
 
-  subroutine arg_operation_rev_ad(x, x_ad, y, y_ad)
-    real, intent(inout) :: x
+  subroutine arg_operation_rev_ad(x_ad, y_ad)
     real, intent(inout) :: x_ad
-    real, intent(in)  :: y
     real, intent(inout) :: y_ad
     real :: foo_arg1_save_45_ad
 
     foo_arg1_save_45_ad = 0.0
-    call foo_rev_ad(x, x_ad, y * 2.0, foo_arg1_save_45_ad) ! call foo(x, y * 2.0)
+    call foo_rev_ad(x_ad, foo_arg1_save_45_ad) ! call foo(x, y * 2.0)
     y_ad = foo_arg1_save_45_ad * 2.0 + y_ad ! call foo(x, y * 2.0)
 
     return
@@ -133,15 +129,14 @@ contains
     return
   end subroutine arg_function_fwd_ad
 
-  subroutine arg_function_rev_ad(x, x_ad, y, y_ad)
-    real, intent(inout) :: x
+  subroutine arg_function_rev_ad(x_ad, y, y_ad)
     real, intent(inout) :: x_ad
     real, intent(in)  :: y
     real, intent(inout) :: y_ad
     real :: foo_arg1_save_54_ad
 
     foo_arg1_save_54_ad = 0.0
-    call foo_rev_ad(x, x_ad, bar(y), foo_arg1_save_54_ad) ! call foo(x, bar(y))
+    call foo_rev_ad(x_ad, foo_arg1_save_54_ad) ! call foo(x, bar(y))
     call bar_rev_ad(y, y_ad, foo_arg1_save_54_ad) ! call foo(x, bar(y))
 
     return

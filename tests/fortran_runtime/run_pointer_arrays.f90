@@ -78,7 +78,7 @@ contains
 
     inner1 = res_ad**2
     x_ad = 0.0
-    call pointer_allocate_rev_ad(n, x, x_ad, res_ad)
+    call pointer_allocate_rev_ad(n, x_ad, res_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_pointer_allocate_rev failed', inner1, inner2
@@ -113,7 +113,7 @@ contains
 
     inner1 = res_ad**2
     x_ad = 0.0
-    call pointer_subarray_rev_ad(n, x, x_ad, res_ad)
+    call pointer_subarray_rev_ad(n, x_ad, res_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_pointer_subarray_rev failed', inner1, inner2
@@ -168,7 +168,7 @@ contains
        error stop 1
     end if
 
-    call pointer_allsub_init_rev_ad(n)
+    call pointer_allsub_init_rev_ad()
     deallocate(all_p)
 
     return
@@ -202,7 +202,7 @@ contains
     inner1 = res_ad**2
     x_ad(:) = 0.0
     y_ad(:) = 0.0
-    call pointer_swap_rev_ad(n, x, x_ad, y, y_ad, res_ad)
+    call pointer_swap_rev_ad(n, x_ad, y_ad, res_ad)
     inner2 = sum(x_ad) + sum(y_ad)
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_pointer_swap_rev failed', inner1, inner2
