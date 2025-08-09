@@ -71,7 +71,7 @@ contains
     end if
 
     inner1 = sum(u_ad(:)**2)
-    call self_ref_slice_rev_ad(u, u_ad, 3, 5, 1, 3)
+    call self_ref_slice_rev_ad(u_ad, 3, 5, 1)
     inner2 = sum(u_ad(:))
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_slice_rev failed', inner1, inner2
@@ -111,7 +111,7 @@ contains
     end if
 
     inner1 = sum(u_ad(:)**2) + sum(v_ad(:)**2)
-    call self_ref_slice_ptr_rev_ad(u, u_ad, v, v_ad, 3, 5, 1, 3)
+    call self_ref_slice_ptr_rev_ad(u_ad, v_ad, 3, 5, 1, 3)
     inner2 = sum(u_ad(:)) + sum(v_ad(:))
     if (abs((inner2 - inner1) / inner1) > tol_ptr) then
        print *, 'test_slice_ptr_rev failed', inner1, inner2

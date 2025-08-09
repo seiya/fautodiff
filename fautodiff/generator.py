@@ -7,6 +7,7 @@ FWD_SUFFIX = "_fwd_ad"
 REV_SUFFIX = "_rev_ad"
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -632,7 +633,6 @@ def _dependency_groups(
         if v not in indices:
             strongconnect(v)
 
-    comps.reverse()  # Tarjan yields reverse topological order
     return comps, deps
 
 
@@ -1620,6 +1620,13 @@ def _generate_ad_subroutine(
     used = {v.name for v in subroutine.content.collect_vars()}
     used.update(v.name for v in subroutine.ad_init.collect_vars())
     used.update(v.name for v in subroutine.ad_content.collect_vars())
+    for decl in subroutine.decls.iter_children():
+        if decl.name in used and decl.dims:
+            dims = decl.dims if isinstance(decl.dims, tuple) else (decl.dims,)
+            for dim in dims:
+                for name in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", dim):
+                    if name in subroutine.args:
+                        used.add(name)
     for name in list(subroutine.args):
         if name not in used:
             decl = subroutine.decls.find_by_name(name)

@@ -91,7 +91,7 @@ contains
     inner1 = z_ad**2
     x_ad = 0.0
     y_ad = 0.0
-    call simple_rev_ad(x, x_ad, y, y_ad, z_ad)
+    call simple_rev_ad(x, x_ad, y_ad, z_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_simple_rev failed', inner1, inner2

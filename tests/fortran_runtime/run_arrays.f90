@@ -91,7 +91,7 @@ contains
     inner1 = sum(c_ad(:)**2)
     a_ad(:) = 0.0
     b_ad(:) = 0.0
-    call elementwise_add_rev_ad(n, a, a_ad, b, b_ad, c_ad)
+    call elementwise_add_rev_ad(n, a_ad, b_ad, c_ad)
     inner2 = sum(a_ad) + sum(b_ad)
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_elementwise_rev failed', inner1, inner2
@@ -126,7 +126,7 @@ contains
 
     inner1 = sum(a_ad(:)**2)
     a = (/1.0, 2.0, 3.0/)
-    call scale_array_rev_ad(n, a, a_ad)
+    call scale_array_rev_ad(n, a_ad)
     inner2 = sum(a_ad(:))
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_scale_array_rev failed', inner1, inner2
@@ -167,7 +167,7 @@ contains
     a_ad(:,:) = 0.0
     b_ad(:,:) = 0.0
     c_ad = 0.0
-    call multidimension_rev_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d_ad)
+    call multidimension_rev_ad(n, m, a_ad, b, b_ad, c, c_ad, d_ad)
     inner2 = sum(a_ad(:,:)) + sum(b_ad(:,:)) + c_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_multidimension_rev failed', inner1, inner2
@@ -279,7 +279,7 @@ contains
 
     inner1 = sum(b_ad(:)**2)
     a_ad(:) = 0.0
-    call stencil_rev_ad(n, a, a_ad, b_ad)
+    call stencil_rev_ad(n, a_ad, b_ad)
     inner2 = sum(a_ad(:))
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_stencil_rev failed', inner1, inner2

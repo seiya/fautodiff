@@ -64,7 +64,7 @@ contains
 
     inner1 = y_ad**2
     x_ad = 0.0
-    call add_const_rev_ad(x, x_ad, y_ad, z)
+    call add_const_rev_ad(x_ad, y_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_add_const_rev failed', inner1, inner2
@@ -94,7 +94,7 @@ contains
 
     inner1 = z_ad**2
     x_ad = 0.0
-    call worker_rev_ad(x, x_ad, z_ad)
+    call worker_rev_ad(x_ad, z_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_worker_rev failed', inner1, inner2

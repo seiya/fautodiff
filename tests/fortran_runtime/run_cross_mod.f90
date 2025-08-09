@@ -71,7 +71,7 @@ contains
 
     inner1 = x_ad**2
     x = 1.0
-    call call_inc_rev_ad(x, x_ad)
+    call call_inc_rev_ad(x_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_call_inc_rev failed', inner1, inner2
@@ -103,7 +103,7 @@ contains
 
     inner1 = x_ad**2
     x = 1.0
-    call call_inc_kw_rev_ad(x, x_ad)
+    call call_inc_kw_rev_ad(x_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_call_inc_kw_rev failed', inner1, inner2
@@ -136,7 +136,7 @@ contains
     inner1 = a_ad**2
     a = 1.0
     inc_ad = 0.0
-    call incval_rev_ad(a, a_ad, 1.0, inc_ad)
+    call incval_rev_ad(a_ad, inc_ad)
     inner2 = a_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_incval_rev failed', inner1, inner2

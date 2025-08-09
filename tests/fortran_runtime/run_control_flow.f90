@@ -70,7 +70,7 @@ contains
     fd = (z_eps - z) / eps
     x_ad = 1.0
     y_ad = 1.0
-    call if_example_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
+    call if_example_fwd_ad(x, x_ad, y, z, z_ad)
     if (abs((z_ad - fd) / fd) > tol) then
        print *, 'test_if_example_fwd failed', z_ad, fd
        error stop 1
@@ -79,7 +79,7 @@ contains
     inner1 = z_ad**2
     x_ad = 0.0
     y_ad = 0.0
-    call if_example_rev_ad(x, x_ad, y, y_ad, z_ad)
+    call if_example_rev_ad(x, x_ad, z_ad)
     inner2 = x_ad + y_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_if_example_rev failed', inner1, inner2
@@ -111,7 +111,7 @@ contains
 
     inner1 = sum_ad**2
     x_ad = 0.0
-    call do_example_rev_ad(n, x, x_ad, sum_ad)
+    call do_example_rev_ad(n, x_ad, sum_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_do_example_rev failed', inner1, inner2
@@ -142,7 +142,7 @@ contains
     end if
     inner1 = z_ad**2
     x_ad = 0.0
-    call select_example_rev_ad(i, x, x_ad, z_ad)
+    call select_example_rev_ad(i, x_ad, z_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_select_example_rev failed case1', inner1, inner2
@@ -161,7 +161,7 @@ contains
     end if
     inner1 = z_ad**2
     x_ad = 0.0
-    call select_example_rev_ad(i, x, x_ad, z_ad)
+    call select_example_rev_ad(i, x_ad, z_ad)
     inner2 = x_ad
     if (abs(inner2 - inner1) > tol) then
        print *, 'test_select_example_rev failed default', inner1, inner2
@@ -192,7 +192,7 @@ contains
     inner1 = 0.0
     x_ad = 0.0
     limit_ad = 0.0
-    call do_while_example_rev_ad(x, x_ad, limit, limit_ad)
+    call do_while_example_rev_ad(x, x_ad, limit)
     inner2 = x_ad + limit_ad
     if (abs(inner2 - inner1) > tol) then
        print *, 'test_do_while_example_rev failed', inner1, inner2

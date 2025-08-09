@@ -72,7 +72,7 @@ contains
     inner1 = x_ad**2
     x = 2.0_8
     call scale_8(x)
-    call scale_8_rev_ad(x, x_ad)
+    call scale_8_rev_ad(x_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_scale_8 failed', inner1, inner2
@@ -105,7 +105,7 @@ contains
     inner1 = x_ad**2
     x = 2.0_RP
     call scale_rp(x)
-    call scale_rp_rev_ad(x, x_ad)
+    call scale_rp_rev_ad(x_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_scale_rp failed', inner1, inner2
@@ -138,7 +138,7 @@ contains
     inner1 = x_ad**2
     x = 2.0d0
     call scale_dp(x)
-    call scale_dp_rev_ad(x, x_ad)
+    call scale_dp_rev_ad(x_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
        print *, 'test_scale_dp failed', inner1, inner2

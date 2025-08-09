@@ -77,7 +77,7 @@ contains
     end if
 
     call derived_alloc_finalize_fwd_ad(m)
-    call derived_alloc_init_rev_ad(n, m)
+    call derived_alloc_init_rev_ad(m)
     call derived_alloc_finalize(m)
 
     return
