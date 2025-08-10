@@ -1873,17 +1873,16 @@ def generate_ad(
             mod.uses.append(Use("fautodiff_stack"))
 
         modules.append(render_program(mod))
-
-    code = "\n".join(modules)
-    if out_file:
-        Path(out_file).write_text(code)
-    if write_fadmod:
-        for mod_org in modules_org:
+        if write_fadmod:
             _write_fadmod(
                 mod_org,
                 routine_map,
                 fadmod_dir,
             )
+
+    code = "\n".join(modules)
+    if out_file:
+        Path(out_file).write_text(code)
     if warn and warnings:
         for msg in warnings:
             print(f"Warning: {msg}", file=sys.stderr)
