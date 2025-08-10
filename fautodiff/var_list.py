@@ -277,6 +277,17 @@ class VarList:
         else:
             self._update_dims(name, var.ndims_ext())
 
+        # If ``var`` references the entire array (all dimensions are ``:``)
+        # then any previously recorded indices can be replaced by a single
+        # ``None`` entry representing the full variable.
+        if isinstance(var_index, AryIndex) and all(
+            AryIndex.dim_is_entire(dim) for dim in var_index
+        ):
+            self.vars[name] = [var_index]
+            if name in self.exclude:
+                del self.exclude[name]
+            return
+
         # Remove exclusions that are now explicitly included.
         if name in self.exclude:
             for index in list(self.exclude[name]):
@@ -410,8 +421,8 @@ class VarList:
                 continue
 
             i = AryIndex.get_diff_dim(index, var_index)
-            if i is None:
-                raise RuntimeError(f"Unexpected: {var} {self}")
+            if i < 0:
+                continue
 
             index = index.copy()
             self.vars[name][pos] = index
