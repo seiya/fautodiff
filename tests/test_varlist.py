@@ -111,6 +111,21 @@ class TestVarList(unittest.TestCase):
         self.assertEqual(str(inter), "v(3:4)")
         self.assertEqual(inter.names(), ["v"])
 
+    def test_push_full_array(self):
+        ny = OpVar("ny", typename="integer")
+        nx = OpVar("nx", typename="integer")
+        one = OpInt(1)
+        zero = OpInt(0)
+        v1 = OpVar("v", index=[zero, OpRange([one, ny])])
+        v2 = OpVar("v", index=[OpRange([one, nx]), OpRange([one, ny])])
+        vl = VarList()
+        vl.push(v1)
+        vl.push(v2)
+        self.assertEqual(str(vl), "v(0,1:ny), v(1:nx,1:ny)")
+        v3 = OpVar("v", index=[None, None])
+        vl.push(v3)
+        self.assertEqual(str(vl), "v(:,:)")
+
 
 if __name__ == "__main__":
     unittest.main()

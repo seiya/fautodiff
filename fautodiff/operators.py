@@ -130,18 +130,19 @@ class AryIndex:
         if len(index1.dims) != len(index2.dims):
             raise ValueError("Different number of dimensions")
 
-        def _check_found():
-            if diff_dim > 0:
-                return -1  # disallow differences in multiple dimensions
-
-        diff_dim = -1  # dimension at which difference was found
+        # ``diff_dim`` stores the first dimension where a difference is
+        # encountered.  If we find differences in more than one dimension the
+        # function returns ``-1`` to signal that the indices are too dissimilar
+        # to be merged.
+        diff_dim = -1
         for i, dim1 in enumerate(index1):
             dim2 = index2[i]
             if dim1 == dim2:
                 continue
             if AryIndex.dim_is_entire(dim1) and AryIndex.dim_is_entire(dim2):
                 continue
-            _check_found()
+            if diff_dim >= 0:
+                return -1
             diff_dim = i
 
         return diff_dim
