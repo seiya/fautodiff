@@ -744,11 +744,19 @@ class Node:
                             for dim in range(len(lhs.index)):
                                 idx1 = lhs.index[dim]
                                 idx2 = var.index[dim]
-                                if isinstance(idx1, OpRange) or isinstance(idx2, OpRange):
+                                if isinstance(idx1, OpRange) or isinstance(
+                                    idx2, OpRange
+                                ):
                                     flag = True
                                     break
                                 diff = idx1 - idx2
-                                if not (isinstance(diff, OpInt) or (isinstance(diff, OpNeg) and isinstance(diff.args[0], OpInt))):
+                                if not (
+                                    isinstance(diff, OpInt)
+                                    or (
+                                        isinstance(diff, OpNeg)
+                                        and isinstance(diff.args[0], OpInt)
+                                    )
+                                ):
                                     flag = True
                                     break
                             break
@@ -769,13 +777,19 @@ class Node:
                         lhs_index.append(ldim)
                         continue
                     if ldim[2] is not None and ldim[2] != OpInt(1):
-                        raise NotImplementedError(f"stride access is not supported: {lhs}")
+                        raise NotImplementedError(
+                            f"stride access is not supported: {lhs}"
+                        )
                     ldim0 = ldim[0]
                     ldim1 = ldim[1]
                     if ldim0 is None:
-                        ldim0 = OpFunc("lbound", [grad_lhs.change_index(None), OpInt(dim+1)])
+                        ldim0 = OpFunc(
+                            "lbound", [grad_lhs.change_index(None), OpInt(dim + 1)]
+                        )
                     if ldim1 is None:
-                        ldim1 = OpFunc("ubound", [grad_lhs.change_index(None), OpInt(dim+1)])
+                        ldim1 = OpFunc(
+                            "ubound", [grad_lhs.change_index(None), OpInt(dim + 1)]
+                        )
                     idx_var = OpVar(f"n{dim+1}_{self.get_id()}_ad", typename="integer")
                     saved_vars.append(idx_var)
                     index_vars.append((idx_var, (ldim0, ldim1)))
@@ -798,12 +812,20 @@ class Node:
                             rhs_index.append(rdim)
                             continue
                         if rdim[2] is not None and rdim[2] != OpInt(1):
-                            raise NotImplementedError(f"stride access is not supported: {var}")
+                            raise NotImplementedError(
+                                f"stride access is not supported: {var}"
+                            )
                         idx_var, ldim = index_vars[idx]
                         idx += 1
                         rdim0 = rdim[0]
                         if rdim0 is None:
-                            rdim0 = OpFunc("lbound", [var.add_suffix(AD_SUFFIX).change_index(None), OpInt(dim+1)])
+                            rdim0 = OpFunc(
+                                "lbound",
+                                [
+                                    var.add_suffix(AD_SUFFIX).change_index(None),
+                                    OpInt(dim + 1),
+                                ],
+                            )
                         index = idx_var
                         if rdim0 == ldim[0]:
                             index = idx_var
@@ -811,14 +833,21 @@ class Node:
                             index = rdim0 + idx_var - ldim[0]
                         rhs_index.append(index)
                     if idx != len(index_vars):
-                        raise RuntimeError(f"The number of range index is different: {lhs} {var} {len(index_vars)} {idx}")
-                    var.index = AryIndex(rhs_index) # override variables in rhs
+                        raise RuntimeError(
+                            f"The number of range index is different: {lhs} {var} {len(index_vars)} {idx}"
+                        )
+                    var.index = AryIndex(rhs_index)  # override variables in rhs
                 for var in rhs_vars:
                     grad_rhs = var.add_suffix(AD_SUFFIX)
                     dev = rhs.derivative(
-                       var, target=grad_lhs, info=self.info, warnings=warnings
+                        var, target=grad_lhs, info=self.info, warnings=warnings
                     )
-                    assig = Assignment(grad_rhs, tmp_var * dev, accumulate=(grad_rhs != grad_lhs), ad_info=ad_info)
+                    assig = Assignment(
+                        grad_rhs,
+                        tmp_var * dev,
+                        accumulate=(grad_rhs != grad_lhs),
+                        ad_info=ad_info,
+                    )
                     body.append(assig)
 
                 for idx_var, ldim in index_vars:
@@ -848,7 +877,12 @@ class Node:
                 if not grad_rhs.is_array() and res.is_array():
                     res = OpFunc("sum", args=[res])
                 assigns.append(
-                    Assignment(grad_rhs, res, accumulate=(grad_rhs != grad_lhs), ad_info=ad_info)
+                    Assignment(
+                        grad_rhs,
+                        res,
+                        accumulate=(grad_rhs != grad_lhs),
+                        ad_info=ad_info,
+                    )
                 )
             if lhs not in rhs_vars:
                 # If lhs does not appear in rhs, its gradient is cleared
@@ -1093,6 +1127,52 @@ class Block(Node):
         if vars is None:
             vars = VarList()
         return vars
+
+    def recurrent_vars(self) -> List[str]:
+        required_vars = self.required_vars()
+        assigned_vars = self.assigned_vars()
+        common_var_names = sorted(
+            set(required_vars.names()) & set(assigned_vars.names())
+        )
+        do_index_list = set(self.do_index_list)
+        var_names: List[str] = []
+        for name in common_var_names:
+            flag = False
+            for index in required_vars[name]:
+                if not (index is not None and do_index_list <= set(index.list())):
+                    flag = True
+                    break
+            if not flag:
+                for index in assigned_vars[name]:
+                    if not (index is not None and do_index_list <= set(index.list())):
+                        flag = True
+                        break
+            if flag:
+                var_names.append(name)
+        return var_names
+
+    def conflict_vars(self) -> List[str]:
+        required_vars = self.required_vars()
+        assigned_vars = self.assigned_vars()
+        common_var_names = sorted(
+            set(required_vars.names()) & set(assigned_vars.names())
+        )
+        do_index_list = set(self.do_index_list)
+        var_names: List[str] = []
+        for name in common_var_names:
+            flag = True
+            for index in required_vars[name]:
+                if index is not None and do_index_list <= set(index.list()):
+                    flag = False
+                    break
+            if flag:
+                for index in assigned_vars[name]:
+                    if index is not None and do_index_list <= set(index.list()):
+                        flag = False
+                        break
+            if flag:
+                var_names.append(name)
+        return var_names
 
     def remove_push(self) -> "Block":
         children_new = []

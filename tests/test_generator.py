@@ -496,6 +496,35 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad("omp.f90", warn=False)
         self.assertIn("!$omp parallel do reduction(+:x, x_ad)", generated)
 
+    def test_omp_workshare_directive(self):
+        code_tree.Node.reset()
+        import textwrap
+
+        src = textwrap.dedent(
+            """
+            module t
+            contains
+              subroutine s(n, x, y)
+                integer, intent(in) :: n
+                real, intent(in) :: x(n)
+                real, intent(out) :: y(n)
+                !$omp parallel workshare
+                y = x
+                !$omp end parallel workshare
+              end subroutine s
+            end module t
+            """
+        )
+        from unittest.mock import patch
+
+        import fautodiff.parser as parser
+
+        modules = parser.parse_src(src)
+        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
+            generated = generator.generate_ad("omp_ws.f90", warn=False)
+        self.assertIn("!$omp parallel workshare", generated)
+        self.assertIn("!$omp end parallel workshare", generated)
+
     def test_save_variable_treated_like_inout(self):
         code_tree.Node.reset()
         import textwrap
