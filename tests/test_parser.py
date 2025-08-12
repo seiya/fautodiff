@@ -6,7 +6,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff import code_tree, generator, operators, parser
-from fautodiff.code_tree import Block, render_program
+from fautodiff.code_tree import Block, DoLoop, OmpDirective, render_program
+
 
 
 class TestParser(unittest.TestCase):
@@ -635,6 +636,101 @@ class TestParser(unittest.TestCase):
         seq_t = next(d for d in type_defs if d.name == "seq_t")
         self.assertTrue(seq_t.sequence)
 
+    def test_parse_optional_argument(self):
+        src = textwrap.dedent(
+            """
+            module optmod
+            contains
+              subroutine foo(x, y)
+                real, intent(inout) :: x
+                real, intent(in), optional :: y
+                if (present(y)) then
+                  x = x + y
+                end if
+              end subroutine foo
+            end module optmod
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        decl = routine.decls.find_by_name("y")
+        self.assertTrue(decl.optional)
+        self.assertEqual(
+            render_program(Block([decl])).strip(),
+            "real, intent(in), optional  :: y",
+        )
+
+    def test_new_decl_and_type_attrs(self):
+        src = textwrap.dedent(
+            """
+            module test
+              type, abstract, bind(C) :: t
+              end type t
+              type :: seq_t
+                sequence
+                integer :: i
+              end type seq_t
+            contains
+              subroutine foo(a, b, c, d)
+                real, save :: a
+                integer, value :: b
+                real, volatile :: c
+                real, asynchronous :: d
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        decls = routine.decls
+        self.assertTrue(decls.find_by_name("a").save)
+        self.assertTrue(decls.find_by_name("b").value)
+        self.assertTrue(decls.find_by_name("c").volatile)
+        self.assertTrue(decls.find_by_name("d").asynchronous)
+        type_defs = [
+            d for d in module.decls.iter_children() if isinstance(d, code_tree.TypeDef)
+        ]
+        t = next(d for d in type_defs if d.name == "t")
+        self.assertTrue(t.abstract)
+        self.assertEqual(t.bind, "C")
+        seq_t = next(d for d in type_defs if d.name == "seq_t")
+        self.assertTrue(seq_t.sequence)
+
+    def test_use_missing_fadmod_raises(self):
+        # Using an external module with search_dirs provided but no fadmod file
+        # should raise an error when declarations are requested.
+        src = textwrap.dedent(
+            """
+            module modb
+            contains
+              subroutine foo(x)
+                use moda
+                integer, intent(out) :: x
+                x = 0
+              end subroutine foo
+            end module modb
+            """
+        )
+        with self.assertRaises(RuntimeError):
+            parser.parse_src(src, search_dirs=["."])
+
+    def test_routine_decl_with_access_error(self):
+        # Routine-level variable with access spec should raise
+        src = textwrap.dedent(
+            """
+            module m
+            contains
+              subroutine s()
+                integer, public :: x
+              end subroutine s
+            end module m
+            """
+        )
+        with self.assertRaises(RuntimeError):
+            parser.parse_src(src)
+
+class TestParserOmp(unittest.TestCase):
+
     def test_parse_omp_do(self):
         src = textwrap.dedent(
             """
@@ -705,65 +801,72 @@ class TestParser(unittest.TestCase):
         self.assertEqual(stmt.directive.lower(), "parallel")
         self.assertIsInstance(stmt.body, code_tree.Block)
 
-    def test_parse_optional_argument(self):
+    def test_omp_standalone_barrier(self):
         src = textwrap.dedent(
             """
-            module optmod
+            module t
             contains
-              subroutine foo(x, y)
-                real, intent(inout) :: x
-                real, intent(in), optional :: y
-                if (present(y)) then
-                  x = x + y
-                end if
+              subroutine foo()
+                integer :: x
+!$omp barrier
+                x = 1
               end subroutine foo
-            end module optmod
+            end module t
             """
         )
-        module = parser.parse_src(src)[0]
-        routine = module.routines[0]
-        decl = routine.decls.find_by_name("y")
-        self.assertTrue(decl.optional)
-        self.assertEqual(
-            render_program(Block([decl])).strip(),
-            "real, intent(in), optional  :: y",
-        )
+        mod = parser.parse_src(src)[0]
+        r = mod.routines[0]
+        # OmpDirective should be present
+        self.assertTrue(any(isinstance(n, OmpDirective) for n in r.content))
+        txt = render_program(r.content)
+        self.assertIn("!$omp barrier", txt)
 
-    def test_new_decl_and_type_attrs(self):
+    def test_omp_do_follows_stmt(self):
         src = textwrap.dedent(
             """
-            module test
-              type, abstract, bind(C) :: t
-              end type t
-              type :: seq_t
-                sequence
-                integer :: i
-              end type seq_t
+            module t
             contains
-              subroutine foo(a, b, c, d)
-                real, save :: a
-                integer, value :: b
-                real, volatile :: c
-                real, asynchronous :: d
+              subroutine foo(n)
+                integer :: n, i, x
+!$omp do
+                do i = 1, n
+                  x = i
+                end do
               end subroutine foo
-            end module test
+            end module t
             """
         )
-        module = parser.parse_src(src)[0]
-        routine = module.routines[0]
-        decls = routine.decls
-        self.assertTrue(decls.find_by_name("a").save)
-        self.assertTrue(decls.find_by_name("b").value)
-        self.assertTrue(decls.find_by_name("c").volatile)
-        self.assertTrue(decls.find_by_name("d").asynchronous)
-        type_defs = [
-            d for d in module.decls.iter_children() if isinstance(d, code_tree.TypeDef)
-        ]
-        t = next(d for d in type_defs if d.name == "t")
-        self.assertTrue(t.abstract)
-        self.assertEqual(t.bind, "C")
-        seq_t = next(d for d in type_defs if d.name == "seq_t")
-        self.assertTrue(seq_t.sequence)
+        mod = parser.parse_src(src)[0]
+        r = mod.routines[0]
+        omp_nodes = [n for n in r.content if isinstance(n, OmpDirective)]
+        self.assertTrue(omp_nodes)
+        self.assertIsInstance(omp_nodes[0].body, DoLoop)
+
+
+class TestPreprocessorParsing(unittest.TestCase):
+    def test_cpp_lines_do_not_break_parsing(self):
+        # Ensure the parser tolerates C-preprocessor lines in the body.
+        src = textwrap.dedent(
+            """
+            module t
+            contains
+              subroutine foo()
+            #if defined(A)
+                call bar()
+            #else
+                call qux()
+            #endif
+              end subroutine foo
+            end module t
+            """
+        )
+        mod = parser.parse_src(src)[0]
+        r = mod.routines[0]
+        # Calls should still be parsed
+        body = render_program(r.content)
+        self.assertIn("call bar()", body)
+        self.assertIn("call qux()", body)
+
 
 
 if __name__ == "__main__":

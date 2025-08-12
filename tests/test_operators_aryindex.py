@@ -1,13 +1,14 @@
-import sys
 import unittest
 from pathlib import Path
 
+import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff.operators import AryIndex, OpInt, OpRange, OpVar
 
 
-class TestAryIndex(unittest.TestCase):
+class TestAryIndexOps(unittest.TestCase):
+
     def test_equality_and_str(self):
         i = OpVar("i")
         idx1 = AryIndex([1, None, i])
@@ -53,6 +54,25 @@ class TestAryIndex(unittest.TestCase):
         self.assertTrue(idx.is_depended_on(i))
         self.assertFalse(idx.is_depended_on(OpVar("k")))
 
+    def test_check_cover_negative_stride_and_scalar(self):
+        # a(5:1:-1) should cover a(3)
+        rng = OpRange([OpInt(5), OpInt(1), OpInt(-1)])
+        idx_full = AryIndex([rng])
+        idx_scalar = AryIndex([OpInt(3)])
+        self.assertTrue(idx_full >= idx_scalar)
+        self.assertTrue(idx_scalar <= idx_full)
+
+    def test_get_diff_dim_multiple(self):
+        i1 = AryIndex([OpInt(1), OpRange([OpInt(1), OpInt(3)])])
+        i2 = AryIndex([OpInt(2), OpRange([OpInt(2), OpInt(4)])])
+        self.assertEqual(AryIndex.get_diff_dim(i1, i2), -1)
+
+    def test_dim_is_entire(self):
+        self.assertTrue(AryIndex.dim_is_entire(None))
+        self.assertTrue(AryIndex.dim_is_entire(OpRange([None, None])))
+        self.assertFalse(AryIndex.dim_is_entire(OpRange([OpInt(1), OpInt(2)])))
+
 
 if __name__ == "__main__":
     unittest.main()
+
