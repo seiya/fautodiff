@@ -119,6 +119,7 @@ def _strip_sequential_omp(
                 if len(children) == 1 and isinstance(children[0], DoLoop):
                     check_body = children[0]
             if reverse:
+                dir_norm = node.directive.split("(")[0].strip().lower()
                 if isinstance(check_body, DoLoop):
                     if check_body.has_modified_indices():
                         if warnings is not None:
@@ -128,6 +129,17 @@ def _strip_sequential_omp(
                         return check_body
                     node.body = body
                     return node
+                if "workshare" in dir_norm:
+                    if isinstance(body, Block):
+                        if body.recurrent_vars() or body.conflict_vars():
+                            if warnings is not None:
+                                warnings.append(
+                                    "Dropped OpenMP directive: workshare runs sequentially in reverse mode due to dependency",
+                                )
+                            return body
+                        node.body = body
+                        return node
+                    return body
                 return body
             node.body = body
             return node
