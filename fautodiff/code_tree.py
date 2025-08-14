@@ -1395,8 +1395,11 @@ class PreprocessorLine(Node):
         return PreprocessorLine(self.text)
 
     def render(self, indent: int = 0) -> List[str]:
+        text = self.text.strip()
+        if text.startswith("#define"):
+            return [f"{text}\n"]
         space = "  " * indent
-        return [f"{space}{self.text}\n"]
+        return [f"{space}{text}\n"]
 
     def is_effectively_empty(self) -> bool:
         return False

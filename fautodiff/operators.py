@@ -284,6 +284,7 @@ class Operator:
     """Abstract fortran oprations."""
 
     args: Optional[List[Optional[Operator]]] = None
+    macro_name: Optional[str] = None
     PRIORITY: ClassVar[int] = -999
 
     def __post_init__(self):
@@ -381,6 +382,8 @@ class Operator:
         if isinstance(other, int):
             return self + OpInt(other)
         if isinstance(other, Operator):
+            if self.macro_name or other.macro_name:
+                return OpAdd(args=[self, other])
             if isinstance(self, OpInt) and self.val == 0:
                 return other
             if isinstance(other, OpInt) and other.val == 0:
@@ -471,6 +474,8 @@ class Operator:
         if isinstance(other, int):
             return self - OpInt(other)
         if isinstance(other, Operator):
+            if self.macro_name or other.macro_name:
+                return OpSub(args=[self, other])
             if self == other:
                 return OpInt(0)
             if isinstance(self, OpInt) and self.val == 0:
@@ -575,6 +580,8 @@ class Operator:
         if isinstance(other, int):
             return self * OpInt(other)
         if isinstance(other, Operator):
+            if self.macro_name or other.macro_name:
+                return OpMul(args=[self, other])
             if isinstance(self, OpInt) and self.val == 1:
                 return other
             if isinstance(other, OpInt) and other.val == 1:
@@ -671,6 +678,8 @@ class Operator:
         if isinstance(other, int):
             return self / OpInt(other)
         if isinstance(other, Operator):
+            if self.macro_name or other.macro_name:
+                return OpDiv(args=[self, other])
             if isinstance(other, OpInt) and other.val == 1:
                 return self
             if isinstance(self, OpInt) and self.val == 0:
@@ -715,6 +724,8 @@ class Operator:
         if isinstance(other, int):
             return OpPow(args=[self, OpInt(other)])
         if isinstance(other, Operator):
+            if self.macro_name or other.macro_name:
+                return OpPow(args=[self, other])
             if isinstance(other, OpInt) and other.val == 0:
                 return OpInt(1, target=other.target, kind=other.kind)
             if isinstance(other, OpInt) and other.val == 1:
@@ -853,6 +864,8 @@ class OpInt(OpNum):
         )
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         kind = None
         if self.target is not None:
             kind = self.target.kind
@@ -876,6 +889,8 @@ class OpInt(OpNum):
 @dataclass
 class OpAry(OpLeaf):
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         return f"[{', '.join(self.args)}]"
 
 
@@ -889,6 +904,8 @@ class OpChar(OpLeaf):
         self.name = name
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         return self.name
 
 
@@ -898,6 +915,8 @@ class OpTrue(OpLeaf):
         super().__init__(args=[])
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         return ".true."
 
 
@@ -907,6 +926,8 @@ class OpFalse(OpLeaf):
         super().__init__(args=[])
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         return ".false."
 
 
@@ -921,6 +942,8 @@ class OpReal(OpNum):
         self.val = val
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         if self.kind is not None:
             if self.kind == "4":
                 return f"{self.val}e{self.expo}"
@@ -946,6 +969,8 @@ class OpComplex(OpNum):
         self.imag = imag
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         return f"({self.real}, {self.imag})"
 
 
@@ -1303,6 +1328,8 @@ class OpVar(OpLeaf):
         return index.list()
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         if self.ref_var is not None:
             ref_var = f"{self.ref_var}%"
         else:
@@ -1334,6 +1361,8 @@ class OpUnary(Operator):
             raise ValueError("length of args must 1")
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         a0 = self._paren(self.args[0])
         return f"{self.OP} {a0}"
 
@@ -1375,6 +1404,8 @@ class OpBinary(Operator):
             raise ValueError("length of args must 2")
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         a0 = self._paren(self.args[0])
         eq = (
             isinstance(self.args[1], OpNeg)
@@ -1475,6 +1506,8 @@ class OpPow(OpBinary):
     PRIORITY: ClassVar[int] = 2
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         # remove target and kind
         if isinstance(self.args[1], OpInt):
             a1 = OpInt(val=self.args[1].val)
@@ -1526,6 +1559,8 @@ class OpLogic(OpBinary):
         self.op = op
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         a0 = self._paren(self.args[0])
         eq = isinstance(self.args[1], OpNeg)
         a1 = self._paren(self.args[1], eq=eq)
@@ -1617,6 +1652,8 @@ class OpFunc(Operator):
         self.name = name
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         args = []
         for arg in self.args:
             args.append(f"{arg}")
@@ -1831,6 +1868,8 @@ class OpFuncUser(Operator):
                     raise TypeError(f"args[{i}] must be an Operator: {type(arg)}")
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         args = []
         for arg in self.args:
             args.append(f"{arg}")
@@ -1898,6 +1937,8 @@ class OpRange(Operator):
         return OpRange(args)
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         if len(self.args) == 0:
             args = [None, None]
         if len(self.args) == 1:
@@ -1948,4 +1989,6 @@ class OpType(Operator):
         self.args = None
 
     def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
         return self.name

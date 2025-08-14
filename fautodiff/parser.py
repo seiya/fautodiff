@@ -83,6 +83,47 @@ if parse(getattr(fparser, "__version__", "0")) < Version("0.2.0"):
 _CPP_PREFIX = "!$CPP"
 
 
+_MACRO_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#define\s+(\w+)\s*(.*)")
+
+
+class MacroTable(dict):
+    """Simple table mapping macro names to their expansions."""
+
+    def register(self, name: str, value: str) -> None:
+        self[name] = value
+
+
+macro_table: MacroTable = MacroTable()
+module_macros: set[str] = set()
+
+
+def _extract_macros(src: str) -> None:
+    """Populate ``macro_table`` with ``#define`` directives from ``src``."""
+    macro_table.clear()
+    for line in src.splitlines():
+        m = _MACRO_RE.match(line)
+        if m:
+            name, value = m.group(1), m.group(2).strip()
+            macro_table.register(name, value)
+
+
+def _mark_module_macros(modules: List[Module]) -> None:
+    """Record macros that appear inside modules."""
+
+    module_macros.clear()
+
+    def _visit(node: Node) -> None:
+        if isinstance(node, PreprocessorLine):
+            m = re.match(r"#define\s+(\w+)", node.text.strip())
+            if m:
+                module_macros.add(m.group(1))
+        for child in getattr(node, "iter_children", lambda: [])():
+            _visit(child)
+
+    for mod in modules:
+        _visit(mod)
+
+
 def _inject_cpp_lines(src: str) -> str:
     """Replace preprocessor lines with marked comments."""
     lines = []
@@ -198,6 +239,10 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
             decl = decl_map[name]
         elif name in type_map:
             decl = type_map[name]
+        elif name in macro_table:
+            op = OpVar(name=name, is_constant=True)
+            op.macro_name = name
+            return op
         else:
             raise ValueError(f"Not found in the declaration section: {name}")
 
@@ -395,12 +440,15 @@ def parse_file(
     """Parse ``path`` and return a list of :class:`Module` nodes."""
     src = Path(path).read_text()
     src = _inject_cpp_lines(src)
+    _extract_macros(src)
     reader = FortranStringReader(
         src, ignore_comments=False, include_omp_conditional_lines=True
     )
-    return _parse_from_reader(
+    modules = _parse_from_reader(
         reader, path, search_dirs=search_dirs, decl_map=decl_map, type_map=type_map
     )
+    _mark_module_macros(modules)
+    return modules
 
 
 def parse_src(
@@ -413,12 +461,15 @@ def parse_src(
 ) -> List[Module]:
     """Parse ``src`` and return a list of :class:`Module` nodes."""
     src = _inject_cpp_lines(src)
+    _extract_macros(src)
     reader = FortranStringReader(
         src, ignore_comments=False, include_omp_conditional_lines=True
     )
-    return _parse_from_reader(
+    modules = _parse_from_reader(
         reader, src_name, search_dirs=search_dirs, decl_map=decl_map, type_map=type_map
     )
+    _mark_module_macros(modules)
+    return modules
 
 
 def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
@@ -730,7 +781,8 @@ def _parse_decls(
                 if isinstance(cnt, Fortran2003.Comment):
                     line = _comment_to_cpp(cnt)
                     if line is not None:
-                        continue  # preprocessor directives not handled here
+                        decls.append(PreprocessorLine(line))
+                        continue
                     text = cnt.items[0].strip()
                     if text.startswith("!$FAD"):
                         _parse_directive(text, directives)
@@ -750,7 +802,8 @@ def _parse_decls(
         if isinstance(item, Fortran2003.Comment):
             line = _comment_to_cpp(item)
             if line is not None:
-                continue  # preprocessor directives not handled here
+                decls.append(PreprocessorLine(line))
+                continue
             continue
         if isinstance(item, Fortran2003.Use_Stmt):
             only = None
