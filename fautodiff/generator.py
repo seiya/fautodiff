@@ -35,6 +35,7 @@ from .code_tree import (
     OmpDirective,
     PointerAssignment,
     PointerClear,
+    PreprocessorLine,
     Program,
     PushPop,
     ReturnStmt,
@@ -871,6 +872,10 @@ def _prepare_fwd_ad_header(
 
     ad_name = f"{routine_org.name}{FWD_SUFFIX}"
     subroutine = Subroutine(ad_name, [v.name for v in args])
+    # Preserve preprocessor lines from the original routine declarations
+    for node in routine_org.decls.iter_children():
+        if isinstance(node, PreprocessorLine):
+            subroutine.decls.append(node.copy())
     arg_info["name_fwd_ad"] = ad_name
     for var in args:
         subroutine.decls.append(
@@ -1000,6 +1005,10 @@ def _prepare_rev_ad_header(
 
     ad_name = f"{routine_org.name}{REV_SUFFIX}"
     subroutine = Subroutine(ad_name, [v.name for v in args])
+    # Preserve preprocessor lines from the original routine declarations
+    for node in routine_org.decls.iter_children():
+        if isinstance(node, PreprocessorLine):
+            subroutine.decls.append(node.copy())
     arg_info["name_rev_ad"] = ad_name
     for var in args:
         subroutine.decls.append(
@@ -1632,6 +1641,8 @@ def _generate_ad_subroutine(
     used.update(v.name for v in subroutine.ad_init.collect_vars())
     used.update(v.name for v in subroutine.ad_content.collect_vars())
     for decl in subroutine.decls.iter_children():
+        if not isinstance(decl, Declaration):
+            continue
         if decl.name in used and decl.dims:
             dims = decl.dims if isinstance(decl.dims, tuple) else (decl.dims,)
             for dim in dims:
@@ -1891,8 +1902,15 @@ def generate_ad(
                 routine_map,
                 fadmod_dir,
             )
-
-    code = "\n".join(modules)
+    macro_lines = [
+        f"#define {name} {val}".rstrip()
+        for name, val in parser.macro_table.items()
+        if name not in parser.module_macros
+    ]
+    if macro_lines:
+        code = "\n".join(macro_lines + [""] + modules)
+    else:
+        code = "\n".join(modules)
     if out_file:
         Path(out_file).write_text(code)
     if warn and warnings:

@@ -12,7 +12,7 @@ contains
 
     y_ad = x_ad ! y = x
     y = x
-    #define SCALE_TWO 2
+#define SCALE_TWO 2
     #ifdef USE_ADD
     y = y + 1.0
     #endif
