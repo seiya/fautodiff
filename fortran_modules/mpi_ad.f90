@@ -13,6 +13,8 @@ module mpi_ad
   public :: mpi_recv_rev_ad
   public :: mpi_send_fwd_ad
   public :: mpi_send_rev_ad
+  public :: mpi_sendrecv_fwd_ad
+  public :: mpi_sendrecv_rev_ad
   public :: mpi_isend_fwd_ad
   public :: mpi_isend_fwd_rev_ad
   public :: mpi_isend_rev_ad
@@ -99,6 +101,18 @@ module mpi_ad
      module procedure mpi_send_rev_ad_r8
      module procedure mpi_send_rev_ad_scalar_r4
      module procedure mpi_send_rev_ad_scalar_r8
+  end interface
+  interface mpi_sendrecv_fwd_ad
+     module procedure mpi_sendrecv_fwd_ad_r4
+     module procedure mpi_sendrecv_fwd_ad_r8
+     module procedure mpi_sendrecv_fwd_ad_scalar_r4
+     module procedure mpi_sendrecv_fwd_ad_scalar_r8
+  end interface
+  interface mpi_sendrecv_rev_ad
+     module procedure mpi_sendrecv_rev_ad_r4
+     module procedure mpi_sendrecv_rev_ad_r8
+     module procedure mpi_sendrecv_rev_ad_scalar_r4
+     module procedure mpi_sendrecv_rev_ad_scalar_r8
   end interface
   interface mpi_isend_fwd_ad
      module procedure mpi_isend_fwd_ad_r4
@@ -713,6 +727,140 @@ contains
     call c_f_pointer(c_loc(buf_ad), b_ad, [1])
     call mpi_send_rev_ad_r8(b_ad, 1, datatype, dest, tag, comm, ierr)
   end subroutine mpi_send_rev_ad_scalar_r8
+
+  subroutine mpi_sendrecv_fwd_ad_r4(sendbuf, sendbuf_ad, sendcount, sendtype, dest, sendtag, &
+                                    recvbuf, recvbuf_ad, recvcount, recvtype, source, recvtag, &
+                                    comm, status, ierr)
+    real, intent(in) :: sendbuf(*)
+    real, intent(in) :: sendbuf_ad(*)
+    integer, intent(in) :: sendcount, sendtype, dest, sendtag
+    real, intent(out) :: recvbuf(*)
+    real, intent(out) :: recvbuf_ad(*)
+    integer, intent(in) :: recvcount, recvtype, source, recvtag, comm
+    integer, intent(inout) :: status(MPI_STATUS_SIZE)
+    integer, intent(out), optional :: ierr
+
+    call MPI_Sendrecv(sendbuf, sendcount, sendtype, dest, sendtag, recvbuf, recvcount, &
+                      recvtype, source, recvtag, comm, status, ierr)
+    call MPI_Sendrecv(sendbuf_ad, sendcount, sendtype, dest, sendtag, recvbuf_ad, recvcount, &
+                      recvtype, source, recvtag, comm, status, ierr)
+  end subroutine mpi_sendrecv_fwd_ad_r4
+
+  subroutine mpi_sendrecv_rev_ad_r4(sendbuf_ad, sendcount, sendtype, dest, sendtag, &
+                                    recvbuf_ad, recvcount, recvtype, source, recvtag, comm, ierr)
+    real, intent(inout) :: sendbuf_ad(*)
+    integer, intent(in) :: sendcount, sendtype, dest, sendtag
+    real, intent(inout) :: recvbuf_ad(*)
+    integer, intent(in) :: recvcount, recvtype, source, recvtag, comm
+    integer, intent(out), optional :: ierr
+    real :: tmp(sendcount)
+
+    call MPI_Sendrecv(recvbuf_ad, recvcount, recvtype, source, recvtag, tmp, sendcount, &
+                      sendtype, dest, sendtag, comm, MPI_STATUS_IGNORE, ierr)
+    sendbuf_ad(:sendcount) = sendbuf_ad(:sendcount) + tmp(:sendcount)
+    recvbuf_ad(:recvcount) = 0.0
+  end subroutine mpi_sendrecv_rev_ad_r4
+
+  subroutine mpi_sendrecv_fwd_ad_r8(sendbuf, sendbuf_ad, sendcount, sendtype, dest, sendtag, &
+                                    recvbuf, recvbuf_ad, recvcount, recvtype, source, recvtag, &
+                                    comm, status, ierr)
+    real(8), intent(in) :: sendbuf(*)
+    real(8), intent(in) :: sendbuf_ad(*)
+    integer, intent(in) :: sendcount, sendtype, dest, sendtag
+    real(8), intent(out) :: recvbuf(*)
+    real(8), intent(out) :: recvbuf_ad(*)
+    integer, intent(in) :: recvcount, recvtype, source, recvtag, comm
+    integer, intent(inout) :: status(MPI_STATUS_SIZE)
+    integer, intent(out), optional :: ierr
+
+    call MPI_Sendrecv(sendbuf, sendcount, sendtype, dest, sendtag, recvbuf, recvcount, &
+                      recvtype, source, recvtag, comm, status, ierr)
+    call MPI_Sendrecv(sendbuf_ad, sendcount, sendtype, dest, sendtag, recvbuf_ad, recvcount, &
+                      recvtype, source, recvtag, comm, status, ierr)
+  end subroutine mpi_sendrecv_fwd_ad_r8
+
+  subroutine mpi_sendrecv_rev_ad_r8(sendbuf_ad, sendcount, sendtype, dest, sendtag, &
+                                    recvbuf_ad, recvcount, recvtype, source, recvtag, comm, ierr)
+    real(8), intent(inout) :: sendbuf_ad(*)
+    integer, intent(in) :: sendcount, sendtype, dest, sendtag
+    real(8), intent(inout) :: recvbuf_ad(*)
+    integer, intent(in) :: recvcount, recvtype, source, recvtag, comm
+    integer, intent(out), optional :: ierr
+    real(8) :: tmp(sendcount)
+
+    call MPI_Sendrecv(recvbuf_ad, recvcount, recvtype, source, recvtag, tmp, sendcount, &
+                      sendtype, dest, sendtag, comm, MPI_STATUS_IGNORE, ierr)
+    sendbuf_ad(:sendcount) = sendbuf_ad(:sendcount) + tmp(:sendcount)
+    recvbuf_ad(:recvcount) = 0.0_8
+  end subroutine mpi_sendrecv_rev_ad_r8
+
+  subroutine mpi_sendrecv_fwd_ad_scalar_r4(sendbuf, sendbuf_ad, sendcount, sendtype, dest, sendtag, &
+                                           recvbuf, recvbuf_ad, recvcount, recvtype, source, recvtag, &
+                                           comm, status, ierr)
+    real, intent(in), target :: sendbuf
+    real, intent(in), target :: sendbuf_ad
+    integer, intent(in) :: sendcount, sendtype, dest, sendtag
+    real, intent(out), target :: recvbuf
+    real, intent(out), target :: recvbuf_ad
+    integer, intent(in) :: recvcount, recvtype, source, recvtag, comm
+    integer, intent(inout) :: status(MPI_STATUS_SIZE)
+    integer, intent(out), optional :: ierr
+    real, pointer :: sb(:), sb_ad(:), rb(:), rb_ad(:)
+
+    call c_f_pointer(c_loc(sendbuf), sb, [1])
+    call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [1])
+    call c_f_pointer(c_loc(recvbuf), rb, [1])
+    call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [1])
+    call mpi_sendrecv_fwd_ad_r4(sb, sb_ad, 1, sendtype, dest, sendtag, rb, rb_ad, 1, recvtype, source, recvtag, comm, status, ierr)
+  end subroutine mpi_sendrecv_fwd_ad_scalar_r4
+
+  subroutine mpi_sendrecv_rev_ad_scalar_r4(sendbuf_ad, sendcount, sendtype, dest, sendtag, &
+                                           recvbuf_ad, recvcount, recvtype, source, recvtag, comm, ierr)
+    real, intent(inout), target :: sendbuf_ad
+    integer, intent(in) :: sendcount, sendtype, dest, sendtag
+    real, intent(inout), target :: recvbuf_ad
+    integer, intent(in) :: recvcount, recvtype, source, recvtag, comm
+    integer, intent(out), optional :: ierr
+    real, pointer :: sb_ad(:), rb_ad(:)
+
+    call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [1])
+    call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [1])
+    call mpi_sendrecv_rev_ad_r4(sb_ad, 1, sendtype, dest, sendtag, rb_ad, 1, recvtype, source, recvtag, comm, ierr)
+  end subroutine mpi_sendrecv_rev_ad_scalar_r4
+
+  subroutine mpi_sendrecv_fwd_ad_scalar_r8(sendbuf, sendbuf_ad, sendcount, sendtype, dest, sendtag, &
+                                           recvbuf, recvbuf_ad, recvcount, recvtype, source, recvtag, &
+                                           comm, status, ierr)
+    real(8), intent(in), target :: sendbuf
+    real(8), intent(in), target :: sendbuf_ad
+    integer, intent(in) :: sendcount, sendtype, dest, sendtag
+    real(8), intent(out), target :: recvbuf
+    real(8), intent(out), target :: recvbuf_ad
+    integer, intent(in) :: recvcount, recvtype, source, recvtag, comm
+    integer, intent(inout) :: status(MPI_STATUS_SIZE)
+    integer, intent(out), optional :: ierr
+    real(8), pointer :: sb(:), sb_ad(:), rb(:), rb_ad(:)
+
+    call c_f_pointer(c_loc(sendbuf), sb, [1])
+    call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [1])
+    call c_f_pointer(c_loc(recvbuf), rb, [1])
+    call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [1])
+    call mpi_sendrecv_fwd_ad_r8(sb, sb_ad, 1, sendtype, dest, sendtag, rb, rb_ad, 1, recvtype, source, recvtag, comm, status, ierr)
+  end subroutine mpi_sendrecv_fwd_ad_scalar_r8
+
+  subroutine mpi_sendrecv_rev_ad_scalar_r8(sendbuf_ad, sendcount, sendtype, dest, sendtag, &
+                                           recvbuf_ad, recvcount, recvtype, source, recvtag, comm, ierr)
+    real(8), intent(inout), target :: sendbuf_ad
+    integer, intent(in) :: sendcount, sendtype, dest, sendtag
+    real(8), intent(inout), target :: recvbuf_ad
+    integer, intent(in) :: recvcount, recvtype, source, recvtag, comm
+    integer, intent(out), optional :: ierr
+    real(8), pointer :: sb_ad(:), rb_ad(:)
+
+    call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [1])
+    call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [1])
+    call mpi_sendrecv_rev_ad_r8(sb_ad, 1, sendtype, dest, sendtag, rb_ad, 1, recvtype, source, recvtag, comm, ierr)
+  end subroutine mpi_sendrecv_rev_ad_scalar_r8
 
   subroutine mpi_isend_fwd_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
     real, intent(in) :: buf(*)
