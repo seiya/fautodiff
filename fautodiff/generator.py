@@ -855,6 +855,7 @@ def _prepare_fwd_ad_header(
                 typename=typ,
                 kind=kind,
                 kind_val=kind_val,
+                kind_keyword=getattr(arg, "kind_keyword", None),
                 dims=dims,
                 intent=arg.intent,
                 ad_target=True,
@@ -901,6 +902,7 @@ def _prepare_fwd_ad_header(
                 typename=var.typename,
                 kind=var.kind,
                 kind_val=getattr(var, "kind_val", None),
+                kind_keyword=getattr(var, "kind_keyword", False),
                 char_len=var.char_len,
                 dims=var.dims,
                 intent=var.intent,
@@ -980,6 +982,7 @@ def _prepare_rev_ad_header(
                     typename=typ,
                     kind=kind,
                     kind_val=kind_val,
+                    kind_keyword=getattr(arg, "kind_keyword", None),
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1006,6 +1009,7 @@ def _prepare_rev_ad_header(
                     typename=typ,
                     kind=kind,
                     kind_val=kind_val,
+                    kind_keyword=getattr(arg, "kind_keyword", None),
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1050,6 +1054,7 @@ def _prepare_rev_ad_header(
                 typename=var.typename,
                 kind=var.kind,
                 kind_val=getattr(var, "kind_val", None),
+                kind_keyword=getattr(var, "kind_keyword", False),
                 char_len=var.char_len,
                 dims=var.dims,
                 intent=var.intent,
@@ -1179,7 +1184,9 @@ def _generate_ad_subroutine(
         and not has_save_grad_input
     ):
         for arg in out_grad_args:
-            lhs = OpVar(arg.name, kind=arg.kind)
+            lhs = OpVar(
+                arg.name, kind=arg.kind, kind_keyword=getattr(arg, "kind_keyword", None)
+            )
             if arg.is_complex_type:
                 zero = OpComplex(
                     OpReal("0.0", kind=arg.kind),
@@ -1251,6 +1258,8 @@ def _generate_ad_subroutine(
                             name=name,
                             typename=base_decl.typename,
                             kind=base_decl.kind,
+                            kind_val=base_decl.kind_val,
+                            kind_keyword=base_decl.kind_keyword,
                             dims=base_decl.dims,
                             parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
@@ -1468,6 +1477,8 @@ def _generate_ad_subroutine(
                             name=name,
                             typename=base_decl.typename,
                             kind=base_decl.kind,
+                            kind_val=base_decl.kind_val,
+                            kind_keyword=base_decl.kind_keyword,
                             dims=base_decl.dims,
                             parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
@@ -1646,6 +1657,14 @@ def _generate_ad_subroutine(
                 name=var.name,
                 typename=typename,
                 kind=kind,
+                kind_val=(
+                    base_decl.kind_val if base_decl else getattr(var, "kind_val", None)
+                ),
+                kind_keyword=(
+                    base_decl.kind_keyword
+                    if base_decl
+                    else getattr(var, "kind_keyword", False)
+                ),
                 dims=dims,
                 parameter=base_decl.parameter if base_decl else False,
                 init_val=base_decl.init_val if base_decl else None,
@@ -1782,7 +1801,13 @@ def generate_ad(
             else:
                 mod.uses = Block([])
         else:
-            mod.uses = Block([Use(name)])
+            if mod_org.uses is not None:
+                uses = Block([Use(name)])
+                for child in mod_org.uses.iter_children():
+                    uses.append(child.deep_clone())
+                mod.uses = uses
+            else:
+                mod.uses = Block([Use(name)])
 
         if mod_org.decls:
             type_map = {}
@@ -1925,9 +1950,12 @@ def generate_ad(
                     mod.routines.append(info["wrapper"])
 
         name_mod = mod.name
+        existing_uses = {u.name for u in mod.uses.iter_children() if isinstance(u, Use)}
         for m in sorted(ad_modules_used):
             if m != name_mod:
-                mod.uses.append(Use(m))
+                if m not in existing_uses:
+                    mod.uses.append(Use(m))
+                    existing_uses.add(m)
                 mod.uses.append(Use(f"{m}{AD_SUFFIX}"))
         if pushpop_used:
             mod.uses.append(Use("fautodiff_stack"))

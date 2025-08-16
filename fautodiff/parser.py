@@ -874,6 +874,7 @@ def _parse_decl_stmt(
     type_spec = stmt.items[0]
     kind = None
     kind_val = None
+    kind_keyword = False
     char_len = None
     type_def = None
     if isinstance(type_spec, Fortran2003.Intrinsic_Type_Spec):
@@ -909,6 +910,8 @@ def _parse_decl_stmt(
                         kind_val = _eval_kind(init)
                         if kind_val is None:
                             kind_val = _eval_iso_kind(init) or init
+                    if not init.strip().isdigit():
+                        kind_keyword = True
         elif isinstance(selector, Fortran2003.Length_Selector):
             char_len = selector.items[1].string
         else:
@@ -1047,6 +1050,7 @@ def _parse_decl_stmt(
                 typename=base_type.lower(),
                 kind=kind,
                 kind_val=kind_val,
+                kind_keyword=kind_keyword,
                 char_len=char_len,
                 dims=dims,
                 intent=intent,
