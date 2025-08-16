@@ -494,11 +494,8 @@ class Node:
         for arg in routine.args:
             if isinstance(arg, OpVar):
                 argtypes.append(arg.typename)
-                argkinds.append(arg.kind)
-                if arg.dims:
-                    argdims.append(len(arg.dims))
-                else:
-                    argdims.append(None)
+                argkinds.append(getattr(arg, "kind_val", None) or arg.kind)
+                argdims.append(len(arg.dims) if arg.dims else None)
                 continue
             if isinstance(arg, OpLeaf):
                 argkinds.append(arg.kind)
@@ -521,22 +518,24 @@ class Node:
             for cand in generic_map[name]:
                 if cand not in routine_map:
                     raise RuntimeError(f"Not found in routine_map: {cand}")
-                arg_info = routine_map[cand]
-                cand_types = list(arg_info.get("type", []))
+                cand_info = routine_map[cand]
+                cand_types = list(cand_info.get("type", []))
                 cand_kinds = (
-                    list(arg_info.get("kind", [])) if arg_info.get("kind") else []
+                    list(cand_info.get("kind", [])) if cand_info.get("kind") else []
                 )
                 cand_dims = (
-                    list(arg_info.get("dims", [])) if arg_info.get("dims") else []
+                    list(cand_info.get("dims", [])) if cand_info.get("dims") else []
                 )
                 if len(cand_types) == len(argtypes) + 1:
                     cand_types = cand_types[:-1]
-                    cand_kinds = cand_kinds[:-1] if cand_kinds else cand_kinds
-                    cand_dims = cand_dims[:-1] if cand_dims else cand_dims
-                if cand_types == argtypes:
-                    if cand_kinds == argkinds:
-                        if [(arg and len(arg)) for arg in cand_dims] == argdims:
-                            return arg_info
+                    cand_kinds = cand_kinds[:-1]
+                    cand_dims = cand_dims[:-1]
+                if (
+                    cand_types == argtypes
+                    and cand_kinds == argkinds
+                    and [len(d) if d else None for d in cand_dims] == argdims
+                ):
+                    return cand_info
         return None
 
     def _generate_ad_forward(
@@ -2546,6 +2545,7 @@ class Declaration(Node):
     name: str
     typename: str
     kind: Optional[str] = None
+    kind_val: Optional[str] = None
     char_len: Optional[str] = None
     dims: Optional[Union[Tuple[str], str]] = None
     intent: Optional[str] = None
@@ -2568,6 +2568,8 @@ class Declaration(Node):
         super().__post_init__()
         if self.kind is not None and not isinstance(self.kind, str):
             raise ValueError(f"kind must be str: {type(self.kind)}")
+        if self.kind_val is not None and not isinstance(self.kind_val, str):
+            raise ValueError(f"kind_val must be str: {type(self.kind_val)}")
         if self.char_len is not None and not isinstance(self.char_len, str):
             raise ValueError(f"char_len must be str: {type(self.char_len)}")
         if self.dims is not None and (
@@ -2585,6 +2587,7 @@ class Declaration(Node):
             name=self.name,
             typename=self.typename,
             kind=self.kind,
+            kind_val=self.kind_val,
             char_len=self.char_len,
             dims=self.dims,
             intent=self.intent,
@@ -2610,6 +2613,7 @@ class Declaration(Node):
             name=self.name,
             typename=self.typename,
             kind=self.kind,
+            kind_val=self.kind_val,
             char_len=self.char_len,
             dims=dims,
             intent=self.intent,
@@ -2635,6 +2639,7 @@ class Declaration(Node):
                 name=self.name,
                 typename=self.typename,
                 kind=self.kind,
+                kind_val=self.kind_val,
                 is_constant=self.parameter or self.constant,
                 allocatable=self.allocatable,
                 pointer=self.pointer,
@@ -2661,6 +2666,7 @@ class Declaration(Node):
             name=self.name,
             typename=self.typename,
             kind=self.kind,
+            kind_val=self.kind_val,
             is_constant=self.parameter or self.constant,
             allocatable=self.allocatable,
             pointer=self.pointer,
@@ -2688,7 +2694,10 @@ class Declaration(Node):
         line = f"{space}{self.typename}"
         pat = ""
         if self.kind is not None:
-            line += f"({self.kind})"
+            if self.kind.isdigit():
+                line += f"({self.kind})"
+            else:
+                line += f"(kind={self.kind})"
         if self.char_len is not None:
             line += f"(len={self.char_len})"
         if self.parameter:
@@ -2830,6 +2839,8 @@ class Declaration(Node):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Optional["Declaration"]:
+        if self.parameter:
+            return self.deep_clone()
         target_names = targets.names()
         if self.intent is not None or self.name in target_names:
             return self.deep_clone()
