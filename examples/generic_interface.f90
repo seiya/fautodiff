@@ -4,18 +4,21 @@ module generic_interface
     module procedure :: add_real4, add_real8, add_int
   end interface
 contains
-  real function add_real4(x, y) result(r)
+  function add_real4(x, y) result(r)
     real, intent(in) :: x, y
+    real :: r
     r = x + y
   end function add_real4
 
-  real(8) function add_real8(x, y) result(r)
+  function add_real8(x, y) result(r)
     real(8), intent(in) :: x, y
+    real(8) :: r
     r = x + y
   end function add_real8
 
-  integer function add_int(i, j) result(k)
+  function add_int(i, j) result(k)
     integer, intent(in) :: i, j
+    integer :: k
     k = i + j
   end function add_int
 

@@ -519,16 +519,23 @@ class Node:
 
         if arg_info is None and generic_map and name in generic_map:
             for cand in generic_map[name]:
-                if not cand in routine_map:
+                if cand not in routine_map:
                     raise RuntimeError(f"Not found in routine_map: {cand}")
                 arg_info = routine_map[cand]
-                if "type" in arg_info and arg_info["type"] == argtypes:
-                    if "kind" in arg_info and arg_info["kind"] == argkinds:
-                        if (
-                            "dims" in arg_info
-                            and [(arg and len(arg)) for arg in arg_info["dims"]]
-                            == argdims
-                        ):
+                cand_types = list(arg_info.get("type", []))
+                cand_kinds = (
+                    list(arg_info.get("kind", [])) if arg_info.get("kind") else []
+                )
+                cand_dims = (
+                    list(arg_info.get("dims", [])) if arg_info.get("dims") else []
+                )
+                if len(cand_types) == len(argtypes) + 1:
+                    cand_types = cand_types[:-1]
+                    cand_kinds = cand_kinds[:-1] if cand_kinds else cand_kinds
+                    cand_dims = cand_dims[:-1] if cand_dims else cand_dims
+                if cand_types == argtypes:
+                    if cand_kinds == argkinds:
+                        if [(arg and len(arg)) for arg in cand_dims] == argdims:
                             return arg_info
         return None
 

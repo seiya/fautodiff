@@ -30,6 +30,7 @@ from .code_tree import (
     ForallBlock,
     Function,
     IfBlock,
+    Interface,
     Module,
     Node,
     OmpDirective,
@@ -1753,6 +1754,8 @@ def generate_ad(
             type_map = {}
             for child in mod_org.decls.iter_children():
                 ad_code = child.generate_ad([], type_map=type_map)
+                if isinstance(child, Interface) and child.module_procs:
+                    generic_routines[child.name] = child.module_procs
                 if ad_code:
                     if isinstance(child, TypeDef):
                         type_map[child.name] = ad_code[0]
