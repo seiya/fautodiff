@@ -13,9 +13,9 @@ contains
     y_ad = x_ad ! y = x
     y = x
 #define SCALE_TWO 2
-    #ifdef USE_ADD
+#ifdef USE_ADD
     y = y + 1.0
-    #endif
+#endif
 
     return
   end subroutine foo_fwd_ad
@@ -24,6 +24,7 @@ contains
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
 
+#define SCALE_TWO 2
     x_ad = y_ad + x_ad ! y = x
     y_ad = 0.0 ! y = x
 

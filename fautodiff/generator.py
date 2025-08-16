@@ -1902,13 +1902,9 @@ def generate_ad(
                 routine_map,
                 fadmod_dir,
             )
-    macro_lines = [
-        f"#define {name} {val}".rstrip()
-        for name, val in parser.macro_table.items()
-        if name not in parser.module_macros
-    ]
-    if macro_lines:
-        code = "\n".join(macro_lines + [""] + modules)
+    preamble = parser.file_cpp_lines
+    if preamble:
+        code = "\n".join(preamble + [""] + modules)
     else:
         code = "\n".join(modules)
     if out_file:
