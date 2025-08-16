@@ -14,6 +14,17 @@ from fparser.common.readfortran import FortranFileReader, FortranStringReader
 from fparser.two import Fortran2003, Fortran2008
 from fparser.two.parser import ParserFactory
 from fparser.two.utils import walk
+
+
+def _eval_selected_real_kind(p: int, r: int) -> str:
+    """Evaluate ``selected_real_kind`` for common precisions."""
+    if p <= 6 and r <= 37:
+        return "4"
+    if p <= 15 and r <= 307:
+        return "8"
+    return "16"
+
+
 from packaging.version import Version, parse
 
 from .code_tree import (
@@ -482,6 +493,21 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
         kind = decl.kind
         if kind is None and decl.typename.lower().startswith("double"):
             kind = "8"
+        if (
+            kind is not None
+            and decl_map is not None
+            and not kind.isdigit()
+            and kind in decl_map
+        ):
+            ref = decl_map[kind]
+            if ref.init_val is not None:
+                m = re.match(
+                    r"selected_real_kind\((\d+),\s*(\d+)\)", ref.init_val, re.I
+                )
+                if m:
+                    kind = _eval_selected_real_kind(int(m.group(1)), int(m.group(2)))
+                elif ref.init_val.isdigit():
+                    kind = ref.init_val
 
         return OpVar(
             name=name,
@@ -758,6 +784,7 @@ def _parse_decl_stmt(
     allow_intent=True,
     allow_access=False,
     declared_in="routine",
+    decl_map=None,
 ) -> List[Declaration]:
     """Parse a single ``Type_Declaration_Stmt`` and return declarations."""
 
@@ -783,6 +810,20 @@ def _parse_decl_stmt(
         elif isinstance(selector, Fortran2003.Kind_Selector):
             if selector.items[1]:
                 kind = selector.items[1].string
+                if (
+                    decl_map is not None
+                    and not kind.isdigit()
+                    and kind in decl_map
+                    and decl_map[kind].init_val is not None
+                ):
+                    init = decl_map[kind].init_val
+                    m = re.match(r"selected_real_kind\((\d+),\s*(\d+)\)", init, re.I)
+                    if m:
+                        kind = _eval_selected_real_kind(
+                            int(m.group(1)), int(m.group(2))
+                        )
+                    elif init.isdigit():
+                        kind = init
         elif isinstance(selector, Fortran2003.Length_Selector):
             char_len = selector.items[1].string
         else:
@@ -1134,6 +1175,7 @@ def _parse_decls(
                 allow_intent=allow_intent,
                 allow_access=allow_access,
                 declared_in=declared_in,
+                decl_map=decl_map,
             ):
                 if allow_access and decl.access is None:
                     if decl.name in access_map:
@@ -1217,6 +1259,7 @@ def _parse_decls(
                                 allow_intent=False,
                                 allow_access=False,
                                 declared_in=declared_in,
+                                decl_map=decl_map,
                             )
                         )
                     continue
