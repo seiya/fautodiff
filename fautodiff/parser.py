@@ -132,6 +132,14 @@ _MACRO_RE = re.compile(
 _UNDEF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#undef\s+(\w+)")
 _IFDEF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#ifdef\s+(\w+)")
 _IFNDEF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#ifndef\s+(\w+)")
+# ``#if defined(NAME)``
+_IF_DEFINED_RE = re.compile(
+    rf"{re.escape(_CPP_PREFIX)}\s+#if\s+defined\s*(?:\((\w+)\)|\s+(\w+))"
+)
+# ``#if !defined(NAME)``
+_IF_NOT_DEFINED_RE = re.compile(
+    rf"{re.escape(_CPP_PREFIX)}\s+#if\s+!\s*defined\s*(?:\((\w+)\)|\s+(\w+))"
+)
 _ELSE_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#else")
 _ENDIF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#endif")
 _TOKEN_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
@@ -240,7 +248,21 @@ def _extract_macros(src: str) -> None:
                     m.group(1) not in macro_table and m.group(1) not in macro_table.func
                 )
                 continue
+            if m := _IF_DEFINED_RE.match(line):
+                name = m.group(1) or m.group(2)
+                stack.append((macro_table.copy(), active))
+                active = active and (name in macro_table or name in macro_table.func)
+                continue
+            if m := _IF_NOT_DEFINED_RE.match(line):
+                name = m.group(1) or m.group(2)
+                stack.append((macro_table.copy(), active))
+                active = active and (
+                    name not in macro_table and name not in macro_table.func
+                )
+                continue
             if _ELSE_RE.match(line):
+                if not stack:
+                    continue
                 prev_table, prev_active = stack[-1]
                 if active:
                     # keep current table for taken branch before switching
@@ -253,6 +275,8 @@ def _extract_macros(src: str) -> None:
                 stack[-1] = (taken_table, prev_active)
                 continue
             if _ENDIF_RE.match(line):
+                if not stack:
+                    continue
                 prev_table, prev_active = stack.pop()
                 if not active:
                     macro_table.clear()
