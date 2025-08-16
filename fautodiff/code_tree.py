@@ -2408,6 +2408,8 @@ class Routine(Node):
         return OpVar(
             name,
             kind=decl.kind,
+            kind_val=decl.kind_val,
+            kind_keyword=decl.kind_keyword,
             char_len=decl.char_len,
             dims=decl.dims,
             typename=decl.typename,
@@ -2533,6 +2535,7 @@ class Declaration(Node):
     typename: str
     kind: Optional[str] = None
     kind_val: Optional[str] = None
+    kind_keyword: bool = False
     char_len: Optional[str] = None
     dims: Optional[Union[Tuple[str], str]] = None
     intent: Optional[str] = None
@@ -2557,6 +2560,10 @@ class Declaration(Node):
             raise ValueError(f"kind must be str: {type(self.kind)}")
         if self.kind_val is not None and not isinstance(self.kind_val, str):
             raise ValueError(f"kind_val must be str: {type(self.kind_val)}")
+        if self.kind_keyword is None:
+            self.kind_keyword = False
+        elif not isinstance(self.kind_keyword, bool):
+            raise ValueError(f"kind_keyword must be bool: {type(self.kind_keyword)}")
         if self.char_len is not None and not isinstance(self.char_len, str):
             raise ValueError(f"char_len must be str: {type(self.char_len)}")
         if self.dims is not None and (
@@ -2575,6 +2582,7 @@ class Declaration(Node):
             typename=self.typename,
             kind=self.kind,
             kind_val=self.kind_val,
+            kind_keyword=self.kind_keyword,
             char_len=self.char_len,
             dims=self.dims,
             intent=self.intent,
@@ -2601,6 +2609,7 @@ class Declaration(Node):
             typename=self.typename,
             kind=self.kind,
             kind_val=self.kind_val,
+            kind_keyword=self.kind_keyword,
             char_len=self.char_len,
             dims=dims,
             intent=self.intent,
@@ -2627,6 +2636,7 @@ class Declaration(Node):
                 typename=self.typename,
                 kind=self.kind,
                 kind_val=self.kind_val,
+                kind_keyword=self.kind_keyword,
                 is_constant=self.parameter or self.constant,
                 allocatable=self.allocatable,
                 pointer=self.pointer,
@@ -2654,6 +2664,7 @@ class Declaration(Node):
             typename=self.typename,
             kind=self.kind,
             kind_val=self.kind_val,
+            kind_keyword=self.kind_keyword,
             is_constant=self.parameter or self.constant,
             allocatable=self.allocatable,
             pointer=self.pointer,
@@ -2684,7 +2695,10 @@ class Declaration(Node):
             if self.kind.isdigit():
                 line += f"({self.kind})"
             else:
-                line += f"(kind={self.kind})"
+                if self.kind_keyword:
+                    line += f"(kind={self.kind})"
+                else:
+                    line += f"({self.kind})"
         if self.char_len is not None:
             line += f"(len={self.char_len})"
         if self.parameter:

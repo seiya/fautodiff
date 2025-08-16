@@ -8,6 +8,7 @@ end module var_mod_ad
 
 module use_mod_ad
   use use_mod
+  use var_mod
   implicit none
 
 contains
