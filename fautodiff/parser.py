@@ -84,27 +84,108 @@ _CPP_PREFIX = "!$CPP"
 
 
 _MACRO_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#define\s+(\w+)\s*(.*)")
+_UNDEF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#undef\s+(\w+)")
+_IFDEF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#ifdef\s+(\w+)")
+_IFNDEF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#ifndef\s+(\w+)")
+_ELSE_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#else")
+_ENDIF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#endif")
+_TOKEN_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
 
 
 class MacroTable(dict):
     """Simple table mapping macro names to their expansions."""
 
+    def _expand(self, value: str, stack: List[str]) -> str:
+        """Recursively expand macros in ``value``.
+
+        ``stack`` tracks the expansion chain to detect circular
+        definitions.
+        """
+
+        def repl(match: re.Match[str]) -> str:
+            key = match.group(0)
+            if key in stack:
+                chain = " -> ".join(stack + [key])
+                raise ValueError(f"circular macro definition: {chain}")
+            if key in self:
+                return self._expand(self[key], stack + [key])
+            return key
+
+        return _TOKEN_RE.sub(repl, value)
+
     def register(self, name: str, value: str) -> None:
+        """Register ``name`` with its raw ``value`` after cycle check."""
+
+        self._expand(value, [name])
         self[name] = value
 
 
 macro_table: MacroTable = MacroTable()
 module_macros: set[str] = set()
+file_cpp_lines: List[str] = []
 
 
 def _extract_macros(src: str) -> None:
-    """Populate ``macro_table`` with ``#define`` directives from ``src``."""
+    """Populate ``macro_table`` with preprocessor directives from ``src``.
+
+    Handles ``#define``, ``#undef``, ``#ifdef`` and ``#ifndef`` to emulate a
+    very small subset of the C preprocessor sufficient for tracking macros in
+    the original Fortran sources.
+    """
+
     macro_table.clear()
+    file_cpp_lines.clear()
+    stack: List[Tuple[Dict[str, str], bool]] = []
+    active = True
+    depth = 0
     for line in src.splitlines():
-        m = _MACRO_RE.match(line)
-        if m:
-            name, value = m.group(1), m.group(2).strip()
-            macro_table.register(name, value)
+        stripped = line.lstrip()
+        if stripped.startswith(_CPP_PREFIX):
+            cpp_line = stripped[len(_CPP_PREFIX) :].lstrip()
+            if depth == 0:
+                file_cpp_lines.append(cpp_line.rstrip())
+            if m := _MACRO_RE.match(line):
+                if active:
+                    name, value = m.group(1), m.group(2).strip()
+                    macro_table.register(name, value)
+                continue
+            if m := _UNDEF_RE.match(line):
+                if active:
+                    macro_table.pop(m.group(1), None)
+                continue
+            if m := _IFDEF_RE.match(line):
+                stack.append((macro_table.copy(), active))
+                active = active and (m.group(1) in macro_table)
+                continue
+            if m := _IFNDEF_RE.match(line):
+                stack.append((macro_table.copy(), active))
+                active = active and (m.group(1) not in macro_table)
+                continue
+            if _ELSE_RE.match(line):
+                prev_table, prev_active = stack[-1]
+                if active:
+                    # keep current table for taken branch before switching
+                    taken_table = macro_table.copy()
+                else:
+                    taken_table = prev_table
+                macro_table.clear()
+                macro_table.update(prev_table)
+                active = prev_active and not active
+                stack[-1] = (taken_table, prev_active)
+                continue
+            if _ENDIF_RE.match(line):
+                prev_table, prev_active = stack.pop()
+                if not active:
+                    macro_table.clear()
+                    macro_table.update(prev_table)
+                active = prev_active
+                continue
+            continue
+        low = stripped.lower()
+        if re.match(r"(module|program|subroutine|function)\b", low):
+            depth += 1
+        elif re.match(r"end\s+(module|program|subroutine|function)\b", low):
+            depth = max(depth - 1, 0)
 
 
 def _mark_module_macros(modules: List[Module]) -> None:
@@ -781,7 +862,13 @@ def _parse_decls(
                 if isinstance(cnt, Fortran2003.Comment):
                     line = _comment_to_cpp(cnt)
                     if line is not None:
-                        decls.append(PreprocessorLine(line))
+                        low = line.lstrip().lower()
+                        if low.startswith(
+                            ("#if", "#ifdef", "#ifndef", "#elif", "#else", "#endif")
+                        ):
+                            nodes.append(PreprocessorLine(line))
+                        else:
+                            decls.append(PreprocessorLine(line))
                         continue
                     text = cnt.items[0].strip()
                     if text.startswith("!$FAD"):
@@ -802,7 +889,13 @@ def _parse_decls(
         if isinstance(item, Fortran2003.Comment):
             line = _comment_to_cpp(item)
             if line is not None:
-                decls.append(PreprocessorLine(line))
+                low = line.lstrip().lower()
+                if low.startswith(
+                    ("#if", "#ifdef", "#ifndef", "#elif", "#else", "#endif")
+                ):
+                    nodes.append(PreprocessorLine(line))
+                else:
+                    decls.append(PreprocessorLine(line))
                 continue
             continue
         if isinstance(item, Fortran2003.Use_Stmt):
@@ -1319,6 +1412,62 @@ def find_subroutines(modules: List[Module]) -> List[str]:
     return names
 
 
+def _merge_cpp_lines(nodes: List[Node]) -> List[Node]:
+    """Combine consecutive preprocessor lines into ``PreprocessorIfBlock`` nodes."""
+
+    merged: List[Node] = []
+    i = 0
+    while i < len(nodes):
+        node = nodes[i]
+        if isinstance(node, PreprocessorLine):
+            text = node.text.lstrip()
+            low = text.lower()
+            if low.startswith("#if"):
+                cond = text[1:]
+                cond_blocks: List[Tuple[str, Block]] = []
+                macro_tables: List[Dict[str, str]] = []
+                current: List[Node] = []
+                i += 1
+                depth = 0
+                while i < len(nodes):
+                    n = nodes[i]
+                    if isinstance(n, PreprocessorLine):
+                        low2 = n.text.lstrip().lower()
+                        if low2.startswith("#if"):
+                            depth += 1
+                        elif low2.startswith("#endif"):
+                            if depth == 0:
+                                block = Block(_merge_cpp_lines(current))
+                                cond_blocks.append((cond, block))
+                                macro_tables.append({})
+                                break
+                            depth -= 1
+                        elif (
+                            low2.startswith("#elif") or low2.startswith("#else")
+                        ) and depth == 0:
+                            block = Block(_merge_cpp_lines(current))
+                            cond_blocks.append((cond, block))
+                            macro_tables.append({})
+                            cond = n.text[1:]
+                            current = []
+                            i += 1
+                            continue
+                    current.append(n)
+                    i += 1
+                else:
+                    raise ValueError("Unterminated preprocessor conditional")
+                merged.append(PreprocessorIfBlock(cond_blocks, macro_tables))
+            else:
+                merged.append(node)
+            i += 1
+        else:
+            if isinstance(node, Block):
+                node._children = _merge_cpp_lines(node._children)
+            merged.append(node)
+            i += 1
+    return merged
+
+
 def _parse_routine(
     content,
     src_name: str,
@@ -1723,14 +1872,16 @@ def _parse_routine(
         blk = Block([])
         i = 0
 
-        def _parse_cpp_if(start_idx: int) -> Tuple[PreprocessorIfBlock, int]:
+        def _parse_cpp_if(start_idx: int) -> Tuple[Optional[PreprocessorIfBlock], int]:
             line = _comment_to_cpp(body_list[start_idx])
             assert line is not None
             cond = line[1:]
             cond_blocks: List[Tuple[str, Block]] = []
+            macro_tables: List[Dict[str, str]] = []
             current: List = []
             depth = 0
             j = start_idx + 1
+            outer_table = macro_table.copy()
             while j < len(body_list):
                 st2 = body_list[j]
                 line2 = (
@@ -1746,13 +1897,19 @@ def _parse_routine(
                         if depth == 0:
                             block = _block(current, decl_map, type_map)
                             cond_blocks.append((cond, block))
-                            return PreprocessorIfBlock(cond_blocks), j + 1
+                            macro_tables.append(macro_table.copy())
+                            macro_table.clear()
+                            macro_table.update(outer_table)
+                            return PreprocessorIfBlock(cond_blocks, macro_tables), j + 1
                         depth -= 1
                     elif (
                         low.startswith("#elif") or low.startswith("#else")
                     ) and depth == 0:
                         block = _block(current, decl_map, type_map)
                         cond_blocks.append((cond, block))
+                        macro_tables.append(macro_table.copy())
+                        macro_table.clear()
+                        macro_table.update(outer_table)
                         cond = line2[1:]
                         current = []
                         j += 1
@@ -1788,9 +1945,25 @@ def _parse_routine(
             if isinstance(st, Fortran2003.Comment):
                 line = _comment_to_cpp(st)
                 if line is not None:
-                    if line.lstrip().lower().startswith("#if"):
+                    low = line.lstrip().lower()
+                    if low.startswith("#if"):
                         node, i = _parse_cpp_if(i)
-                        blk.append(node)
+                        if node is not None:
+                            blk.append(node)
+                        continue
+                    if low.startswith("#define"):
+                        m = re.match(r"#define\s+(\w+)\s*(.*)", line)
+                        if m:
+                            macro_table.register(m.group(1), m.group(2).strip())
+                        blk.append(PreprocessorLine(line))
+                        i += 1
+                        continue
+                    if low.startswith("#undef"):
+                        m = re.match(r"#undef\s+(\w+)", line)
+                        if m:
+                            macro_table.pop(m.group(1), None)
+                        blk.append(PreprocessorLine(line))
+                        i += 1
                         continue
                     blk.append(PreprocessorLine(line))
                     i += 1
@@ -1868,10 +2041,17 @@ def _parse_routine(
                 src_name=src_name,
                 omp_pending=pending_omp,
             )
-            routine.decls = Block(uses + decls + nodes)
+            routine.decls = Block(uses + decls)
+            if nodes:
+                routine.content = Block(nodes)
             continue
         if isinstance(item, Fortran2003.Execution_Part):
-            routine.content = _block(item.content, routine.decl_map, type_map)
+            block = _block(item.content, routine.decl_map, type_map)
+            if routine.content.is_effectively_empty():
+                routine.content = block
+            else:
+                for n in block._children:
+                    routine.content.append(n)
             continue
         if isinstance(item, Fortran2003.End_Subroutine_Stmt):
             continue
@@ -1881,5 +2061,5 @@ def _parse_routine(
 
     if routine.decl_map is None:
         routine.decl_map = decl_map
-
+    routine.content._children = _merge_cpp_lines(routine.content._children)
     return routine

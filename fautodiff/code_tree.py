@@ -1396,10 +1396,7 @@ class PreprocessorLine(Node):
 
     def render(self, indent: int = 0) -> List[str]:
         text = self.text.strip()
-        if text.startswith("#define"):
-            return [f"{text}\n"]
-        space = "  " * indent
-        return [f"{space}{text}\n"]
+        return [f"{text}\n"]
 
     def is_effectively_empty(self) -> bool:
         return False
@@ -1417,8 +1414,6 @@ class PreprocessorLine(Node):
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
-        if reverse:
-            return []
         return [PreprocessorLine(self.text)]
 
     def set_for_returnexitcycle(
@@ -1449,9 +1444,14 @@ class PreprocessorIfBlock(Node):
     """Representation of ``#if`` style preprocessor conditionals."""
 
     cond_blocks: List[Tuple[str, Block]] = field(default_factory=list)
+    macro_tables: List[Dict[str, str]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        if self.macro_tables and len(self.macro_tables) != len(self.cond_blocks):
+            raise ValueError("macro table count mismatch")
+        if not self.macro_tables:
+            self.macro_tables = [{} for _ in self.cond_blocks]
         for cond, block in self.cond_blocks:
             if not isinstance(cond, str):
                 raise ValueError("condition must be a string")
@@ -1460,25 +1460,28 @@ class PreprocessorIfBlock(Node):
             block.set_parent(self)
 
     def copy(self) -> "PreprocessorIfBlock":
-        return PreprocessorIfBlock(self.cond_blocks)
+        return PreprocessorIfBlock(
+            self.cond_blocks, [m.copy() for m in self.macro_tables]
+        )
 
     def deep_clone(self) -> "PreprocessorIfBlock":
         cond_blocks: List[Tuple[str, Block]] = []
-        for cond, block in self.cond_blocks:
+        macro_tables: List[Dict[str, str]] = []
+        for (cond, block), table in zip(self.cond_blocks, self.macro_tables):
             cond_blocks.append((cond, block.deep_clone()))
-        return PreprocessorIfBlock(cond_blocks)
+            macro_tables.append(table.copy())
+        return PreprocessorIfBlock(cond_blocks, macro_tables)
 
     def iter_children(self) -> Iterator[Node]:
         for _, block in self.cond_blocks:
             yield block
 
     def render(self, indent: int = 0) -> List[str]:
-        space = "  " * indent
         lines: List[str] = []
         for cond, block in self.cond_blocks:
-            lines.append(f"{space}#{cond}\n")
+            lines.append(f"#{cond}\n")
             lines.extend(block.render(indent))
-        lines.append(f"{space}#endif\n")
+        lines.append("#endif\n")
         return lines
 
     def is_effectively_empty(self) -> bool:
@@ -1498,8 +1501,9 @@ class PreprocessorIfBlock(Node):
         warnings: Optional[list[str]] = None,
     ) -> List["Node"]:
         cond_blocks: List[Tuple[str, Block]] = []
+        macro_tables: List[Dict[str, str]] = []
         has_content = False
-        for cond, block in self.cond_blocks:
+        for (cond, block), table in zip(self.cond_blocks, self.macro_tables):
             nodes = block.generate_ad(
                 saved_vars,
                 reverse,
@@ -1516,9 +1520,10 @@ class PreprocessorIfBlock(Node):
             if nodes:
                 has_content = True
             cond_blocks.append((cond, Block(nodes)))
+            macro_tables.append(table)
         if not has_content:
             return []
-        return [PreprocessorIfBlock(cond_blocks)]
+        return [PreprocessorIfBlock(cond_blocks, macro_tables)]
 
     def set_for_returnexitcycle(
         self,
@@ -1532,8 +1537,9 @@ class PreprocessorIfBlock(Node):
         keep: bool = False,
     ) -> List[Node]:
         cond_blocks: List[Tuple[str, Block]] = []
+        macro_tables: List[Dict[str, str]] = []
         has_content = False
-        for cond, block in self.cond_blocks:
+        for (cond, block), table in zip(self.cond_blocks, self.macro_tables):
             nodes = block.set_for_returnexitcycle(
                 return_flags,
                 exitcycle_flags,
@@ -1548,9 +1554,10 @@ class PreprocessorIfBlock(Node):
             if nodes:
                 has_content = True
             cond_blocks.append((cond, Block(nodes)))
+            macro_tables.append(table)
         if not has_content:
             return []
-        return [PreprocessorIfBlock(cond_blocks)]
+        return [PreprocessorIfBlock(cond_blocks, macro_tables)]
 
     def required_vars(
         self,
@@ -1577,15 +1584,17 @@ class PreprocessorIfBlock(Node):
         base_targets: Optional[VarList] = None,
     ) -> Optional["PreprocessorIfBlock"]:
         cond_blocks: List[Tuple[str, Block]] = []
+        macro_tables: List[Dict[str, str]] = []
         flag = False
-        for cond, block in self.cond_blocks:
+        for (cond, block), table in zip(self.cond_blocks, self.macro_tables):
             block = block.prune_for(targets, mod_vars, decl_map, base_targets)
             cond_blocks.append((cond, block))
+            macro_tables.append(table)
             if not block.is_effectively_empty():
                 flag = True
         if not flag:
             return None
-        return PreprocessorIfBlock(cond_blocks)
+        return PreprocessorIfBlock(cond_blocks, macro_tables)
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         vars_list = VarList()
