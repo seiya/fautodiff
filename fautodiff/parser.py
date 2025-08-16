@@ -140,13 +140,14 @@ class MacroTable(dict):
     def register(self, name: str, value: str) -> None:
         """Register ``name`` with its raw ``value`` after cycle check."""
 
-        self._expand(value, [name])
-        self[name] = value
+        expanded = self._expand(value, [name])
+        self[name] = expanded
 
     def register_func(self, name: str, params: List[str], value: str) -> None:
         """Register a function-like macro ``name``."""
 
-        self.func[name] = (params, value)
+        expanded = self._expand(value, [name])
+        self.func[name] = (params, expanded)
 
 
 macro_table: MacroTable = MacroTable()
@@ -239,6 +240,29 @@ def _extract_macros(src: str) -> None:
             depth = max(depth - 1, 0)
 
 
+def _expand_macros(src: str) -> str:
+    """Expand object-like macros in ``src`` and record their origins."""
+
+    out_lines: List[str] = []
+    for line in src.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(_CPP_PREFIX):
+            out_lines.append(line)
+            continue
+        m = _TOKEN_RE.fullmatch(stripped)
+        if m and m.group(0) in macro_table:
+            name = m.group(0)
+            expansion = macro_table._expand(macro_table[name], [name])
+            parts = [p.strip() for p in expansion.split(";") if p.strip()]
+            for part in parts:
+                out_lines.append(part)
+            continue
+        out_lines.append(line)
+    if src.endswith("\n"):
+        return "\n".join(out_lines) + "\n"
+    return "\n".join(out_lines)
+
+
 def _mark_module_macros(modules: List[Module]) -> None:
     """Record macros that appear inside modules."""
 
@@ -279,6 +303,24 @@ def _comment_to_cpp(comment) -> Optional[str]:
             line = line[1:]
         return line
     return None
+
+
+def _apply_macro_name(node: Node, name: str) -> None:
+    """Recursively tag all Operators within ``node`` with ``name``."""
+
+    def _mark(obj: Any) -> None:
+        if isinstance(obj, Operator):
+            obj.macro_name = name
+            for v in vars(obj).values():
+                _mark(v)
+        elif isinstance(obj, Node):
+            for v in vars(obj).values():
+                _mark(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                _mark(item)
+
+    _mark(node)
 
 
 def _stmt_name(stmt):
@@ -599,6 +641,7 @@ def parse_file(
     src = Path(path).read_text()
     src = _inject_cpp_lines(src)
     _extract_macros(src)
+    src = _expand_macros(src)
     reader = FortranStringReader(
         src, ignore_comments=False, include_omp_conditional_lines=True
     )
@@ -620,6 +663,7 @@ def parse_src(
     """Parse ``src`` and return a list of :class:`Module` nodes."""
     src = _inject_cpp_lines(src)
     _extract_macros(src)
+    src = _expand_macros(src)
     reader = FortranStringReader(
         src, ignore_comments=False, include_omp_conditional_lines=True
     )
@@ -944,6 +988,11 @@ def _parse_decls(
                             ("#if", "#ifdef", "#ifndef", "#elif", "#else", "#endif")
                         ):
                             nodes.append(PreprocessorLine(line))
+                        elif low.startswith("#define"):
+                            m = re.match(r"#define\s+(\w+)\s*(.*)", line)
+                            if m:
+                                macro_table.register(m.group(1), m.group(2).strip())
+                            decls.append(PreprocessorLine(line))
                         else:
                             decls.append(PreprocessorLine(line))
                         continue
@@ -971,6 +1020,11 @@ def _parse_decls(
                     ("#if", "#ifdef", "#ifndef", "#elif", "#else", "#endif")
                 ):
                     nodes.append(PreprocessorLine(line))
+                elif low.startswith("#define"):
+                    m = re.match(r"#define\s+(\w+)\s*(.*)", line)
+                    if m:
+                        macro_table.register(m.group(1), m.group(2).strip())
+                    decls.append(PreprocessorLine(line))
                 else:
                     decls.append(PreprocessorLine(line))
                 continue
