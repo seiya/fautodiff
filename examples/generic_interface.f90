@@ -22,10 +22,25 @@ contains
     k = i + j
   end function add_int
 
-  subroutine call_add_real(x, y, z)
+  subroutine call_add_real_8(x, y, z)
+    integer, parameter :: RP = 8
+    real(RP), intent(in) :: x, y
+    real(RP), intent(out) :: z
+    z = add(x, y)
+  end subroutine call_add_real_8
+
+  subroutine call_add_real_selected_real_kind(x, y, z)
     integer, parameter :: RP = selected_real_kind(15, 307)
     real(kind=RP), intent(in) :: x, y
     real(kind=RP), intent(out) :: z
     z = add(x, y)
-  end subroutine call_add_real
+  end subroutine call_add_real_selected_real_kind
+
+  subroutine call_add_real_kind(x, y, z)
+    integer, parameter :: RP = kind(1.0d0)
+    real(kind=RP), intent(in) :: x, y
+    real(kind=RP), intent(out) :: z
+    z = add(x, y)
+  end subroutine call_add_real_kind
+
 end module generic_interface
