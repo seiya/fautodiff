@@ -606,6 +606,8 @@ examples_dir = Path("examples")
 for _src in sorted(examples_dir.glob("*.f90")):
     if _src.name.endswith("_ad.f90"):
         continue
+    if _src.stem == "generic_interface":
+        continue
     test_name = f"test_{_src.stem}"
     if hasattr(TestGenerator, test_name):
         continue

@@ -14,7 +14,7 @@ vpath %.f90 $(HELPER_DIR)
 vpath %.f90 $(MOD_DIR)
 vpath %.f90 .
 
-PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_control_flow.out run_cross_mod.out \
+PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_control_flow.out run_cross_mod.out run_generic_interface.out \
            run_intrinsic_func.out run_real_kind.out run_save_vars.out run_store_vars.out \
            run_directives.out run_parameter_var.out run_module_vars.out run_call_module_vars.out run_allocate_vars.out \
            run_exit_cycle.out run_pointer_arrays.out run_derived_alloc.out run_mpi_example.out \
@@ -53,6 +53,7 @@ $(OUTDIR)/run_arrays.o: $(OUTDIR)/arrays.o $(OUTDIR)/arrays_ad.o
 $(OUTDIR)/run_call_example.o: $(OUTDIR)/call_example.o $(OUTDIR)/call_example_ad.o
 $(OUTDIR)/run_control_flow.o: $(OUTDIR)/control_flow.o $(OUTDIR)/control_flow_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_cross_mod.o: $(OUTDIR)/cross_mod_a.o $(OUTDIR)/cross_mod_a_ad.o $(OUTDIR)/cross_mod_b.o $(OUTDIR)/cross_mod_b_ad.o
+$(OUTDIR)/run_generic_interface.o: $(OUTDIR)/generic_interface.o $(OUTDIR)/generic_interface_ad.o
 $(OUTDIR)/run_intrinsic_func.o: $(OUTDIR)/intrinsic_func.o $(OUTDIR)/intrinsic_func_ad.o
 $(OUTDIR)/run_real_kind.o: $(OUTDIR)/real_kind.o $(OUTDIR)/real_kind_ad.o
 $(OUTDIR)/run_save_vars.o: $(OUTDIR)/save_vars.o $(OUTDIR)/save_vars_ad.o
@@ -82,6 +83,7 @@ $(OUTDIR)/run_arrays.out: $(OUTDIR)/run_arrays.o $(OUTDIR)/arrays.o $(OUTDIR)/ar
 $(OUTDIR)/run_call_example.out: $(OUTDIR)/run_call_example.o $(OUTDIR)/call_example.o $(OUTDIR)/call_example_ad.o
 $(OUTDIR)/run_control_flow.out: $(OUTDIR)/run_control_flow.o $(OUTDIR)/control_flow.o $(OUTDIR)/control_flow_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_cross_mod.out: $(OUTDIR)/run_cross_mod.o $(OUTDIR)/cross_mod_a.o $(OUTDIR)/cross_mod_a_ad.o $(OUTDIR)/cross_mod_b.o $(OUTDIR)/cross_mod_b_ad.o
+$(OUTDIR)/run_generic_interface.out: $(OUTDIR)/run_generic_interface.o $(OUTDIR)/generic_interface.o $(OUTDIR)/generic_interface_ad.o
 $(OUTDIR)/run_intrinsic_func.out: $(OUTDIR)/run_intrinsic_func.o $(OUTDIR)/intrinsic_func.o $(OUTDIR)/intrinsic_func_ad.o
 $(OUTDIR)/run_real_kind.out: $(OUTDIR)/run_real_kind.o $(OUTDIR)/real_kind.o $(OUTDIR)/real_kind_ad.o
 $(OUTDIR)/run_save_vars.out: $(OUTDIR)/run_save_vars.o $(OUTDIR)/save_vars.o $(OUTDIR)/save_vars_ad.o $(OUTDIR)/fautodiff_stack.o

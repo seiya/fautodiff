@@ -161,6 +161,9 @@ class TestFortranADCode(unittest.TestCase):
     def test_derived_alloc(self):
         self._run_test("derived_alloc", ["derived_alloc"])
 
+    def test_generic_interface(self):
+        self._run_test("generic_interface", ["call_add_real"])
+
     mpifort = shutil.which("mpifort")
 
     def test_mpi_example(self):
