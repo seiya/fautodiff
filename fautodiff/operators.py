@@ -980,6 +980,7 @@ class OpVar(OpLeaf):
     name: str = field(default="")
     index: Optional[AryIndex] = None
     kind: Optional[str] = None
+    kind_val: Optional[str] = None
     char_len: Optional[str] = None
     typename: Optional[str] = field(default=None)
     dims: Optional[Tuple[str]] = field(repr=False, default=None)
@@ -1004,6 +1005,7 @@ class OpVar(OpLeaf):
         name: str,
         index: Optional[AryIndex] = None,
         kind: Optional[str] = None,
+        kind_val: Optional[str] = None,
         char_len: Optional[str] = None,
         dims: Optional[Tuple[str]] = None,
         reference: Optional[OpVar] = None,
@@ -1032,6 +1034,7 @@ class OpVar(OpLeaf):
             index = AryIndex(index)
         self.index = index
         self.kind = kind
+        self.kind_val = kind_val
         self.char_len = char_len
         self.dims = dims
         self.reference = reference

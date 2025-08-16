@@ -35,6 +35,7 @@ contains
   end subroutine sum_reduce_rev_ad
 
   subroutine isend_irecv_fwd_ad(x, x_ad, y, y_ad, comm)
+    integer, parameter :: tag = 0
     real, intent(inout) :: x(2)
     real, intent(inout) :: x_ad(2)
     real, intent(out) :: y
@@ -47,7 +48,6 @@ contains
     integer :: size
     integer :: pn
     integer :: pp
-    integer, parameter :: tag = 0
     integer :: reqr
     integer :: reqs
 
@@ -69,6 +69,7 @@ contains
   end subroutine isend_irecv_fwd_ad
 
   subroutine isend_irecv_rev_ad(x_ad, y_ad, comm)
+    integer, parameter :: tag = 0
     real, intent(inout) :: x_ad(2)
     real, intent(inout) :: y_ad
     integer, intent(in)  :: comm
@@ -79,7 +80,6 @@ contains
     integer :: size
     integer :: pn
     integer :: pp
-    integer, parameter :: tag = 0
 
     call MPI_Comm_rank(comm, rank, ierr)
     call MPI_Comm_size(comm, size, ierr)

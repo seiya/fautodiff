@@ -30,6 +30,7 @@ from .code_tree import (
     ForallBlock,
     Function,
     IfBlock,
+    Interface,
     Module,
     Node,
     OmpDirective,
@@ -835,11 +836,14 @@ def _prepare_fwd_ad_header(
         dims = arg.dims
         intent = arg.intent or "inout"
         kind = arg.kind
+        kind_val = getattr(arg, "kind_val", None)
+        kind_val = getattr(arg, "kind_val", None)
+        kind_val = getattr(arg, "kind_val", None)
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
         arg_info["dims"].append(dims)
-        arg_info["kind"].append(kind)
+        arg_info["kind"].append(kind_val if kind_val is not None else kind)
 
         # Always pass original argument to the forward AD routine
         args.append(arg)
@@ -850,6 +854,7 @@ def _prepare_fwd_ad_header(
                 ad_name,
                 typename=typ,
                 kind=kind,
+                kind_val=kind_val,
                 dims=dims,
                 intent=arg.intent,
                 ad_target=True,
@@ -873,16 +878,29 @@ def _prepare_fwd_ad_header(
     ad_name = f"{routine_org.name}{FWD_SUFFIX}"
     subroutine = Subroutine(ad_name, [v.name for v in args])
     # Preserve preprocessor lines from the original routine declarations
-    for node in routine_org.decls.iter_children():
+    decl_children = list(routine_org.decls.iter_children())
+    for node in decl_children:
         if isinstance(node, PreprocessorLine):
             subroutine.decls.append(node.copy())
     arg_info["name_fwd_ad"] = ad_name
+    # Copy parameter declarations from the original routine
+    for node in decl_children:
+        if (
+            isinstance(node, Declaration)
+            and node.parameter
+            and node.name not in arg_info["args"]
+        ):
+            clone = node.deep_clone()
+            clone.donot_prune = True
+            subroutine.decls.append(clone)
+
     for var in args:
         subroutine.decls.append(
             Declaration(
                 name=var.name,
                 typename=var.typename,
                 kind=var.kind,
+                kind_val=getattr(var, "kind_val", None),
                 char_len=var.char_len,
                 dims=var.dims,
                 intent=var.intent,
@@ -948,11 +966,12 @@ def _prepare_rev_ad_header(
         dims = arg.dims
         intent = arg.intent or "inout"
         kind = arg.kind
+        kind_val = getattr(arg, "kind_val", None)
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
         arg_info["dims"].append(dims)
-        arg_info["kind"].append(kind)
+        arg_info["kind"].append(kind_val if kind_val is not None else kind)
         if intent == "out":
             if arg.ad_target and not arg.is_constant:
                 ad_name = f"{name}{AD_SUFFIX}"
@@ -960,6 +979,7 @@ def _prepare_rev_ad_header(
                     ad_name,
                     typename=typ,
                     kind=kind,
+                    kind_val=kind_val,
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -985,6 +1005,7 @@ def _prepare_rev_ad_header(
                     ad_name,
                     typename=typ,
                     kind=kind,
+                    kind_val=kind_val,
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1006,16 +1027,29 @@ def _prepare_rev_ad_header(
     ad_name = f"{routine_org.name}{REV_SUFFIX}"
     subroutine = Subroutine(ad_name, [v.name for v in args])
     # Preserve preprocessor lines from the original routine declarations
-    for node in routine_org.decls.iter_children():
+    decl_children = list(routine_org.decls.iter_children())
+    for node in decl_children:
         if isinstance(node, PreprocessorLine):
             subroutine.decls.append(node.copy())
     arg_info["name_rev_ad"] = ad_name
+    # Copy parameter declarations from the original routine
+    for node in decl_children:
+        if (
+            isinstance(node, Declaration)
+            and node.parameter
+            and node.name not in arg_info["args"]
+        ):
+            clone = node.deep_clone()
+            clone.donot_prune = True
+            subroutine.decls.append(clone)
+
     for var in args:
         subroutine.decls.append(
             Declaration(
                 name=var.name,
                 typename=var.typename,
                 kind=var.kind,
+                kind_val=getattr(var, "kind_val", None),
                 char_len=var.char_len,
                 dims=var.dims,
                 intent=var.intent,
@@ -1754,6 +1788,8 @@ def generate_ad(
             type_map = {}
             for child in mod_org.decls.iter_children():
                 ad_code = child.generate_ad([], type_map=type_map)
+                if isinstance(child, Interface) and child.module_procs:
+                    generic_routines[child.name] = child.module_procs
                 if ad_code:
                     if isinstance(child, TypeDef):
                         type_map[child.name] = ad_code[0]
