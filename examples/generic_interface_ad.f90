@@ -1,5 +1,6 @@
 module generic_interface_ad
   use generic_interface
+  use iso_fortran_env, only: real64
   implicit none
 
 contains
