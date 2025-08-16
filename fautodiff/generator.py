@@ -1731,6 +1731,7 @@ def generate_ad(
         search_dirs.append(cwd)
 
     modules_org = parser.parse_file(in_file, search_dirs=search_dirs)
+    warnings.extend(parser.macro_warnings)
     if fadmod_dir is None:
         fadmod_dir = Path.cwd()
     else:

@@ -93,6 +93,10 @@ _ELSE_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#else")
 _ENDIF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#endif")
 _TOKEN_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
 
+_FUNC_MACRO_CONT_RE = re.compile(r"\\\s*$")
+_FUNC_MACRO_PASTE_RE = re.compile(r"##")
+_FUNC_MACRO_VARIADIC_RE = re.compile(r"\.\.\.")
+
 
 class MacroTable(dict):
     """Simple table mapping macro names to their expansions."""
@@ -148,6 +152,7 @@ class MacroTable(dict):
 macro_table: MacroTable = MacroTable()
 module_macros: set[str] = set()
 file_cpp_lines: List[str] = []
+macro_warnings: List[str] = []
 
 
 def _extract_macros(src: str) -> None:
@@ -160,6 +165,7 @@ def _extract_macros(src: str) -> None:
 
     macro_table.clear()
     file_cpp_lines.clear()
+    macro_warnings.clear()
     stack: List[Tuple[MacroTable, bool]] = []
     active = True
     depth = 0
@@ -174,7 +180,16 @@ def _extract_macros(src: str) -> None:
                     name = m.group(1)
                     args = m.group(2)
                     value = m.group(3).strip()
-                    if args:
+                    macro_line = m.group(0)
+                    if (
+                        _FUNC_MACRO_CONT_RE.search(macro_line)
+                        or _FUNC_MACRO_PASTE_RE.search(macro_line)
+                        or _FUNC_MACRO_VARIADIC_RE.search(macro_line)
+                    ):
+                        macro_warnings.append(
+                            f"unsupported macro '{name}' preserved as preprocessor line"
+                        )
+                    elif args:
                         params = [a.strip() for a in args[1:-1].split(",") if a.strip()]
                         macro_table.register_func(name, params, value)
                     else:
