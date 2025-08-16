@@ -366,6 +366,12 @@ class TestGenerator(unittest.TestCase):
         self.assertFalse(routines["foo"].get("skip"))
         self.assertFalse(routines["bar"].get("skip"))
 
+    def test_macro_multistmt_example(self):
+        code_tree.Node.reset()
+        generated = generator.generate_ad("examples/macro_multistmt.F90", warn=False)
+        expected = Path("examples/macro_multistmt_ad.F90").read_text()
+        self.assertEqual(generated, expected)
+
     def test_deallocate_mod_grad_var_prevents_skip(self):
         code_tree.Node.reset()
         import textwrap

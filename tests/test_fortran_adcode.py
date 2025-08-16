@@ -181,6 +181,9 @@ class TestFortranADCode(unittest.TestCase):
     def test_macro_args(self):
         self._run_test("macro_args", ["foo"])
 
+    def test_macro_multistmt(self):
+        self._run_test("macro_multistmt", ["foo"])
+
     def test_self_reference(self):
         self._run_test(
             "self_reference",

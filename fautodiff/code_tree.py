@@ -1084,6 +1084,10 @@ class Block(Node):
             self.append(node)
 
     def insert_before(self, id: int, node: Node) -> None:
+        if isinstance(node, Block):
+            for ch in reversed(node._children):
+                self.insert_before(id, ch)
+            return
         for i, child in enumerate(self._children):
             if child.get_id() == id:
                 node.build_do_index_list(self.do_index_list)
@@ -1092,6 +1096,11 @@ class Block(Node):
         raise ValueError("id is not found")
 
     def insert_after(self, id: int, node: Node) -> None:
+        if isinstance(node, Block):
+            for ch in node._children:
+                self.insert_after(id, ch)
+                id = ch.get_id()
+            return
         for i, child in enumerate(self._children):
             if child.get_id() == id:
                 node.build_do_index_list(self.do_index_list)
@@ -1100,6 +1109,10 @@ class Block(Node):
         raise ValueError("id is not found")
 
     def insert_begin(self, node: Node) -> None:
+        if isinstance(node, Block):
+            for ch in reversed(node._children):
+                self.insert_begin(ch)
+            return
         node.build_do_index_list(self.do_index_list)
         self._set_parent(node)
         return self._children.insert(0, node)
