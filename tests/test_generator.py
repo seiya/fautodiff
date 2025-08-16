@@ -607,8 +607,6 @@ srcs = list(examples_dir.glob("*.f90")) + list(examples_dir.glob("*.F90"))
 for _src in sorted(srcs):
     if _src.stem.endswith("_ad"):
         continue
-    if _src.stem == "generic_interface":
-        continue
     test_name = f"test_{_src.stem}"
     if hasattr(TestGenerator, test_name):
         continue
