@@ -10,7 +10,7 @@ from fautodiff import code_tree, generator
 class TestMacroConditions(unittest.TestCase):
     def test_conditional_macros(self):
         code_tree.Node.reset()
-        src = Path(__file__).resolve().parents[1] / "examples" / "conditional_macro.f90"
+        src = Path(__file__).resolve().parents[1] / "examples" / "conditional_macro.F90"
         generated = generator.generate_ad(str(src), warn=False)
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]

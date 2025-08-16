@@ -2,11 +2,11 @@ OUTDIR ?= $(shell pwd)
 
 FC = gfortran
 MPIFC ?= mpifort
-FFLAGS = -O2 -ffree-line-length-none \
+FFLAGS = -O2 -ffree-line-length-none -cpp \
          -ffpe-trap=invalid,zero,overflow,underflow -fbounds-check -finit-real=nan -g -fbacktrace -fopenmp
 
-SRCS := $(wildcard *.f90)
-OBJS := $(addprefix $(OUTDIR)/,$(SRCS:.f90=.o))
+SRCS := $(wildcard *.f90) $(wildcard *.F90)
+OBJS := $(addprefix $(OUTDIR)/,$(patsubst %.f90,%.o,$(patsubst %.F90,%.o,$(SRCS))))
 
 HELPER_DIR = ../fortran_modules
 HELPER_SRCS = $(wildcard $(HELPER_DIR)/*.f90)
@@ -14,6 +14,7 @@ HELPER_OBJS = $(addprefix $(OUTDIR)/,$(notdir $(HELPER_SRCS:.f90=.o)))
 
 vpath %.f90 $(HELPER_DIR)
 vpath %.f90 .
+vpath %.F90 .
 
 all: $(HELPER_OBJS) $(OBJS)
 
@@ -21,6 +22,9 @@ $(OUTDIR)/mpi_%.o: mpi_%.f90
 	$(MPIFC) $(FFLAGS) -c $< -I$(OUTDIR) -J $(OUTDIR) -o $@
 
 $(OUTDIR)/%.o: %.f90
+	$(FC) $(FFLAGS) -c $< -I$(OUTDIR) -J $(OUTDIR) -o $@
+
+$(OUTDIR)/%.o: %.F90
 	$(FC) $(FFLAGS) -c $< -I$(OUTDIR) -J $(OUTDIR) -o $@
 
 # AD modules depend on their original modules

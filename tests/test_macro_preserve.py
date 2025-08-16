@@ -10,7 +10,7 @@ from fautodiff import code_tree, generator
 class TestMacroPreserve(unittest.TestCase):
     def test_macro_re_emitted(self):
         code_tree.Node.reset()
-        src = Path(__file__).resolve().parents[1] / "examples" / "macro_sample.f90"
+        src = Path(__file__).resolve().parents[1] / "examples" / "macro_sample.F90"
         generated = generator.generate_ad(str(src), warn=False)
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]
@@ -32,6 +32,23 @@ class TestMacroPreserve(unittest.TestCase):
         self.assertTrue(
             any("CONST + CONST_MOD + CONST_SUB" in l for l in stripped),
             msg="defined constants not preserved in computation",
+        )
+
+    def test_macro_args_parenthesized(self):
+        code_tree.Node.reset()
+        src = Path(__file__).resolve().parents[1] / "examples" / "macro_args.F90"
+        generated = generator.generate_ad(str(src), warn=False)
+        lines = generated.splitlines()
+        stripped = [l.strip() for l in lines]
+
+        self.assertIn("#define SQR(x) ((x) * (x))", stripped)
+        self.assertIn("#define MUL(x, y) ((x) * (y))", stripped)
+        self.assertIn("b = SQR(a + 1.0) + MUL(a, a - 1.0)", stripped)
+        self.assertTrue(
+            any(
+                "b_ad = a_ad * (a + 1.0 + a + 1.0 + a - 1.0 + a)" in l for l in stripped
+            ),
+            msg="function-like macros not expanded correctly",
         )
 
 
