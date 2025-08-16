@@ -4,7 +4,7 @@ import textwrap
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -22,21 +22,17 @@ class TestMacroWarnings(unittest.TestCase):
             end program foo
             """
         )
-        with NamedTemporaryFile("w", suffix=".F90", delete=False) as tmp:
-            tmp.write(src)
-            path = tmp.name
-        try:
+        modules = parser.parse_src(src)
+        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
             buf = io.StringIO()
             with redirect_stderr(buf):
-                generated = generator.generate_ad(path)
-            msgs = buf.getvalue().splitlines()
-            self.assertTrue(any("CONCAT" in m for m in msgs))
-            self.assertTrue(any("VARIADIC" in m for m in msgs))
-            lines = [l.strip() for l in generated.splitlines()]
-            self.assertIn("#define CONCAT(a, b) a ## b", lines)
-            self.assertIn("#define VARIADIC(...) (__VA_ARGS__)", lines)
-        finally:
-            Path(path).unlink()
+                generated = generator.generate_ad("macro.f90")
+        msgs = buf.getvalue().splitlines()
+        self.assertTrue(any("CONCAT" in m for m in msgs))
+        self.assertTrue(any("VARIADIC" in m for m in msgs))
+        lines = [l.strip() for l in generated.splitlines()]
+        self.assertIn("#define CONCAT(a, b) a ## b", lines)
+        self.assertIn("#define VARIADIC(...) (__VA_ARGS__)", lines)
 
     def test_line_continuation_macro_warn(self):
         src = "#define BIG(a) a + \\\n  a\n"
