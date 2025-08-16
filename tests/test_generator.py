@@ -596,15 +596,16 @@ def _make_example_test(src: Path):
         generated = generator.generate_ad(
             str(src), warn=False, search_dirs=[".", "examples", "fortran_modules"]
         )
-        expected = src.with_name(src.stem + "_ad.f90").read_text()
+        expected = src.with_name(src.stem + "_ad" + src.suffix).read_text()
         self.assertEqual(generated, expected, msg=f"Mismatch for {src.name}")
 
     return test
 
 
 examples_dir = Path("examples")
-for _src in sorted(examples_dir.glob("*.f90")):
-    if _src.name.endswith("_ad.f90"):
+srcs = list(examples_dir.glob("*.f90")) + list(examples_dir.glob("*.F90"))
+for _src in sorted(srcs):
+    if _src.stem.endswith("_ad"):
         continue
     if _src.stem == "generic_interface":
         continue

@@ -2,23 +2,25 @@ OUTDIR ?= $(shell pwd)
 
 FC = gfortran
 MPIFC ?= mpifort
-FFLAGS = -O2 -ffree-line-length-none \
+FFLAGS = -O2 -ffree-line-length-none -cpp \
          -ffpe-trap=invalid,zero,overflow,underflow -fbounds-check -finit-real=nan -g -fbacktrace -fopenmp
 
 HELPER_DIR = ../../fortran_modules
 MOD_DIR = ../../examples
-MOD_SRCS = $(wildcard $(MOD_DIR)/*.f90)
-MOD_OBJS = $(addprefix $(OUTDIR)/,$(notdir $(MOD_SRCS:.f90=.o)))
+MOD_SRCS = $(wildcard $(MOD_DIR)/*.f90) $(wildcard $(MOD_DIR)/*.F90)
+MOD_OBJS = $(addprefix $(OUTDIR)/,$(notdir $(patsubst %.f90,%.o,$(patsubst %.F90,%.o,$(MOD_SRCS)))))
 
 vpath %.f90 $(HELPER_DIR)
 vpath %.f90 $(MOD_DIR)
 vpath %.f90 .
+vpath %.F90 $(MOD_DIR)
 
 PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_control_flow.out run_cross_mod.out run_generic_interface.out \
            run_intrinsic_func.out run_real_kind.out run_save_vars.out run_store_vars.out \
            run_directives.out run_parameter_var.out run_module_vars.out run_call_module_vars.out run_allocate_vars.out \
            run_exit_cycle.out run_pointer_arrays.out run_derived_alloc.out run_mpi_example.out \
-                   run_stack.out run_where_forall.out run_omp_loops.out run_return_example.out run_self_reference.out
+                   run_stack.out run_where_forall.out run_omp_loops.out run_return_example.out run_self_reference.out \
+           run_macro_args.out
 PROGRAMS = $(addprefix $(OUTDIR)/,$(PROGRAM_NAMES))
 
 .PHONY: all clean
@@ -39,6 +41,9 @@ $(OUTDIR)/run_mpi_example.o: run_mpi_example.f90
 	$(MPIFC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
 
 $(OUTDIR)/%.o: %.f90
+	$(MAKE) -C $(MOD_DIR) OUTDIR=$(OUTDIR) MPIFC=$(MPIFC) $@
+
+$(OUTDIR)/%.o: %.F90
 	$(MAKE) -C $(MOD_DIR) OUTDIR=$(OUTDIR) MPIFC=$(MPIFC) $@
 
 # AD modules depend on their original modules
@@ -76,6 +81,7 @@ $(OUTDIR)/run_omp_loops.o: $(OUTDIR)/omp_loops.o $(OUTDIR)/omp_loops_ad.o
 $(OUTDIR)/run_fautodiff_stack.o: $(OUTDIR)/fautodiff_stack.o
 
 $(OUTDIR)/run_self_reference.o: $(OUTDIR)/self_reference.o $(OUTDIR)/self_reference_ad.o
+$(OUTDIR)/run_macro_args.o: $(OUTDIR)/macro_args.o $(OUTDIR)/macro_args_ad.o
 
 
 $(OUTDIR)/run_simple_math.out: $(OUTDIR)/run_simple_math.o $(OUTDIR)/simple_math.o $(OUTDIR)/simple_math_ad.o
@@ -106,6 +112,7 @@ $(OUTDIR)/run_omp_loops.out: $(OUTDIR)/run_omp_loops.o $(OUTDIR)/omp_loops.o $(O
 $(OUTDIR)/run_fautodiff_stack.out: $(OUTDIR)/run_fautodiff_stack.o $(OUTDIR)/fautodiff_stack.o
 
 $(OUTDIR)/run_self_reference.out: $(OUTDIR)/run_self_reference.o $(OUTDIR)/self_reference.o $(OUTDIR)/self_reference_ad.o
+$(OUTDIR)/run_macro_args.out: $(OUTDIR)/run_macro_args.o $(OUTDIR)/macro_args.o $(OUTDIR)/macro_args_ad.o
 
 clean:
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.mod

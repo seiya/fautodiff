@@ -83,7 +83,9 @@ if parse(getattr(fparser, "__version__", "0")) < Version("0.2.0"):
 _CPP_PREFIX = "!$CPP"
 
 
-_MACRO_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#define\s+(\w+)\s*(.*)")
+_MACRO_RE = re.compile(
+    rf"{re.escape(_CPP_PREFIX)}\s+#define\s+(\w+)(\([^)]*\))?\s*(.*)"
+)
 _UNDEF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#undef\s+(\w+)")
 _IFDEF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#ifdef\s+(\w+)")
 _IFNDEF_RE = re.compile(rf"{re.escape(_CPP_PREFIX)}\s+#ifndef\s+(\w+)")
@@ -94,6 +96,24 @@ _TOKEN_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
 
 class MacroTable(dict):
     """Simple table mapping macro names to their expansions."""
+
+    def __init__(self):  # type: ignore[no-untyped-def]
+        super().__init__()
+        self.func: Dict[str, Tuple[List[str], str]] = {}
+
+    def clear(self) -> None:  # type: ignore[override]
+        super().clear()
+        self.func.clear()
+
+    def copy(self) -> "MacroTable":  # type: ignore[override]
+        new = MacroTable()
+        dict.update(new, self)
+        new.func = {k: (v[0][:], v[1]) for k, v in self.func.items()}
+        return new
+
+    def update(self, other: "MacroTable") -> None:  # type: ignore[override]
+        dict.update(self, other)
+        self.func.update({k: (v[0][:], v[1]) for k, v in other.func.items()})
 
     def _expand(self, value: str, stack: List[str]) -> str:
         """Recursively expand macros in ``value``.
@@ -119,6 +139,11 @@ class MacroTable(dict):
         self._expand(value, [name])
         self[name] = value
 
+    def register_func(self, name: str, params: List[str], value: str) -> None:
+        """Register a function-like macro ``name``."""
+
+        self.func[name] = (params, value)
+
 
 macro_table: MacroTable = MacroTable()
 module_macros: set[str] = set()
@@ -135,7 +160,7 @@ def _extract_macros(src: str) -> None:
 
     macro_table.clear()
     file_cpp_lines.clear()
-    stack: List[Tuple[Dict[str, str], bool]] = []
+    stack: List[Tuple[MacroTable, bool]] = []
     active = True
     depth = 0
     for line in src.splitlines():
@@ -146,20 +171,31 @@ def _extract_macros(src: str) -> None:
                 file_cpp_lines.append(cpp_line.rstrip())
             if m := _MACRO_RE.match(line):
                 if active:
-                    name, value = m.group(1), m.group(2).strip()
-                    macro_table.register(name, value)
+                    name = m.group(1)
+                    args = m.group(2)
+                    value = m.group(3).strip()
+                    if args:
+                        params = [a.strip() for a in args[1:-1].split(",") if a.strip()]
+                        macro_table.register_func(name, params, value)
+                    else:
+                        macro_table.register(name, value)
                 continue
             if m := _UNDEF_RE.match(line):
                 if active:
                     macro_table.pop(m.group(1), None)
+                    macro_table.func.pop(m.group(1), None)
                 continue
             if m := _IFDEF_RE.match(line):
                 stack.append((macro_table.copy(), active))
-                active = active and (m.group(1) in macro_table)
+                active = active and (
+                    m.group(1) in macro_table or m.group(1) in macro_table.func
+                )
                 continue
             if m := _IFNDEF_RE.match(line):
                 stack.append((macro_table.copy(), active))
-                active = active and (m.group(1) not in macro_table)
+                active = active and (
+                    m.group(1) not in macro_table and m.group(1) not in macro_table.func
+                )
                 continue
             if _ELSE_RE.match(line):
                 prev_table, prev_active = stack[-1]
@@ -347,6 +383,32 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Part_Ref):
         name = stmt.items[0].string
+        if name in macro_table.func:
+            arg_strs = [
+                arg.tofortran()
+                for arg in getattr(stmt.items[1], "items", [])
+                if not isinstance(arg, str)
+            ]
+            params, body = macro_table.func[name]
+            mapping = {p: a for p, a in zip(params, arg_strs)}
+
+            def repl(match: re.Match[str]) -> str:
+                key = match.group(0)
+                if key in mapping:
+                    return f"({mapping[key]})"
+                return key
+
+            expanded = _TOKEN_RE.sub(repl, body)
+            reader = FortranStringReader(
+                f"subroutine macro_tmp()\nres = {expanded}\nend subroutine macro_tmp\n"
+            )
+            factory = ParserFactory().create(std="f2008")
+            ast = factory(reader)
+            assign = walk(ast, Fortran2003.Assignment_Stmt)[0]
+            op = _stmt2op(assign.items[2], decl_map, type_map)
+            op.macro_name = f"{name}({', '.join(arg_strs)})"
+            return op
+
         index = AryIndex([_stmt2op(x, decl_map, type_map) for x in stmt.items[1].items])
         # check it is array or not
         decl = None
