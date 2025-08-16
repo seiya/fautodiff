@@ -25,6 +25,38 @@ def _eval_selected_real_kind(p: int, r: int) -> str:
     return "16"
 
 
+_ISO_KIND_MAP = {
+    "real32": "4",
+    "real64": "8",
+    "real128": "16",
+    "int8": "1",
+    "int16": "2",
+    "int32": "4",
+    "int64": "8",
+}
+
+
+def _eval_iso_kind(name: str) -> Optional[str]:
+    """Return kind value for ``iso_fortran_env`` named constants."""
+    return _ISO_KIND_MAP.get(name.lower())
+
+
+def _eval_kind(expr: str) -> Optional[str]:
+    """Evaluate ``kind(<literal>)`` expressions."""
+    m = re.match(r"kind\(([^)]+)\)", expr, re.I)
+    if not m:
+        return None
+    val = m.group(1).strip()
+    m2 = _KIND_RE.match(val)
+    if not m2:
+        return None
+    if m2.group(4):
+        return m2.group(4)
+    if m2.group(3) and m2.group(3).lower().startswith("d"):
+        return "8"
+    return "4"
+
+
 from packaging.version import Version, parse
 
 from .code_tree import (
@@ -383,6 +415,8 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
         ):
             kind = "8"
             kind_val = "8"
+        if kind_val is None and kind is not None and not kind.isdigit():
+            kind_val = _eval_iso_kind(kind)
         if (
             kind_val is None
             and kind is not None
@@ -402,7 +436,9 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                 elif ref.init_val.isdigit():
                     kind_val = ref.init_val
                 else:
-                    kind_val = ref.init_val
+                    kind_val = _eval_kind(ref.init_val)
+                    if kind_val is None:
+                        kind_val = _eval_iso_kind(ref.init_val) or ref.init_val
 
         return OpVar(
             name=name,
@@ -708,8 +744,13 @@ def _parse_decl_stmt(
                 kind = selector.items[1].string
                 if kind.isdigit():
                     kind_val = kind
+                else:
+                    kind_val = _eval_iso_kind(kind)
+                    if kind_val is None:
+                        kind_val = _eval_kind(kind)
                 if (
-                    decl_map is not None
+                    kind_val is None
+                    and decl_map is not None
                     and not kind.isdigit()
                     and kind in decl_map
                     and decl_map[kind].init_val is not None
@@ -723,7 +764,9 @@ def _parse_decl_stmt(
                     elif init.isdigit():
                         kind_val = init
                     else:
-                        kind_val = init
+                        kind_val = _eval_kind(init)
+                        if kind_val is None:
+                            kind_val = _eval_iso_kind(init) or init
         elif isinstance(selector, Fortran2003.Length_Selector):
             char_len = selector.items[1].string
         else:

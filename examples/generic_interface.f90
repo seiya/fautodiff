@@ -1,4 +1,5 @@
 module generic_interface
+  use iso_fortran_env, only: real64
   implicit none
   interface add
     module procedure :: add_real4, add_real8, add_int
@@ -42,5 +43,11 @@ contains
     real(kind=RP), intent(out) :: z
     z = add(x, y)
   end subroutine call_add_real_kind
+
+  subroutine call_add_real_real64(x, y, z)
+    real(real64), intent(in) :: x, y
+    real(real64), intent(out) :: z
+    z = add(x, y)
+  end subroutine call_add_real_real64
 
 end module generic_interface

@@ -131,4 +131,27 @@ contains
     return
   end subroutine call_add_real_kind_rev_ad
 
+  subroutine call_add_real_real64_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
+    real(real64), intent(in)  :: x
+    real(real64), intent(in)  :: x_ad
+    real(real64), intent(in)  :: y
+    real(real64), intent(in)  :: y_ad
+    real(real64), intent(out) :: z
+    real(real64), intent(out) :: z_ad
+
+    call add_real8_fwd_ad(x, x_ad, y, y_ad, z, z_ad) ! z = add(x, y)
+
+    return
+  end subroutine call_add_real_real64_fwd_ad
+
+  subroutine call_add_real_real64_rev_ad(x_ad, y_ad, z_ad)
+    real(real64), intent(inout) :: x_ad
+    real(real64), intent(inout) :: y_ad
+    real(real64), intent(inout) :: z_ad
+
+    call add_real8_rev_ad(x_ad, y_ad, z_ad) ! z = add(x, y)
+
+    return
+  end subroutine call_add_real_real64_rev_ad
+
 end module generic_interface_ad
