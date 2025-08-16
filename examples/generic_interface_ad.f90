@@ -57,12 +57,13 @@ contains
   end subroutine add_real8_rev_ad
 
   subroutine call_add_real_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
-    real(8), intent(in)  :: x
-    real(8), intent(in)  :: x_ad
-    real(8), intent(in)  :: y
-    real(8), intent(in)  :: y_ad
-    real(8), intent(out) :: z
-    real(8), intent(out) :: z_ad
+    integer, parameter :: RP = selected_real_kind(15, 307)
+    real(kind=RP), intent(in)  :: x
+    real(kind=RP), intent(in)  :: x_ad
+    real(kind=RP), intent(in)  :: y
+    real(kind=RP), intent(in)  :: y_ad
+    real(kind=RP), intent(out) :: z
+    real(kind=RP), intent(out) :: z_ad
 
     call add_real8_fwd_ad(x, x_ad, y, y_ad, z, z_ad) ! z = add(x, y)
 
@@ -70,9 +71,10 @@ contains
   end subroutine call_add_real_fwd_ad
 
   subroutine call_add_real_rev_ad(x_ad, y_ad, z_ad)
-    real(8), intent(inout) :: x_ad
-    real(8), intent(inout) :: y_ad
-    real(8), intent(inout) :: z_ad
+    integer, parameter :: RP = selected_real_kind(15, 307)
+    real(kind=RP), intent(inout) :: x_ad
+    real(kind=RP), intent(inout) :: y_ad
+    real(kind=RP), intent(inout) :: z_ad
 
     call add_real8_rev_ad(x_ad, y_ad, z_ad) ! z = add(x, y)
 

@@ -375,10 +375,17 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
             raise ValueError(f"Not found in the declaration section: {name}")
 
         kind = decl.kind
-        if kind is None and decl.typename.lower().startswith("double"):
-            kind = "8"
+        kind_val = getattr(decl, "kind_val", None)
         if (
-            kind is not None
+            kind_val is None
+            and kind is None
+            and decl.typename.lower().startswith("double")
+        ):
+            kind = "8"
+            kind_val = "8"
+        if (
+            kind_val is None
+            and kind is not None
             and decl_map is not None
             and not kind.isdigit()
             and kind in decl_map
@@ -389,14 +396,19 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                     r"selected_real_kind\((\d+),\s*(\d+)\)", ref.init_val, re.I
                 )
                 if m:
-                    kind = _eval_selected_real_kind(int(m.group(1)), int(m.group(2)))
+                    kind_val = _eval_selected_real_kind(
+                        int(m.group(1)), int(m.group(2))
+                    )
                 elif ref.init_val.isdigit():
-                    kind = ref.init_val
+                    kind_val = ref.init_val
+                else:
+                    kind_val = ref.init_val
 
         return OpVar(
             name=name,
             typename=decl.typename,
             kind=kind,
+            kind_val=kind_val,
             char_len=decl.char_len,
             dims=decl.dims,
             ad_target=decl.ad_target(),
@@ -448,6 +460,7 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                 index=index,
                 typename=decl.typename,
                 kind=decl.kind,
+                kind_val=getattr(decl, "kind_val", None),
                 char_len=decl.char_len,
                 dims=decl.dims,
                 ad_target=decl.ad_target(),
@@ -682,6 +695,7 @@ def _parse_decl_stmt(
 
     type_spec = stmt.items[0]
     kind = None
+    kind_val = None
     char_len = None
     type_def = None
     if isinstance(type_spec, Fortran2003.Intrinsic_Type_Spec):
@@ -692,6 +706,8 @@ def _parse_decl_stmt(
         elif isinstance(selector, Fortran2003.Kind_Selector):
             if selector.items[1]:
                 kind = selector.items[1].string
+                if kind.isdigit():
+                    kind_val = kind
                 if (
                     decl_map is not None
                     and not kind.isdigit()
@@ -701,11 +717,13 @@ def _parse_decl_stmt(
                     init = decl_map[kind].init_val
                     m = re.match(r"selected_real_kind\((\d+),\s*(\d+)\)", init, re.I)
                     if m:
-                        kind = _eval_selected_real_kind(
+                        kind_val = _eval_selected_real_kind(
                             int(m.group(1)), int(m.group(2))
                         )
                     elif init.isdigit():
-                        kind = init
+                        kind_val = init
+                    else:
+                        kind_val = init
         elif isinstance(selector, Fortran2003.Length_Selector):
             char_len = selector.items[1].string
         else:
@@ -843,6 +861,7 @@ def _parse_decl_stmt(
                 name=name,
                 typename=base_type.lower(),
                 kind=kind,
+                kind_val=kind_val,
                 char_len=char_len,
                 dims=dims,
                 intent=intent,
