@@ -435,31 +435,67 @@ def _comment_to_cpp(comment) -> Optional[str]:
     return None
 
 
-def _collect_stmt_lines(line_no: Optional[int]) -> List[str]:
-    """Return the original source lines for a statement starting at ``line_no``.
+def _collect_stmt_lines(line_no: Optional[int], code: str) -> List[str]:
+    """Return the original source lines for a statement.
 
-    The returned list includes any interleaved preprocessor directives that
-    belong to the same Fortran statement.  This is used to reconstruct
-    statements that are split by C preprocessor conditionals.
+    ``line_no`` is the first line of the statement in the original source. If
+    this value is missing or outside the available range (which can happen when
+    preprocessor lines shift the numbering), we search for ``code`` to locate
+    the statement.
     """
 
-    if line_no is None or line_no <= 0:
-        return []
+    needle = str(code).strip()
+    if (
+        line_no is None
+        or line_no <= 0
+        or line_no > len(_SRC_LINES)
+        or not needle.startswith(_SRC_LINES[line_no - 1].strip().rstrip("&"))
+    ):
+        line_no = None
+        for idx, line in enumerate(_SRC_LINES):
+            cand = line.strip().rstrip("&")
+            if needle.startswith(cand):
+                line_no = idx + 1
+                break
+        if line_no is None:
+            return []
+
+    # ``line_no`` points at the first line of the statement in the original
+    # source.  We rely on subsequent logic to pull in any following
+    # preprocessor lines that are part of the same statement but do not attach
+    # leading ``#`` lines here as those belong to surrounding blocks handled
+    # elsewhere.
+
+    start = min(line_no - 1, len(_SRC_LINES) - 1)
+
     lines: List[str] = []
-    i = line_no - 1
+    i = start
+    depth = 0
     while i < len(_SRC_LINES):
         line = _SRC_LINES[i]
-        lines.append(line)
-        stripped = line.rstrip()
-        if stripped.lstrip().startswith("#"):
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            directive = stripped[1:].strip().split()[0].lower()
+            if directive in {"else", "elif"} and depth == 0:
+                break
+            lines.append(line)
+            if directive in {"if", "ifdef", "ifndef"}:
+                depth += 1
+            elif directive == "endif":
+                depth = max(depth - 1, 0)
             i += 1
             continue
-        if stripped.endswith("&"):
+
+        lines.append(line)
+        stripped_r = stripped.rstrip()
+        if stripped_r.endswith("&"):
+            i += 1
+            continue
+        if depth > 0:
             i += 1
             continue
         if i + 1 < len(_SRC_LINES) and _SRC_LINES[i + 1].lstrip().startswith("#"):
-            i += 1
-            continue
+            break
         break
     return lines
 
@@ -1916,7 +1952,7 @@ def _parse_routine(
             "file": src_name,
             "line": line_no,
             "code": stmt.string,
-            "lines": _collect_stmt_lines(line_no),
+            "lines": _collect_stmt_lines(line_no, stmt.string),
         }
         consumed_set = (
             set(range(line_no, line_no + len(info["lines"]))) if line_no else set()

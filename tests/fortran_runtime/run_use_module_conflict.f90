@@ -1,6 +1,7 @@
 program run_use_module_conflict
   use use_module_conflict
   use use_module_conflict_ad
+  use real8_module_ad, only: r_ad
   implicit none
   real, parameter :: tol = 1.0e-5
 
@@ -56,6 +57,7 @@ contains
 
     inner1 = y_ad**2
     x_ad = 0.0_8
+    r_ad = 0.0_8
     call add_with_mod_rev_ad(x_ad, y_ad)
     inner2 = x_ad
     if (abs((inner2 - inner1) / inner1) > tol) then
