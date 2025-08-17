@@ -126,6 +126,10 @@ if parse(getattr(fparser, "__version__", "0")) < Version("0.2.0"):
 
 _CPP_PREFIX = "!$CPP"
 
+# Original source lines of the file currently being parsed.  These are used to
+# reconstruct statements that contain preprocessor directives.
+_SRC_LINES: List[str] = []
+
 
 _MACRO_RE = re.compile(
     rf"{re.escape(_CPP_PREFIX)}\s+#define\s+(\w+)(\([^)]*\))?\s*(.*)"
@@ -429,6 +433,94 @@ def _comment_to_cpp(comment) -> Optional[str]:
             line = line[1:]
         return line
     return None
+
+
+def _collect_stmt_lines(line_no: Optional[int]) -> List[str]:
+    """Return the original source lines for a statement starting at ``line_no``.
+
+    The returned list includes any interleaved preprocessor directives that
+    belong to the same Fortran statement.  This is used to reconstruct
+    statements that are split by C preprocessor conditionals.
+    """
+
+    if line_no is None or line_no <= 0:
+        return []
+    lines: List[str] = []
+    i = line_no - 1
+    while i < len(_SRC_LINES):
+        line = _SRC_LINES[i]
+        lines.append(line)
+        stripped = line.rstrip()
+        if stripped.lstrip().startswith("#"):
+            i += 1
+            continue
+        if stripped.endswith("&"):
+            i += 1
+            continue
+        if i + 1 < len(_SRC_LINES) and _SRC_LINES[i + 1].lstrip().startswith("#"):
+            i += 1
+            continue
+        break
+    return lines
+
+
+def _normalize_stmt_lines(lines: List[str]) -> str:
+    """Join continued Fortran lines into a single line string."""
+
+    parts: List[str] = []
+    for line in lines:
+        stripped = line.rstrip()
+        if stripped.endswith("&"):
+            stripped = stripped[:-1]
+        parts.append(stripped.strip())
+    return " ".join(parts).strip()
+
+
+def _assignment_with_cpp(
+    lines: List[str], decl_map: dict, type_map: dict, info: dict
+) -> PreprocessorIfBlock:
+    """Return a ``PreprocessorIfBlock`` for an assignment with CPP lines."""
+
+    # Identify conditional regions
+    idx_if = next(i for i, l in enumerate(lines) if l.lstrip().startswith("#"))
+    cond_line = lines[idx_if].lstrip()[1:]
+    idx_else = None
+    idx_end = None
+    for i in range(idx_if + 1, len(lines)):
+        s = lines[i].lstrip()
+        if s.startswith("#else"):
+            idx_else = i
+        if s.startswith("#endif"):
+            idx_end = i
+            break
+    if idx_end is None:
+        raise ValueError("Unterminated preprocessor conditional in assignment")
+
+    pre = lines[:idx_if]
+    true_part = lines[idx_if + 1 : idx_else if idx_else is not None else idx_end]
+    false_part: List[str] = []
+    if idx_else is not None:
+        false_part = lines[idx_else + 1 : idx_end]
+    post = lines[idx_end + 1 :]
+
+    true_lines = pre + true_part + post
+    false_lines = pre + false_part + post
+
+    def _build_assignment(ls: List[str]) -> Assignment:
+        text = _normalize_stmt_lines(ls)
+        stmt = Fortran2003.Assignment_Stmt(text)
+        lhs = _stmt2op(stmt.items[0], decl_map, type_map)
+        rhs = _stmt2op(stmt.items[2], decl_map, type_map)
+        new_info = dict(info)
+        new_info["code"] = text
+        return Assignment(lhs, rhs, False, new_info)
+
+    assign_true = _build_assignment(true_lines)
+    assign_false = _build_assignment(false_lines)
+
+    cond_blocks = [(cond_line, Block([assign_true])), ("else", Block([assign_false]))]
+    macro_tables = [{}, {}]
+    return PreprocessorIfBlock(cond_blocks, macro_tables)
 
 
 def _apply_macro_name(node: Node, name: str) -> None:
@@ -819,6 +911,8 @@ def parse_src(
     src_name: str = "<string>",
 ) -> List[Module]:
     """Parse ``src`` and return a list of :class:`Module` nodes."""
+    global _SRC_LINES
+    _SRC_LINES = src.splitlines()
     src = _inject_cpp_lines(src)
     _extract_macros(src)
     src = _expand_macros(src)
@@ -1822,11 +1916,21 @@ def _parse_routine(
             "file": src_name,
             "line": line_no,
             "code": stmt.string,
+            "lines": _collect_stmt_lines(line_no),
         }
+        consumed_set = (
+            set(range(line_no, line_no + len(info["lines"]))) if line_no else set()
+        )
         if isinstance(stmt, Fortran2003.Assignment_Stmt):
+            if any(l.lstrip().startswith("#") for l in info["lines"]):
+                node = _assignment_with_cpp(info["lines"], decl_map, type_map, info)
+                setattr(node, "_consumed_lines", consumed_set)
+                return node
             lhs = _stmt2op(stmt.items[0], decl_map, type_map)
             rhs = _stmt2op(stmt.items[2], decl_map, type_map)
-            return Assignment(lhs, rhs, False, info)
+            node = Assignment(lhs, rhs, False, info)
+            setattr(node, "_consumed_lines", consumed_set)
+            return node
         if isinstance(stmt, Fortran2003.Pointer_Assignment_Stmt):
             lhs = _stmt2op(stmt.items[0], decl_map, type_map)
             if stmt.items[2].string == "null()":
@@ -2194,6 +2298,7 @@ def _parse_routine(
     def _block(body_list, decl_map: dict, type_map: dict) -> Block:
         blk = Block([])
         i = 0
+        consumed: set[int] = set()
 
         def _parse_cpp_if(start_idx: int) -> Tuple[Optional[PreprocessorIfBlock], int]:
             line = _comment_to_cpp(body_list[start_idx])
@@ -2242,6 +2347,17 @@ def _parse_routine(
             raise ValueError("Unterminated preprocessor conditional")
 
         while i < len(body_list):
+            line_no = None
+            itm = body_list[i]
+            if getattr(itm, "item", None) is not None and getattr(
+                itm.item, "span", None
+            ):
+                line_no = itm.item.span[0]
+            elif getattr(itm, "span", None):
+                line_no = itm.span[0]
+            if line_no in consumed:
+                i += 1
+                continue
             if pending_omp:
                 omp = pending_omp.pop(0)
                 dir_norm = omp.directive.split("(")[0].strip().lower()
@@ -2252,6 +2368,7 @@ def _parse_routine(
                     if i < len(body_list):
                         st2 = body_list[i]
                         node = _parse_stmt(st2, decl_map, type_map)
+                        consumed.update(getattr(node, "_consumed_lines", set()))
                         omp.body = node
                         omp.body.set_parent(omp)
                         i += 1
@@ -2307,6 +2424,7 @@ def _parse_routine(
                         if i < len(body_list):
                             st2 = body_list[i]
                             node = _parse_stmt(st2, decl_map, type_map)
+                            consumed.update(getattr(node, "_consumed_lines", set()))
                             blk.append(OmpDirective(directive, clauses, node))
                             i += 1
                         else:
@@ -2320,6 +2438,7 @@ def _parse_routine(
                 i += 1
                 continue
             node = _parse_stmt(st, decl_map, type_map)
+            consumed.update(getattr(node, "_consumed_lines", set()))
             if node is not None:
                 blk.append(node)
             i += 1
