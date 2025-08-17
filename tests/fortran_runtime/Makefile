@@ -20,7 +20,7 @@ PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_cont
            run_directives.out run_parameter_var.out run_module_vars.out run_call_module_vars.out run_allocate_vars.out \
            run_exit_cycle.out run_pointer_arrays.out run_derived_alloc.out run_mpi_example.out \
                    run_stack.out run_where_forall.out run_omp_loops.out run_return_example.out run_self_reference.out \
-           run_macro_args.out run_macro_multistmt.out
+           run_macro_args.out run_macro_multistmt.out run_use_module_conflict.out
 PROGRAMS = $(addprefix $(OUTDIR)/,$(PROGRAM_NAMES))
 
 .PHONY: all clean
@@ -83,6 +83,7 @@ $(OUTDIR)/run_fautodiff_stack.o: $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_self_reference.o: $(OUTDIR)/self_reference.o $(OUTDIR)/self_reference_ad.o
 $(OUTDIR)/run_macro_args.o: $(OUTDIR)/macro_args.o $(OUTDIR)/macro_args_ad.o
 $(OUTDIR)/run_macro_multistmt.o: $(OUTDIR)/macro_multistmt.o $(OUTDIR)/macro_multistmt_ad.o
+$(OUTDIR)/run_use_module_conflict.o: $(OUTDIR)/real4_module.o $(OUTDIR)/real4_module_ad.o $(OUTDIR)/real8_module.o $(OUTDIR)/real8_module_ad.o $(OUTDIR)/use_module_conflict.o $(OUTDIR)/use_module_conflict_ad.o
 
 
 $(OUTDIR)/run_simple_math.out: $(OUTDIR)/run_simple_math.o $(OUTDIR)/simple_math.o $(OUTDIR)/simple_math_ad.o
@@ -115,6 +116,7 @@ $(OUTDIR)/run_fautodiff_stack.out: $(OUTDIR)/run_fautodiff_stack.o $(OUTDIR)/fau
 $(OUTDIR)/run_self_reference.out: $(OUTDIR)/run_self_reference.o $(OUTDIR)/self_reference.o $(OUTDIR)/self_reference_ad.o
 $(OUTDIR)/run_macro_args.out: $(OUTDIR)/run_macro_args.o $(OUTDIR)/macro_args.o $(OUTDIR)/macro_args_ad.o
 $(OUTDIR)/run_macro_multistmt.out: $(OUTDIR)/run_macro_multistmt.o $(OUTDIR)/macro_multistmt.o $(OUTDIR)/macro_multistmt_ad.o
+$(OUTDIR)/run_use_module_conflict.out: $(OUTDIR)/run_use_module_conflict.o $(OUTDIR)/real4_module.o $(OUTDIR)/real4_module_ad.o $(OUTDIR)/real8_module.o $(OUTDIR)/real8_module_ad.o $(OUTDIR)/use_module_conflict.o $(OUTDIR)/use_module_conflict_ad.o
 
 clean:
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.mod

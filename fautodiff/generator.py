@@ -895,6 +895,10 @@ def _prepare_fwd_ad_header(
             clone.donot_prune = True
             subroutine.decls.append(clone)
 
+    for node in decl_children:
+        if isinstance(node, Use):
+            subroutine.decls.append(node.deep_clone())
+
     for var in args:
         subroutine.decls.append(
             Declaration(
@@ -1046,6 +1050,10 @@ def _prepare_rev_ad_header(
             clone = node.deep_clone()
             clone.donot_prune = True
             subroutine.decls.append(clone)
+
+    for node in decl_children:
+        if isinstance(node, Use):
+            subroutine.decls.append(node.deep_clone())
 
     for var in args:
         subroutine.decls.append(
