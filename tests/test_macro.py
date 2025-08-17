@@ -46,8 +46,35 @@ end module test
 class TestMacroConditions(unittest.TestCase):
     def test_conditional_macros(self):
         code_tree.Node.reset()
-        src = Path(__file__).resolve().parents[1] / "examples" / "conditional_macro.F90"
-        generated = generator.generate_ad(str(src), warn=False)
+        src = textwrap.dedent(
+            """
+#define BASE 1
+#define TEMP BASE
+#define DOUBLE TEMP
+#undef TEMP
+#ifndef OMIT
+#define COND 5
+#endif
+module conditional_macro
+contains
+  subroutine foo(x, y)
+    real, intent(in) :: x
+    real, intent(out) :: y
+    real :: z
+    z = x + BASE
+    z = z + DOUBLE
+#ifdef COND
+    y = z + COND
+#else
+    y = z
+#endif
+  end subroutine foo
+end module conditional_macro
+            """
+        )
+        modules = parser.parse_src(src)
+        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
+            generated = generator.generate_ad("macro.f90", warn=False)
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]
 
@@ -76,8 +103,25 @@ class TestMacroConditions(unittest.TestCase):
 class TestMacroMultiStmt(unittest.TestCase):
     def test_multi_statement_macro(self):
         code_tree.Node.reset()
-        src = Path(__file__).resolve().parents[1] / "examples" / "macro_multistmt.F90"
-        generated = generator.generate_ad(str(src), warn=False)
+        src = textwrap.dedent(
+            """
+#ifdef INC
+#define DO_TWO x  = x + 1; y = y * 2
+#else
+#define DO_TWO x  = x - 1; y = y * 2
+#endif
+module macro_multistmt
+contains
+  subroutine foo(x, y)
+    real :: x, y
+    DO_TWO
+  end subroutine foo
+end module macro_multistmt
+            """
+        )
+        modules = parser.parse_src(src)
+        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
+            generated = generator.generate_ad("macro.f90", warn=False)
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]
 
@@ -97,8 +141,25 @@ class TestMacroMultiStmt(unittest.TestCase):
 class TestMacroPreserve(unittest.TestCase):
     def test_macro_re_emitted(self):
         code_tree.Node.reset()
-        src = Path(__file__).resolve().parents[1] / "examples" / "macro_sample.F90"
-        generated = generator.generate_ad(str(src), warn=False)
+        src = textwrap.dedent(
+            """
+#define CONST 1
+module macro_sample
+#define CONST_MOD 2
+  real :: modvar = CONST_MOD
+contains
+  subroutine foo(x)
+#define CONST_SUB 3
+    real, intent(out) :: x
+    real :: subvar = CONST_SUB
+    x = CONST + CONST_MOD + CONST_SUB
+  end subroutine foo
+end module macro_sample
+            """
+        )
+        modules = parser.parse_src(src)
+        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
+            generated = generator.generate_ad("macro.f90", warn=False)
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]
 
@@ -123,8 +184,26 @@ class TestMacroPreserve(unittest.TestCase):
 
     def test_macro_args_parenthesized(self):
         code_tree.Node.reset()
-        src = Path(__file__).resolve().parents[1] / "examples" / "macro_args.F90"
-        generated = generator.generate_ad(str(src), warn=False)
+        src = textwrap.dedent(
+            """
+#define SQR(x) ((x) * (x))
+#define MUL(x, y) ((x) * (y))
+module macro_args
+  implicit none
+contains
+
+  subroutine foo(a, b)
+    real, intent(in) :: a
+    real, intent(out) :: b
+    b = SQR(a + 1.0) + MUL(a, a - 1.0)
+  end subroutine foo
+
+end module macro_args
+            """
+        )
+        modules = parser.parse_src(src)
+        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
+            generated = generator.generate_ad("macro.f90", warn=False)
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]
 
