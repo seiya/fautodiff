@@ -198,6 +198,9 @@ class TestFortranADCode(unittest.TestCase):
             ["slice", "slice_ptr", "slice_expr"],
         )
 
+    def test_use_module_conflict(self):
+        self._run_test("use_module_conflict", ["add_with_mod"])
+
 
 if __name__ == "__main__":
     unittest.main()
