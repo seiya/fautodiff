@@ -498,7 +498,9 @@ class Node:
                 if arg.dims:
                     if arg.index:
                         if len(arg.index) != len(arg.dims):
-                            raise RuntimeError(f"rank is not consistent: {arg.index} {arg.dims}")
+                            raise RuntimeError(
+                                f"rank is not consistent: {arg.index} {arg.dims}"
+                            )
                         ndims = 0
                         for idx in arg.index:
                             if idx is None or isinstance(idx, OpRange):
@@ -1852,6 +1854,15 @@ class Use(Node):
     def deep_clone(self) -> "Use":
         only = list(self.only) if self.only else None
         return Use(self.name, only)
+
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> "Use":
+        return self
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent

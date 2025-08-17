@@ -898,6 +898,8 @@ def _prepare_fwd_ad_header(
     for node in decl_children:
         if isinstance(node, Use):
             subroutine.decls.append(node.deep_clone())
+            if not node.name.endswith(AD_SUFFIX):
+                subroutine.decls.append(Use(f"{node.name}{AD_SUFFIX}"))
 
     for var in args:
         subroutine.decls.append(
@@ -1054,6 +1056,8 @@ def _prepare_rev_ad_header(
     for node in decl_children:
         if isinstance(node, Use):
             subroutine.decls.append(node.deep_clone())
+            if not node.name.endswith(AD_SUFFIX):
+                subroutine.decls.append(Use(f"{node.name}{AD_SUFFIX}"))
 
     for var in args:
         subroutine.decls.append(
