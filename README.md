@@ -5,6 +5,8 @@ This source-to-source tool parses existing Fortran programs and emits new module
 with ``_ad`` suffixes, preserving the original structure while providing forward
 and reverse mode derivatives. Documentation of the supported Fortran constructs
 can be found in ``doc/fortran_support.md``.
+Basic C preprocessor macros are also recognized; see ``doc/preprocessor.md`` for
+details.
 
 ## Installation
 
