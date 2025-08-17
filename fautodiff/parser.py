@@ -446,7 +446,7 @@ def _collect_stmt_lines(line_no: Optional[int], code: str) -> List[str]:
 
     if line_no is None or line_no <= 0 or line_no > len(_SRC_LINES):
         line_no = None
-        needle = code.strip()
+        needle = str(code).strip()
         for idx, line in enumerate(_SRC_LINES):
             if needle and needle == line.strip():
                 line_no = idx + 1
@@ -454,33 +454,43 @@ def _collect_stmt_lines(line_no: Optional[int], code: str) -> List[str]:
         if line_no is None:
             return []
 
-    # Include any preceding preprocessor lines that are attached to this
-    # statement. ``line_no`` points at the first Fortran line so we walk
-    # backwards to collect any contiguous ``#`` lines before it.
+    # ``line_no`` points at the first line of the statement in the original
+    # source.  We rely on subsequent logic to pull in any following
+    # preprocessor lines that are part of the same statement but do not attach
+    # leading ``#`` lines here as those belong to surrounding blocks handled
+    # elsewhere.
 
     start = min(line_no - 1, len(_SRC_LINES) - 1)
-    i = start - 1
-    while i >= 0 and _SRC_LINES[i].lstrip().startswith("#"):
-        start = i
-        i -= 1
 
     lines: List[str] = []
     i = start
+    depth = 0
     while i < len(_SRC_LINES):
         line = _SRC_LINES[i]
         lines.append(line)
-        stripped = line.rstrip()
-        if stripped.lstrip().startswith("#"):
-            if stripped.lstrip().startswith("#endif"):
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            directive = stripped[1:].strip().split()[0].lower()
+            if directive in {"if", "ifdef", "ifndef"}:
+                depth += 1
+            elif directive == "endif":
+                depth = max(depth - 1, 0)
+                if depth == 0:
+                    break
+            elif directive in {"else", "elif"} and depth == 0:
                 break
             i += 1
             continue
-        if stripped.endswith("&"):
+
+        stripped_r = stripped.rstrip()
+        if stripped_r.endswith("&"):
+            i += 1
+            continue
+        if depth > 0:
             i += 1
             continue
         if i + 1 < len(_SRC_LINES) and _SRC_LINES[i + 1].lstrip().startswith("#"):
-            i += 1
-            continue
+            break
         break
     return lines
 
