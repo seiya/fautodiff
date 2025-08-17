@@ -1139,6 +1139,7 @@ def _generate_ad_subroutine(
     mod_vars: List[OpVar],
     routine_info: Dict[str, Any],
     warnings: List[str],
+    const_var_names: List[str],
     *,
     reverse: bool,
 ) -> tuple[Optional[Subroutine], bool, Set[str]]:
@@ -1741,11 +1742,15 @@ def _generate_ad_subroutine(
     mod_all_var_names = [v.name_ext() for v in mod_vars]
     for v in mod_ad_vars:
         mod_all_var_names.append(v.name_ext())
-    required_vnames = [
-        str(var)
-        for var in subroutine.required_vars()
-        if var.name not in mod_all_var_names
-    ]
+    mod_all_var_names.extend(const_var_names)
+    required_vnames = []
+    for var in subroutine.required_vars():
+        if var.name in mod_all_var_names or var.is_constant:
+            continue
+        decl = subroutine.decls.find_by_name(var.name) if subroutine.decls else None
+        if decl is not None and (decl.parameter or getattr(decl, "constant", False)):
+            continue
+        required_vnames.append(str(var))
     if len(required_vnames) > 0:
         _warn(
             warnings,
@@ -1861,7 +1866,11 @@ def generate_ad(
         loaded, vars_info, generic_map = _load_fadmods(used_mods, search_dirs)
         routine_map.update(loaded)
         generic_routines.update(generic_map)
+        const_var_names: List[str] = []
         for name, vars in vars_info.items():
+            for v in vars:
+                if v.is_constant:
+                    const_var_names.append(v.name_ext())
             vars = [v for v in vars if not v.is_constant]
             if vars:
                 mod_vars.extend(vars)
@@ -1905,6 +1914,7 @@ def generate_ad(
                             mod_vars,
                             routine_info_fwd[name_r],
                             warnings,
+                            const_var_names,
                             reverse=False,
                         )
                         if sub is not None:
@@ -1920,6 +1930,7 @@ def generate_ad(
                             mod_vars,
                             routine_info_rev[name_r],
                             warnings,
+                            const_var_names,
                             reverse=True,
                         )
                         if sub is not None:
