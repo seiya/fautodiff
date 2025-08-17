@@ -15,8 +15,12 @@ class TestMacroMultiStmt(unittest.TestCase):
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]
 
-        # macro definition moved to top
-        self.assertEqual(stripped[0], "#define DO_TWO x  = x + 1; y = y * 2")
+        # conditional macro block moved to top
+        self.assertEqual(stripped[0], "#ifdef INC")
+        self.assertEqual(stripped[1], "#define DO_TWO x  = x + 1; y = y * 2")
+        self.assertEqual(stripped[2], "#else")
+        self.assertEqual(stripped[3], "#define DO_TWO x  = x - 1; y = y * 2")
+        self.assertEqual(stripped[4], "#endif")
         # expanded statements are present
         self.assertTrue(any("x = x + 1" in l for l in stripped))
         self.assertTrue(any("y = y * 2" in l for l in stripped))
