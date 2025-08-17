@@ -444,9 +444,14 @@ def _collect_stmt_lines(line_no: Optional[int], code: str) -> List[str]:
     the statement.
     """
 
-    if line_no is None or line_no <= 0 or line_no > len(_SRC_LINES):
+    needle = str(code).strip()
+    if (
+        line_no is None
+        or line_no <= 0
+        or line_no > len(_SRC_LINES)
+        or _SRC_LINES[line_no - 1].strip() != needle
+    ):
         line_no = None
-        needle = str(code).strip()
         for idx, line in enumerate(_SRC_LINES):
             if needle and needle == line.strip():
                 line_no = idx + 1
