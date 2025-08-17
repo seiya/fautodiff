@@ -9,7 +9,6 @@ from fautodiff import code_tree, generator, operators, parser
 from fautodiff.code_tree import Block, DoLoop, OmpDirective, render_program
 
 
-
 class TestParser(unittest.TestCase):
     def test_find_subroutines(self):
         base = Path(__file__).resolve().parents[1]
@@ -729,6 +728,7 @@ class TestParser(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             parser.parse_src(src)
 
+
 class TestParserOmp(unittest.TestCase):
 
     def test_parse_omp_do(self):
@@ -867,6 +867,29 @@ class TestPreprocessorParsing(unittest.TestCase):
         self.assertIn("call bar()", body)
         self.assertIn("call qux()", body)
 
+    def test_cpp_conditional_inside_statement(self):
+        src = textwrap.dedent(
+            """
+            module t
+            contains
+              subroutine foo(x, y, z)
+                real :: x, y, z
+                x = y &
+            #ifdef Z
+                  + z &
+            #endif
+                  + 1.0
+              end subroutine foo
+            end module t
+            """
+        )
+        mod = parser.parse_src(src)[0]
+        r = mod.routines[0]
+        body = render_program(r.content)
+        self.assertIn("#ifdef Z", body)
+        self.assertIn("x = y + z + 1.0", body)
+        self.assertIn("#else", body)
+        self.assertIn("x = y + 1.0", body)
 
 
 if __name__ == "__main__":
