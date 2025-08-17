@@ -495,7 +495,19 @@ class Node:
             if isinstance(arg, OpVar):
                 argtypes.append(arg.typename)
                 argkinds.append(getattr(arg, "kind_val", None) or arg.kind)
-                argdims.append(len(arg.dims) if arg.dims else None)
+                if arg.dims:
+                    if arg.index:
+                        if len(arg.index) != len(arg.dims):
+                            raise RuntimeError(f"rank is not consistent: {arg.index} {arg.dims}")
+                        ndims = 0
+                        for idx in arg.index:
+                            if idx is None or isinstance(idx, OpRange):
+                                ndims += 1
+                        argdims.append(ndims if ndims > 0 else None)
+                    else:
+                        argdims.append(len(arg.dims))
+                else:
+                    argdims.append(None)
                 continue
             if isinstance(arg, OpLeaf):
                 argkinds.append(arg.kind)
