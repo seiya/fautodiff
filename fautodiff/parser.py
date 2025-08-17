@@ -435,23 +435,44 @@ def _comment_to_cpp(comment) -> Optional[str]:
     return None
 
 
-def _collect_stmt_lines(line_no: Optional[int]) -> List[str]:
-    """Return the original source lines for a statement starting at ``line_no``.
+def _collect_stmt_lines(line_no: Optional[int], code: str) -> List[str]:
+    """Return the original source lines for a statement.
 
-    The returned list includes any interleaved preprocessor directives that
-    belong to the same Fortran statement.  This is used to reconstruct
-    statements that are split by C preprocessor conditionals.
+    ``line_no`` is the first line of the statement in the original source. If
+    this value is missing or outside the available range (which can happen when
+    preprocessor lines shift the numbering), we search for ``code`` to locate
+    the statement.
     """
 
-    if line_no is None or line_no <= 0:
-        return []
+    if line_no is None or line_no <= 0 or line_no > len(_SRC_LINES):
+        line_no = None
+        needle = code.strip()
+        for idx, line in enumerate(_SRC_LINES):
+            if needle and needle == line.strip():
+                line_no = idx + 1
+                break
+        if line_no is None:
+            return []
+
+    # Include any preceding preprocessor lines that are attached to this
+    # statement. ``line_no`` points at the first Fortran line so we walk
+    # backwards to collect any contiguous ``#`` lines before it.
+
+    start = min(line_no - 1, len(_SRC_LINES) - 1)
+    i = start - 1
+    while i >= 0 and _SRC_LINES[i].lstrip().startswith("#"):
+        start = i
+        i -= 1
+
     lines: List[str] = []
-    i = line_no - 1
+    i = start
     while i < len(_SRC_LINES):
         line = _SRC_LINES[i]
         lines.append(line)
         stripped = line.rstrip()
         if stripped.lstrip().startswith("#"):
+            if stripped.lstrip().startswith("#endif"):
+                break
             i += 1
             continue
         if stripped.endswith("&"):
@@ -1916,7 +1937,7 @@ def _parse_routine(
             "file": src_name,
             "line": line_no,
             "code": stmt.string,
-            "lines": _collect_stmt_lines(line_no),
+            "lines": _collect_stmt_lines(line_no, stmt.string),
         }
         consumed_set = (
             set(range(line_no, line_no + len(info["lines"]))) if line_no else set()
