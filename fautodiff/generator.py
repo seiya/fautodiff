@@ -30,6 +30,7 @@ from .code_tree import (
     ForallBlock,
     Function,
     IfBlock,
+    Interface,
     Module,
     Node,
     OmpDirective,
@@ -835,11 +836,14 @@ def _prepare_fwd_ad_header(
         dims = arg.dims
         intent = arg.intent or "inout"
         kind = arg.kind
+        kind_val = getattr(arg, "kind_val", None)
+        kind_val = getattr(arg, "kind_val", None)
+        kind_val = getattr(arg, "kind_val", None)
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
         arg_info["dims"].append(dims)
-        arg_info["kind"].append(kind)
+        arg_info["kind"].append(kind_val if kind_val is not None else kind)
 
         # Always pass original argument to the forward AD routine
         args.append(arg)
@@ -850,6 +854,8 @@ def _prepare_fwd_ad_header(
                 ad_name,
                 typename=typ,
                 kind=kind,
+                kind_val=kind_val,
+                kind_keyword=getattr(arg, "kind_keyword", None),
                 dims=dims,
                 intent=arg.intent,
                 ad_target=True,
@@ -873,16 +879,30 @@ def _prepare_fwd_ad_header(
     ad_name = f"{routine_org.name}{FWD_SUFFIX}"
     subroutine = Subroutine(ad_name, [v.name for v in args])
     # Preserve preprocessor lines from the original routine declarations
-    for node in routine_org.decls.iter_children():
+    decl_children = list(routine_org.decls.iter_children())
+    for node in decl_children:
         if isinstance(node, PreprocessorLine):
             subroutine.decls.append(node.copy())
     arg_info["name_fwd_ad"] = ad_name
+    # Copy parameter declarations from the original routine
+    for node in decl_children:
+        if (
+            isinstance(node, Declaration)
+            and node.parameter
+            and node.name not in arg_info["args"]
+        ):
+            clone = node.deep_clone()
+            clone.donot_prune = True
+            subroutine.decls.append(clone)
+
     for var in args:
         subroutine.decls.append(
             Declaration(
                 name=var.name,
                 typename=var.typename,
                 kind=var.kind,
+                kind_val=getattr(var, "kind_val", None),
+                kind_keyword=getattr(var, "kind_keyword", False),
                 char_len=var.char_len,
                 dims=var.dims,
                 intent=var.intent,
@@ -948,11 +968,12 @@ def _prepare_rev_ad_header(
         dims = arg.dims
         intent = arg.intent or "inout"
         kind = arg.kind
+        kind_val = getattr(arg, "kind_val", None)
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
         arg_info["dims"].append(dims)
-        arg_info["kind"].append(kind)
+        arg_info["kind"].append(kind_val if kind_val is not None else kind)
         if intent == "out":
             if arg.ad_target and not arg.is_constant:
                 ad_name = f"{name}{AD_SUFFIX}"
@@ -960,6 +981,8 @@ def _prepare_rev_ad_header(
                     ad_name,
                     typename=typ,
                     kind=kind,
+                    kind_val=kind_val,
+                    kind_keyword=getattr(arg, "kind_keyword", None),
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -985,6 +1008,8 @@ def _prepare_rev_ad_header(
                     ad_name,
                     typename=typ,
                     kind=kind,
+                    kind_val=kind_val,
+                    kind_keyword=getattr(arg, "kind_keyword", None),
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1006,16 +1031,30 @@ def _prepare_rev_ad_header(
     ad_name = f"{routine_org.name}{REV_SUFFIX}"
     subroutine = Subroutine(ad_name, [v.name for v in args])
     # Preserve preprocessor lines from the original routine declarations
-    for node in routine_org.decls.iter_children():
+    decl_children = list(routine_org.decls.iter_children())
+    for node in decl_children:
         if isinstance(node, PreprocessorLine):
             subroutine.decls.append(node.copy())
     arg_info["name_rev_ad"] = ad_name
+    # Copy parameter declarations from the original routine
+    for node in decl_children:
+        if (
+            isinstance(node, Declaration)
+            and node.parameter
+            and node.name not in arg_info["args"]
+        ):
+            clone = node.deep_clone()
+            clone.donot_prune = True
+            subroutine.decls.append(clone)
+
     for var in args:
         subroutine.decls.append(
             Declaration(
                 name=var.name,
                 typename=var.typename,
                 kind=var.kind,
+                kind_val=getattr(var, "kind_val", None),
+                kind_keyword=getattr(var, "kind_keyword", False),
                 char_len=var.char_len,
                 dims=var.dims,
                 intent=var.intent,
@@ -1145,7 +1184,9 @@ def _generate_ad_subroutine(
         and not has_save_grad_input
     ):
         for arg in out_grad_args:
-            lhs = OpVar(arg.name, kind=arg.kind)
+            lhs = OpVar(
+                arg.name, kind=arg.kind, kind_keyword=getattr(arg, "kind_keyword", None)
+            )
             if arg.is_complex_type:
                 zero = OpComplex(
                     OpReal("0.0", kind=arg.kind),
@@ -1217,6 +1258,8 @@ def _generate_ad_subroutine(
                             name=name,
                             typename=base_decl.typename,
                             kind=base_decl.kind,
+                            kind_val=base_decl.kind_val,
+                            kind_keyword=base_decl.kind_keyword,
                             dims=base_decl.dims,
                             parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
@@ -1434,6 +1477,8 @@ def _generate_ad_subroutine(
                             name=name,
                             typename=base_decl.typename,
                             kind=base_decl.kind,
+                            kind_val=base_decl.kind_val,
+                            kind_keyword=base_decl.kind_keyword,
                             dims=base_decl.dims,
                             parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
@@ -1612,6 +1657,14 @@ def _generate_ad_subroutine(
                 name=var.name,
                 typename=typename,
                 kind=kind,
+                kind_val=(
+                    base_decl.kind_val if base_decl else getattr(var, "kind_val", None)
+                ),
+                kind_keyword=(
+                    base_decl.kind_keyword
+                    if base_decl
+                    else getattr(var, "kind_keyword", False)
+                ),
                 dims=dims,
                 parameter=base_decl.parameter if base_decl else False,
                 init_val=base_decl.init_val if base_decl else None,
@@ -1748,12 +1801,20 @@ def generate_ad(
             else:
                 mod.uses = Block([])
         else:
-            mod.uses = Block([Use(name)])
+            if mod_org.uses is not None:
+                uses = Block([Use(name)])
+                for child in mod_org.uses.iter_children():
+                    uses.append(child.deep_clone())
+                mod.uses = uses
+            else:
+                mod.uses = Block([Use(name)])
 
         if mod_org.decls:
             type_map = {}
             for child in mod_org.decls.iter_children():
                 ad_code = child.generate_ad([], type_map=type_map)
+                if isinstance(child, Interface) and child.module_procs:
+                    generic_routines[child.name] = child.module_procs
                 if ad_code:
                     if isinstance(child, TypeDef):
                         type_map[child.name] = ad_code[0]
@@ -1889,9 +1950,12 @@ def generate_ad(
                     mod.routines.append(info["wrapper"])
 
         name_mod = mod.name
+        existing_uses = {u.name for u in mod.uses.iter_children() if isinstance(u, Use)}
         for m in sorted(ad_modules_used):
             if m != name_mod:
-                mod.uses.append(Use(m))
+                if m not in existing_uses:
+                    mod.uses.append(Use(m))
+                    existing_uses.add(m)
                 mod.uses.append(Use(f"{m}{AD_SUFFIX}"))
         if pushpop_used:
             mod.uses.append(Use("fautodiff_stack"))
