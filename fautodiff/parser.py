@@ -449,11 +449,12 @@ def _collect_stmt_lines(line_no: Optional[int], code: str) -> List[str]:
         line_no is None
         or line_no <= 0
         or line_no > len(_SRC_LINES)
-        or _SRC_LINES[line_no - 1].strip() != needle
+        or not needle.startswith(_SRC_LINES[line_no - 1].strip().rstrip("&"))
     ):
         line_no = None
         for idx, line in enumerate(_SRC_LINES):
-            if needle and needle == line.strip():
+            cand = line.strip().rstrip("&")
+            if needle.startswith(cand):
                 line_no = idx + 1
                 break
         if line_no is None:
@@ -472,21 +473,20 @@ def _collect_stmt_lines(line_no: Optional[int], code: str) -> List[str]:
     depth = 0
     while i < len(_SRC_LINES):
         line = _SRC_LINES[i]
-        lines.append(line)
         stripped = line.lstrip()
         if stripped.startswith("#"):
             directive = stripped[1:].strip().split()[0].lower()
+            if directive in {"else", "elif"} and depth == 0:
+                break
+            lines.append(line)
             if directive in {"if", "ifdef", "ifndef"}:
                 depth += 1
             elif directive == "endif":
                 depth = max(depth - 1, 0)
-                if depth == 0:
-                    break
-            elif directive in {"else", "elif"} and depth == 0:
-                break
             i += 1
             continue
 
+        lines.append(line)
         stripped_r = stripped.rstrip()
         if stripped_r.endswith("&"):
             i += 1
