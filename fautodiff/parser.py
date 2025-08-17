@@ -154,6 +154,7 @@ macro_table: MacroTable = MacroTable()
 module_macros: set[str] = set()
 file_cpp_lines: List[str] = []
 macro_warnings: List[str] = []
+conditional_macros: Dict[str, List[Tuple[str, str]]] = {}
 
 
 def _extract_macros(src: str) -> None:
@@ -167,7 +168,9 @@ def _extract_macros(src: str) -> None:
     macro_table.clear()
     file_cpp_lines.clear()
     macro_warnings.clear()
+    conditional_macros.clear()
     stack: List[Tuple[MacroTable, bool]] = []
+    cond_stack: List[str] = []
     active = True
     depth = 0
     for line in src.splitlines():
@@ -177,11 +180,14 @@ def _extract_macros(src: str) -> None:
             if depth == 0:
                 file_cpp_lines.append(cpp_line.rstrip())
             if m := _MACRO_RE.match(line):
+                name = m.group(1)
+                args = m.group(2)
+                value = m.group(3).strip()
+                macro_line = m.group(0)
+                if cond_stack:
+                    directive = cond_stack[-1]
+                    conditional_macros.setdefault(name, []).append((directive, value))
                 if active:
-                    name = m.group(1)
-                    args = m.group(2)
-                    value = m.group(3).strip()
-                    macro_line = m.group(0)
                     if (
                         _FUNC_MACRO_CONT_RE.search(macro_line)
                         or _FUNC_MACRO_PASTE_RE.search(macro_line)
@@ -197,18 +203,22 @@ def _extract_macros(src: str) -> None:
                         macro_table.register(name, value)
                 continue
             if m := _UNDEF_RE.match(line):
+                if cond_stack:
+                    conditional_macros.pop(m.group(1), None)
                 if active:
                     macro_table.pop(m.group(1), None)
                     macro_table.func.pop(m.group(1), None)
                 continue
             if m := _IFDEF_RE.match(line):
                 stack.append((macro_table.copy(), active))
+                cond_stack.append(f"#ifdef {m.group(1)}")
                 active = active and (
                     m.group(1) in macro_table or m.group(1) in macro_table.func
                 )
                 continue
             if m := _IFNDEF_RE.match(line):
                 stack.append((macro_table.copy(), active))
+                cond_stack.append(f"#ifndef {m.group(1)}")
                 active = active and (
                     m.group(1) not in macro_table and m.group(1) not in macro_table.func
                 )
@@ -224,8 +234,12 @@ def _extract_macros(src: str) -> None:
                 macro_table.update(prev_table)
                 active = prev_active and not active
                 stack[-1] = (taken_table, prev_active)
+                if cond_stack:
+                    cond_stack[-1] = "#else"
                 continue
             if _ENDIF_RE.match(line):
+                if cond_stack:
+                    cond_stack.pop()
                 prev_table, prev_active = stack.pop()
                 if not active:
                     macro_table.clear()
@@ -250,13 +264,23 @@ def _expand_macros(src: str) -> str:
             out_lines.append(line)
             continue
         m = _TOKEN_RE.fullmatch(stripped)
-        if m and m.group(0) in macro_table:
+        if m:
             name = m.group(0)
-            expansion = macro_table._expand(macro_table[name], [name])
-            parts = [p.strip() for p in expansion.split(";") if p.strip()]
-            for part in parts:
-                out_lines.append(part)
-            continue
+            if name in conditional_macros:
+                conds = conditional_macros[name]
+                for cond, expansion in conds:
+                    out_lines.append(f"{_CPP_PREFIX} {cond}")
+                    parts = [p.strip() for p in expansion.split(";") if p.strip()]
+                    for part in parts:
+                        out_lines.append(part)
+                out_lines.append(f"{_CPP_PREFIX} #endif")
+                continue
+            if name in macro_table:
+                expansion = macro_table._expand(macro_table[name], [name])
+                parts = [p.strip() for p in expansion.split(";") if p.strip()]
+                for part in parts:
+                    out_lines.append(part)
+                continue
         out_lines.append(line)
     if src.endswith("\n"):
         return "\n".join(out_lines) + "\n"
