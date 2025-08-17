@@ -7,7 +7,7 @@ rest of the package does not rely on the underlying parser implementation.
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import fparser
 from fparser.common.readfortran import FortranFileReader, FortranStringReader
@@ -17,6 +17,7 @@ from fparser.two.utils import walk
 from packaging.version import Version, parse
 
 from .code_tree import (
+    AD_SUFFIX,
     Allocate,
     Assignment,
     Block,
@@ -157,6 +158,40 @@ macro_warnings: List[str] = []
 conditional_macros: Dict[str, List[Tuple[str, str]]] = {}
 
 
+macro_rename_hook: Callable[[str], str] = lambda name: f"{name}_macro"
+
+
+def set_macro_rename_hook(hook: Callable[[str], str]) -> None:
+    """Set a hook used to rename identifiers from macro expansions."""
+
+    global macro_rename_hook
+    macro_rename_hook = hook
+
+
+def _rename_macro_identifiers(part: str) -> str:
+    """Rename identifiers with ``_ad`` suffix in macro expansions."""
+
+    renames: List[Tuple[str, str]] = []
+
+    def repl(match: re.Match[str]) -> str:
+        token = match.group(0)
+        if token.endswith(AD_SUFFIX):
+            new = macro_rename_hook(token)
+            if new != token:
+                macro_warnings.append(
+                    f"identifier '{token}' in macro expansion renamed to '{new}'"
+                )
+                renames.append((token, new))
+            return new
+        return token
+
+    new_part = _TOKEN_RE.sub(repl, part)
+    if renames:
+        comment = ", ".join(f"{old} -> {new}" for old, new in renames)
+        new_part = f"{new_part} ! {comment}"
+    return new_part
+
+
 def _extract_macros(src: str) -> None:
     """Populate ``macro_table`` with preprocessor directives from ``src``.
 
@@ -272,14 +307,14 @@ def _expand_macros(src: str) -> str:
                     out_lines.append(f"{_CPP_PREFIX} {cond}")
                     parts = [p.strip() for p in expansion.split(";") if p.strip()]
                     for part in parts:
-                        out_lines.append(part)
+                        out_lines.append(_rename_macro_identifiers(part))
                 out_lines.append(f"{_CPP_PREFIX} #endif")
                 continue
             if name in macro_table:
                 expansion = macro_table._expand(macro_table[name], [name])
                 parts = [p.strip() for p in expansion.split(";") if p.strip()]
                 for part in parts:
-                    out_lines.append(part)
+                    out_lines.append(_rename_macro_identifiers(part))
                 continue
         out_lines.append(line)
     if src.endswith("\n"):
