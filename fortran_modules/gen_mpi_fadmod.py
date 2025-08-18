@@ -155,6 +155,21 @@ routines_mpi: Dict[str, dict] = {
     "MPI_Add_error_string": {"skip": True},
     "MPI_Errhandler_create": {"skip": True},
     "MPI_Errhandler_get": {"skip": True},
+    # MPI-IO routines (no AD support yet)
+    "MPI_File_open": {"skip": True},
+    "MPI_File_close": {"skip": True},
+    "MPI_File_read": {"skip": True},
+    "MPI_File_write": {"skip": True},
+    "MPI_File_set_view": {"skip": True},
+    "MPI_File_get_view": {"skip": True},
+    "MPI_File_read_at": {"skip": True},
+    "MPI_File_write_at": {"skip": True},
+    "MPI_File_read_all": {"skip": True},
+    "MPI_File_write_all": {"skip": True},
+    "MPI_File_seek": {"skip": True},
+    "MPI_File_get_position": {"skip": True},
+    "MPI_File_get_size": {"skip": True},
+    "MPI_File_set_size": {"skip": True},
 }
 
 
@@ -204,6 +219,24 @@ variables: Dict[str, dict] = {
     "MPI_ERR_ROOT": {},
     "MPI_ERR_TOPOLOGY": {},
     "MPI_ERR_OTHER": {},
+    # MPI-IO constants
+    "MPI_FILE_NULL": {},
+    "MPI_INFO_NULL": {},
+    "MPI_MAX_DATAREP_STRING": {},
+    "MPI_MODE_RDONLY": {},
+    "MPI_MODE_WRONLY": {},
+    "MPI_MODE_RDWR": {},
+    "MPI_MODE_CREATE": {},
+    "MPI_MODE_EXCL": {},
+    "MPI_MODE_DELETE_ON_CLOSE": {},
+    "MPI_MODE_UNIQUE_OPEN": {},
+    "MPI_MODE_APPEND": {},
+    "MPI_MODE_SEQUENTIAL": {},
+    "MPI_SEEK_SET": {},
+    "MPI_SEEK_CUR": {},
+    "MPI_SEEK_END": {},
+    "MPI_DISPLACEMENT_CURRENT": {},
+    "MPI_OFFSET_KIND": {},
 }
 common = {"typename": "integer", "parameter": True}
 decl_map = {}
