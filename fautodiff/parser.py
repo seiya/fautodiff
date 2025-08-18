@@ -1109,6 +1109,8 @@ def _parse_decl_stmt(
                 if attr_name in ("ASYNC", "ASYNCHRONOUS"):
                     asynchronous = True
                     continue
+                if attr_name == "CONTIGUOUS":
+                    continue
                 raise RuntimeError(f"Unsupported attribute: {type(attr)} {attr}")
             if isinstance(
                 attr, Fortran2008.component_attr_spec_r437.Component_Attr_Spec
