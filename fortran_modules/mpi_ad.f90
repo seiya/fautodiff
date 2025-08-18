@@ -41,6 +41,50 @@ module mpi_ad
   public :: mpi_wait_rev_ad
   public :: mpi_waitall_fwd_ad
   public :: mpi_waitall_rev_ad
+  public :: mpi_barrier_fwd_ad
+  public :: mpi_barrier_rev_ad
+  public :: mpi_win_fence_fwd_ad
+  public :: mpi_win_fence_rev_ad
+  public :: mpi_comm_group_fwd_ad
+  public :: mpi_comm_group_rev_ad
+  public :: mpi_group_size_fwd_ad
+  public :: mpi_group_size_rev_ad
+  public :: mpi_group_rank_fwd_ad
+  public :: mpi_group_rank_rev_ad
+  public :: mpi_group_incl_fwd_ad
+  public :: mpi_group_incl_rev_ad
+  public :: mpi_group_excl_fwd_ad
+  public :: mpi_group_excl_rev_ad
+  public :: mpi_group_union_fwd_ad
+  public :: mpi_group_union_rev_ad
+  public :: mpi_group_intersection_fwd_ad
+  public :: mpi_group_intersection_rev_ad
+  public :: mpi_group_difference_fwd_ad
+  public :: mpi_group_difference_rev_ad
+  public :: mpi_group_translate_ranks_fwd_ad
+  public :: mpi_group_translate_ranks_rev_ad
+  public :: mpi_group_free_fwd_ad
+  public :: mpi_group_free_rev_ad
+  public :: mpi_cart_create_fwd_ad
+  public :: mpi_cart_create_rev_ad
+  public :: mpi_cart_sub_fwd_ad
+  public :: mpi_cart_sub_rev_ad
+  public :: mpi_cart_rank_fwd_ad
+  public :: mpi_cart_rank_rev_ad
+  public :: mpi_cart_coords_fwd_ad
+  public :: mpi_cart_coords_rev_ad
+  public :: mpi_cart_shift_fwd_ad
+  public :: mpi_cart_shift_rev_ad
+  public :: mpi_dims_create_fwd_ad
+  public :: mpi_dims_create_rev_ad
+  public :: mpi_error_class_fwd_ad
+  public :: mpi_error_class_rev_ad
+  public :: mpi_error_string_fwd_ad
+  public :: mpi_error_string_rev_ad
+  public :: mpi_errhandler_set_fwd_ad
+  public :: mpi_errhandler_set_rev_ad
+  public :: mpi_errhandler_free_fwd_ad
+  public :: mpi_errhandler_free_rev_ad
 
   interface mpi_bcast_fwd_ad
      module procedure mpi_bcast_fwd_ad_r4
@@ -2036,11 +2080,373 @@ contains
         print *, "Error: Invalid request_ad in mpi_waitall_rev_ad"
       end if
     end do
-
+    
     if (flag_persistent) then
       call MPI_Startall(count, reqs, ierr)
     end if
   end subroutine mpi_waitall_rev_ad
+
+  subroutine mpi_barrier_fwd_ad(comm, ierr)
+    integer, intent(in) :: comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Barrier(comm, ierr)
+  end subroutine mpi_barrier_fwd_ad
+
+  subroutine mpi_barrier_rev_ad(comm, ierr)
+    integer, intent(in) :: comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Barrier(comm, ierr)
+  end subroutine mpi_barrier_rev_ad
+
+  subroutine mpi_win_fence_fwd_ad(assert, win, ierr)
+    integer, intent(in) :: assert
+    integer, intent(in) :: win
+    integer, intent(out), optional :: ierr
+
+    call MPI_Win_fence(assert, win, ierr)
+  end subroutine mpi_win_fence_fwd_ad
+
+  subroutine mpi_win_fence_rev_ad(assert, win, ierr)
+    integer, intent(in) :: assert
+    integer, intent(in) :: win
+    integer, intent(out), optional :: ierr
+
+    call MPI_Win_fence(assert, win, ierr)
+  end subroutine mpi_win_fence_rev_ad
+
+  subroutine mpi_comm_group_fwd_ad(comm, group, ierr)
+    integer, intent(in) :: comm
+    integer, intent(out) :: group
+    integer, intent(out), optional :: ierr
+
+    call MPI_Comm_group(comm, group, ierr)
+  end subroutine mpi_comm_group_fwd_ad
+
+  subroutine mpi_comm_group_rev_ad(comm, group, ierr)
+    integer, intent(in) :: comm
+    integer, intent(inout) :: group
+    integer, intent(out), optional :: ierr
+
+    call MPI_Comm_group(comm, group, ierr)
+  end subroutine mpi_comm_group_rev_ad
+
+  subroutine mpi_group_size_fwd_ad(group, size, ierr)
+    integer, intent(in) :: group
+    integer, intent(out) :: size
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_size(group, size, ierr)
+  end subroutine mpi_group_size_fwd_ad
+
+  subroutine mpi_group_size_rev_ad(group, size, ierr)
+    integer, intent(in) :: group
+    integer, intent(inout) :: size
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_size(group, size, ierr)
+  end subroutine mpi_group_size_rev_ad
+
+  subroutine mpi_group_rank_fwd_ad(group, rank, ierr)
+    integer, intent(in) :: group
+    integer, intent(out) :: rank
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_rank(group, rank, ierr)
+  end subroutine mpi_group_rank_fwd_ad
+
+  subroutine mpi_group_rank_rev_ad(group, rank, ierr)
+    integer, intent(in) :: group
+    integer, intent(inout) :: rank
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_rank(group, rank, ierr)
+  end subroutine mpi_group_rank_rev_ad
+
+  subroutine mpi_group_incl_fwd_ad(group, n, ranks, newgroup, ierr)
+    integer, intent(in) :: group, n
+    integer, intent(in) :: ranks(n)
+    integer, intent(out) :: newgroup
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_incl(group, n, ranks, newgroup, ierr)
+  end subroutine mpi_group_incl_fwd_ad
+
+  subroutine mpi_group_incl_rev_ad(group, n, ranks, newgroup, ierr)
+    integer, intent(in) :: group, n
+    integer, intent(in) :: ranks(n)
+    integer, intent(inout) :: newgroup
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_incl(group, n, ranks, newgroup, ierr)
+  end subroutine mpi_group_incl_rev_ad
+
+  subroutine mpi_group_excl_fwd_ad(group, n, ranks, newgroup, ierr)
+    integer, intent(in) :: group, n
+    integer, intent(in) :: ranks(n)
+    integer, intent(out) :: newgroup
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_excl(group, n, ranks, newgroup, ierr)
+  end subroutine mpi_group_excl_fwd_ad
+
+  subroutine mpi_group_excl_rev_ad(group, n, ranks, newgroup, ierr)
+    integer, intent(in) :: group, n
+    integer, intent(in) :: ranks(n)
+    integer, intent(inout) :: newgroup
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_excl(group, n, ranks, newgroup, ierr)
+  end subroutine mpi_group_excl_rev_ad
+
+  subroutine mpi_group_union_fwd_ad(group1, group2, newgroup, ierr)
+    integer, intent(in) :: group1, group2
+    integer, intent(out) :: newgroup
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_union(group1, group2, newgroup, ierr)
+  end subroutine mpi_group_union_fwd_ad
+
+  subroutine mpi_group_union_rev_ad(group1, group2, newgroup, ierr)
+    integer, intent(in) :: group1, group2
+    integer, intent(inout) :: newgroup
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_union(group1, group2, newgroup, ierr)
+  end subroutine mpi_group_union_rev_ad
+
+  subroutine mpi_group_intersection_fwd_ad(group1, group2, newgroup, ierr)
+    integer, intent(in) :: group1, group2
+    integer, intent(out) :: newgroup
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_intersection(group1, group2, newgroup, ierr)
+  end subroutine mpi_group_intersection_fwd_ad
+
+  subroutine mpi_group_intersection_rev_ad(group1, group2, newgroup, ierr)
+    integer, intent(in) :: group1, group2
+    integer, intent(inout) :: newgroup
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_intersection(group1, group2, newgroup, ierr)
+  end subroutine mpi_group_intersection_rev_ad
+
+  subroutine mpi_group_difference_fwd_ad(group1, group2, newgroup, ierr)
+    integer, intent(in) :: group1, group2
+    integer, intent(out) :: newgroup
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_difference(group1, group2, newgroup, ierr)
+  end subroutine mpi_group_difference_fwd_ad
+
+  subroutine mpi_group_difference_rev_ad(group1, group2, newgroup, ierr)
+    integer, intent(in) :: group1, group2
+    integer, intent(inout) :: newgroup
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_difference(group1, group2, newgroup, ierr)
+  end subroutine mpi_group_difference_rev_ad
+
+  subroutine mpi_group_translate_ranks_fwd_ad(group1, n, ranks1, group2, ranks2, ierr)
+    integer, intent(in) :: group1, n, group2
+    integer, intent(in) :: ranks1(n)
+    integer, intent(out) :: ranks2(n)
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_translate_ranks(group1, n, ranks1, group2, ranks2, ierr)
+  end subroutine mpi_group_translate_ranks_fwd_ad
+
+  subroutine mpi_group_translate_ranks_rev_ad(group1, n, ranks1, group2, ranks2, ierr)
+    integer, intent(in) :: group1, n, group2
+    integer, intent(in) :: ranks1(n)
+    integer, intent(inout) :: ranks2(n)
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_translate_ranks(group1, n, ranks1, group2, ranks2, ierr)
+  end subroutine mpi_group_translate_ranks_rev_ad
+
+  subroutine mpi_group_free_fwd_ad(group, ierr)
+    integer, intent(inout) :: group
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_free(group, ierr)
+  end subroutine mpi_group_free_fwd_ad
+
+  subroutine mpi_group_free_rev_ad(group, ierr)
+    integer, intent(inout) :: group
+    integer, intent(out), optional :: ierr
+
+    call MPI_Group_free(group, ierr)
+  end subroutine mpi_group_free_rev_ad
+
+  subroutine mpi_cart_create_fwd_ad(comm_old, ndims, dims, periods, reorder, comm_cart, ierr)
+    integer, intent(in) :: comm_old, ndims
+    integer, intent(in) :: dims(ndims)
+    logical, intent(in) :: periods(ndims)
+    logical, intent(in) :: reorder
+    integer, intent(out) :: comm_cart
+    integer, intent(out), optional :: ierr
+
+    call MPI_Cart_create(comm_old, ndims, dims, periods, reorder, comm_cart, ierr)
+  end subroutine mpi_cart_create_fwd_ad
+
+  subroutine mpi_cart_create_rev_ad(comm_old, ndims, dims, periods, reorder, comm_cart, ierr)
+    integer, intent(in) :: comm_old, ndims
+    integer, intent(in) :: dims(ndims)
+    logical, intent(in) :: periods(ndims)
+    logical, intent(in) :: reorder
+    integer, intent(inout) :: comm_cart
+    integer, intent(out), optional :: ierr
+
+    call MPI_Cart_create(comm_old, ndims, dims, periods, reorder, comm_cart, ierr)
+  end subroutine mpi_cart_create_rev_ad
+
+  subroutine mpi_cart_sub_fwd_ad(comm, remain_dims, new_comm, ierr)
+    integer, intent(in) :: comm
+    logical, intent(in) :: remain_dims(:)
+    integer, intent(out) :: new_comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Cart_sub(comm, remain_dims, new_comm, ierr)
+  end subroutine mpi_cart_sub_fwd_ad
+
+  subroutine mpi_cart_sub_rev_ad(comm, remain_dims, new_comm, ierr)
+    integer, intent(in) :: comm
+    logical, intent(in) :: remain_dims(:)
+    integer, intent(inout) :: new_comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Cart_sub(comm, remain_dims, new_comm, ierr)
+  end subroutine mpi_cart_sub_rev_ad
+
+  subroutine mpi_cart_rank_fwd_ad(comm, coords, rank, ierr)
+    integer, intent(in) :: comm
+    integer, intent(in) :: coords(:)
+    integer, intent(out) :: rank
+    integer, intent(out), optional :: ierr
+
+    call MPI_Cart_rank(comm, coords, rank, ierr)
+  end subroutine mpi_cart_rank_fwd_ad
+
+  subroutine mpi_cart_rank_rev_ad(comm, coords, rank, ierr)
+    integer, intent(in) :: comm
+    integer, intent(in) :: coords(:)
+    integer, intent(inout) :: rank
+    integer, intent(out), optional :: ierr
+
+    call MPI_Cart_rank(comm, coords, rank, ierr)
+  end subroutine mpi_cart_rank_rev_ad
+
+  subroutine mpi_cart_coords_fwd_ad(comm, rank, maxdims, coords, ierr)
+    integer, intent(in) :: comm, rank, maxdims
+    integer, intent(out) :: coords(maxdims)
+    integer, intent(out), optional :: ierr
+
+    call MPI_Cart_coords(comm, rank, maxdims, coords, ierr)
+  end subroutine mpi_cart_coords_fwd_ad
+
+  subroutine mpi_cart_coords_rev_ad(comm, rank, maxdims, coords, ierr)
+    integer, intent(in) :: comm, rank, maxdims
+    integer, intent(inout) :: coords(maxdims)
+    integer, intent(out), optional :: ierr
+
+    call MPI_Cart_coords(comm, rank, maxdims, coords, ierr)
+  end subroutine mpi_cart_coords_rev_ad
+
+  subroutine mpi_cart_shift_fwd_ad(comm, direction, disp, source, dest, ierr)
+    integer, intent(in) :: comm, direction, disp
+    integer, intent(out) :: source, dest
+    integer, intent(out), optional :: ierr
+
+    call MPI_Cart_shift(comm, direction, disp, source, dest, ierr)
+  end subroutine mpi_cart_shift_fwd_ad
+
+  subroutine mpi_cart_shift_rev_ad(comm, direction, disp, source, dest, ierr)
+    integer, intent(in) :: comm, direction, disp
+    integer, intent(inout) :: source, dest
+    integer, intent(out), optional :: ierr
+
+    call MPI_Cart_shift(comm, direction, disp, source, dest, ierr)
+  end subroutine mpi_cart_shift_rev_ad
+
+  subroutine mpi_dims_create_fwd_ad(nnodes, ndims, dims, ierr)
+    integer, intent(in) :: nnodes, ndims
+    integer, intent(inout) :: dims(ndims)
+    integer, intent(out), optional :: ierr
+
+    call MPI_Dims_create(nnodes, ndims, dims, ierr)
+  end subroutine mpi_dims_create_fwd_ad
+
+  subroutine mpi_dims_create_rev_ad(nnodes, ndims, dims, ierr)
+    integer, intent(in) :: nnodes, ndims
+    integer, intent(inout) :: dims(ndims)
+    integer, intent(out), optional :: ierr
+
+    call MPI_Dims_create(nnodes, ndims, dims, ierr)
+  end subroutine mpi_dims_create_rev_ad
+
+  subroutine mpi_error_class_fwd_ad(errorcode, errorclass, ierr)
+    integer, intent(in) :: errorcode
+    integer, intent(out) :: errorclass
+    integer, intent(out), optional :: ierr
+
+    call MPI_Error_class(errorcode, errorclass, ierr)
+  end subroutine mpi_error_class_fwd_ad
+
+  subroutine mpi_error_class_rev_ad(errorcode, errorclass, ierr)
+    integer, intent(in) :: errorcode
+    integer, intent(inout) :: errorclass
+    integer, intent(out), optional :: ierr
+
+    call MPI_Error_class(errorcode, errorclass, ierr)
+  end subroutine mpi_error_class_rev_ad
+
+  subroutine mpi_error_string_fwd_ad(errorcode, string, resultlen, ierr)
+    integer, intent(in) :: errorcode
+    character(len=*), intent(out) :: string
+    integer, intent(out) :: resultlen
+    integer, intent(out), optional :: ierr
+
+    call MPI_Error_string(errorcode, string, resultlen, ierr)
+  end subroutine mpi_error_string_fwd_ad
+
+  subroutine mpi_error_string_rev_ad(errorcode, string, resultlen, ierr)
+    integer, intent(in) :: errorcode
+    character(len=*), intent(inout) :: string
+    integer, intent(inout) :: resultlen
+    integer, intent(out), optional :: ierr
+
+    call MPI_Error_string(errorcode, string, resultlen, ierr)
+  end subroutine mpi_error_string_rev_ad
+
+  subroutine mpi_errhandler_set_fwd_ad(comm, errhandler, ierr)
+    integer, intent(in) :: comm, errhandler
+    integer, intent(out), optional :: ierr
+
+    call MPI_Errhandler_set(comm, errhandler, ierr)
+  end subroutine mpi_errhandler_set_fwd_ad
+
+  subroutine mpi_errhandler_set_rev_ad(comm, errhandler, ierr)
+    integer, intent(in) :: comm, errhandler
+    integer, intent(out), optional :: ierr
+
+    call MPI_Errhandler_set(comm, errhandler, ierr)
+  end subroutine mpi_errhandler_set_rev_ad
+
+  subroutine mpi_errhandler_free_fwd_ad(errhandler, ierr)
+    integer, intent(inout) :: errhandler
+    integer, intent(out), optional :: ierr
+
+    call MPI_Errhandler_free(errhandler, ierr)
+  end subroutine mpi_errhandler_free_fwd_ad
+
+  subroutine mpi_errhandler_free_rev_ad(errhandler, ierr)
+    integer, intent(inout) :: errhandler
+    integer, intent(out), optional :: ierr
+
+    call MPI_Errhandler_free(errhandler, ierr)
+  end subroutine mpi_errhandler_free_rev_ad
 
   subroutine update_advar(req_map)
     class(req_map_t), intent(inout) :: req_map
