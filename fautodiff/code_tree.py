@@ -1427,6 +1427,48 @@ class Statement(Node):
 
 
 @dataclass
+class StopStmt(Statement):
+    """Representation of a STOP or ERROR STOP statement."""
+
+    def generate_ad(
+        self,
+        saved_vars: List[OpVar],
+        reverse: bool = False,
+        assigned_advars: Optional[VarList] = None,
+        routine_map: Optional[dict] = None,
+        generic_map: Optional[dict] = None,
+        mod_vars: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        return_flags: Optional[List[OpVar]] = None,
+        type_map: Optional[dict] = None,
+        warnings: Optional[list[str]] = None,
+    ) -> List["Node"]:
+        return [StopStmt(self.body)]
+
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> "StopStmt":
+        return StopStmt(self.body)
+
+    def set_for_returnexitcycle(
+        self,
+        return_flags: Optional[List[OpVar]] = None,
+        exitcycle_flags: Optional[List[OpVar]] = None,
+        set_return_cond: bool = False,
+        set_exitcycle_cond: bool = False,
+        set_do_index: Optional[Tuple[OpVar, OpVar]] = None,
+        label: Optional[str] = None,
+        label_map: Optional[List[Tuple[str, str]]] = None,
+        keep: bool = False,
+    ) -> List["Node"]:
+        return []
+
+
+@dataclass
 class PreprocessorLine(Node):
     """A single preprocessor directive line."""
 

@@ -20,7 +20,7 @@ PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_cont
            run_directives.out run_parameter_var.out run_module_vars.out run_call_module_vars.out run_allocate_vars.out \
            run_exit_cycle.out run_pointer_arrays.out run_derived_alloc.out run_mpi_example.out \
                    run_stack.out run_where_forall.out run_omp_loops.out run_return_example.out run_self_reference.out \
-           run_macro_args.out run_macro_multistmt.out run_use_module_conflict.out
+           run_macro_args.out run_macro_multistmt.out run_use_module_conflict.out run_stop_example.out
 PROGRAMS = $(addprefix $(OUTDIR)/,$(PROGRAM_NAMES))
 
 .PHONY: all clean
@@ -76,6 +76,8 @@ $(OUTDIR)/run_where_forall.o: $(OUTDIR)/where_forall.o $(OUTDIR)/where_forall_ad
 
 $(OUTDIR)/run_return_example.o: $(OUTDIR)/return_example.o $(OUTDIR)/return_example_ad.o
 
+$(OUTDIR)/run_stop_example.o: $(OUTDIR)/stop_example.o $(OUTDIR)/stop_example_ad.o
+
 $(OUTDIR)/run_omp_loops.o: $(OUTDIR)/omp_loops.o $(OUTDIR)/omp_loops_ad.o
 
 $(OUTDIR)/run_fautodiff_stack.o: $(OUTDIR)/fautodiff_stack.o
@@ -108,6 +110,8 @@ $(OUTDIR)/run_mpi_example.out: $(OUTDIR)/run_mpi_example.o $(OUTDIR)/mpi_example
 $(OUTDIR)/run_where_forall.out: $(OUTDIR)/run_where_forall.o $(OUTDIR)/where_forall.o $(OUTDIR)/where_forall_ad.o
 
 $(OUTDIR)/run_return_example.out: $(OUTDIR)/run_return_example.o $(OUTDIR)/return_example.o $(OUTDIR)/return_example_ad.o
+
+$(OUTDIR)/run_stop_example.out: $(OUTDIR)/run_stop_example.o $(OUTDIR)/stop_example.o $(OUTDIR)/stop_example_ad.o
 
 $(OUTDIR)/run_omp_loops.out: $(OUTDIR)/run_omp_loops.o $(OUTDIR)/omp_loops.o $(OUTDIR)/omp_loops_ad.o
 
