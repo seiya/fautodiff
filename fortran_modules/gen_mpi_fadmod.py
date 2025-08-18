@@ -22,6 +22,20 @@ from fautodiff.code_tree import Declaration, Interface
 _MODE_RE = re.compile(r"mpi_(.*?)(_fwd_rev_ad|_fwd_ad|_rev_ad)(?:_(.*))?$", re.I)
 
 
+def _find_count_arg(arg: str, args: List[str]) -> str | None:
+    arg_lower = arg.lower()
+    for cand in args:
+        cand_lower = cand.lower()
+        if cand_lower.endswith("count") or cand_lower.endswith("counts"):
+            base = cand_lower[:-5] if cand_lower.endswith("count") else cand_lower[:-6]
+            base = base.rstrip("_")
+            if base and arg_lower.startswith(base):
+                return cand
+    if "count" in args:
+        return "count"
+    return None
+
+
 def _collect_routines(mod, routines: Dict[str, dict]) -> Dict[str, dict]:
     for sub in mod.routines:
         name = sub.name
@@ -48,8 +62,9 @@ def _collect_routines(mod, routines: Dict[str, dict]) -> Dict[str, dict]:
                 if decls.get(arg) and decls.get(arg).dims:
                     dim = []
                     for d in decls.get(arg).dims:
-                        if d == "*" and "count" in mpi_args:
-                            dim.append("count")
+                        if d == "*":
+                            count = _find_count_arg(arg, mpi_args)
+                            dim.append(count if count else d)
                         else:
                             dim.append(d)
                 else:

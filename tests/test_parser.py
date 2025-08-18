@@ -179,6 +179,28 @@ class TestParser(unittest.TestCase):
         self.assertIsNotNone(decl)
         self.assertEqual(decl.dims, ("n",))
 
+    def test_parse_assumed_size(self):
+        src = textwrap.dedent(
+            """\
+        module test
+        contains
+          subroutine foo(n, a, b)
+            integer :: n
+            real :: a(*)
+            real :: b(n, *)
+          end subroutine foo
+        end module test
+        """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        decl = routine.decls.find_by_name("a")
+        self.assertIsNotNone(decl)
+        self.assertEqual(decl.dims, ("*",))
+        decl = routine.decls.find_by_name("b")
+        self.assertIsNotNone(decl)
+        self.assertEqual(decl.dims, ("n", "*"))
+
     def test_parse_public(self):
         src = textwrap.dedent(
             """\
