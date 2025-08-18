@@ -104,6 +104,33 @@
     "MPI_Type_contiguous": {
       "skip": true
     },
+    "MPI_Type_vector": {
+      "skip": true
+    },
+    "MPI_Type_indexed": {
+      "skip": true
+    },
+    "MPI_Type_create_hvector": {
+      "skip": true
+    },
+    "MPI_Type_create_hindexed": {
+      "skip": true
+    },
+    "MPI_Type_create_hindexed_block": {
+      "skip": true
+    },
+    "MPI_Type_create_struct": {
+      "skip": true
+    },
+    "MPI_Type_create_resized": {
+      "skip": true
+    },
+    "MPI_Type_create_subarray": {
+      "skip": true
+    },
+    "MPI_Type_create_darray": {
+      "skip": true
+    },
     "MPI_Group_compare": {
       "skip": true
     },
@@ -4465,6 +4492,10 @@
     }
   },
   "variables": {
+    "MPI_SUCCESS": {
+      "typename": "integer",
+      "parameter": true
+    },
     "MPI_COMM_WORLD": {
       "typename": "integer",
       "parameter": true
@@ -4478,6 +4509,14 @@
       "parameter": true
     },
     "MPI_PROC_NULL": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_ANY_SOURCE": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_ANY_TAG": {
       "typename": "integer",
       "parameter": true
     },
@@ -4608,6 +4647,34 @@
       "typename": "integer",
       "parameter": true
     },
+    "MPI_TAG_UB": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_BSEND_OVERHEAD": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_UNIVERSE_SIZE": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_APPNUM": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MAX_PROCESSOR_NAME": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MAX_PORT_NAME": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MAX_LIBRARY_VERSION_STRING": {
+      "typename": "integer",
+      "parameter": true
+    },
     "MPI_MAX_ERROR_STRING": {
       "typename": "integer",
       "parameter": true
@@ -4645,6 +4712,14 @@
       "parameter": true
     },
     "MPI_ERR_OTHER": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_ERR_IN_STATUS": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_ERR_PENDING": {
       "typename": "integer",
       "parameter": true
     },
