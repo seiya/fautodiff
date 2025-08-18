@@ -1158,7 +1158,11 @@ def _parse_decl_stmt(
             ):
                 dims = tuple(v.string for v in dim_spec.items)
             elif isinstance(dim_spec, Fortran2003.Assumed_Size_Spec):
-                dims = "*"
+                dims = []
+                if dim_spec.items[0] is not None:
+                    dims.extend(v.string for v in dim_spec.items[0].items)
+                dims.append("*")
+                dims = tuple(dims)
             elif dim_spec is None:
                 dims = dim_attr
             else:
