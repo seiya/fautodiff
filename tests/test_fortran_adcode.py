@@ -201,6 +201,9 @@ class TestFortranADCode(unittest.TestCase):
     def test_use_module_conflict(self):
         self._run_test("use_module_conflict", ["add_with_mod"])
 
+    def test_stop_example(self):
+        self._run_test("stop_example", ["stop_sub"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -87,6 +87,7 @@ from .code_tree import (
     ReturnStmt,
     SelectBlock,
     Statement,
+    StopStmt,
     Subroutine,
     TypeDef,
     Use,
@@ -2292,6 +2293,10 @@ def _parse_routine(
         if isinstance(stmt, Fortran2003.Cycle_Stmt):
             label = stmt.items[1].string if stmt.items[1] is not None else None
             return CycleStmt(label=label)
+        if isinstance(stmt, Fortran2008.Error_Stop_Stmt):
+            return StopStmt(stmt.string)
+        if isinstance(stmt, Fortran2003.Stop_Stmt):
+            return StopStmt(stmt.string)
 
         print(type(stmt))
         print(stmt.items)
