@@ -540,16 +540,27 @@ class Node:
                 cand_dims = (
                     list(cand_info.get("dims", [])) if cand_info.get("dims") else []
                 )
+                cand_dims_lens = [len(d) if d else None for d in cand_dims]
                 if len(cand_types) == len(argtypes) + 1:
                     cand_types = cand_types[:-1]
                     cand_kinds = cand_kinds[:-1]
-                    cand_dims = cand_dims[:-1]
-                if (
-                    cand_types == argtypes
-                    and cand_kinds == argkinds
-                    and [len(d) if d else None for d in cand_dims] == argdims
-                ):
-                    return cand_info
+                    cand_dims_lens = cand_dims_lens[:-1]
+                if cand_types == argtypes and cand_kinds == argkinds:
+                    dims_match = True
+                    for cd, ad in zip(cand_dims_lens, argdims):
+                        if cd is None or cd == ad:
+                            continue
+                        if (
+                            cand_info.get("module") == "mpi"
+                            and cd == 1
+                            and ad is not None
+                            and ad > 1
+                        ):
+                            continue
+                        dims_match = False
+                        break
+                    if dims_match:
+                        return cand_info
         return None
 
     def _generate_ad_forward(

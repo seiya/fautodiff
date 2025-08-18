@@ -595,6 +595,33 @@ class TestGenerator(unittest.TestCase):
         for routine in generics["MPI_Recv_init"]:
             self.assertIn(routine, routines)
 
+    def test_mpi_send_multidim(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module m
+              use mpi
+            contains
+              subroutine foo(a)
+                real :: a(2,3)
+                integer :: ierr
+                call MPI_Send(a, 6, MPI_REAL, 0, 0, MPI_COMM_WORLD, ierr)
+              end subroutine foo
+            end module m
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "m.f90"
+            src_path.write_text(src)
+            generated = generator.generate_ad(
+                str(src_path), warn=False, search_dirs=["fortran_modules"]
+            )
+            self.assertIn("MPI_Send_rev_ad", generated)
+
 
 def _make_example_test(src: Path):
     def test(self):
