@@ -104,6 +104,33 @@
     "MPI_Type_contiguous": {
       "skip": true
     },
+    "MPI_Type_vector": {
+      "skip": true
+    },
+    "MPI_Type_indexed": {
+      "skip": true
+    },
+    "MPI_Type_create_hvector": {
+      "skip": true
+    },
+    "MPI_Type_create_hindexed": {
+      "skip": true
+    },
+    "MPI_Type_create_hindexed_block": {
+      "skip": true
+    },
+    "MPI_Type_create_struct": {
+      "skip": true
+    },
+    "MPI_Type_create_resized": {
+      "skip": true
+    },
+    "MPI_Type_create_subarray": {
+      "skip": true
+    },
+    "MPI_Type_create_darray": {
+      "skip": true
+    },
     "MPI_Group_compare": {
       "skip": true
     },
@@ -144,6 +171,48 @@
       "skip": true
     },
     "MPI_Errhandler_get": {
+      "skip": true
+    },
+    "MPI_File_open": {
+      "skip": true
+    },
+    "MPI_File_close": {
+      "skip": true
+    },
+    "MPI_File_read": {
+      "skip": true
+    },
+    "MPI_File_write": {
+      "skip": true
+    },
+    "MPI_File_set_view": {
+      "skip": true
+    },
+    "MPI_File_get_view": {
+      "skip": true
+    },
+    "MPI_File_read_at": {
+      "skip": true
+    },
+    "MPI_File_write_at": {
+      "skip": true
+    },
+    "MPI_File_read_all": {
+      "skip": true
+    },
+    "MPI_File_write_all": {
+      "skip": true
+    },
+    "MPI_File_seek": {
+      "skip": true
+    },
+    "MPI_File_get_position": {
+      "skip": true
+    },
+    "MPI_File_get_size": {
+      "skip": true
+    },
+    "MPI_File_set_size": {
       "skip": true
     },
     "MPI_Bcast_r4": {
@@ -4423,6 +4492,10 @@
     }
   },
   "variables": {
+    "MPI_SUCCESS": {
+      "typename": "integer",
+      "parameter": true
+    },
     "MPI_COMM_WORLD": {
       "typename": "integer",
       "parameter": true
@@ -4436,6 +4509,14 @@
       "parameter": true
     },
     "MPI_PROC_NULL": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_ANY_SOURCE": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_ANY_TAG": {
       "typename": "integer",
       "parameter": true
     },
@@ -4566,6 +4647,34 @@
       "typename": "integer",
       "parameter": true
     },
+    "MPI_TAG_UB": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_BSEND_OVERHEAD": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_UNIVERSE_SIZE": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_APPNUM": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MAX_PROCESSOR_NAME": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MAX_PORT_NAME": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MAX_LIBRARY_VERSION_STRING": {
+      "typename": "integer",
+      "parameter": true
+    },
     "MPI_MAX_ERROR_STRING": {
       "typename": "integer",
       "parameter": true
@@ -4603,6 +4712,82 @@
       "parameter": true
     },
     "MPI_ERR_OTHER": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_ERR_IN_STATUS": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_ERR_PENDING": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_FILE_NULL": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_INFO_NULL": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MAX_DATAREP_STRING": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_RDONLY": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_WRONLY": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_RDWR": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_CREATE": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_EXCL": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_DELETE_ON_CLOSE": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_UNIQUE_OPEN": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_APPEND": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_SEQUENTIAL": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_SEEK_SET": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_SEEK_CUR": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_SEEK_END": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_DISPLACEMENT_CURRENT": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_OFFSET_KIND": {
       "typename": "integer",
       "parameter": true
     }
