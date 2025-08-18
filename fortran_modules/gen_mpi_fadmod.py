@@ -14,7 +14,7 @@ import json
 import re
 import tempfile
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Set
 
 from fautodiff import parser
 from fautodiff.code_tree import Declaration, Interface
@@ -36,7 +36,9 @@ def _find_count_arg(arg: str, args: List[str]) -> str | None:
     return None
 
 
-def _collect_routines(mod, routines: Dict[str, dict]) -> Dict[str, dict]:
+def _collect_routines(
+    mod, routines: Dict[str, dict], assumed_rank: Set[str]
+) -> Dict[str, dict]:
     for sub in mod.routines:
         name = sub.name
         if not name.startswith("mpi_"):
@@ -58,8 +60,11 @@ def _collect_routines(mod, routines: Dict[str, dict]) -> Dict[str, dict]:
             types = []
             kinds = []
             for arg in mpi_args:
+                arg_lower = arg.lower()
                 intents.append(decls.get(arg).intent if decls.get(arg) else None)
-                if decls.get(arg) and decls.get(arg).dims:
+                if arg_lower in assumed_rank:
+                    dim = None
+                elif decls.get(arg) and decls.get(arg).dims:
                     dim = []
                     for d in decls.get(arg).dims:
                         if d == "*":
@@ -212,9 +217,21 @@ for name, v in variables.items():
 
 def main() -> None:
     here = Path(__file__).resolve().parent
-    src = str(here / "mpi_ad.f90")
-    mod = parser.parse_file(src, search_dirs=[str(here)], decl_map=decl_map)[0]
-    routines = _collect_routines(mod, routines_mpi)
+    src_path = here / "mpi_ad.f90"
+    src_text = src_path.read_text()
+
+    assumed_rank: Set[str] = set()
+    for m in re.finditer(r"::\s*([A-Za-z0-9_,\s]+)\(\s*\.\.\s*\)", src_text):
+        names = m.group(1).split(",")
+        for name in names:
+            assumed_rank.add(name.strip().lower())
+
+    processed = re.sub(r"\(\s*\.\.\s*\)", "(:)", src_text)
+    with tempfile.NamedTemporaryFile("w", suffix=".f90") as tmp:
+        tmp.write(processed)
+        tmp.flush()
+        mod = parser.parse_file(tmp.name, search_dirs=[str(here)], decl_map=decl_map)[0]
+    routines = _collect_routines(mod, routines_mpi, assumed_rank)
     generics = _interfaces_to_generics(mod)
     data = {"routines": routines, "variables": variables, "generics": generics}
     print(json.dumps(data, indent=2))
