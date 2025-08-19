@@ -195,6 +195,10 @@ variables: Dict[str, dict] = {
     "MPI_STATUS_SIZE": {},
     "MPI_STATUS_IGNORE": {"dims": ["MPI_STATUS_SIZE"]},
     "MPI_STATUSES_IGNORE": {"dims": ["MPI_STATUS_SIZE", ":"]},
+    "MPI_IN_PLACE": {},
+    "MPI_BOTTOM": {},
+    "MPI_UNWEIGHTED": {},
+    "MPI_WEIGHTS_EMPTY": {},
     "MPI_REQUEST_NULL": {},
     "MPI_SUM": {},
     "MPI_MAX": {},
@@ -274,7 +278,7 @@ variables: Dict[str, dict] = {
     "MPI_DISPLACEMENT_CURRENT": {},
     "MPI_OFFSET_KIND": {},
 }
-common = {"var_type": VarType("integer"), "parameter": True}
+common = {"typename": "integer", "parameter": True}
 decl_map = {}
 for name, v in variables.items():
     v.update(common)
@@ -307,7 +311,7 @@ def main() -> None:
     routines = _collect_routines(mod, routines_mpi, assumed_rank)
     generics = _interfaces_to_generics(mod)
     data = {"routines": routines, "variables": variables, "generics": generics}
-    print(json.dumps(data, indent=2))
+    print(json.dumps(data, indent=2, default=str))
 
 
 if __name__ == "__main__":
