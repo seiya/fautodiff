@@ -121,8 +121,6 @@ from .operators import (
 )
 from .var_type import VarType
 
-_ZERO_ARG_INTRINSIC_TYPES = {"command_argument_count": VarType("integer")}
-
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
 
 if parse(getattr(fparser, "__version__", "0")) < Version("0.2.0"):
@@ -786,9 +784,10 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                 if not isinstance(arg, str)
             ]
             if name_l in INTRINSIC_FUNCTIONS or name_l in NONDIFF_INTRINSICS:
-                return OpFunc(
-                    name_l, args, var_type=_ZERO_ARG_INTRINSIC_TYPES.get(name_l)
+                var_type = INTRINSIC_FUNCTIONS.get(name_l) or NONDIFF_INTRINSICS.get(
+                    name_l
                 )
+                return OpFunc(name_l, args, var_type=var_type)
             return OpFuncUser(name_l, args)
 
     if isinstance(stmt, Fortran2003.Subscript_Triplet):
@@ -802,7 +801,8 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
             for arg in getattr(stmt.items[1], "items", [])
             if not isinstance(arg, str)
         ]
-        return OpFunc(name, args, var_type=_ZERO_ARG_INTRINSIC_TYPES.get(name))
+        var_type = INTRINSIC_FUNCTIONS.get(name) or NONDIFF_INTRINSICS.get(name)
+        return OpFunc(name, args, var_type=var_type)
 
     if isinstance(stmt, Fortran2003.Char_Literal_Constant):
         name = stmt.items[0]

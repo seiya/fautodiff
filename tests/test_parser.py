@@ -121,6 +121,42 @@ class TestParser(unittest.TestCase):
         self.assertIsInstance(cond.args[0], operators.OpFunc)
         self.assertEqual(cond.args[0].var_type.typename.lower(), "integer")
 
+    def test_intrinsic_function_type(self):
+        src = textwrap.dedent(
+            """\
+            module t
+            contains
+              subroutine foo(x)
+                real :: x
+                x = sin(x)
+              end subroutine foo
+            end module t
+            """
+        )
+        mod = parser.parse_src(src)[0]
+        r = mod.routines[0]
+        assign = r.content.first()
+        self.assertIsInstance(assign.rhs, operators.OpFunc)
+        self.assertEqual(assign.rhs.var_type.typename.lower(), "real")
+
+    def test_nondiff_intrinsic_function_type(self):
+        src = textwrap.dedent(
+            """\
+            module t
+            contains
+              subroutine foo()
+                integer :: x(3), n
+                n = size(x)
+              end subroutine foo
+            end module t
+            """
+        )
+        mod = parser.parse_src(src)[0]
+        r = mod.routines[0]
+        assign = r.content.first()
+        self.assertIsInstance(assign.rhs, operators.OpFunc)
+        self.assertEqual(assign.rhs.var_type.typename.lower(), "integer")
+
     def test_parse_function_call_assignment_in_function(self):
         src = textwrap.dedent(
             """\
