@@ -1609,8 +1609,10 @@ def _generate_ad_subroutine(
             base_decl = routine_org.find_decl(ref)
 
         allocatable = False
+        pointer = False
         if base_decl is not None:
             allocatable = base_decl.allocatable
+            pointer = base_decl.pointer
             if (
                 allocatable and base_decl.declared_in != "routine"
             ):  # module or use variable
@@ -1636,7 +1638,11 @@ def _generate_ad_subroutine(
         else:
             dims = var.dims
 
-        if dims is not None and var.reference is not None:
+        if (
+            dims is not None
+            and var.reference is not None
+            and not (allocatable or pointer)
+        ):
             dims_new = []
             for i, dim in enumerate(dims):
                 if dim.endswith(":"):
@@ -1689,7 +1695,7 @@ def _generate_ad_subroutine(
                 parameter=base_decl.parameter if base_decl else False,
                 init_val=base_decl.init_val if base_decl else None,
                 allocatable=allocatable,
-                pointer=base_decl.pointer if base_decl else False,
+                pointer=pointer,
                 optional=base_decl.optional if base_decl else False,
                 target=base_decl.target if base_decl else False,
                 declared_in="routine",
