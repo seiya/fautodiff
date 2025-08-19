@@ -18,6 +18,7 @@ from typing import Dict, List, Set
 
 from fautodiff import parser
 from fautodiff.code_tree import Declaration, Interface
+from fautodiff.var_type import VarType
 
 _MODE_RE = re.compile(r"mpi_(.*?)(_fwd_rev_ad|_fwd_ad|_rev_ad)(?:_(.*))?$", re.I)
 
@@ -273,17 +274,17 @@ variables: Dict[str, dict] = {
     "MPI_DISPLACEMENT_CURRENT": {},
     "MPI_OFFSET_KIND": {},
 }
-common = {"typename": "integer", "parameter": True}
+common = {"var_type": VarType("integer"), "parameter": True}
 decl_map = {}
 for name, v in variables.items():
     v.update(common)
     dims = tuple(v.get("dims")) if "dims" in v else None
     decl_map[name] = Declaration(
-        name=name, typename="integer", dims=dims, parameter=True
+        name=name, var_type=VarType("integer"), dims=dims, parameter=True
     )
 # iso_c_binding declarations used in mpi_ad.f90
 decl_map["c_null_ptr"] = Declaration(
-    name="c_null_ptr", typename="type(c_ptr)", parameter=True
+    name="c_null_ptr", var_type=VarType("type(c_ptr)"), parameter=True
 )
 
 

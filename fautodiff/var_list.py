@@ -254,8 +254,7 @@ class VarList:
                 return OpVar(
                     var.name,
                     index=index,
-                    kind=var.var_type.kind if var.var_type else None,
-                    typename=var.var_type.typename if var.var_type else None,
+                    var_type=var.var_type.copy() if var.var_type else None,
                     ad_target=var.ad_target,
                     is_constant=var.is_constant,
                     ref_var=ref_var,

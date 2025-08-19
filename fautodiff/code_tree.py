@@ -493,41 +493,30 @@ class Node:
         argkinds: List[Optional[str]] = []
         argdims: List[Optional[int]] = []
         for arg in routine.args:
-            if isinstance(arg, OpVar):
-                argtypes.append(arg.var_type.typename)
-                argkinds.append(getattr(arg, "kind_val", None) or arg.kind)
-                if arg.dims:
-                    if arg.index:
-                        if len(arg.index) != len(arg.dims):
-                            raise RuntimeError(
-                                f"rank is not consistent: {arg.index} {arg.dims}"
-                            )
-                        ndims = 0
-                        for idx in arg.index:
-                            if idx is None or isinstance(idx, OpRange):
-                                ndims += 1
-                        argdims.append(ndims if ndims > 0 else None)
-                    else:
-                        argdims.append(len(arg.dims))
+            if not isinstance(arg, Operator):
+                raise ValueError(f"Unsupported argument type: {type(arg)}")
+            argtypes.append(arg.var_type.typename)
+            kind = (
+                arg.var_type.kind_val
+                if arg.var_type.kind_val is not None
+                else arg.var_type.kind
+            )
+            argkinds.append(kind)
+            if isinstance(arg, OpVar) and arg.dims:
+                if arg.index:
+                    if len(arg.index) != len(arg.dims):
+                        raise RuntimeError(
+                            f"rank is not consistent: {arg.index} {arg.dims}"
+                        )
+                    ndims = 0
+                    for idx in arg.index:
+                        if idx is None or isinstance(idx, OpRange):
+                            ndims += 1
+                    argdims.append(ndims if ndims > 0 else None)
                 else:
-                    argdims.append(None)
-                continue
-            if isinstance(arg, OpLeaf):
-                argkinds.append(arg.kind)
+                    argdims.append(len(arg.dims))
+            else:
                 argdims.append(None)
-                if isinstance(arg, OpReal):
-                    argtypes.append("real")
-                    continue
-                if isinstance(arg, OpInt):
-                    argtypes.append("integer")
-                    continue
-                if isinstance(arg, OpChar):
-                    argtypes.append("character")
-                    continue
-                if isinstance(arg, (OpTrue, OpFalse)):
-                    argtypes.append("logical")
-                    continue
-            raise ValueError(f"Unsupported argument type: {type(arg)}")
 
         if arg_info is None and generic_map and name in generic_map:
             for cand in generic_map[name]:
@@ -593,13 +582,15 @@ class Node:
                 name = self._save_var_name(
                     f"{ufunc.name}{n}", self.get_id(), no_suffix=True
                 )
-                result = OpVar(name, typename=arg_info["type"][-1])
+                result = OpVar(name, var_type=VarType(arg_info["type"][-1]))
                 saved_vars.append(result)
                 saved_vars.append(
                     OpVar(
                         f"{name}{AD_SUFFIX}",
-                        typename=arg_info["type"][-1],
-                        kind=arg_info["kind"][-1],
+                        var_type=VarType(
+                            arg_info["type"][-1],
+                            kind=arg_info["kind"][-1],
+                        ),
                         dims=arg_info["dims"][-1],
                     )
                 )
@@ -700,13 +691,15 @@ class Node:
                 name = self._save_var_name(
                     f"{ufunc.name}{n}", self.get_id(), no_suffix=True
                 )
-                result = OpVar(name, typename=arg_info["type"][-1])
+                result = OpVar(name, var_type=VarType(arg_info["type"][-1]))
                 saved_vars.append(result)
                 saved_vars.append(
                     OpVar(
                         f"{name}{AD_SUFFIX}",
-                        typename=arg_info["type"][-1],
-                        kind=arg_info["kind"][-1],
+                        var_type=VarType(
+                            arg_info["type"][-1],
+                            kind=arg_info["kind"][-1],
+                        ),
                         dims=arg_info["dims"][-1],
                     )
                 )
@@ -797,8 +790,10 @@ class Node:
             if flag:
                 tmp_var = OpVar(
                     self._save_var_name("tmp", self.get_id()),
-                    typename=grad_lhs.var_type.typename,
-                    kind=grad_lhs.kind,
+                    var_type=VarType(
+                        grad_lhs.var_type.typename,
+                        kind=grad_lhs.var_type.kind,
+                    ),
                 )
                 saved_vars.append(tmp_var)
                 lhs_index: List[Operator] = []
@@ -822,7 +817,10 @@ class Node:
                         ldim1 = OpFunc(
                             "ubound", [grad_lhs.change_index(None), OpInt(dim + 1)]
                         )
-                    idx_var = OpVar(f"n{dim+1}_{self.get_id()}_ad", typename="integer")
+                    idx_var = OpVar(
+                        f"n{dim+1}_{self.get_id()}_ad",
+                        var_type=VarType("integer"),
+                    )
                     saved_vars.append(idx_var)
                     index_vars.append((idx_var, (ldim0, ldim1)))
                     lhs_index.append(idx_var)
@@ -1781,7 +1779,9 @@ class ExitCycle(Node):
         return nodes
 
     def flag(self) -> OpVar:
-        return OpVar(f"{self.name}_flag_{self.get_id()}_ad", typename="logical")
+        return OpVar(
+            f"{self.name}_flag_{self.get_id()}_ad", var_type=VarType("logical")
+        )
 
 
 @dataclass
@@ -1892,7 +1892,9 @@ class ReturnStmt(Node):
         return iter(())
 
     def flag(self) -> OpVar:
-        return OpVar(f"{self.name}_flag_{self.get_id()}_ad", typename="logical")
+        return OpVar(
+            f"{self.name}_flag_{self.get_id()}_ad", var_type=VarType("logical")
+        )
 
 
 @dataclass
@@ -2162,15 +2164,17 @@ class CallStatement(Node):
                 name = self._save_var_name(
                     f"{self.name}_arg{i}", self.get_id(), no_suffix=True
                 )
-                tmp = OpVar(name, typename="real")
+                tmp = OpVar(name, var_type=VarType("real"))
                 tmp_vars.append((tmp, arg))
                 args_new.append(tmp)
                 saved_vars.append(tmp)
                 saved_vars.append(
                     OpVar(
                         f"{tmp.name}{AD_SUFFIX}",
-                        typename="real",
-                        kind=arg_info["kind"][i],
+                        var_type=VarType(
+                            "real",
+                            kind=arg_info["kind"][i],
+                        ),
                         dims=arg_info["dims"][i],
                     )
                 )
@@ -2498,12 +2502,8 @@ class Routine(Node):
             intent = "out"
         return OpVar(
             name,
-            kind=decl.var_type.kind,
-            kind_val=decl.var_type.kind_val,
-            kind_keyword=decl.var_type.kind_keyword,
-            char_len=decl.var_type.char_len,
+            var_type=decl.var_type.copy(),
             dims=decl.dims,
-            typename=decl.var_type.typename,
             intent=intent,
             ad_target=None,
             is_constant=decl.parameter or getattr(decl, "constant", False),
@@ -2644,12 +2644,7 @@ class Declaration(Node):
     def __init__(
         self,
         name: str,
-        typename: Optional[str] = None,
-        kind: Optional[str] = None,
-        kind_val: Optional[str] = None,
-        kind_keyword: bool = False,
-        char_len: Optional[str] = None,
-        var_type: Optional[VarType] = None,
+        var_type: VarType,
         dims: Optional[Union[Tuple[str], str]] = None,
         intent: Optional[str] = None,
         parameter: bool = False,
@@ -2667,16 +2662,6 @@ class Declaration(Node):
         type_def: Optional[TypeDef] = None,
         declared_in: Optional[str] = None,
     ):
-        if var_type is None:
-            if typename is None:
-                raise ValueError("typename or var_type must be provided")
-            var_type = VarType(
-                typename=typename,
-                kind=kind,
-                kind_val=kind_val,
-                kind_keyword=kind_keyword,
-                char_len=char_len,
-            )
         self.name = name
         self.var_type = var_type
         self.dims = dims
@@ -2883,8 +2868,7 @@ class Declaration(Node):
                 vars.push(
                     OpVar(
                         self.name,
-                        typename=self.var_type.typename,
-                        kind=self.var_type.kind,
+                        var_type=self.var_type.copy(),
                         is_constant=self.parameter or self.constant,
                         allocatable=self.allocatable,
                         pointer=self.pointer,
@@ -2928,9 +2912,11 @@ class Declaration(Node):
         )
         decl = Declaration(
             name=name,
-            typename=typename,
-            kind=self.var_type.kind,
-            kind_val=self.var_type.kind_val,
+            var_type=VarType(
+                typename,
+                kind=self.var_type.kind,
+                kind_val=self.var_type.kind_val,
+            ),
             dims=self.dims,
             init_val=init_val,
             allocatable=self.allocatable,
@@ -3362,8 +3348,7 @@ class SaveAssignment(Node):
                 self._save_var_name(name, self.id, pushpop=self.pushpop),
                 index=self.var.concat_index(),
                 dims=dims,
-                typename=self.var.var_type.typename if self.var.var_type else None,
-                kind=self.var.var_type.kind if self.var.var_type else None,
+                var_type=self.var.var_type.copy() if self.var.var_type else None,
                 ad_target=self.var.ad_target,
                 is_constant=self.var.is_constant,
                 reference=self.var,
@@ -3513,7 +3498,7 @@ class PushPop(SaveAssignment):
             return "fautodiff_stack_p"
         typ = self.var.var_type.typename if self.var.var_type else None
         kind = self.var.var_type.kind if self.var.var_type else None
-        if typ is None:
+        if typ is None or typ == "unknown":
             p = self.parent
             while p is not None and not isinstance(p, Routine):
                 p = p.parent
@@ -4061,8 +4046,7 @@ class PointerClear(Node):
                 if self.previous is None:
                     tmpvar = OpVar(
                         self._save_var_name(var.name, id),
-                        typename=typename,
-                        kind=kind,
+                        var_type=VarType(typename, kind=kind),
                         index=index,
                         dims=dims,
                         pointer=True,
@@ -4075,8 +4059,7 @@ class PointerClear(Node):
                     saved_vars.append(tmpvar)
                     tmpvar_ad = OpVar(
                         self._save_var_name(var_ad.name, id),
-                        typename=typename,
-                        kind=kind,
+                        var_type=VarType(typename, kind=kind),
                         index=index,
                         dims=dims,
                         pointer=True,
@@ -4667,7 +4650,9 @@ class DoAbst(Node):
                 self.parent.insert_before(self.get_id(), save_false)
                 save_true = PushPopL(".true.")
                 self._body.insert_begin(save_true)
-                cond = OpFuncUser("fautodiff_stack_l%get", [])
+                cond = OpFuncUser(
+                    "fautodiff_stack_l%get", [], var_type=VarType("logical")
+                )
 
         body = Block(nodes)
         if self.do:
@@ -4903,7 +4888,7 @@ class DoLoop(DoAbst):
         return [self]
 
     def exit_do_start(self) -> OpVar:
-        return OpVar(f"exit_do_start_{self.get_id()}_ad", typename="integer")
+        return OpVar(f"exit_do_start_{self.get_id()}_ad", var_type=VarType("integer"))
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent

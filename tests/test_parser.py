@@ -103,6 +103,85 @@ class TestParser(unittest.TestCase):
         self.assertIsInstance(stmt.rhs, operators.OpFuncUser)
         self.assertEqual(stmt.rhs.name, "foo")
 
+    def test_command_argument_count(self):
+        src = textwrap.dedent(
+            """\
+            module t
+            contains
+              subroutine foo()
+                if (command_argument_count() > 0) then
+                end if
+              end subroutine foo
+            end module t
+            """
+        )
+        mod = parser.parse_src(src)[0]
+        r = mod.routines[0]
+        cond = r.content.first().cond_blocks[0][0]
+        self.assertIsInstance(cond.args[0], operators.OpFunc)
+        self.assertEqual(cond.args[0].var_type.typename.lower(), "integer")
+
+    def test_intrinsic_function_type(self):
+        src = textwrap.dedent(
+            """\
+            module t
+            contains
+              subroutine foo(x)
+                real :: x
+                x = sin(x)
+              end subroutine foo
+            end module t
+            """
+        )
+        mod = parser.parse_src(src)[0]
+        r = mod.routines[0]
+        assign = r.content.first()
+        self.assertIsInstance(assign.rhs, operators.OpFunc)
+        self.assertEqual(assign.rhs.var_type.typename.lower(), "real")
+
+    def test_nondiff_intrinsic_function_type(self):
+        src = textwrap.dedent(
+            """\
+            module t
+            contains
+              subroutine foo()
+                integer :: x(3), n
+                n = size(x)
+              end subroutine foo
+            end module t
+            """
+        )
+        mod = parser.parse_src(src)[0]
+        r = mod.routines[0]
+        assign = r.content.first()
+        self.assertIsInstance(assign.rhs, operators.OpFunc)
+        self.assertEqual(assign.rhs.var_type.typename.lower(), "integer")
+
+    def test_intrinsic_function_type_from_args(self):
+        src = textwrap.dedent(
+            """\
+            module t
+            contains
+              subroutine foo(x)
+                integer :: x
+                x = min(1, x)
+              end subroutine foo
+              subroutine bar(y)
+                real :: y
+                y = min(1.0, y)
+              end subroutine bar
+            end module t
+            """
+        )
+        mod = parser.parse_src(src)[0]
+        r_int, r_real = mod.routines
+        assign_int = r_int.content.first()
+        assign_real = r_real.content.first()
+        self.assertIsInstance(assign_int.rhs, operators.OpFunc)
+        self.assertEqual(assign_int.rhs.var_type.typename.lower(), "integer")
+        self.assertIsInstance(assign_real.rhs, operators.OpFunc)
+        self.assertEqual(assign_real.rhs.var_type.typename.lower(), "real")
+
     def test_parse_function_call_assignment_in_function(self):
         src = textwrap.dedent(
             """\

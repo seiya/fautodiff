@@ -286,6 +286,7 @@ class Operator:
     """Abstract fortran oprations."""
 
     args: Optional[List[Optional[Operator]]] = None
+    var_type: Optional[VarType] = None
     macro_name: Optional[str] = None
     PRIORITY: ClassVar[int] = -999
 
@@ -293,6 +294,13 @@ class Operator:
         """Ensure the argument list is stored as a Python list."""
         if self.args is not None and not isinstance(self.args, list):
             raise ValueError(f"args must be a list: {type(self.args)}")
+        if self.var_type is None and self.args:
+            for arg in self.args:
+                if isinstance(arg, Operator):
+                    self.var_type = arg.var_type.copy()
+                    break
+        if self.var_type is None:
+            raise ValueError("var_type must not be None")
         return None
 
     def _paren(self, arg: Operator, eq: bool = False) -> str:
@@ -839,7 +847,11 @@ class OpInt(OpNum):
     def __init__(
         self, val: int, kind: Optional[str] = None, target: Optional[OpVar] = None
     ):
-        super().__init__(args=[], kind=kind)
+        super().__init__(
+            args=[],
+            var_type=VarType("integer", kind=kind),
+            kind=kind,
+        )
         if val < 0:
             raise ValueError(f"val must be >= 0: {val}")
         self.val = val
@@ -902,7 +914,7 @@ class OpChar(OpLeaf):
     name: str = field(default="")
 
     def __init__(self, name: str):
-        super().__init__(args=[])
+        super().__init__(args=[], var_type=VarType("character"))
         self.name = name
 
     def __str__(self) -> str:
@@ -914,7 +926,7 @@ class OpChar(OpLeaf):
 @dataclass
 class OpTrue(OpLeaf):
     def __init__(self):
-        super().__init__(args=[])
+        super().__init__(args=[], var_type=VarType("logical"))
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -925,7 +937,7 @@ class OpTrue(OpLeaf):
 @dataclass
 class OpFalse(OpLeaf):
     def __init__(self):
-        super().__init__(args=[])
+        super().__init__(args=[], var_type=VarType("logical"))
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -940,7 +952,11 @@ class OpReal(OpNum):
     expo: int = field(default=0)
 
     def __init__(self, val, kind=None, expo=None):
-        super().__init__(args=[], kind=kind)
+        super().__init__(
+            args=[],
+            var_type=VarType("real", kind=kind),
+            kind=kind,
+        )
         self.val = val
 
     def __str__(self) -> str:
@@ -966,7 +982,11 @@ class OpComplex(OpNum):
     imag: Operator = field(default=None)
 
     def __init__(self, real: Operator, imag: Operator, kind: Optional[str] = None):
-        super().__init__(args=[real, imag], kind=kind)
+        super().__init__(
+            args=[real, imag],
+            var_type=VarType("complex", kind=kind),
+            kind=kind,
+        )
         self.real = real
         self.imag = imag
 
@@ -981,7 +1001,6 @@ class OpVar(OpLeaf):
 
     name: str = field(default="")
     index: Optional[AryIndex] = None
-    var_type: Optional[VarType] = None
     dims: Optional[Tuple[str]] = field(repr=False, default=None)
     intent: Optional[str] = field(default=None, repr=False)
     ad_target: Optional[bool] = field(default=None, repr=False)
@@ -1003,14 +1022,9 @@ class OpVar(OpLeaf):
         self,
         name: str,
         index: Optional[AryIndex] = None,
-        kind: Optional[str] = None,
-        kind_val: Optional[str] = None,
-        kind_keyword: Optional[bool] = None,
-        char_len: Optional[str] = None,
         var_type: Optional[VarType] = None,
         dims: Optional[Tuple[str]] = None,
         reference: Optional[OpVar] = None,
-        typename: Optional[str] = None,
         intent: Optional[str] = None,
         ad_target: Optional[bool] = None,
         is_constant: Optional[bool] = None,
@@ -1025,7 +1039,9 @@ class OpVar(OpLeaf):
         declared_in: Optional[str] = None,
         ref_var: Optional[OpVar] = None,
     ):
-        super().__init__(args=[])
+        if var_type is None:
+            var_type = VarType("unknown")
+        super().__init__(args=[], var_type=var_type)
         if not isinstance(name, str):
             raise ValueError(f"name must be str: {type(name)}")
         if not _NAME_RE.fullmatch(name):
@@ -1034,15 +1050,6 @@ class OpVar(OpLeaf):
         if index is not None and not isinstance(index, AryIndex):
             index = AryIndex(index)
         self.index = index
-        if var_type is None and (typename is not None or kind is not None):
-            var_type = VarType(
-                typename=typename or "",
-                kind=kind,
-                kind_val=kind_val,
-                kind_keyword=bool(kind_keyword),
-                char_len=char_len,
-            )
-        self.var_type = var_type
         if self.var_type is not None:
             self.kind = self.var_type.kind
         self.dims = dims
@@ -1188,13 +1195,9 @@ class OpVar(OpLeaf):
         return OpVar(
             name=self.name,
             index=index,
-            kind=self.var_type.kind if self.var_type else None,
-            kind_val=self.var_type.kind_val if self.var_type else None,
-            kind_keyword=self.var_type.kind_keyword if self.var_type else None,
-            char_len=self.var_type.char_len if self.var_type else None,
+            var_type=self.var_type.copy() if self.var_type else None,
             dims=self.dims,
             reference=self.reference,
-            typename=self.var_type.typename if self.var_type else None,
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,
@@ -1224,13 +1227,9 @@ class OpVar(OpLeaf):
         return OpVar(
             name,
             index=index,
-            kind=self.var_type.kind if self.var_type else None,
-            kind_val=self.var_type.kind_val if self.var_type else None,
-            kind_keyword=self.var_type.kind_keyword if self.var_type else None,
-            char_len=self.var_type.char_len if self.var_type else None,
+            var_type=self.var_type.copy() if self.var_type else None,
             dims=self.dims,
             reference=self.reference,
-            typename=self.var_type.typename if self.var_type else None,
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,
@@ -1276,13 +1275,9 @@ class OpVar(OpLeaf):
         return OpVar(
             name,
             index=index,
-            kind=self.var_type.kind if self.var_type else None,
-            kind_val=self.var_type.kind_val if self.var_type else None,
-            kind_keyword=self.var_type.kind_keyword if self.var_type else None,
-            char_len=self.var_type.char_len if self.var_type else None,
+            var_type=self.var_type.copy() if self.var_type else None,
             dims=self.dims,
             reference=self.reference,
-            typename=self.var_type.typename if self.var_type else None,
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,
@@ -1574,7 +1569,7 @@ class OpLogic(OpBinary):
     PRIORITY: ClassVar[int] = 6
 
     def __init__(self, op: str, args: List[Operator]):
-        super().__init__(args=args)
+        super().__init__(args=args, var_type=VarType("logical"))
         if not op:
             raise ValueError("op should not be empty")
         self.op = op
@@ -1595,39 +1590,42 @@ class OpLogic(OpBinary):
 
 
 INTRINSIC_FUNCTIONS = {
-    "abs",
-    "sqrt",
-    "exp",
-    "log",
-    "log10",
-    "sin",
-    "cos",
-    "tan",
-    "asin",
-    "acos",
-    "atan",
-    "sinh",
-    "cosh",
-    "tanh",
-    "asinh",
-    "acosh",
-    "atanh",
-    "erf",
-    "erfc",
-    "real",
-    "dble",
-    "aimag",
-    "conjg",
-    "cmplx",
+    "abs": VarType("real"),
+    "sqrt": VarType("real"),
+    "exp": VarType("real"),
+    "log": VarType("real"),
+    "log10": VarType("real"),
+    "sin": VarType("real"),
+    "cos": VarType("real"),
+    "tan": VarType("real"),
+    "asin": VarType("real"),
+    "acos": VarType("real"),
+    "atan": VarType("real"),
+    "sinh": VarType("real"),
+    "cosh": VarType("real"),
+    "tanh": VarType("real"),
+    "asinh": VarType("real"),
+    "acosh": VarType("real"),
+    "atanh": VarType("real"),
+    "erf": VarType("real"),
+    "erfc": VarType("real"),
+    "real": VarType("real"),
+    "dble": VarType("real"),
+    "aimag": VarType("real"),
+    "conjg": VarType("complex"),
+    "cmplx": VarType("complex"),
+    "atan2": VarType("real"),
+    "transpose": VarType("unknown"),
+    "cshift": VarType("unknown"),
+    "dot_product": VarType("real"),
+    "matmul": VarType("unknown"),
+}
+
+ARG_TYPE_INTRINSICS = {
     "mod",
     "min",
     "max",
     "sign",
-    "atan2",
-    "transpose",
-    "cshift",
-    "dot_product",
-    "matmul",
     "sum",
     "product",
     "minval",
@@ -1635,26 +1633,27 @@ INTRINSIC_FUNCTIONS = {
 }
 
 NONDIFF_INTRINSICS = {
-    "len",
-    "len_trim",
-    "adjustl",
-    "index",
-    "lbound",
-    "ubound",
-    "size",
-    "epsilon",
-    "huge",
-    "tiny",
-    "ichar",
-    "achar",
-    "int",
-    "nint",
-    "allocated",
-    "all",
-    "any",
-    "count",
-    "maxloc",
-    "minloc",
+    "len": VarType("integer"),
+    "len_trim": VarType("integer"),
+    "adjustl": VarType("character"),
+    "index": VarType("integer"),
+    "lbound": VarType("integer"),
+    "ubound": VarType("integer"),
+    "size": VarType("integer"),
+    "epsilon": VarType("real"),
+    "huge": VarType("real"),
+    "tiny": VarType("real"),
+    "ichar": VarType("integer"),
+    "achar": VarType("character"),
+    "int": VarType("integer"),
+    "nint": VarType("integer"),
+    "allocated": VarType("logical"),
+    "all": VarType("logical"),
+    "any": VarType("logical"),
+    "command_argument_count": VarType("integer"),
+    "count": VarType("integer"),
+    "maxloc": VarType("integer"),
+    "minloc": VarType("integer"),
 }
 
 
@@ -1664,8 +1663,10 @@ class OpFunc(Operator):
     name: str = field(default="")
     PRIORITY: ClassVar[int] = 1
 
-    def __init__(self, name: str, args: List[Operator]):
-        super().__init__(args=args)
+    def __init__(
+        self, name: str, args: List[Operator], var_type: Optional[VarType] = None
+    ):
+        super().__init__(args=args, var_type=var_type)
         if not name:
             raise ValueError("name should not be empty")
         if self.args is None:
@@ -1876,11 +1877,18 @@ class OpFuncUser(Operator):
     intents: Optional[List[str]] = field(default=None)
     PRIORITY: ClassVar[int] = 1
 
-    def __init__(self, name: str, args: List[Operator]):
-        super().__init__(args=args)
+    def __init__(
+        self,
+        name: str,
+        args: List[Operator],
+        intents: Optional[List[str]] = None,
+        var_type: Optional[VarType] = None,
+    ):
+        super().__init__(args=args, var_type=var_type)
         if not name:
             raise ValueError("name should not be empty")
         self.name = name
+        self.intents = intents
         if self.args is None:
             self.args = []
         else:

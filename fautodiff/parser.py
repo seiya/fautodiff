@@ -94,6 +94,7 @@ from .code_tree import (
     WhereBlock,
 )
 from .operators import (
+    ARG_TYPE_INTRINSICS,
     INTRINSIC_FUNCTIONS,
     NONDIFF_INTRINSICS,
     AryIndex,
@@ -119,6 +120,7 @@ from .operators import (
     OpType,
     OpVar,
 )
+from .var_type import VarType
 
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
 
@@ -709,12 +711,15 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                     if kind_val is None:
                         kind_val = _eval_iso_kind(ref.init_val) or ref.init_val
 
-        return OpVar(
-            name=name,
-            typename=decl.var_type.typename,
+        vt = VarType(
+            decl.var_type.typename,
             kind=kind,
             kind_val=kind_val,
             char_len=decl.var_type.char_len,
+        )
+        return OpVar(
+            name=name,
+            var_type=vt,
             dims=decl.dims,
             ad_target=decl.ad_target(),
             is_constant=decl.parameter or getattr(decl, "constant", False),
@@ -763,10 +768,7 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
             return OpVar(
                 name=name,
                 index=index,
-                typename=decl.var_type.typename,
-                kind=decl.var_type.kind,
-                kind_val=decl.var_type.kind_val,
-                char_len=decl.var_type.char_len,
+                var_type=decl.var_type.copy(),
                 dims=decl.dims,
                 ad_target=decl.ad_target(),
                 is_constant=decl.parameter or getattr(decl, "constant", False),
@@ -782,8 +784,16 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                 for arg in getattr(stmt.items[1], "items", [])
                 if not isinstance(arg, str)
             ]
+            if name_l in ARG_TYPE_INTRINSICS:
+                if not args:
+                    raise ValueError(f"{name_l} requires at least one argument")
+                var_type = args[0].var_type.copy()
+                return OpFunc(name_l, args, var_type=var_type)
             if name_l in INTRINSIC_FUNCTIONS or name_l in NONDIFF_INTRINSICS:
-                return OpFunc(name_l, args)
+                var_type = INTRINSIC_FUNCTIONS.get(name_l) or NONDIFF_INTRINSICS.get(
+                    name_l
+                )
+                return OpFunc(name_l, args, var_type=var_type)
             return OpFuncUser(name_l, args)
 
     if isinstance(stmt, Fortran2003.Subscript_Triplet):
@@ -797,7 +807,13 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
             for arg in getattr(stmt.items[1], "items", [])
             if not isinstance(arg, str)
         ]
-        return OpFunc(name, args)
+        if name in ARG_TYPE_INTRINSICS:
+            if not args:
+                raise ValueError(f"{name} requires at least one argument")
+            var_type = args[0].var_type.copy()
+        else:
+            var_type = INTRINSIC_FUNCTIONS.get(name) or NONDIFF_INTRINSICS.get(name)
+        return OpFunc(name, args, var_type=var_type)
 
     if isinstance(stmt, Fortran2003.Char_Literal_Constant):
         name = stmt.items[0]
@@ -886,7 +902,8 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Array_Constructor):
         elms = [_stmt2op(elm, decl_map, type_map) for elm in stmt.items[1].items]
-        return OpAry(elms)
+        vt = elms[0].var_type if elms else VarType("real")
+        return OpAry(elms, var_type=vt)
 
     if isinstance(stmt, Fortran2003.Data_Ref):
         ref = _stmt2op(stmt.items[0], decl_map, type_map)
@@ -1184,11 +1201,13 @@ def _parse_decl_stmt(
         decls.append(
             Declaration(
                 name=name,
-                typename=base_type.lower(),
-                kind=kind,
-                kind_val=kind_val,
-                kind_keyword=kind_keyword,
-                char_len=char_len,
+                var_type=VarType(
+                    base_type.lower(),
+                    kind=kind,
+                    kind_val=kind_val,
+                    kind_keyword=kind_keyword,
+                    char_len=char_len,
+                ),
                 dims=dims,
                 intent=intent,
                 parameter=parameter,
@@ -1557,8 +1576,7 @@ def _search_use(
             if only is None or vname in only:
                 decl_map[vname] = Declaration(
                     vname,
-                    info["typename"],
-                    info.get("kind"),
+                    var_type=VarType(info["typename"], kind=info.get("kind")),
                     dims=(
                         tuple(info["dims"]) if info.get("dims") is not None else None
                     ),
