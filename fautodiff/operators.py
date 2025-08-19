@@ -294,6 +294,13 @@ class Operator:
         """Ensure the argument list is stored as a Python list."""
         if self.args is not None and not isinstance(self.args, list):
             raise ValueError(f"args must be a list: {type(self.args)}")
+        if self.var_type is None and self.args:
+            for arg in self.args:
+                if isinstance(arg, Operator):
+                    self.var_type = arg.var_type.copy()
+                    break
+        if self.var_type is None:
+            raise ValueError("var_type must not be None")
         return None
 
     def _paren(self, arg: Operator, eq: bool = False) -> str:
@@ -840,7 +847,11 @@ class OpInt(OpNum):
     def __init__(
         self, val: int, kind: Optional[str] = None, target: Optional[OpVar] = None
     ):
-        super().__init__(args=[], kind=kind)
+        super().__init__(
+            args=[],
+            var_type=VarType("integer", kind=kind),
+            kind=kind,
+        )
         if val < 0:
             raise ValueError(f"val must be >= 0: {val}")
         self.val = val
@@ -903,7 +914,7 @@ class OpChar(OpLeaf):
     name: str = field(default="")
 
     def __init__(self, name: str):
-        super().__init__(args=[])
+        super().__init__(args=[], var_type=VarType("character"))
         self.name = name
 
     def __str__(self) -> str:
@@ -915,7 +926,7 @@ class OpChar(OpLeaf):
 @dataclass
 class OpTrue(OpLeaf):
     def __init__(self):
-        super().__init__(args=[])
+        super().__init__(args=[], var_type=VarType("logical"))
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -926,7 +937,7 @@ class OpTrue(OpLeaf):
 @dataclass
 class OpFalse(OpLeaf):
     def __init__(self):
-        super().__init__(args=[])
+        super().__init__(args=[], var_type=VarType("logical"))
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -941,7 +952,11 @@ class OpReal(OpNum):
     expo: int = field(default=0)
 
     def __init__(self, val, kind=None, expo=None):
-        super().__init__(args=[], kind=kind)
+        super().__init__(
+            args=[],
+            var_type=VarType("real", kind=kind),
+            kind=kind,
+        )
         self.val = val
 
     def __str__(self) -> str:
@@ -967,7 +982,11 @@ class OpComplex(OpNum):
     imag: Operator = field(default=None)
 
     def __init__(self, real: Operator, imag: Operator, kind: Optional[str] = None):
-        super().__init__(args=[real, imag], kind=kind)
+        super().__init__(
+            args=[real, imag],
+            var_type=VarType("complex", kind=kind),
+            kind=kind,
+        )
         self.real = real
         self.imag = imag
 
@@ -1020,6 +1039,8 @@ class OpVar(OpLeaf):
         declared_in: Optional[str] = None,
         ref_var: Optional[OpVar] = None,
     ):
+        if var_type is None:
+            var_type = VarType("unknown")
         super().__init__(args=[], var_type=var_type)
         if not isinstance(name, str):
             raise ValueError(f"name must be str: {type(name)}")
@@ -1548,7 +1569,7 @@ class OpLogic(OpBinary):
     PRIORITY: ClassVar[int] = 6
 
     def __init__(self, op: str, args: List[Operator]):
-        super().__init__(args=args)
+        super().__init__(args=args, var_type=VarType("logical"))
         if not op:
             raise ValueError("op should not be empty")
         self.op = op
@@ -1850,11 +1871,18 @@ class OpFuncUser(Operator):
     intents: Optional[List[str]] = field(default=None)
     PRIORITY: ClassVar[int] = 1
 
-    def __init__(self, name: str, args: List[Operator]):
-        super().__init__(args=args)
+    def __init__(
+        self,
+        name: str,
+        args: List[Operator],
+        intents: Optional[List[str]] = None,
+        var_type: Optional[VarType] = None,
+    ):
+        super().__init__(args=args, var_type=var_type)
         if not name:
             raise ValueError("name should not be empty")
         self.name = name
+        self.intents = intents
         if self.args is None:
             self.args = []
         else:

@@ -887,7 +887,8 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
 
     if isinstance(stmt, Fortran2003.Array_Constructor):
         elms = [_stmt2op(elm, decl_map, type_map) for elm in stmt.items[1].items]
-        return OpAry(elms)
+        vt = elms[0].var_type if elms else VarType("real")
+        return OpAry(elms, var_type=vt)
 
     if isinstance(stmt, Fortran2003.Data_Ref):
         ref = _stmt2op(stmt.items[0], decl_map, type_map)

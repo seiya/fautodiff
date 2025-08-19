@@ -493,41 +493,30 @@ class Node:
         argkinds: List[Optional[str]] = []
         argdims: List[Optional[int]] = []
         for arg in routine.args:
-            if isinstance(arg, OpVar):
-                argtypes.append(arg.var_type.typename)
-                argkinds.append(getattr(arg, "kind_val", None) or arg.kind)
-                if arg.dims:
-                    if arg.index:
-                        if len(arg.index) != len(arg.dims):
-                            raise RuntimeError(
-                                f"rank is not consistent: {arg.index} {arg.dims}"
-                            )
-                        ndims = 0
-                        for idx in arg.index:
-                            if idx is None or isinstance(idx, OpRange):
-                                ndims += 1
-                        argdims.append(ndims if ndims > 0 else None)
-                    else:
-                        argdims.append(len(arg.dims))
+            if not isinstance(arg, Operator):
+                raise ValueError(f"Unsupported argument type: {type(arg)}")
+            argtypes.append(arg.var_type.typename)
+            kind = (
+                arg.var_type.kind_val
+                if arg.var_type.kind_val is not None
+                else arg.var_type.kind
+            )
+            argkinds.append(kind)
+            if isinstance(arg, OpVar) and arg.dims:
+                if arg.index:
+                    if len(arg.index) != len(arg.dims):
+                        raise RuntimeError(
+                            f"rank is not consistent: {arg.index} {arg.dims}"
+                        )
+                    ndims = 0
+                    for idx in arg.index:
+                        if idx is None or isinstance(idx, OpRange):
+                            ndims += 1
+                    argdims.append(ndims if ndims > 0 else None)
                 else:
-                    argdims.append(None)
-                continue
-            if isinstance(arg, OpLeaf):
-                argkinds.append(arg.kind)
+                    argdims.append(len(arg.dims))
+            else:
                 argdims.append(None)
-                if isinstance(arg, OpReal):
-                    argtypes.append("real")
-                    continue
-                if isinstance(arg, OpInt):
-                    argtypes.append("integer")
-                    continue
-                if isinstance(arg, OpChar):
-                    argtypes.append("character")
-                    continue
-                if isinstance(arg, (OpTrue, OpFalse)):
-                    argtypes.append("logical")
-                    continue
-            raise ValueError(f"Unsupported argument type: {type(arg)}")
 
         if arg_info is None and generic_map and name in generic_map:
             for cand in generic_map[name]:
@@ -3509,7 +3498,7 @@ class PushPop(SaveAssignment):
             return "fautodiff_stack_p"
         typ = self.var.var_type.typename if self.var.var_type else None
         kind = self.var.var_type.kind if self.var.var_type else None
-        if typ is None:
+        if typ is None or typ == "unknown":
             p = self.parent
             while p is not None and not isinstance(p, Routine):
                 p = p.parent
@@ -4661,7 +4650,9 @@ class DoAbst(Node):
                 self.parent.insert_before(self.get_id(), save_false)
                 save_true = PushPopL(".true.")
                 self._body.insert_begin(save_true)
-                cond = OpFuncUser("fautodiff_stack_l%get", [])
+                cond = OpFuncUser(
+                    "fautodiff_stack_l%get", [], var_type=VarType("logical")
+                )
 
         body = Block(nodes)
         if self.do:
