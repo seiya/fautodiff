@@ -4723,6 +4723,50 @@
       "typename": "integer",
       "parameter": true
     },
+    "MPI_MODE_NOCHECK": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_NOPRECEDE": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_NOPUT": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_NOSTORE": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_MODE_NOSUCCEED": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_DISTRIBUTE_BLOCK": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_DISTRIBUTE_CYCLIC": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_DISTRIBUTE_NONE": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_DISTRIBUTE_DFLT_DARG": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_ORDER_C": {
+      "typename": "integer",
+      "parameter": true
+    },
+    "MPI_ORDER_FORTRAN": {
+      "typename": "integer",
+      "parameter": true
+    },
     "MPI_FILE_NULL": {
       "typename": "integer",
       "parameter": true
