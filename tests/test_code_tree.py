@@ -25,23 +25,24 @@ from fautodiff.code_tree import (
 )
 from fautodiff.operators import OpFuncUser, OpInt, OpRange, OpReal, OpVar
 from fautodiff.var_list import VarList
+from fautodiff.var_type import VarType
 
 
 class TestOpVar(unittest.TestCase):
     def test_scalar(self):
-        var = OpVar("x", typename="real")
+        var = OpVar("x", var_type=VarType("real"))
         self.assertEqual(var.name, "x")
         self.assertEqual(var.var_type.typename, "real")
         self.assertFalse(var.is_array())
 
     def test_array(self):
-        var = OpVar("a", typename="real", dims=("n",))
+        var = OpVar("a", var_type=VarType("real"), dims=("n",))
         self.assertTrue(var.is_array())
         self.assertEqual(var.dims, ("n",))
 
     def test_invalid_name(self):
         with self.assertRaises(ValueError):
-            OpVar("a(i)", typename="real")
+            OpVar("a(i)", var_type=VarType("real"))
 
 
 class TestRenderProgram(unittest.TestCase):
@@ -185,8 +186,8 @@ class TestNodeMethods(unittest.TestCase):
             "",
             decls=Block(
                 [
-                    Declaration(name="a", typename="real", intent="in"),
-                    Declaration(name="b", typename="real"),
+                    Declaration(name="a", var_type=VarType("real"), intent="in"),
+                    Declaration(name="b", var_type=VarType("real")),
                 ]
             ),
             content=Block([Assignment(OpVar("b"), OpVar("a"))]),
@@ -195,7 +196,7 @@ class TestNodeMethods(unittest.TestCase):
         self.assertEqual({str(v) for v in sub.required_vars()}, set())
 
     def test_block_scope(self):
-        decls = Block([Declaration(name="a", typename="real")])
+        decls = Block([Declaration(name="a", var_type=VarType("real"))])
         body = Block([Assignment(OpVar("b"), OpVar("a"))])
         blk = BlockConstruct(decls, body)
         self.assertFalse(blk.has_reference_to(OpVar("a")))
@@ -209,7 +210,7 @@ class TestNodeMethods(unittest.TestCase):
         self.assertEqual({str(v) for v in vars}, {"a", "b"})
 
     def test_block_unrefered_advars(self):
-        decls = Block([Declaration(name="a_ad", typename="real")])
+        decls = Block([Declaration(name="a_ad", var_type=VarType("real"))])
         blk = BlockConstruct(decls, Block([]))
         vars = VarList([OpVar("b_ad")])
         vars = blk.unrefered_advars(vars)

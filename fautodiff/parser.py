@@ -119,6 +119,7 @@ from .operators import (
     OpType,
     OpVar,
 )
+from .var_type import VarType
 
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
 
@@ -709,12 +710,15 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                     if kind_val is None:
                         kind_val = _eval_iso_kind(ref.init_val) or ref.init_val
 
-        return OpVar(
-            name=name,
-            typename=decl.var_type.typename,
+        vt = VarType(
+            decl.var_type.typename,
             kind=kind,
             kind_val=kind_val,
             char_len=decl.var_type.char_len,
+        )
+        return OpVar(
+            name=name,
+            var_type=vt,
             dims=decl.dims,
             ad_target=decl.ad_target(),
             is_constant=decl.parameter or getattr(decl, "constant", False),
@@ -763,10 +767,7 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
             return OpVar(
                 name=name,
                 index=index,
-                typename=decl.var_type.typename,
-                kind=decl.var_type.kind,
-                kind_val=decl.var_type.kind_val,
-                char_len=decl.var_type.char_len,
+                var_type=decl.var_type.copy(),
                 dims=decl.dims,
                 ad_target=decl.ad_target(),
                 is_constant=decl.parameter or getattr(decl, "constant", False),
@@ -1184,11 +1185,13 @@ def _parse_decl_stmt(
         decls.append(
             Declaration(
                 name=name,
-                typename=base_type.lower(),
-                kind=kind,
-                kind_val=kind_val,
-                kind_keyword=kind_keyword,
-                char_len=char_len,
+                var_type=VarType(
+                    base_type.lower(),
+                    kind=kind,
+                    kind_val=kind_val,
+                    kind_keyword=kind_keyword,
+                    char_len=char_len,
+                ),
                 dims=dims,
                 intent=intent,
                 parameter=parameter,
@@ -1557,8 +1560,7 @@ def _search_use(
             if only is None or vname in only:
                 decl_map[vname] = Declaration(
                     vname,
-                    info["typename"],
-                    info.get("kind"),
+                    var_type=VarType(info["typename"], kind=info.get("kind")),
                     dims=(
                         tuple(info["dims"]) if info.get("dims") is not None else None
                     ),

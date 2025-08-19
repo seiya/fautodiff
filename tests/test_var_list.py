@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff.operators import AryIndex, OpInt, OpNeg, OpRange, OpVar
 from fautodiff.var_list import VarList
+from fautodiff.var_type import VarType
 
 
 class TestVarList(unittest.TestCase):
@@ -112,8 +113,8 @@ class TestVarList(unittest.TestCase):
         self.assertEqual(inter.names(), ["v"])
 
     def test_push_full_array(self):
-        ny = OpVar("ny", typename="integer")
-        nx = OpVar("nx", typename="integer")
+        ny = OpVar("ny", var_type=VarType("integer"))
+        nx = OpVar("nx", var_type=VarType("integer"))
         one = OpInt(1)
         zero = OpInt(0)
         v1 = OpVar("v", index=[zero, OpRange([one, ny])])
@@ -133,7 +134,9 @@ class TestVarList(unittest.TestCase):
         a = OpVar("a", index=a_idx)
         vl = VarList([a])
         # expand upward over negative stride; range should flip and stride cleared
-        vl.update_index_upward({"a": (0, 1)}, OpRange([OpInt(1), OpInt(5), OpNeg([OpInt(1)])]))
+        vl.update_index_upward(
+            {"a": (0, 1)}, OpRange([OpInt(1), OpInt(5), OpNeg([OpInt(1)])])
+        )
         names = vl.names()
         self.assertEqual(names, ["a"])
         # index list exists and contains a range
@@ -149,15 +152,19 @@ class TestVarList(unittest.TestCase):
 
     def test_intersection_various_cases(self):
         # self: a(:) and b(2:4)
-        vl1 = VarList([
-            OpVar("a", index=AryIndex([None])),
-            OpVar("b", index=AryIndex([OpRange([OpInt(2), OpInt(4), OpInt(1)])])),
-        ])
+        vl1 = VarList(
+            [
+                OpVar("a", index=AryIndex([None])),
+                OpVar("b", index=AryIndex([OpRange([OpInt(2), OpInt(4), OpInt(1)])])),
+            ]
+        )
         # other: a(3) and b(4)
-        vl2 = VarList([
-            OpVar("a", index=AryIndex([OpInt(3)])),
-            OpVar("b", index=AryIndex([OpInt(4)])),
-        ])
+        vl2 = VarList(
+            [
+                OpVar("a", index=AryIndex([OpInt(3)])),
+                OpVar("b", index=AryIndex([OpInt(4)])),
+            ]
+        )
         inter = vl1 & vl2
         s = sorted(str(v) for v in inter)
         self.assertEqual(s, ["a(3)", "b(4)"])
@@ -170,9 +177,11 @@ class TestVarList(unittest.TestCase):
 
     def test_update_index_downward(self):
         # names mapping: a uses index 0 and has 1 dim
-        vl = VarList([
-            OpVar("a", index=AryIndex([OpRange([OpInt(1), OpInt(3)])])),
-        ])
+        vl = VarList(
+            [
+                OpVar("a", index=AryIndex([OpRange([OpInt(1), OpInt(3)])])),
+            ]
+        )
         i = OpVar("i")
         vl.update_index_downward({"a": (0, 1)}, i)
         # now indices must be list of explicit i

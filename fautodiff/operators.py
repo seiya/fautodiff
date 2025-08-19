@@ -286,6 +286,7 @@ class Operator:
     """Abstract fortran oprations."""
 
     args: Optional[List[Optional[Operator]]] = None
+    var_type: Optional[VarType] = None
     macro_name: Optional[str] = None
     PRIORITY: ClassVar[int] = -999
 
@@ -981,7 +982,6 @@ class OpVar(OpLeaf):
 
     name: str = field(default="")
     index: Optional[AryIndex] = None
-    var_type: Optional[VarType] = None
     dims: Optional[Tuple[str]] = field(repr=False, default=None)
     intent: Optional[str] = field(default=None, repr=False)
     ad_target: Optional[bool] = field(default=None, repr=False)
@@ -1003,14 +1003,9 @@ class OpVar(OpLeaf):
         self,
         name: str,
         index: Optional[AryIndex] = None,
-        kind: Optional[str] = None,
-        kind_val: Optional[str] = None,
-        kind_keyword: Optional[bool] = None,
-        char_len: Optional[str] = None,
         var_type: Optional[VarType] = None,
         dims: Optional[Tuple[str]] = None,
         reference: Optional[OpVar] = None,
-        typename: Optional[str] = None,
         intent: Optional[str] = None,
         ad_target: Optional[bool] = None,
         is_constant: Optional[bool] = None,
@@ -1025,7 +1020,7 @@ class OpVar(OpLeaf):
         declared_in: Optional[str] = None,
         ref_var: Optional[OpVar] = None,
     ):
-        super().__init__(args=[])
+        super().__init__(args=[], var_type=var_type)
         if not isinstance(name, str):
             raise ValueError(f"name must be str: {type(name)}")
         if not _NAME_RE.fullmatch(name):
@@ -1034,15 +1029,6 @@ class OpVar(OpLeaf):
         if index is not None and not isinstance(index, AryIndex):
             index = AryIndex(index)
         self.index = index
-        if var_type is None and (typename is not None or kind is not None):
-            var_type = VarType(
-                typename=typename or "",
-                kind=kind,
-                kind_val=kind_val,
-                kind_keyword=bool(kind_keyword),
-                char_len=char_len,
-            )
-        self.var_type = var_type
         if self.var_type is not None:
             self.kind = self.var_type.kind
         self.dims = dims
@@ -1188,13 +1174,9 @@ class OpVar(OpLeaf):
         return OpVar(
             name=self.name,
             index=index,
-            kind=self.var_type.kind if self.var_type else None,
-            kind_val=self.var_type.kind_val if self.var_type else None,
-            kind_keyword=self.var_type.kind_keyword if self.var_type else None,
-            char_len=self.var_type.char_len if self.var_type else None,
+            var_type=self.var_type.copy() if self.var_type else None,
             dims=self.dims,
             reference=self.reference,
-            typename=self.var_type.typename if self.var_type else None,
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,
@@ -1224,13 +1206,9 @@ class OpVar(OpLeaf):
         return OpVar(
             name,
             index=index,
-            kind=self.var_type.kind if self.var_type else None,
-            kind_val=self.var_type.kind_val if self.var_type else None,
-            kind_keyword=self.var_type.kind_keyword if self.var_type else None,
-            char_len=self.var_type.char_len if self.var_type else None,
+            var_type=self.var_type.copy() if self.var_type else None,
             dims=self.dims,
             reference=self.reference,
-            typename=self.var_type.typename if self.var_type else None,
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,
@@ -1276,13 +1254,9 @@ class OpVar(OpLeaf):
         return OpVar(
             name,
             index=index,
-            kind=self.var_type.kind if self.var_type else None,
-            kind_val=self.var_type.kind_val if self.var_type else None,
-            kind_keyword=self.var_type.kind_keyword if self.var_type else None,
-            char_len=self.var_type.char_len if self.var_type else None,
+            var_type=self.var_type.copy() if self.var_type else None,
             dims=self.dims,
             reference=self.reference,
-            typename=self.var_type.typename if self.var_type else None,
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,

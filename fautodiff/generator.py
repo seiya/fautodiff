@@ -61,6 +61,7 @@ from .operators import (
     OpTrue,
     OpVar,
 )
+from .var_type import VarType
 
 code_tree.AD_SUFFIX = AD_SUFFIX
 code_tree.FWD_SUFFIX = FWD_SUFFIX
@@ -232,7 +233,9 @@ def _module_var_fwd_rev(
             range = []
             if var_ref.dims is not None:
                 for n, dim in enumerate(var_ref.dims):
-                    idx.append(OpVar(f"n{len(index)+n}_ad", typename="integer"))
+                    idx.append(
+                        OpVar(f"n{len(index)+n}_ad", var_type=VarType("integer"))
+                    )
                     if dim == ":":
                         vv = var_ref.change_index(None)
                         i0 = OpFunc("lbound", args=[vv, OpInt(n + 1)])
@@ -271,7 +274,7 @@ def _module_var_fwd_rev(
         sub_fwd_rev.content.append(node_fwd)
         subroutine.content.insert_begin(node_rev)
     for idx in index:
-        decl = Declaration(name=idx.name, typename="integer")
+        decl = Declaration(name=idx.name, var_type=VarType("integer"))
         if decl.name not in sub_fwd_rev.args:
             sub_fwd_rev.decls.append(decl)
         subroutine.decls.append(decl)
@@ -686,11 +689,14 @@ def _load_fadmods(
                     if vars_data:
                         vars = []
                         for name, info in vars_data.items():
+                            vt = None
+                            typename = info.get("typename")
+                            if typename is not None:
+                                vt = VarType(typename, kind=info.get("kind", None))
                             vars.append(
                                 OpVar(
                                     name=name,
-                                    typename=info.get("typename"),
-                                    kind=info.get("kind", None),
+                                    var_type=vt,
                                     dims=info.get("dims", None),
                                     is_constant=info.get("constant", False),
                                     allocatable=info.get("allocatable", False),
@@ -850,10 +856,12 @@ def _prepare_fwd_ad_header(
             ad_name = f"{name}{AD_SUFFIX}"
             var = OpVar(
                 ad_name,
-                typename=typ,
-                kind=kind,
-                kind_val=kind_val,
-                kind_keyword=arg.var_type.kind_keyword,
+                var_type=VarType(
+                    typ,
+                    kind=kind,
+                    kind_val=kind_val,
+                    kind_keyword=arg.var_type.kind_keyword,
+                ),
                 dims=dims,
                 intent=arg.intent,
                 ad_target=True,
@@ -904,11 +912,7 @@ def _prepare_fwd_ad_header(
         subroutine.decls.append(
             Declaration(
                 name=var.name,
-                typename=var.var_type.typename,
-                kind=var.var_type.kind,
-                kind_val=var.var_type.kind_val,
-                kind_keyword=var.var_type.kind_keyword,
-                char_len=var.var_type.char_len,
+                var_type=var.var_type.copy(),
                 dims=var.dims,
                 intent=var.intent,
                 allocatable=var.allocatable,
@@ -984,10 +988,12 @@ def _prepare_rev_ad_header(
                 ad_name = f"{name}{AD_SUFFIX}"
                 var = OpVar(
                     ad_name,
-                    typename=typ,
-                    kind=kind,
-                    kind_val=kind_val,
-                    kind_keyword=arg.var_type.kind_keyword,
+                    var_type=VarType(
+                        typ,
+                        kind=kind,
+                        kind_val=kind_val,
+                        kind_keyword=arg.var_type.kind_keyword,
+                    ),
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1011,10 +1017,12 @@ def _prepare_rev_ad_header(
                 ad_name = f"{name}{AD_SUFFIX}"
                 var = OpVar(
                     ad_name,
-                    typename=typ,
-                    kind=kind,
-                    kind_val=kind_val,
-                    kind_keyword=arg.var_type.kind_keyword,
+                    var_type=VarType(
+                        typ,
+                        kind=kind,
+                        kind_val=kind_val,
+                        kind_keyword=arg.var_type.kind_keyword,
+                    ),
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1063,11 +1071,7 @@ def _prepare_rev_ad_header(
         subroutine.decls.append(
             Declaration(
                 name=var.name,
-                typename=var.var_type.typename,
-                kind=var.var_type.kind,
-                kind_val=var.var_type.kind_val,
-                kind_keyword=var.var_type.kind_keyword,
-                char_len=var.var_type.char_len,
+                var_type=var.var_type.copy(),
                 dims=var.dims,
                 intent=var.intent,
                 allocatable=var.allocatable,
@@ -1271,10 +1275,7 @@ def _generate_ad_subroutine(
                     subroutine.decls.append(
                         Declaration(
                             name=name,
-                            typename=base_decl.var_type.typename,
-                            kind=base_decl.var_type.kind,
-                            kind_val=base_decl.var_type.kind_val,
-                            kind_keyword=base_decl.var_type.kind_keyword,
+                            var_type=base_decl.var_type.copy(),
                             dims=base_decl.dims,
                             parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
@@ -1490,10 +1491,7 @@ def _generate_ad_subroutine(
                     subroutine.decls.append(
                         Declaration(
                             name=name,
-                            typename=base_decl.var_type.typename,
-                            kind=base_decl.var_type.kind,
-                            kind_val=base_decl.var_type.kind_val,
-                            kind_keyword=base_decl.var_type.kind_keyword,
+                            var_type=base_decl.var_type.copy(),
                             dims=base_decl.dims,
                             parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
@@ -1510,11 +1508,19 @@ def _generate_ad_subroutine(
                     )
                 elif name.startswith(("cycle_flag", "exit_flag", "return_flag")):
                     subroutine.decls.append(
-                        Declaration(name, typename="logical", declared_in="routine")
+                        Declaration(
+                            name,
+                            var_type=VarType("logical"),
+                            declared_in="routine",
+                        )
                     )
                 elif name.startswith(("exit_do_start")):
                     subroutine.decls.append(
-                        Declaration(name, typename="integer", declared_in="routine")
+                        Declaration(
+                            name,
+                            var_type=VarType("integer"),
+                            declared_in="routine",
+                        )
                     )
                 continue
             if decl is not None:
@@ -1663,25 +1669,22 @@ def _generate_ad_subroutine(
             raise RuntimeError(f"typename cannot be identified {var}")
 
         if base_decl:
-            kind = base_decl.var_type.kind
+            var_type = base_decl.var_type.copy()
         else:
-            kind = var.var_type.kind if var.var_type else None
+            if var.var_type is not None:
+                var_type = var.var_type.copy()
+            elif var.ad_target:
+                var_type = VarType("real")
+            else:
+                print([var])
+                print([var.reference])
+                print([base_decl])
+                raise RuntimeError(f"typename cannot be identified {var}")
 
         subroutine.decls.append(
             Declaration(
                 name=var.name,
-                typename=typename,
-                kind=kind,
-                kind_val=(
-                    base_decl.var_type.kind_val
-                    if base_decl
-                    else (var.var_type.kind_val if var.var_type else None)
-                ),
-                kind_keyword=(
-                    base_decl.var_type.kind_keyword
-                    if base_decl
-                    else (var.var_type.kind_keyword if var.var_type else False)
-                ),
+                var_type=var_type,
                 dims=dims,
                 parameter=base_decl.parameter if base_decl else False,
                 init_val=base_decl.init_val if base_decl else None,
