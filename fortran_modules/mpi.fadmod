@@ -764,7 +764,7 @@
       ],
       "intents": [
         "in",
-        "out",
+        "inout",
         "in",
         "in",
         "in",
@@ -811,8 +811,8 @@
       ],
       "intents_fwd_ad": [
         "in",
-        "out",
-        "out",
+        "inout",
+        "inout",
         "in",
         "in",
         "in",
@@ -850,7 +850,7 @@
       ],
       "intents": [
         "in",
-        "out",
+        "inout",
         "in",
         "in",
         "in",
@@ -897,8 +897,8 @@
       ],
       "intents_fwd_ad": [
         "in",
-        "out",
-        "out",
+        "inout",
+        "inout",
         "in",
         "in",
         "in",

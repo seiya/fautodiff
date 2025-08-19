@@ -439,8 +439,8 @@ end subroutine mpi_allreduce_rev_ad_r8
 
   subroutine mpi_allreduce_fwd_ad_r4_inplace(sendbuf, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
     integer, intent(in) :: sendbuf
-    real, intent(out) :: recvbuf(..)
-    real, intent(out) :: recvbuf_ad(..)
+    real, intent(inout) :: recvbuf(..)
+    real, intent(inout) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
 
@@ -458,8 +458,8 @@ end subroutine mpi_allreduce_rev_ad_r8
 
   subroutine mpi_allreduce_fwd_ad_r8_inplace(sendbuf, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
     integer, intent(in) :: sendbuf
-    real(8), intent(out) :: recvbuf(..)
-    real(8), intent(out) :: recvbuf_ad(..)
+    real(8), intent(inout) :: recvbuf(..)
+    real(8), intent(inout) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
 
