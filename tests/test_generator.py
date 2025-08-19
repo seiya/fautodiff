@@ -558,6 +558,47 @@ class TestGenerator(unittest.TestCase):
             self.assertIn("x_ad = s_ad", generated)
             self.assertNotIn("s_ad = 0", generated)
 
+    def test_save_assignment_allocatable(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+              subroutine foo(n, x, y, z)
+                integer, intent(in) :: n
+                real, intent(in) :: x(n), y
+                real, intent(out) :: z
+                real, allocatable :: htmp(:)
+                integer :: i
+                allocate(htmp(n))
+                htmp = x
+                z = 0.0
+                do i = 1, n
+                  z = z + htmp(i) * y
+                end do
+                htmp = x**2
+                do i = 1, n
+                  z = z + htmp(i) * y
+                end do
+                deallocate(htmp)
+              end subroutine foo
+            end module test
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            src_path = Path(tmp) / "save_alloc.f90"
+            src_path.write_text(src)
+            generated = generator.generate_ad(str(src_path), warn=False)
+            lines = generated.splitlines()
+            save_decl = next(l for l in lines if "htmp_save" in l)
+            self.assertRegex(save_decl, r"allocatable :: .*\(:\)")
+            self.assertNotIn("lbound", save_decl)
+            self.assertNotIn("ubound", save_decl)
+
     def test_persistent_mpi_wrappers(self):
         code_tree.Node.reset()
         import textwrap
