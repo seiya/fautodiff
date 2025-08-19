@@ -103,6 +103,24 @@ class TestParser(unittest.TestCase):
         self.assertIsInstance(stmt.rhs, operators.OpFuncUser)
         self.assertEqual(stmt.rhs.name, "foo")
 
+    def test_command_argument_count(self):
+        src = textwrap.dedent(
+            """\
+            module t
+            contains
+              subroutine foo()
+                if (command_argument_count() > 0) then
+                end if
+              end subroutine foo
+            end module t
+            """
+        )
+        mod = parser.parse_src(src)[0]
+        r = mod.routines[0]
+        cond = r.content.first().cond_blocks[0][0]
+        self.assertIsInstance(cond.args[0], operators.OpFunc)
+        self.assertEqual(cond.args[0].var_type.typename.lower(), "integer")
+
     def test_parse_function_call_assignment_in_function(self):
         src = textwrap.dedent(
             """\

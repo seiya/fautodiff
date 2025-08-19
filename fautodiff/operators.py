@@ -1647,6 +1647,7 @@ NONDIFF_INTRINSICS = {
     "allocated",
     "all",
     "any",
+    "command_argument_count",
     "count",
     "maxloc",
     "minloc",
@@ -1659,8 +1660,10 @@ class OpFunc(Operator):
     name: str = field(default="")
     PRIORITY: ClassVar[int] = 1
 
-    def __init__(self, name: str, args: List[Operator]):
-        super().__init__(args=args)
+    def __init__(
+        self, name: str, args: List[Operator], var_type: Optional[VarType] = None
+    ):
+        super().__init__(args=args, var_type=var_type)
         if not name:
             raise ValueError("name should not be empty")
         if self.args is None:
