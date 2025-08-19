@@ -42,6 +42,7 @@ from .operators import (
     OpVar,
 )
 from .var_list import VarList
+from .var_type import VarType
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -493,7 +494,7 @@ class Node:
         argdims: List[Optional[int]] = []
         for arg in routine.args:
             if isinstance(arg, OpVar):
-                argtypes.append(arg.typename)
+                argtypes.append(arg.var_type.typename)
                 argkinds.append(getattr(arg, "kind_val", None) or arg.kind)
                 if arg.dims:
                     if arg.index:
@@ -796,7 +797,7 @@ class Node:
             if flag:
                 tmp_var = OpVar(
                     self._save_var_name("tmp", self.get_id()),
-                    typename=grad_lhs.typename,
+                    typename=grad_lhs.var_type.typename,
                     kind=grad_lhs.kind,
                 )
                 saved_vars.append(tmp_var)
@@ -2216,7 +2217,8 @@ class CallStatement(Node):
                 for lhs, rhs in tmp_vars:
                     init_nodes.append(
                         Assignment(
-                            lhs.add_suffix(AD_SUFFIX), OpReal("0.0", kind=lhs.kind)
+                            lhs.add_suffix(AD_SUFFIX),
+                            OpReal("0.0", kind=lhs.kind_val or lhs.kind),
                         )
                     )
                     ad_nodes.extend(
@@ -2496,12 +2498,12 @@ class Routine(Node):
             intent = "out"
         return OpVar(
             name,
-            kind=decl.kind,
-            kind_val=decl.kind_val,
-            kind_keyword=decl.kind_keyword,
-            char_len=decl.char_len,
+            kind=decl.var_type.kind,
+            kind_val=decl.var_type.kind_val,
+            kind_keyword=decl.var_type.kind_keyword,
+            char_len=decl.var_type.char_len,
             dims=decl.dims,
-            typename=decl.typename,
+            typename=decl.var_type.typename,
             intent=intent,
             ad_target=None,
             is_constant=decl.parameter or getattr(decl, "constant", False),
@@ -2621,11 +2623,7 @@ class Declaration(Node):
     """A variable declaration."""
 
     name: str
-    typename: str
-    kind: Optional[str] = None
-    kind_val: Optional[str] = None
-    kind_keyword: bool = False
-    char_len: Optional[str] = None
+    var_type: VarType
     dims: Optional[Union[Tuple[str], str]] = None
     intent: Optional[str] = None
     parameter: bool = False
@@ -2643,18 +2641,66 @@ class Declaration(Node):
     type_def: Optional[TypeDef] = None
     declared_in: Optional[str] = None
 
+    def __init__(
+        self,
+        name: str,
+        typename: Optional[str] = None,
+        kind: Optional[str] = None,
+        kind_val: Optional[str] = None,
+        kind_keyword: bool = False,
+        char_len: Optional[str] = None,
+        var_type: Optional[VarType] = None,
+        dims: Optional[Union[Tuple[str], str]] = None,
+        intent: Optional[str] = None,
+        parameter: bool = False,
+        constant: bool = False,
+        init_val: Optional[str] = None,
+        access: Optional[str] = None,
+        allocatable: bool = False,
+        pointer: bool = False,
+        optional: bool = False,
+        target: bool = False,
+        save: bool = False,
+        value: bool = False,
+        volatile: bool = False,
+        asynchronous: bool = False,
+        type_def: Optional[TypeDef] = None,
+        declared_in: Optional[str] = None,
+    ):
+        if var_type is None:
+            if typename is None:
+                raise ValueError("typename or var_type must be provided")
+            var_type = VarType(
+                typename=typename,
+                kind=kind,
+                kind_val=kind_val,
+                kind_keyword=kind_keyword,
+                char_len=char_len,
+            )
+        self.name = name
+        self.var_type = var_type
+        self.dims = dims
+        self.intent = intent
+        self.parameter = parameter
+        self.constant = constant
+        self.init_val = init_val
+        self.access = access
+        self.allocatable = allocatable
+        self.pointer = pointer
+        self.optional = optional
+        self.target = target
+        self.save = save
+        self.value = value
+        self.volatile = volatile
+        self.asynchronous = asynchronous
+        self.type_def = type_def
+        self.declared_in = declared_in
+        self.__post_init__()
+
     def __post_init__(self):
         super().__post_init__()
-        if self.kind is not None and not isinstance(self.kind, str):
-            raise ValueError(f"kind must be str: {type(self.kind)}")
-        if self.kind_val is not None and not isinstance(self.kind_val, str):
-            raise ValueError(f"kind_val must be str: {type(self.kind_val)}")
-        if self.kind_keyword is None:
-            self.kind_keyword = False
-        elif not isinstance(self.kind_keyword, bool):
-            raise ValueError(f"kind_keyword must be bool: {type(self.kind_keyword)}")
-        if self.char_len is not None and not isinstance(self.char_len, str):
-            raise ValueError(f"char_len must be str: {type(self.char_len)}")
+        if not isinstance(self.var_type, VarType):
+            raise ValueError(f"var_type must be VarType: {type(self.var_type)}")
         if self.dims is not None and (
             not (isinstance(self.dims, tuple) or self.dims == "*")
             or any(not isinstance(dim, str) for dim in self.dims)
@@ -2668,11 +2714,7 @@ class Declaration(Node):
     def copy(self) -> "Declaration":
         return Declaration(
             name=self.name,
-            typename=self.typename,
-            kind=self.kind,
-            kind_val=self.kind_val,
-            kind_keyword=self.kind_keyword,
-            char_len=self.char_len,
+            var_type=self.var_type.copy(),
             dims=self.dims,
             intent=self.intent,
             parameter=self.parameter,
@@ -2695,11 +2737,7 @@ class Declaration(Node):
         dims = tuple(self.dims) if self.dims else None
         return Declaration(
             name=self.name,
-            typename=self.typename,
-            kind=self.kind,
-            kind_val=self.kind_val,
-            kind_keyword=self.kind_keyword,
-            char_len=self.char_len,
+            var_type=self.var_type.copy(),
             dims=dims,
             intent=self.intent,
             parameter=self.parameter,
@@ -2722,10 +2760,7 @@ class Declaration(Node):
         if self.intent in ("in", "inout") or self.save:
             yield OpVar(
                 name=self.name,
-                typename=self.typename,
-                kind=self.kind,
-                kind_val=self.kind_val,
-                kind_keyword=self.kind_keyword,
+                var_type=self.var_type.copy(),
                 is_constant=self.parameter or self.constant,
                 allocatable=self.allocatable,
                 pointer=self.pointer,
@@ -2750,10 +2785,7 @@ class Declaration(Node):
     ) -> List[OpVar]:
         var = OpVar(
             name=self.name,
-            typename=self.typename,
-            kind=self.kind,
-            kind_val=self.kind_val,
-            kind_keyword=self.kind_keyword,
+            var_type=self.var_type.copy(),
             is_constant=self.parameter or self.constant,
             allocatable=self.allocatable,
             pointer=self.pointer,
@@ -2778,18 +2810,8 @@ class Declaration(Node):
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        line = f"{space}{self.typename}"
+        line = f"{space}{self.var_type}"
         pat = ""
-        if self.kind is not None:
-            if self.kind.isdigit():
-                line += f"({self.kind})"
-            else:
-                if self.kind_keyword:
-                    line += f"(kind={self.kind})"
-                else:
-                    line += f"({self.kind})"
-        if self.char_len is not None:
-            line += f"(len={self.char_len})"
         if self.parameter:
             line += ", parameter"
         if self.access is not None:
@@ -2826,7 +2848,7 @@ class Declaration(Node):
     def ad_target(self) -> bool:
         if self.constant or self.parameter:
             return False
-        typename = self.typename.lower()
+        typename = self.var_type.typename.lower()
         if (
             typename.startswith("real")
             or typename.startswith("double")
@@ -2861,8 +2883,8 @@ class Declaration(Node):
                 vars.push(
                     OpVar(
                         self.name,
-                        typename=self.typename,
-                        kind=self.kind,
+                        typename=self.var_type.typename,
+                        kind=self.var_type.kind,
                         is_constant=self.parameter or self.constant,
                         allocatable=self.allocatable,
                         pointer=self.pointer,
@@ -2894,20 +2916,21 @@ class Declaration(Node):
             return []
         name = f"{self.name}{AD_SUFFIX}"
         if self.type_def is None:
-            typename = self.typename
+            typename = self.var_type.typename
             type_def = None
         else:
             type_def = type_map[self.type_def.name]
             typename = f"type({type_def.name})"
         init_val = (
-            str(OpReal("0.0", kind=self.kind))
+            str(OpReal("0.0", kind=self.var_type.kind_val or self.var_type.kind))
             if not (self.allocatable or self.pointer)
             else None
         )
         decl = Declaration(
             name=name,
             typename=typename,
-            kind=self.kind,
+            kind=self.var_type.kind,
+            kind_val=self.var_type.kind_val,
             dims=self.dims,
             init_val=init_val,
             allocatable=self.allocatable,
@@ -3258,7 +3281,7 @@ class ClearAssignment(Node):
         ad_comment = ""
         if self.ad_info is not None:
             ad_comment = f" ! {self.ad_info}"
-        zero = OpReal("0.0", kind=self.lhs.kind)
+        zero = OpReal("0.0", kind=self.lhs.kind_val or self.lhs.kind)
         return [f"{space}{self.lhs} = {zero}{ad_comment}\n"]
 
     def assigned_vars(
@@ -3339,8 +3362,8 @@ class SaveAssignment(Node):
                 self._save_var_name(name, self.id, pushpop=self.pushpop),
                 index=self.var.concat_index(),
                 dims=dims,
-                typename=self.var.typename,
-                kind=self.var.kind,
+                typename=self.var.var_type.typename if self.var.var_type else None,
+                kind=self.var.var_type.kind if self.var.var_type else None,
                 ad_target=self.var.ad_target,
                 is_constant=self.var.is_constant,
                 reference=self.var,
@@ -3488,8 +3511,8 @@ class PushPop(SaveAssignment):
     def _stack_name(self) -> str:
         if self.pointer:
             return "fautodiff_stack_p"
-        typ = self.var.typename
-        kind = self.var.kind
+        typ = self.var.var_type.typename if self.var.var_type else None
+        kind = self.var.var_type.kind if self.var.var_type else None
         if typ is None:
             p = self.parent
             while p is not None and not isinstance(p, Routine):
@@ -3497,8 +3520,8 @@ class PushPop(SaveAssignment):
             if p is not None:
                 v = p.get_var(self.var.name)
                 if v is not None:
-                    typ = v.typename
-                    kind = v.kind
+                    typ = v.var_type.typename if v.var_type else None
+                    kind = v.var_type.kind if v.var_type else None
         typ = typ.lower() if typ else ""
         if typ.startswith("logical"):
             return "fautodiff_stack_l"
@@ -3638,7 +3661,7 @@ class Allocate(Node):
                     nodes.append(
                         Allocate._add_if(Allocate([ad_var]), ad_var, is_mod_var)
                     )
-                    if not var.typename.startswith(("type", "class")):
+                    if not var.var_type.typename.startswith(("type", "class")):
                         nodes.append(ClearAssignment(ad_var.change_index(None)))
 
         return nodes
@@ -3768,7 +3791,7 @@ class Deallocate(Node):
                 if var.ad_target:
                     mold = None
                     if is_mod_var:
-                        if var.typename.startswith(("type", "class")):
+                        if var.var_type.typename.startswith(("type", "class")):
                             index = []
                             ndim = len(var.index)
                             var = var.change_index(None)
@@ -3786,7 +3809,7 @@ class Deallocate(Node):
                             Allocate([ad_var], mold=mold), ad_var, is_mod_var
                         )
                     )
-                    if not var.typename.startswith(("type", "class")):
+                    if not var.var_type.typename.startswith(("type", "class")):
                         nodes.append(ClearAssignment(ad_var.change_index(None)))
 
             else:
@@ -4025,8 +4048,8 @@ class PointerClear(Node):
             ad_info = self.info.get("code") if self.info is not None else None
             var = self.var
             var_ad = var.add_suffix(AD_SUFFIX)
-            typename = var.typename
-            kind = var.kind
+            typename = var.var_type.typename
+            kind = var.var_type.kind
             index = var.index
             dims = var.dims
             if isinstance(self.previous, OpVar):

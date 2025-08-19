@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from typing import Any, ClassVar, Iterable, Iterator, List, Optional, Tuple, Union
 
+from .var_type import VarType
+
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")  # pattern for valid variable names
 
 # Suffix used for adjoint variables.  This is set by ``generator`` when a
@@ -979,11 +981,7 @@ class OpVar(OpLeaf):
 
     name: str = field(default="")
     index: Optional[AryIndex] = None
-    kind: Optional[str] = None
-    kind_val: Optional[str] = None
-    kind_keyword: Optional[bool] = field(default=None, repr=False)
-    char_len: Optional[str] = None
-    typename: Optional[str] = field(default=None)
+    var_type: Optional[VarType] = None
     dims: Optional[Tuple[str]] = field(repr=False, default=None)
     intent: Optional[str] = field(default=None, repr=False)
     ad_target: Optional[bool] = field(default=None, repr=False)
@@ -1009,6 +1007,7 @@ class OpVar(OpLeaf):
         kind_val: Optional[str] = None,
         kind_keyword: Optional[bool] = None,
         char_len: Optional[str] = None,
+        var_type: Optional[VarType] = None,
         dims: Optional[Tuple[str]] = None,
         reference: Optional[OpVar] = None,
         typename: Optional[str] = None,
@@ -1035,13 +1034,19 @@ class OpVar(OpLeaf):
         if index is not None and not isinstance(index, AryIndex):
             index = AryIndex(index)
         self.index = index
-        self.kind = kind
-        self.kind_val = kind_val
-        self.kind_keyword = kind_keyword
-        self.char_len = char_len
+        if var_type is None and (typename is not None or kind is not None):
+            var_type = VarType(
+                typename=typename or "",
+                kind=kind,
+                kind_val=kind_val,
+                kind_keyword=bool(kind_keyword),
+                char_len=char_len,
+            )
+        self.var_type = var_type
+        if self.var_type is not None:
+            self.kind = self.var_type.kind
         self.dims = dims
         self.reference = reference
-        self.typename = typename
         self.intent = intent
         self.ad_target = ad_target
         self.is_constant = is_constant
@@ -1055,8 +1060,8 @@ class OpVar(OpLeaf):
         self.asynchronous = asynchronous
         self.declared_in = declared_in
         self.ref_var = ref_var
-        if self.ad_target is None and self.typename is not None:
-            typename = self.typename.lower()
+        if self.ad_target is None and self.var_type is not None:
+            typename = self.var_type.typename.lower()
             if typename.startswith(("type", "class")):
                 raise ValueError("ad_target must be set for type or class variable")
             is_deriv_type = (
@@ -1067,6 +1072,10 @@ class OpVar(OpLeaf):
             self.ad_target = is_deriv_type and not self.is_constant
         elif self.ad_target is None:
             self.ad_target = False
+
+    @property
+    def kind_val(self) -> Optional[str]:
+        return self.var_type.kind_val if self.var_type else None
 
     def name_ext(self) -> str:
         name = self.name
@@ -1148,16 +1157,16 @@ class OpVar(OpLeaf):
 
     @property
     def is_real_type(self) -> bool:
-        if self.typename is None:
+        if self.var_type is None:
             return False
-        typename = self.typename.lower()
+        typename = self.var_type.typename.lower()
         return typename.startswith("real") or typename.startswith("double")
 
     @property
     def is_complex_type(self) -> bool:
-        if self.typename is None:
+        if self.var_type is None:
             return False
-        return self.typename.lower().startswith("complex")
+        return self.var_type.typename.lower().startswith("complex")
 
     def is_array(self) -> bool:
         if self.dims is None and self.index is None:
@@ -1179,13 +1188,13 @@ class OpVar(OpLeaf):
         return OpVar(
             name=self.name,
             index=index,
-            kind=self.kind,
-            kind_val=self.kind_val,
-            kind_keyword=self.kind_keyword,
-            char_len=self.char_len,
+            kind=self.var_type.kind if self.var_type else None,
+            kind_val=self.var_type.kind_val if self.var_type else None,
+            kind_keyword=self.var_type.kind_keyword if self.var_type else None,
+            char_len=self.var_type.char_len if self.var_type else None,
             dims=self.dims,
             reference=self.reference,
-            typename=self.typename,
+            typename=self.var_type.typename if self.var_type else None,
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,
@@ -1215,13 +1224,13 @@ class OpVar(OpLeaf):
         return OpVar(
             name,
             index=index,
-            kind=self.kind,
-            kind_val=self.kind_val,
-            kind_keyword=self.kind_keyword,
-            char_len=self.char_len,
+            kind=self.var_type.kind if self.var_type else None,
+            kind_val=self.var_type.kind_val if self.var_type else None,
+            kind_keyword=self.var_type.kind_keyword if self.var_type else None,
+            char_len=self.var_type.char_len if self.var_type else None,
             dims=self.dims,
             reference=self.reference,
-            typename=self.typename,
+            typename=self.var_type.typename if self.var_type else None,
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,
@@ -1267,13 +1276,13 @@ class OpVar(OpLeaf):
         return OpVar(
             name,
             index=index,
-            kind=self.kind,
-            kind_val=self.kind_val,
-            kind_keyword=self.kind_keyword,
-            char_len=self.char_len,
+            kind=self.var_type.kind if self.var_type else None,
+            kind_val=self.var_type.kind_val if self.var_type else None,
+            kind_keyword=self.var_type.kind_keyword if self.var_type else None,
+            char_len=self.var_type.char_len if self.var_type else None,
             dims=self.dims,
             reference=self.reference,
-            typename=self.typename,
+            typename=self.var_type.typename if self.var_type else None,
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,

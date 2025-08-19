@@ -31,7 +31,7 @@ class TestOpVar(unittest.TestCase):
     def test_scalar(self):
         var = OpVar("x", typename="real")
         self.assertEqual(var.name, "x")
-        self.assertEqual(var.typename, "real")
+        self.assertEqual(var.var_type.typename, "real")
         self.assertFalse(var.is_array())
 
     def test_array(self):

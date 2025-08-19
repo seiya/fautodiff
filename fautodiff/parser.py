@@ -659,7 +659,7 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
         if getattr(imag, "kind", None) == kind:
             pass
         elif getattr(imag, "kind", None) is not None:
-            kind = imag.kind
+            kind = imag.var_type.kind
         return OpComplex(real, imag, kind=kind)
 
     if isinstance(stmt, Fortran2003.Name):
@@ -675,12 +675,12 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
         else:
             raise ValueError(f"Not found in the declaration section: {name}")
 
-        kind = decl.kind
-        kind_val = getattr(decl, "kind_val", None)
+        kind = decl.var_type.kind
+        kind_val = decl.var_type.kind_val
         if (
             kind_val is None
             and kind is None
-            and decl.typename.lower().startswith("double")
+            and decl.var_type.typename.lower().startswith("double")
         ):
             kind = "8"
             kind_val = "8"
@@ -711,10 +711,10 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
 
         return OpVar(
             name=name,
-            typename=decl.typename,
+            typename=decl.var_type.typename,
             kind=kind,
             kind_val=kind_val,
-            char_len=decl.char_len,
+            char_len=decl.var_type.char_len,
             dims=decl.dims,
             ad_target=decl.ad_target(),
             is_constant=decl.parameter or getattr(decl, "constant", False),
@@ -763,10 +763,10 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
             return OpVar(
                 name=name,
                 index=index,
-                typename=decl.typename,
-                kind=decl.kind,
-                kind_val=getattr(decl, "kind_val", None),
-                char_len=decl.char_len,
+                typename=decl.var_type.typename,
+                kind=decl.var_type.kind,
+                kind_val=decl.var_type.kind_val,
+                char_len=decl.var_type.char_len,
                 dims=decl.dims,
                 ad_target=decl.ad_target(),
                 is_constant=decl.parameter or getattr(decl, "constant", False),
@@ -2170,10 +2170,10 @@ def _parse_routine(
                 decl_map_new = decl_map.copy()
                 decl = decl_map[expr.name].copy()
                 if cond in type_map:
-                    decl.typename = f"type({cond})"
+                    decl.var_type.typename = f"type({cond})"
                     decl.type_def = type_map[cond]
                 else:
-                    decl.typename = cond
+                    decl.var_type.typename = cond
                 decl_map_new[expr.name] = decl
                 blk = _block(seg, decl_map_new, type_map)
                 cond_blocks.append(((OpType(cond),), blk))
