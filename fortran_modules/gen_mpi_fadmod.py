@@ -240,6 +240,20 @@ variables: Dict[str, dict] = {
     "MPI_ERR_OTHER": {},
     "MPI_ERR_IN_STATUS": {},
     "MPI_ERR_PENDING": {},
+    # RMA constants
+    "MPI_MODE_NOCHECK": {},
+    "MPI_MODE_NOPRECEDE": {},
+    "MPI_MODE_NOPUT": {},
+    "MPI_MODE_NOSTORE": {},
+    "MPI_MODE_NOSUCCEED": {},
+    # Data distribution constants
+    "MPI_DISTRIBUTE_BLOCK": {},
+    "MPI_DISTRIBUTE_CYCLIC": {},
+    "MPI_DISTRIBUTE_NONE": {},
+    "MPI_DISTRIBUTE_DFLT_DARG": {},
+    # Memory order constants
+    "MPI_ORDER_C": {},
+    "MPI_ORDER_FORTRAN": {},
     # MPI-IO constants
     "MPI_FILE_NULL": {},
     "MPI_INFO_NULL": {},
@@ -267,6 +281,10 @@ for name, v in variables.items():
     decl_map[name] = Declaration(
         name=name, typename="integer", dims=dims, parameter=True
     )
+# iso_c_binding declarations used in mpi_ad.f90
+decl_map["c_null_ptr"] = Declaration(
+    name="c_null_ptr", typename="type(c_ptr)", parameter=True
+)
 
 
 def main() -> None:
@@ -284,7 +302,7 @@ def main() -> None:
     with tempfile.NamedTemporaryFile("w", suffix=".f90") as tmp:
         tmp.write(processed)
         tmp.flush()
-        mod = parser.parse_file(tmp.name, search_dirs=[str(here)], decl_map=decl_map)[0]
+        mod = parser.parse_file(tmp.name, decl_map=decl_map)[0]
     routines = _collect_routines(mod, routines_mpi, assumed_rank)
     generics = _interfaces_to_generics(mod)
     data = {"routines": routines, "variables": variables, "generics": generics}
