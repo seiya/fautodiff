@@ -111,10 +111,14 @@ module mpi_ad
   interface mpi_allreduce_fwd_ad
      module procedure mpi_allreduce_fwd_ad_r4
      module procedure mpi_allreduce_fwd_ad_r8
+     module procedure mpi_allreduce_fwd_ad_r4_inplace
+     module procedure mpi_allreduce_fwd_ad_r8_inplace
   end interface
   interface mpi_allreduce_rev_ad
      module procedure mpi_allreduce_rev_ad_r4
      module procedure mpi_allreduce_rev_ad_r8
+     module procedure mpi_allreduce_rev_ad_r4_inplace
+     module procedure mpi_allreduce_rev_ad_r8_inplace
   end interface
   interface mpi_scatter_fwd_ad
      module procedure mpi_scatter_fwd_ad_r4
@@ -431,6 +435,45 @@ contains
   call MPI_Allreduce(rb_ad, sb_ad, count, datatype, op, comm, ierr)
   rb_ad(1:count) = 0.0_8
 end subroutine mpi_allreduce_rev_ad_r8
+
+
+  subroutine mpi_allreduce_fwd_ad_r4_inplace(sendbuf, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+    integer, intent(in) :: sendbuf
+    real, intent(out) :: recvbuf(..)
+    real, intent(out) :: recvbuf_ad(..)
+    integer, intent(in) :: count, datatype, op, comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm, ierr)
+    call MPI_Allreduce(sendbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+  end subroutine mpi_allreduce_fwd_ad_r4_inplace
+
+  subroutine mpi_allreduce_rev_ad_r4_inplace(recvbuf_ad, count, datatype, op, comm, ierr)
+    real, intent(inout), target, contiguous :: recvbuf_ad(..)
+    integer, intent(in) :: count, datatype, op, comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, op, comm, ierr)
+  end subroutine mpi_allreduce_rev_ad_r4_inplace
+
+  subroutine mpi_allreduce_fwd_ad_r8_inplace(sendbuf, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+    integer, intent(in) :: sendbuf
+    real(8), intent(out) :: recvbuf(..)
+    real(8), intent(out) :: recvbuf_ad(..)
+    integer, intent(in) :: count, datatype, op, comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm, ierr)
+    call MPI_Allreduce(sendbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+  end subroutine mpi_allreduce_fwd_ad_r8_inplace
+
+  subroutine mpi_allreduce_rev_ad_r8_inplace(recvbuf_ad, count, datatype, op, comm, ierr)
+    real(8), intent(inout), target, contiguous :: recvbuf_ad(..)
+    integer, intent(in) :: count, datatype, op, comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, op, comm, ierr)
+  end subroutine mpi_allreduce_rev_ad_r8_inplace
 
   subroutine mpi_scatter_fwd_ad_r4(sendbuf, sendbuf_ad, sendcount, sendtype, recvbuf, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
     real, intent(in) :: sendbuf(..)
