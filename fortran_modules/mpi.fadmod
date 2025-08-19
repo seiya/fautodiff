@@ -751,6 +751,178 @@
         "out"
       ]
     },
+    "MPI_Allreduce_r4_inplace": {
+      "module": "mpi",
+      "args": [
+        "sendbuf",
+        "recvbuf",
+        "count",
+        "datatype",
+        "op",
+        "comm",
+        "ierr"
+      ],
+      "intents": [
+        "in",
+        "out",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "dims": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "type": [
+        "integer",
+        "real",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": "MPI_Allreduce_fwd_ad",
+      "args_fwd_ad": [
+        "sendbuf",
+        "recvbuf",
+        "recvbuf_ad",
+        "count",
+        "datatype",
+        "op",
+        "comm",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "in",
+        "out",
+        "out",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "name_rev_ad": "MPI_Allreduce_rev_ad",
+      "args_rev_ad": [
+        "recvbuf_ad",
+        "count",
+        "datatype",
+        "op",
+        "comm",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "inout",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ]
+    },
+    "MPI_Allreduce_r8_inplace": {
+      "module": "mpi",
+      "args": [
+        "sendbuf",
+        "recvbuf",
+        "count",
+        "datatype",
+        "op",
+        "comm",
+        "ierr"
+      ],
+      "intents": [
+        "in",
+        "out",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "dims": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "type": [
+        "integer",
+        "real",
+        "integer",
+        "integer",
+        "integer",
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        "8",
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "name_fwd_ad": "MPI_Allreduce_fwd_ad",
+      "args_fwd_ad": [
+        "sendbuf",
+        "recvbuf",
+        "recvbuf_ad",
+        "count",
+        "datatype",
+        "op",
+        "comm",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "in",
+        "out",
+        "out",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ],
+      "name_rev_ad": "MPI_Allreduce_rev_ad",
+      "args_rev_ad": [
+        "recvbuf_ad",
+        "count",
+        "datatype",
+        "op",
+        "comm",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        "inout",
+        "in",
+        "in",
+        "in",
+        "in",
+        "out"
+      ]
+    },
     "MPI_Scatter_r4": {
       "module": "mpi",
       "args": [
@@ -5493,7 +5665,9 @@
     ],
     "MPI_Allreduce": [
       "MPI_Allreduce_r4",
-      "MPI_Allreduce_r8"
+      "MPI_Allreduce_r8",
+      "MPI_Allreduce_r4_inplace",
+      "MPI_Allreduce_r8_inplace"
     ],
     "MPI_Scatter": [
       "MPI_Scatter_r4",
