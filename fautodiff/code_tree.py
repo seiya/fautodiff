@@ -2376,9 +2376,13 @@ class Module(Node):
         return lines
 
     def find_use_modules(self) -> List[str]:
-        mods = []
+        mods: List[str] = []
         if self.uses is not None:
             for child in self.uses.iter_children():
+                if isinstance(child, Use):
+                    mods.append(child.name)
+        for routine in self.routines:
+            for child in routine.decls.iter_children():
                 if isinstance(child, Use):
                     mods.append(child.name)
         return mods
