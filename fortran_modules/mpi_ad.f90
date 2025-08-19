@@ -9,6 +9,12 @@ module mpi_ad
   public :: mpi_reduce_rev_ad
   public :: mpi_allreduce_fwd_ad
   public :: mpi_allreduce_rev_ad
+  public :: mpi_scatter_fwd_ad
+  public :: mpi_scatter_rev_ad
+  public :: mpi_gather_fwd_ad
+  public :: mpi_gather_rev_ad
+  public :: mpi_alltoall_fwd_ad
+  public :: mpi_alltoall_rev_ad
   public :: mpi_recv_fwd_ad
   public :: mpi_recv_rev_ad
   public :: mpi_send_fwd_ad
@@ -109,6 +115,30 @@ module mpi_ad
   interface mpi_allreduce_rev_ad
      module procedure mpi_allreduce_rev_ad_r4
      module procedure mpi_allreduce_rev_ad_r8
+  end interface
+  interface mpi_scatter_fwd_ad
+     module procedure mpi_scatter_fwd_ad_r4
+     module procedure mpi_scatter_fwd_ad_r8
+  end interface
+  interface mpi_scatter_rev_ad
+     module procedure mpi_scatter_rev_ad_r4
+     module procedure mpi_scatter_rev_ad_r8
+  end interface
+  interface mpi_gather_fwd_ad
+     module procedure mpi_gather_fwd_ad_r4
+     module procedure mpi_gather_fwd_ad_r8
+  end interface
+  interface mpi_gather_rev_ad
+     module procedure mpi_gather_rev_ad_r4
+     module procedure mpi_gather_rev_ad_r8
+  end interface
+  interface mpi_alltoall_fwd_ad
+     module procedure mpi_alltoall_fwd_ad_r4
+     module procedure mpi_alltoall_fwd_ad_r8
+  end interface
+  interface mpi_alltoall_rev_ad
+     module procedure mpi_alltoall_rev_ad_r4
+     module procedure mpi_alltoall_rev_ad_r8
   end interface
   interface mpi_recv_fwd_ad
      module procedure mpi_recv_fwd_ad_r4
@@ -398,9 +428,221 @@ contains
 
     call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
-    call MPI_Allreduce(rb_ad, sb_ad, count, datatype, op, comm, ierr)
-    rb_ad(1:count) = 0.0_8
-  end subroutine mpi_allreduce_rev_ad_r8
+  call MPI_Allreduce(rb_ad, sb_ad, count, datatype, op, comm, ierr)
+  rb_ad(1:count) = 0.0_8
+end subroutine mpi_allreduce_rev_ad_r8
+
+  subroutine mpi_scatter_fwd_ad_r4(sendbuf, sendbuf_ad, sendcount, sendtype, recvbuf, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+    real, intent(in) :: sendbuf(..)
+    real, intent(in) :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real, intent(out) :: recvbuf(..)
+    real, intent(out) :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, root, comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Scatter(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, root, comm, ierr)
+    call MPI_Scatter(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+  end subroutine mpi_scatter_fwd_ad_r4
+
+  subroutine mpi_scatter_rev_ad_r4(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+    real, intent(inout), target, contiguous :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real, intent(inout), target, contiguous :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, root, comm
+    integer, intent(out), optional :: ierr
+    integer :: rank, size, ierr2
+    real, pointer :: sb_ad(:), rb_ad(:)
+    real, allocatable :: tmp(:)
+    real :: dummy(1)
+
+    call MPI_Comm_rank(comm, rank, ierr2)
+    call MPI_Comm_size(comm, size, ierr2)
+    call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [recvcount])
+    if (rank == root) then
+      allocate(tmp(sendcount * size))
+      call MPI_Gather(rb_ad, recvcount, recvtype, tmp, sendcount, sendtype, root, comm, ierr)
+      call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [sendcount * size])
+      sb_ad(1:sendcount*size) = sb_ad(1:sendcount*size) + tmp(1:sendcount*size)
+      deallocate(tmp)
+    else
+      call MPI_Gather(rb_ad, recvcount, recvtype, dummy, sendcount, sendtype, root, comm, ierr)
+    end if
+    rb_ad(1:recvcount) = 0.0
+  end subroutine mpi_scatter_rev_ad_r4
+
+  subroutine mpi_scatter_fwd_ad_r8(sendbuf, sendbuf_ad, sendcount, sendtype, recvbuf, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+    real(8), intent(in) :: sendbuf(..)
+    real(8), intent(in) :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real(8), intent(out) :: recvbuf(..)
+    real(8), intent(out) :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, root, comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Scatter(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, root, comm, ierr)
+    call MPI_Scatter(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+  end subroutine mpi_scatter_fwd_ad_r8
+
+  subroutine mpi_scatter_rev_ad_r8(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+    real(8), intent(inout), target, contiguous :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real(8), intent(inout), target, contiguous :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, root, comm
+    integer, intent(out), optional :: ierr
+    integer :: rank, size, ierr2
+    real(8), pointer :: sb_ad(:), rb_ad(:)
+    real(8), allocatable :: tmp(:)
+    real(8) :: dummy(1)
+
+    call MPI_Comm_rank(comm, rank, ierr2)
+    call MPI_Comm_size(comm, size, ierr2)
+    call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [recvcount])
+    if (rank == root) then
+      allocate(tmp(sendcount * size))
+      call MPI_Gather(rb_ad, recvcount, recvtype, tmp, sendcount, sendtype, root, comm, ierr)
+      call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [sendcount * size])
+      sb_ad(1:sendcount*size) = sb_ad(1:sendcount*size) + tmp(1:sendcount*size)
+      deallocate(tmp)
+    else
+      call MPI_Gather(rb_ad, recvcount, recvtype, dummy, sendcount, sendtype, root, comm, ierr)
+    end if
+    rb_ad(1:recvcount) = 0.0_8
+  end subroutine mpi_scatter_rev_ad_r8
+
+  subroutine mpi_gather_fwd_ad_r4(sendbuf, sendbuf_ad, sendcount, sendtype, recvbuf, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+    real, intent(in) :: sendbuf(..)
+    real, intent(in) :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real, intent(out) :: recvbuf(..)
+    real, intent(out) :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, root, comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Gather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, root, comm, ierr)
+    call MPI_Gather(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+  end subroutine mpi_gather_fwd_ad_r4
+
+  subroutine mpi_gather_rev_ad_r4(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+    real, intent(inout), target, contiguous :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real, intent(inout), target, contiguous :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, root, comm
+    integer, intent(out), optional :: ierr
+    integer :: rank, size, ierr2
+    real :: tmp(max(sendcount, recvcount))
+    real, pointer :: sb_ad(:), rb_ad(:)
+
+    call MPI_Comm_rank(comm, rank, ierr2)
+    call MPI_Comm_size(comm, size, ierr2)
+    call MPI_Scatter(recvbuf_ad, recvcount, recvtype, tmp, sendcount, sendtype, root, comm, ierr)
+    call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [sendcount])
+    sb_ad(1:sendcount) = sb_ad(1:sendcount) + tmp(1:sendcount)
+    if (rank == root) then
+      call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [recvcount * size])
+      rb_ad(1:recvcount*size) = 0.0
+    end if
+  end subroutine mpi_gather_rev_ad_r4
+
+  subroutine mpi_gather_fwd_ad_r8(sendbuf, sendbuf_ad, sendcount, sendtype, recvbuf, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+    real(8), intent(in) :: sendbuf(..)
+    real(8), intent(in) :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real(8), intent(out) :: recvbuf(..)
+    real(8), intent(out) :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, root, comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Gather(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, root, comm, ierr)
+    call MPI_Gather(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+  end subroutine mpi_gather_fwd_ad_r8
+
+  subroutine mpi_gather_rev_ad_r8(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
+    real(8), intent(inout), target, contiguous :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real(8), intent(inout), target, contiguous :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, root, comm
+    integer, intent(out), optional :: ierr
+    integer :: rank, size, ierr2
+    real(8) :: tmp(max(sendcount, recvcount))
+    real(8), pointer :: sb_ad(:), rb_ad(:)
+
+    call MPI_Comm_rank(comm, rank, ierr2)
+    call MPI_Comm_size(comm, size, ierr2)
+    call MPI_Scatter(recvbuf_ad, recvcount, recvtype, tmp, sendcount, sendtype, root, comm, ierr)
+    call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [sendcount])
+    sb_ad(1:sendcount) = sb_ad(1:sendcount) + tmp(1:sendcount)
+    if (rank == root) then
+      call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [recvcount * size])
+      rb_ad(1:recvcount*size) = 0.0_8
+    end if
+  end subroutine mpi_gather_rev_ad_r8
+
+  subroutine mpi_alltoall_fwd_ad_r4(sendbuf, sendbuf_ad, sendcount, sendtype, recvbuf, recvbuf_ad, recvcount, recvtype, comm, ierr)
+    real, intent(in) :: sendbuf(..)
+    real, intent(in) :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real, intent(out) :: recvbuf(..)
+    real, intent(out) :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Alltoall(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm, ierr)
+    call MPI_Alltoall(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, comm, ierr)
+  end subroutine mpi_alltoall_fwd_ad_r4
+
+  subroutine mpi_alltoall_rev_ad_r4(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, comm, ierr)
+    real, intent(inout), target, contiguous :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real, intent(inout), target, contiguous :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, comm
+    integer, intent(out), optional :: ierr
+    integer :: size, ierr2
+    real, pointer :: sb_ad(:), rb_ad(:)
+    real, allocatable :: tmp(:)
+
+    call MPI_Comm_size(comm, size, ierr2)
+    call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [sendcount * size])
+    call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [recvcount * size])
+    allocate(tmp(sendcount * size))
+    call MPI_Alltoall(rb_ad, recvcount, recvtype, tmp, sendcount, sendtype, comm, ierr)
+    sb_ad(1:sendcount*size) = sb_ad(1:sendcount*size) + tmp(1:sendcount*size)
+    rb_ad(1:recvcount*size) = 0.0
+    deallocate(tmp)
+  end subroutine mpi_alltoall_rev_ad_r4
+
+  subroutine mpi_alltoall_fwd_ad_r8(sendbuf, sendbuf_ad, sendcount, sendtype, recvbuf, recvbuf_ad, recvcount, recvtype, comm, ierr)
+    real(8), intent(in) :: sendbuf(..)
+    real(8), intent(in) :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real(8), intent(out) :: recvbuf(..)
+    real(8), intent(out) :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Alltoall(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype, comm, ierr)
+    call MPI_Alltoall(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, comm, ierr)
+  end subroutine mpi_alltoall_fwd_ad_r8
+
+  subroutine mpi_alltoall_rev_ad_r8(sendbuf_ad, sendcount, sendtype, recvbuf_ad, recvcount, recvtype, comm, ierr)
+    real(8), intent(inout), target, contiguous :: sendbuf_ad(..)
+    integer, intent(in) :: sendcount, sendtype
+    real(8), intent(inout), target, contiguous :: recvbuf_ad(..)
+    integer, intent(in) :: recvcount, recvtype, comm
+    integer, intent(out), optional :: ierr
+    integer :: size, ierr2
+    real(8), pointer :: sb_ad(:), rb_ad(:)
+    real(8), allocatable :: tmp(:)
+
+    call MPI_Comm_size(comm, size, ierr2)
+    call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [sendcount * size])
+    call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [recvcount * size])
+    allocate(tmp(sendcount * size))
+    call MPI_Alltoall(rb_ad, recvcount, recvtype, tmp, sendcount, sendtype, comm, ierr)
+    sb_ad(1:sendcount*size) = sb_ad(1:sendcount*size) + tmp(1:sendcount*size)
+    rb_ad(1:recvcount*size) = 0.0_8
+    deallocate(tmp)
+  end subroutine mpi_alltoall_rev_ad_r8
   subroutine mpi_recv_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, status, ierr)
     real, intent(out) :: buf(..)
     real, intent(out) :: buf_ad(..)
