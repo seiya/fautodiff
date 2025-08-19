@@ -1614,19 +1614,22 @@ INTRINSIC_FUNCTIONS = {
     "aimag": VarType("real"),
     "conjg": VarType("complex"),
     "cmplx": VarType("complex"),
-    "mod": VarType("real"),
-    "min": VarType("real"),
-    "max": VarType("real"),
-    "sign": VarType("real"),
     "atan2": VarType("real"),
     "transpose": VarType("unknown"),
     "cshift": VarType("unknown"),
     "dot_product": VarType("real"),
     "matmul": VarType("unknown"),
-    "sum": VarType("real"),
-    "product": VarType("real"),
-    "minval": VarType("real"),
-    "maxval": VarType("real"),
+}
+
+ARG_TYPE_INTRINSICS = {
+    "mod",
+    "min",
+    "max",
+    "sign",
+    "sum",
+    "product",
+    "minval",
+    "maxval",
 }
 
 NONDIFF_INTRINSICS = {

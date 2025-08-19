@@ -94,6 +94,7 @@ from .code_tree import (
     WhereBlock,
 )
 from .operators import (
+    ARG_TYPE_INTRINSICS,
     INTRINSIC_FUNCTIONS,
     NONDIFF_INTRINSICS,
     AryIndex,
@@ -783,6 +784,11 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                 for arg in getattr(stmt.items[1], "items", [])
                 if not isinstance(arg, str)
             ]
+            if name_l in ARG_TYPE_INTRINSICS:
+                if not args:
+                    raise ValueError(f"{name_l} requires at least one argument")
+                var_type = args[0].var_type.copy()
+                return OpFunc(name_l, args, var_type=var_type)
             if name_l in INTRINSIC_FUNCTIONS or name_l in NONDIFF_INTRINSICS:
                 var_type = INTRINSIC_FUNCTIONS.get(name_l) or NONDIFF_INTRINSICS.get(
                     name_l
@@ -801,7 +807,12 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
             for arg in getattr(stmt.items[1], "items", [])
             if not isinstance(arg, str)
         ]
-        var_type = INTRINSIC_FUNCTIONS.get(name) or NONDIFF_INTRINSICS.get(name)
+        if name in ARG_TYPE_INTRINSICS:
+            if not args:
+                raise ValueError(f"{name} requires at least one argument")
+            var_type = args[0].var_type.copy()
+        else:
+            var_type = INTRINSIC_FUNCTIONS.get(name) or NONDIFF_INTRINSICS.get(name)
         return OpFunc(name, args, var_type=var_type)
 
     if isinstance(stmt, Fortran2003.Char_Literal_Constant):
