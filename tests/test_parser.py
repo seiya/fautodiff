@@ -137,7 +137,7 @@ class TestParser(unittest.TestCase):
         routine = module.routines[0]
         decl = routine.decls.find_by_name("x")
         self.assertIsNotNone(decl)
-        self.assertEqual(decl.kind, "8")
+        self.assertEqual(decl.var_type.kind, "8")
 
     def test_parse_real_kind_rp(self):
         src = textwrap.dedent(
@@ -155,7 +155,7 @@ class TestParser(unittest.TestCase):
         routine = module.routines[0]
         decl = routine.decls.find_by_name("x")
         self.assertIsNotNone(decl)
-        self.assertEqual(decl.kind, "RP")
+        self.assertEqual(decl.var_type.kind, "RP")
 
     def test_parse_dimension(self):
         src = textwrap.dedent(
@@ -251,7 +251,7 @@ class TestParser(unittest.TestCase):
         decl = module.decls.find_by_name("RP")
         self.assertIsNotNone(decl)
         self.assertTrue(decl.parameter)
-        self.assertEqual(decl.typename, "integer")
+        self.assertEqual(decl.var_type.typename, "integer")
         self.assertEqual(decl.access, "public")
 
     def test_module_vars_default_diff(self):
@@ -346,8 +346,8 @@ class TestParser(unittest.TestCase):
         routine = module.routines[0]
         decl = routine.decls.find_by_name("x")
         self.assertIsNotNone(decl)
-        self.assertEqual(decl.typename.lower(), "double precision")
-        self.assertIsNone(decl.kind)
+        self.assertEqual(decl.var_type.typename.lower(), "double precision")
+        self.assertIsNone(decl.var_type.kind)
 
     def test_parse_directives_constant_vars(self):
         src = textwrap.dedent(

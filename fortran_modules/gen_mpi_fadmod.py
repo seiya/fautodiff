@@ -76,9 +76,9 @@ def _collect_routines(
                     dim = None
                 dims.append(dim)
                 types.append(
-                    decls.get(arg).typename.lower() if decls.get(arg) else None
+                    decls.get(arg).var_type.typename.lower() if decls.get(arg) else None
                 )
-                kinds.append(decls.get(arg).kind)
+                kinds.append(decls.get(arg).var_type.kind if decls.get(arg) else None)
             info["intents"] = intents
             info["dims"] = dims
             info["type"] = types

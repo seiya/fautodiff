@@ -731,9 +731,9 @@ def _write_fadmod(mod: Module, routine_map: Dict[str, Any], directory: Path) -> 
     if mod.decls is not None:
         for d in mod.decls.iter_children():
             if isinstance(d, Declaration):
-                info = {"typename": d.typename}
-                if d.kind is not None:
-                    info["kind"] = d.kind
+                info = {"typename": d.var_type.typename}
+                if d.var_type.kind is not None:
+                    info["kind"] = d.var_type.kind
                 if d.dims is not None:
                     info["dims"] = list(d.dims)
                 if d.parameter:
@@ -832,13 +832,11 @@ def _prepare_fwd_ad_header(
 
     for arg in routine_org.arg_vars():
         name = arg.name
-        typ = arg.typename
+        typ = arg.var_type.typename
         dims = arg.dims
         intent = arg.intent or "inout"
-        kind = arg.kind
-        kind_val = getattr(arg, "kind_val", None)
-        kind_val = getattr(arg, "kind_val", None)
-        kind_val = getattr(arg, "kind_val", None)
+        kind = arg.var_type.kind
+        kind_val = arg.var_type.kind_val
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
@@ -855,7 +853,7 @@ def _prepare_fwd_ad_header(
                 typename=typ,
                 kind=kind,
                 kind_val=kind_val,
-                kind_keyword=getattr(arg, "kind_keyword", None),
+                kind_keyword=arg.var_type.kind_keyword,
                 dims=dims,
                 intent=arg.intent,
                 ad_target=True,
@@ -906,11 +904,11 @@ def _prepare_fwd_ad_header(
         subroutine.decls.append(
             Declaration(
                 name=var.name,
-                typename=var.typename,
-                kind=var.kind,
-                kind_val=getattr(var, "kind_val", None),
-                kind_keyword=getattr(var, "kind_keyword", False),
-                char_len=var.char_len,
+                typename=var.var_type.typename,
+                kind=var.var_type.kind,
+                kind_val=var.var_type.kind_val,
+                kind_keyword=var.var_type.kind_keyword,
+                char_len=var.var_type.char_len,
                 dims=var.dims,
                 intent=var.intent,
                 allocatable=var.allocatable,
@@ -971,11 +969,11 @@ def _prepare_rev_ad_header(
 
     for arg in routine_org.arg_vars():
         name = arg.name
-        typ = arg.typename
+        typ = arg.var_type.typename
         dims = arg.dims
         intent = arg.intent or "inout"
-        kind = arg.kind
-        kind_val = getattr(arg, "kind_val", None)
+        kind = arg.var_type.kind
+        kind_val = arg.var_type.kind_val
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
@@ -989,7 +987,7 @@ def _prepare_rev_ad_header(
                     typename=typ,
                     kind=kind,
                     kind_val=kind_val,
-                    kind_keyword=getattr(arg, "kind_keyword", None),
+                    kind_keyword=arg.var_type.kind_keyword,
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1016,7 +1014,7 @@ def _prepare_rev_ad_header(
                     typename=typ,
                     kind=kind,
                     kind_val=kind_val,
-                    kind_keyword=getattr(arg, "kind_keyword", None),
+                    kind_keyword=arg.var_type.kind_keyword,
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1065,11 +1063,11 @@ def _prepare_rev_ad_header(
         subroutine.decls.append(
             Declaration(
                 name=var.name,
-                typename=var.typename,
-                kind=var.kind,
-                kind_val=getattr(var, "kind_val", None),
-                kind_keyword=getattr(var, "kind_keyword", False),
-                char_len=var.char_len,
+                typename=var.var_type.typename,
+                kind=var.var_type.kind,
+                kind_val=var.var_type.kind_val,
+                kind_keyword=var.var_type.kind_keyword,
+                char_len=var.var_type.char_len,
                 dims=var.dims,
                 intent=var.intent,
                 allocatable=var.allocatable,
@@ -1200,16 +1198,18 @@ def _generate_ad_subroutine(
     ):
         for arg in out_grad_args:
             lhs = OpVar(
-                arg.name, kind=arg.kind, kind_keyword=getattr(arg, "kind_keyword", None)
+                arg.name,
+                kind=arg.var_type.kind,
+                kind_keyword=arg.var_type.kind_keyword,
             )
             if arg.is_complex_type:
                 zero = OpComplex(
-                    OpReal("0.0", kind=arg.kind),
-                    OpReal("0.0", kind=arg.kind),
-                    kind=arg.kind,
+                    OpReal("0.0", kind=arg.var_type.kind),
+                    OpReal("0.0", kind=arg.var_type.kind),
+                    kind=arg.var_type.kind,
                 )
             else:
-                zero = OpReal("0.0", kind=arg.kind)
+                zero = OpReal("0.0", kind=arg.var_type.kind)
             ad_block.append(Assignment(lhs, zero))
         subroutine.ad_content = ad_block
         return subroutine, False, set()
@@ -1271,10 +1271,10 @@ def _generate_ad_subroutine(
                     subroutine.decls.append(
                         Declaration(
                             name=name,
-                            typename=base_decl.typename,
-                            kind=base_decl.kind,
-                            kind_val=base_decl.kind_val,
-                            kind_keyword=base_decl.kind_keyword,
+                            typename=base_decl.var_type.typename,
+                            kind=base_decl.var_type.kind,
+                            kind_val=base_decl.var_type.kind_val,
+                            kind_keyword=base_decl.var_type.kind_keyword,
                             dims=base_decl.dims,
                             parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
@@ -1466,12 +1466,12 @@ def _generate_ad_subroutine(
                     index = None
                 if var.is_complex_type:
                     zero = OpComplex(
-                        OpReal("0.0", kind=var.kind),
-                        OpReal("0.0", kind=var.kind),
-                        kind=var.kind,
+                        OpReal("0.0", kind=var.var_type.kind),
+                        OpReal("0.0", kind=var.var_type.kind),
+                        kind=var.var_type.kind,
                     )
                 else:
-                    zero = OpReal(0.0, kind=var.kind)
+                    zero = OpReal(0.0, kind=var.var_type.kind)
                 subroutine.ad_init.append(Assignment(OpVar(name, index=index), zero))
 
     var_names = []
@@ -1490,10 +1490,10 @@ def _generate_ad_subroutine(
                     subroutine.decls.append(
                         Declaration(
                             name=name,
-                            typename=base_decl.typename,
-                            kind=base_decl.kind,
-                            kind_val=base_decl.kind_val,
-                            kind_keyword=base_decl.kind_keyword,
+                            typename=base_decl.var_type.typename,
+                            kind=base_decl.var_type.kind,
+                            kind_val=base_decl.var_type.kind_val,
+                            kind_keyword=base_decl.var_type.kind_keyword,
                             dims=base_decl.dims,
                             parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
@@ -1651,9 +1651,9 @@ def _generate_ad_subroutine(
                 dims = tuple(dims_new)
 
         if base_decl:
-            typename = base_decl.typename
-        elif var.typename is not None:
-            typename = var.typename
+            typename = base_decl.var_type.typename
+        elif var.var_type is not None and var.var_type.typename is not None:
+            typename = var.var_type.typename
         elif var.ad_target:
             typename = "real"
         else:
@@ -1663,9 +1663,9 @@ def _generate_ad_subroutine(
             raise RuntimeError(f"typename cannot be identified {var}")
 
         if base_decl:
-            kind = base_decl.kind
+            kind = base_decl.var_type.kind
         else:
-            kind = var.kind
+            kind = var.var_type.kind if var.var_type else None
 
         subroutine.decls.append(
             Declaration(
@@ -1673,12 +1673,14 @@ def _generate_ad_subroutine(
                 typename=typename,
                 kind=kind,
                 kind_val=(
-                    base_decl.kind_val if base_decl else getattr(var, "kind_val", None)
+                    base_decl.var_type.kind_val
+                    if base_decl
+                    else (var.var_type.kind_val if var.var_type else None)
                 ),
                 kind_keyword=(
-                    base_decl.kind_keyword
+                    base_decl.var_type.kind_keyword
                     if base_decl
-                    else getattr(var, "kind_keyword", False)
+                    else (var.var_type.kind_keyword if var.var_type else False)
                 ),
                 dims=dims,
                 parameter=base_decl.parameter if base_decl else False,
