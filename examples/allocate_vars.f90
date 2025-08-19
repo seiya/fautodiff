@@ -26,6 +26,28 @@ contains
     return
   end subroutine allocate_and_sum
 
+  subroutine save_alloc(n, x, y, z)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n), y
+    real, intent(out) :: z
+    real, allocatable :: htmp(:)
+    integer :: i
+
+    allocate(htmp(n))
+    htmp = x
+    z = 0.0
+    do i = 1, n
+      z = z + htmp(i) * y
+    end do
+    htmp = x**2
+    do i = 1, n
+      z = z + htmp(i) * y
+    end do
+    deallocate(htmp)
+
+    return
+  end subroutine save_alloc
+
   subroutine module_vars_init(n, x)
     integer, intent(in) :: n
     real, intent(in) :: x

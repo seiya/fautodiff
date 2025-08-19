@@ -147,7 +147,9 @@ class TestFortranADCode(unittest.TestCase):
         )
 
     def test_allocate(self):
-        self._run_test("allocate_vars", ["allocate_and_sum", "module_vars"])
+        self._run_test(
+            "allocate_vars", ["allocate_and_sum", "module_vars", "save_alloc"]
+        )
 
     def test_exit_cycle(self):
         self._run_test("exit_cycle", ["do_exit_cycle", "while_exit_cycle"])

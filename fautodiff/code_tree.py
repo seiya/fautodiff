@@ -3356,6 +3356,7 @@ class SaveAssignment(Node):
                 ad_target=self.var.ad_target,
                 is_constant=self.var.is_constant,
                 reference=self.var,
+                allocatable=self.var.allocatable,
             )
         if self.load:
             self.lhs = self.var
@@ -3382,7 +3383,18 @@ class SaveAssignment(Node):
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        return [f"{space}{self.lhs} = {self.rhs}\n"]
+        lines: List[str] = []
+        if self.lhs.allocatable and not self.pushpop:
+            lhs0 = self.lhs.change_index(None)
+            rhs0 = self.rhs.change_index(None)
+            if not self.load and self.var.declared_in == "routine":
+                lines.append(f"{space}allocate({lhs0}, mold={rhs0})\n")
+            else:
+                lines.append(f"{space}if (.not. allocated({lhs0})) then\n")
+                lines.append(f"{space}  allocate({lhs0}, mold={rhs0})\n")
+                lines.append(f"{space}end if\n")
+        lines.append(f"{space}{self.lhs} = {self.rhs}\n")
+        return lines
 
     def is_effectively_empty(self) -> bool:
         return False

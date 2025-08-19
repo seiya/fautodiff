@@ -7,6 +7,7 @@ program run_allocate_vars
   integer, parameter :: I_all = 0
   integer, parameter :: I_allocate_and_sum = 1
   integer, parameter :: I_module_vars = 2
+  integer, parameter :: I_save_alloc = 3
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -24,6 +25,8 @@ program run_allocate_vars
               i_test = I_allocate_and_sum
            case ("module_vars")
               i_test = I_module_vars
+           case ("save_alloc")
+              i_test = I_save_alloc
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -38,6 +41,9 @@ program run_allocate_vars
   end if
   if (i_test == I_module_vars .or. i_test == I_all) then
      call test_module_vars
+  end if
+  if (i_test == I_save_alloc .or. i_test == I_all) then
+     call test_save_alloc
   end if
 
   stop
@@ -116,6 +122,43 @@ contains
 
     return
   end subroutine test_module_vars
+
+  subroutine test_save_alloc
+    real, parameter :: tol = 3.0e-4
+    integer, parameter :: n = 3
+    real :: x(n), y, z
+    real :: x_ad(n), y_ad, z_ad
+    real :: z_eps, fd, eps
+    real :: inner1, inner2
+    integer :: i
+
+    eps = 1.0e-3
+    x = (/1.0, 2.0, 3.0/)
+    y = 2.0
+    call save_alloc(n, x, y, z)
+    y = 2.0 + eps
+    call save_alloc(n, x, y, z_eps)
+    fd = (z_eps - z) / eps
+    x_ad(:) = 0.0
+    y_ad = 1.0
+    call save_alloc_fwd_ad(n, x, x_ad, y, y_ad, z, z_ad)
+    if (abs((z_ad - fd) / fd) > tol) then
+       print *, 'test_save_alloc_fwd failed', z_ad, fd
+       error stop 1
+    end if
+
+    inner1 = z_ad**2
+    x_ad(:) = 0.0
+    y_ad = 0.0
+    call save_alloc_rev_ad(n, x, x_ad, y, y_ad, z_ad)
+    inner2 = y_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_save_alloc_rev failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_save_alloc
 
 
 
