@@ -111,9 +111,7 @@ contains
 
     allocate(htmp(n))
     htmp = x
-    if (.not. allocated(htmp_save_42_ad)) then
-      allocate(htmp_save_42_ad, mold=htmp)
-    end if
+    allocate(htmp_save_42_ad, mold=htmp)
     htmp_save_42_ad(1:n) = htmp(1:n)
     htmp = x**2
 

@@ -3387,9 +3387,12 @@ class SaveAssignment(Node):
         if self.lhs.allocatable and not self.pushpop:
             lhs0 = self.lhs.change_index(None)
             rhs0 = self.rhs.change_index(None)
-            lines.append(f"{space}if (.not. allocated({lhs0})) then\n")
-            lines.append(f"{space}  allocate({lhs0}, mold={rhs0})\n")
-            lines.append(f"{space}end if\n")
+            if not self.load and self.var.declared_in == "routine":
+                lines.append(f"{space}allocate({lhs0}, mold={rhs0})\n")
+            else:
+                lines.append(f"{space}if (.not. allocated({lhs0})) then\n")
+                lines.append(f"{space}  allocate({lhs0}, mold={rhs0})\n")
+                lines.append(f"{space}end if\n")
         lines.append(f"{space}{self.lhs} = {self.rhs}\n")
         return lines
 
