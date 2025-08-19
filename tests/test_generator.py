@@ -598,6 +598,10 @@ class TestGenerator(unittest.TestCase):
             self.assertRegex(save_decl, r"allocatable :: .*\(:\)")
             self.assertNotIn("lbound", save_decl)
             self.assertNotIn("ubound", save_decl)
+            self.assertRegex(generated, r"if \(\.not\. allocated\(htmp_save_\d+_ad\)\)")
+            self.assertRegex(generated, r"allocate\(htmp_save_\d+_ad, mold=htmp\)")
+            self.assertIn("if (.not. allocated(htmp))", generated)
+            self.assertRegex(generated, r"allocate\(htmp, mold=htmp_save_\d+_ad\)")
 
     def test_persistent_mpi_wrappers(self):
         code_tree.Node.reset()

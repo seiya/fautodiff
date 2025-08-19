@@ -63,6 +63,82 @@ contains
     return
   end subroutine allocate_and_sum_rev_ad
 
+  subroutine save_alloc_fwd_ad(n, x, x_ad, y, y_ad, z, z_ad)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x(n)
+    real, intent(in)  :: x_ad(n)
+    real, intent(in)  :: y
+    real, intent(in)  :: y_ad
+    real, intent(out) :: z
+    real, intent(out) :: z_ad
+    real, allocatable :: htmp_ad(:)
+    real, allocatable :: htmp(:)
+    integer :: i
+
+    allocate(htmp(n))
+    allocate(htmp_ad(n))
+    htmp_ad = x_ad ! htmp = x
+    htmp = x
+    z_ad = 0.0 ! z = 0.0
+    z = 0.0
+    do i = 1, n
+      z_ad = z_ad + htmp_ad(i) * y + y_ad * htmp(i) ! z = z + htmp(i) * y
+      z = z + htmp(i) * y
+    end do
+    htmp_ad = x_ad * 2.0 * x ! htmp = x**2
+    htmp = x**2
+    do i = 1, n
+      z_ad = z_ad + htmp_ad(i) * y + y_ad * htmp(i) ! z = z + htmp(i) * y
+      z = z + htmp(i) * y
+    end do
+    deallocate(htmp_ad)
+    deallocate(htmp)
+
+    return
+  end subroutine save_alloc_fwd_ad
+
+  subroutine save_alloc_rev_ad(n, x, x_ad, y, y_ad, z_ad)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x(n)
+    real, intent(inout) :: x_ad(n)
+    real, intent(in)  :: y
+    real, intent(inout) :: y_ad
+    real, intent(inout) :: z_ad
+    real, allocatable :: htmp_ad(:)
+    real, allocatable :: htmp(:)
+    integer :: i
+    real, allocatable :: htmp_save_42_ad(:)
+
+    allocate(htmp(n))
+    htmp = x
+    if (.not. allocated(htmp_save_42_ad)) then
+      allocate(htmp_save_42_ad, mold=htmp)
+    end if
+    htmp_save_42_ad(1:n) = htmp(1:n)
+    htmp = x**2
+
+    allocate(htmp_ad(n))
+    do i = n, 1, - 1
+      htmp_ad(i) = z_ad * y ! z = z + htmp(i) * y
+      y_ad = z_ad * htmp(i) + y_ad ! z = z + htmp(i) * y
+    end do
+    if (.not. allocated(htmp)) then
+      allocate(htmp, mold=htmp_save_42_ad)
+    end if
+    htmp(1:n) = htmp_save_42_ad(1:n)
+    x_ad = htmp_ad * 2.0 * x + x_ad ! htmp = x**2
+    do i = n, 1, - 1
+      htmp_ad(i) = z_ad * y ! z = z + htmp(i) * y
+      y_ad = z_ad * htmp(i) + y_ad ! z = z + htmp(i) * y
+    end do
+    z_ad = 0.0 ! z = 0.0
+    x_ad = htmp_ad + x_ad ! htmp = x
+    deallocate(htmp_ad)
+    deallocate(htmp)
+
+    return
+  end subroutine save_alloc_rev_ad
+
   subroutine module_vars_init_fwd_ad(n, x, x_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
