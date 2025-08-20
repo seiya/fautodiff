@@ -902,6 +902,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r4(idx)%datatype = 0
     req_map_r4(idx)%op_type = 0
     req_map_r4(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_isend_rev_ad_r4
 
   subroutine mpi_isend_fwd_ad_r8(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
@@ -957,6 +958,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r8(idx)%datatype = 0
     req_map_r8(idx)%op_type = 0
     req_map_r8(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_isend_rev_ad_r8
   subroutine mpi_irecv_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
     real, intent(out) :: buf(..)
@@ -1017,6 +1019,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r4(idx)%datatype = 0
     req_map_r4(idx)%op_type = 0
     req_map_r4(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_irecv_rev_ad_r4
 
   subroutine mpi_irecv_fwd_ad_r8(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
@@ -1074,6 +1077,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r8(idx)%datatype = 0
     req_map_r8(idx)%op_type = 0
     req_map_r8(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_irecv_rev_ad_r8
   subroutine mpi_put_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real, intent(in) :: origin(..)
@@ -1274,6 +1278,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r4(idx)%datatype = 0
     req_map_r4(idx)%op_type = 0
     req_map_r4(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_send_init_rev_ad_r4
 
   subroutine mpi_send_init_fwd_ad_r8(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
@@ -1326,6 +1331,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r8(idx)%datatype = 0
     req_map_r8(idx)%op_type = 0
     req_map_r8(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_send_init_rev_ad_r8
   subroutine mpi_recv_init_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
     real, intent(out) :: buf(..)
@@ -1379,6 +1385,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r4(idx)%datatype = 0
     req_map_r4(idx)%op_type = 0
     req_map_r4(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_recv_init_rev_ad_r4
 
   subroutine mpi_recv_init_fwd_ad_r8(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
@@ -1433,6 +1440,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r8(idx)%datatype = 0
     req_map_r8(idx)%op_type = 0
     req_map_r8(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_recv_init_rev_ad_r8
   subroutine mpi_start_fwd_ad(request, request_ad, ierr)
     integer, intent(inout) :: request, request_ad
