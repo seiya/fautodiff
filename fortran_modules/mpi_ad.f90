@@ -332,9 +332,21 @@ contains
     real, intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, root, comm
     integer, intent(out), optional :: ierr
+    real :: tmp(count)
+    integer :: ierr2
 
     call MPI_Reduce(sendbuf, recvbuf, count, datatype, op, root, comm, ierr)
-    call MPI_Reduce(sendbuf_ad, recvbuf_ad, count, datatype, op, root, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Reduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      call MPI_Bcast(recvbuf, count, datatype, root, comm, ierr2)
+      tmp = merge(sendbuf_ad, 0.0, sendbuf == recvbuf)
+      call MPI_Reduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_reduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_reduce_fwd_ad_r4
 
   subroutine mpi_reduce_rev_ad_r4(sendbuf_ad, recvbuf_ad, count, datatype, op, root, comm, ierr)
@@ -362,9 +374,21 @@ contains
     real(8), intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, root, comm
     integer, intent(out), optional :: ierr
+    real(8) :: tmp(count)
+    integer :: ierr2
 
     call MPI_Reduce(sendbuf, recvbuf, count, datatype, op, root, comm, ierr)
-    call MPI_Reduce(sendbuf_ad, recvbuf_ad, count, datatype, op, root, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Reduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      call MPI_Bcast(recvbuf, count, datatype, root, comm, ierr2)
+      tmp = merge(sendbuf_ad, 0.0_8, sendbuf == recvbuf)
+      call MPI_Reduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_reduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_reduce_fwd_ad_r8
 
   subroutine mpi_reduce_rev_ad_r8(sendbuf_ad, recvbuf_ad, count, datatype, op, root, comm, ierr)
@@ -392,9 +416,20 @@ contains
     real, intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
+    real :: tmp(count)
+    integer :: ierr2
 
     call MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm, ierr)
-    call MPI_Allreduce(sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Allreduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      tmp = merge(sendbuf_ad, 0.0, sendbuf == recvbuf)
+      call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_allreduce_fwd_ad_r4
 
   subroutine mpi_allreduce_rev_ad_r4(sendbuf, sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
@@ -438,9 +473,20 @@ contains
     real(8), intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
+    real(8) :: tmp(count)
+    integer :: ierr2
 
     call MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm, ierr)
-    call MPI_Allreduce(sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Allreduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      tmp = merge(sendbuf_ad, 0.0_8, sendbuf == recvbuf)
+      call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_allreduce_fwd_ad_r8
 
   subroutine mpi_allreduce_rev_ad_r8(sendbuf, sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
@@ -483,14 +529,27 @@ contains
     real, intent(inout) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
+    real :: rb(count), rb_ad(count), tmp(count)
+    integer :: ierr2
 
     if (sendbuf /= MPI_IN_PLACE) then
       print *, "Error: sendbuf must be MPI_IN_PLACE for in-place Allreduce."
       call MPI_abort(comm, -1, ierr)
     end if
 
+    rb(1:count) = recvbuf(1:count)
+    rb_ad(1:count) = recvbuf_ad(1:count)
     call MPI_Allreduce(MPI_IN_PLACE, recvbuf, count, datatype, op, comm, ierr)
-    call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, op, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      tmp = merge(rb_ad, 0.0, rb == recvbuf)
+      call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_allreduce_fwd_ad_r4_inplace
 
   subroutine mpi_allreduce_rev_ad_r4_inplace(sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
@@ -537,14 +596,27 @@ contains
     real(8), intent(inout) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
+    real(8) :: rb(count), rb_ad(count), tmp(count)
+    integer :: ierr2
 
     if (sendbuf /= MPI_IN_PLACE) then
       print *, "Error: sendbuf_ad must be MPI_IN_PLACE for in-place Allreduce."
       call MPI_abort(comm, -1, ierr)
     end if
 
+    rb(1:count) = recvbuf(1:count)
+    rb_ad(1:count) = recvbuf_ad(1:count)
     call MPI_Allreduce(MPI_IN_PLACE, recvbuf, count, datatype, op, comm, ierr)
-    call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, op, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      tmp = merge(rb_ad, 0.0_8, rb == recvbuf)
+      call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_allreduce_fwd_ad_r8_inplace
 
   subroutine mpi_allreduce_rev_ad_r8_inplace(sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
