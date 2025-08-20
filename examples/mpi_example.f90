@@ -35,20 +35,20 @@ contains
     x(:) = x(:) + rank
     pn = rank - 1
     pp = rank + 1
-    if (pn >= 1) then
+    if (pn >= 0) then
       call MPI_Irecv(x(1), 1, MPI_REAL, pn, tag, comm, reqs(1), ierr)
       call MPI_Isend(x(2), 1, MPI_REAL, pn, tag+1, comm, reqs(2), ierr)
     end if
-    if (pp <= size) then
+    if (pp < size) then
       call MPI_Irecv(x(3), 1, MPI_REAL, pp, tag+1, comm, reqs(3), ierr)
       call MPI_Isend(x(2), 1, MPI_REAL, pp, tag, comm, reqs(4), ierr)
     end if
     y = x(2)
     call MPI_Waitall(4, reqs, MPI_STATUSES_IGNORE, ierr)
-    if (pn >= 1) then
+    if (pn >= 0) then
       y = x(1) + y
     end if
-    if (pp <= size) then
+    if (pp < size) then
       y = x(3) + y
     end if
 
