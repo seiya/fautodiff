@@ -51,6 +51,8 @@ from .code_tree import (
     render_program,
 )
 from .operators import (
+    Kind,
+    VarType,
     AryIndex,
     OpComplex,
     OpFunc,
@@ -61,7 +63,6 @@ from .operators import (
     OpTrue,
     OpVar,
 )
-from .var_type import VarType
 
 code_tree.AD_SUFFIX = AD_SUFFIX
 code_tree.FWD_SUFFIX = FWD_SUFFIX
@@ -691,8 +692,9 @@ def _load_fadmods(
                         for name, info in vars_data.items():
                             vt = None
                             typename = info.get("typename")
-                            if typename is not None:
-                                vt = VarType(typename, kind=info.get("kind", None))
+                            kind_name = info.get("kind", None)
+                            kind = Kind(OpInt(int(kind_name))) if kind_name is not None else None
+                            vt = VarType(typename, kind=kind)
                             vars.append(
                                 OpVar(
                                     name=name,
@@ -841,13 +843,13 @@ def _prepare_fwd_ad_header(
         typ = arg.var_type.typename
         dims = arg.dims
         intent = arg.intent or "inout"
-        kind = arg.var_type.kind
-        kind_val = arg.var_type.kind_val
+        var_type = arg.var_type
+        kind = var_type.kind
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
         arg_info["dims"].append(dims)
-        arg_info["kind"].append(kind_val if kind_val is not None else kind)
+        arg_info["kind"].append(kind.val if kind is not None else None)
 
         # Always pass original argument to the forward AD routine
         args.append(arg)
@@ -856,12 +858,7 @@ def _prepare_fwd_ad_header(
             ad_name = f"{name}{AD_SUFFIX}"
             var = OpVar(
                 ad_name,
-                var_type=VarType(
-                    typ,
-                    kind=kind,
-                    kind_val=kind_val,
-                    kind_keyword=arg.var_type.kind_keyword,
-                ),
+                var_type=var_type,
                 dims=dims,
                 intent=arg.intent,
                 ad_target=True,
@@ -976,24 +973,19 @@ def _prepare_rev_ad_header(
         typ = arg.var_type.typename
         dims = arg.dims
         intent = arg.intent or "inout"
-        kind = arg.var_type.kind
-        kind_val = arg.var_type.kind_val
+        var_type = arg.var_type
+        kind = var_type.kind
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
         arg_info["dims"].append(dims)
-        arg_info["kind"].append(kind_val if kind_val is not None else kind)
+        arg_info["kind"].append(kind.val if kind is not None else None)
         if intent == "out":
             if arg.ad_target and not arg.is_constant:
                 ad_name = f"{name}{AD_SUFFIX}"
                 var = OpVar(
                     ad_name,
-                    var_type=VarType(
-                        typ,
-                        kind=kind,
-                        kind_val=kind_val,
-                        kind_keyword=arg.var_type.kind_keyword,
-                    ),
+                    var_type=var_type,
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1017,12 +1009,7 @@ def _prepare_rev_ad_header(
                 ad_name = f"{name}{AD_SUFFIX}"
                 var = OpVar(
                     ad_name,
-                    var_type=VarType(
-                        typ,
-                        kind=kind,
-                        kind_val=kind_val,
-                        kind_keyword=arg.var_type.kind_keyword,
-                    ),
+                    var_type=var_type,
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1204,7 +1191,6 @@ def _generate_ad_subroutine(
             lhs = OpVar(
                 arg.name,
                 kind=arg.var_type.kind,
-                kind_keyword=arg.var_type.kind_keyword,
             )
             if arg.is_complex_type:
                 zero = OpComplex(

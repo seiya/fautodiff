@@ -16,23 +16,23 @@ from fparser.two.parser import ParserFactory
 from fparser.two.utils import walk
 
 
-def _eval_selected_real_kind(p: int, r: int) -> str:
+def _eval_selected_real_kind(p: int, r: int) -> int:
     """Evaluate ``selected_real_kind`` for common precisions."""
     if p <= 6 and r <= 37:
-        return "4"
+        return 4
     if p <= 15 and r <= 307:
-        return "8"
-    return "16"
+        return 8
+    return 16
 
 
 _ISO_KIND_MAP = {
-    "real32": "4",
-    "real64": "8",
-    "real128": "16",
-    "int8": "1",
-    "int16": "2",
-    "int32": "4",
-    "int64": "8",
+    "real32": 4,
+    "real64": 8,
+    "real128": 16,
+    "int8": 1,
+    "int16": 2,
+    "int32": 4,
+    "int64": 8,
 }
 
 
@@ -41,7 +41,7 @@ def _eval_iso_kind(name: str) -> Optional[str]:
     return _ISO_KIND_MAP.get(name.lower())
 
 
-def _eval_kind(expr: str) -> Optional[str]:
+def _eval_kind(expr: str) -> Optional[int]:
     """Evaluate ``kind(<literal>)`` expressions."""
     m = re.match(r"kind\(([^)]+)\)", expr, re.I)
     if not m:
@@ -51,10 +51,10 @@ def _eval_kind(expr: str) -> Optional[str]:
     if not m2:
         return None
     if m2.group(4):
-        return m2.group(4)
+        return int(m2.group(4))
     if m2.group(3) and m2.group(3).lower().startswith("d"):
-        return "8"
-    return "4"
+        return 8
+    return 4
 
 
 from packaging.version import Version, parse
@@ -97,6 +97,8 @@ from .operators import (
     ARG_TYPE_INTRINSICS,
     INTRINSIC_FUNCTIONS,
     NONDIFF_INTRINSICS,
+    Kind,
+    VarType,
     AryIndex,
     OpAdd,
     OpAry,
@@ -120,7 +122,6 @@ from .operators import (
     OpType,
     OpVar,
 )
-from .var_type import VarType
 
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
 
@@ -596,6 +597,41 @@ def _stmt_name(stmt):
     raise AttributeError("Could not determine statement name")
 
 
+def _get_kind(var: Union[str, Operator], decl_map: dict) -> Kind:
+    """Return a Kind."""
+    if isinstance(var, str) and var.isdigit():
+        val = int(var)
+        return Kind(OpInt(val), val=val)
+    if isinstance(var, OpInt):
+        return Kind(var, val=var.val)
+    if isinstance(var, Operator):
+        if isinstance(var, OpVar):
+            name = var.name
+        else:
+            raise ValueError(f"Unsupported kind operator: {var}")
+    elif isinstance(var, str):
+        name = var
+    else:
+        raise TypeError(f"Unsupported kind type: {type(var)}")
+    if name in decl_map and decl_map[name].init_val is not None:
+        init_val = decl_map[name].init_val
+        m = re.match(
+            r"selected_real_kind\((\d+),\s*(\d+)\)", init_val, re.I
+        )
+        if m:
+            val = _eval_selected_real_kind(
+                int(m.group(1)), int(m.group(2))
+            )
+        elif init_val.isdigit():
+            val = int(init_val)
+        else:
+            val = _eval_kind(init_val)
+            if val is None:
+                val = _eval_iso_kind(val) or init_val
+        return Kind(OpVar(name), val=val)
+    raise RuntimeError(f"Unsupported kind for {name}. ")
+
+
 def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
     """Return Operator from statement."""
 
@@ -603,12 +639,17 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
         return _stmt2op(stmt.items[1], decl_map, type_map)
 
     if isinstance(stmt, Fortran2003.Int_Literal_Constant):
-        return OpInt(val=int(stmt.items[0]), kind=stmt.items[1])
+        if stmt.items[1] is None:
+            kind = None
+        else:
+            kind = _get_kind(stmt.items[1], decl_map)
+        return OpInt(val=int(stmt.items[0]), kind=kind)
 
     if isinstance(stmt, Fortran2003.Signed_Int_Literal_Constant):
         text = stmt.tofortran()
         if "_" in text:
-            val_str, kind = text.split("_", 1)
+            val_str, kind_name = text.split("_", 1)
+            kind = _get_kind(kind_name, decl_map)
         else:
             val_str, kind = text, None
         val = int(val_str)
@@ -617,52 +658,45 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
         return OpInt(val, kind=kind)
 
     if isinstance(stmt, Fortran2003.Real_Literal_Constant):
-        m = _KIND_RE.fullmatch(stmt.tofortran())
+        val = stmt.items[0]
+        kind_name = stmt.items[1]
+        expo = None
+        sign = None
+        m = re.match(
+            r"([+-])?(\d+(?:\.\d*)?)([eEdD])?([+-]?\d+)?", val
+        )
         if m:
-            sign = m.group(1)
-            val = m.group(2)
-            expo = m.group(3)
-            kind = m.group(4)
-            if kind is None and expo is not None:
-                if expo[0].lower() == "d":
-                    kind = "8"
-            if expo is not None:
-                expo = int(expo[1:])
-            ret = OpReal(val=val, kind=kind, expo=expo)
-            if sign is not None and sign[0] == "-":
-                ret = -ret
-            return ret
-        else:
-            raise ValueError(f"Failed to convert real number: {stmt}")
+            sign, val, ed, expo = m.groups()
+            if kind_name is None and ed is not None:
+                if ed.lower() == "d":
+                    kind_name = OpInt(8)
+        expo = int(expo) if expo is not None else 0
+        kind = _get_kind(kind_name, decl_map) if kind_name else None
+        ret = OpReal(val=val, kind=kind, expo=expo)
+        if sign is not None and sign[0] == "-":
+            ret = -ret
+        return ret
 
     if isinstance(stmt, Fortran2003.Signed_Real_Literal_Constant):
-        m = _KIND_RE.fullmatch(stmt.tofortran())
-        if m:
-            sign = m.group(1)
-            val = m.group(2)
-            expo = m.group(3)
-            kind = m.group(4)
-            if kind is None and expo is not None:
-                if expo[0].lower() == "d":
-                    kind = "8"
-            if expo is not None:
-                expo = int(expo[1:])
-            ret = OpReal(val=val, kind=kind, expo=expo)
-            if sign is not None and sign[0] == "-":
-                ret = -ret
-            return ret
-        else:
-            raise ValueError(f"Failed to convert real number: {stmt}")
+        print(stmt)
+        print(stmt.items)
+        val = None
+        kind = None
+        expo = None
+        sign = None
+        ret = OpReal(val=val, kind=kind, expo=expo)
+        if sign is not None and sign[0] == "-":
+            ret = -ret
+        return ret
 
     if isinstance(stmt, Fortran2003.Complex_Literal_Constant):
         real = _stmt2op(stmt.items[0], decl_map, type_map)
         imag = _stmt2op(stmt.items[1], decl_map, type_map)
-        kind = getattr(real, "kind", None)
-        if getattr(imag, "kind", None) == kind:
-            pass
-        elif getattr(imag, "kind", None) is not None:
-            kind = imag.var_type.kind
-        return OpComplex(real, imag, kind=kind)
+        if real.var_type is not None:
+            var_type = real.var_type + imag.var_type
+        else:
+            var_type = imag.var_type
+        return OpComplex(real, imag, var_type=var_type)
 
     if isinstance(stmt, Fortran2003.Name):
         name = stmt.string
@@ -677,49 +711,9 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
         else:
             raise ValueError(f"Not found in the declaration section: {name}")
 
-        kind = decl.var_type.kind
-        kind_val = decl.var_type.kind_val
-        if (
-            kind_val is None
-            and kind is None
-            and decl.var_type.typename.lower().startswith("double")
-        ):
-            kind = "8"
-            kind_val = "8"
-        if kind_val is None and kind is not None and not kind.isdigit():
-            kind_val = _eval_iso_kind(kind)
-        if (
-            kind_val is None
-            and kind is not None
-            and decl_map is not None
-            and not kind.isdigit()
-            and kind in decl_map
-        ):
-            ref = decl_map[kind]
-            if ref.init_val is not None:
-                m = re.match(
-                    r"selected_real_kind\((\d+),\s*(\d+)\)", ref.init_val, re.I
-                )
-                if m:
-                    kind_val = _eval_selected_real_kind(
-                        int(m.group(1)), int(m.group(2))
-                    )
-                elif ref.init_val.isdigit():
-                    kind_val = ref.init_val
-                else:
-                    kind_val = _eval_kind(ref.init_val)
-                    if kind_val is None:
-                        kind_val = _eval_iso_kind(ref.init_val) or ref.init_val
-
-        vt = VarType(
-            decl.var_type.typename,
-            kind=kind,
-            kind_val=kind_val,
-            char_len=decl.var_type.char_len,
-        )
         return OpVar(
             name=name,
-            var_type=vt,
+            var_type=decl.var_type.copy(),
             dims=decl.dims,
             ad_target=decl.ad_target(),
             is_constant=decl.parameter or getattr(decl, "constant", False),
@@ -1008,7 +1002,6 @@ def _parse_decl_stmt(
     decl_map=None,
 ) -> List[Declaration]:
     """Parse a single ``Type_Declaration_Stmt`` and return declarations."""
-
     if not isinstance(
         stmt,
         (
@@ -1021,8 +1014,6 @@ def _parse_decl_stmt(
 
     type_spec = stmt.items[0]
     kind = None
-    kind_val = None
-    kind_keyword = False
     char_len = None
     type_def = None
     if isinstance(type_spec, Fortran2003.Intrinsic_Type_Spec):
@@ -1032,34 +1023,8 @@ def _parse_decl_stmt(
             pass
         elif isinstance(selector, Fortran2003.Kind_Selector):
             if selector.items[1]:
-                kind = selector.items[1].string
-                if kind.isdigit():
-                    kind_val = kind
-                else:
-                    kind_val = _eval_iso_kind(kind)
-                    if kind_val is None:
-                        kind_val = _eval_kind(kind)
-                if (
-                    kind_val is None
-                    and decl_map is not None
-                    and not kind.isdigit()
-                    and kind in decl_map
-                    and decl_map[kind].init_val is not None
-                ):
-                    init = decl_map[kind].init_val
-                    m = re.match(r"selected_real_kind\((\d+),\s*(\d+)\)", init, re.I)
-                    if m:
-                        kind_val = _eval_selected_real_kind(
-                            int(m.group(1)), int(m.group(2))
-                        )
-                    elif init.isdigit():
-                        kind_val = init
-                    else:
-                        kind_val = _eval_kind(init)
-                        if kind_val is None:
-                            kind_val = _eval_iso_kind(init) or init
-                    if not init.strip().isdigit():
-                        kind_keyword = True
+                var = _stmt2op(selector.items[1], decl_map, type_map)
+                kind = _get_kind(var, decl_map)
         elif isinstance(selector, Fortran2003.Length_Selector):
             char_len = selector.items[1].string
         else:
@@ -1204,8 +1169,6 @@ def _parse_decl_stmt(
                 var_type=VarType(
                     base_type.lower(),
                     kind=kind,
-                    kind_val=kind_val,
-                    kind_keyword=kind_keyword,
                     char_len=char_len,
                 ),
                 dims=dims,
@@ -1574,9 +1537,11 @@ def _search_use(
         vars_map = _load_fadmod_decls(name, search_dirs)
         for vname, info in vars_map.items():
             if only is None or vname in only:
+                kind_name = info.get("kind_name")
+                kind = _get_kind(kind_name, decl_map) if kind_name is not None else None
                 decl_map[vname] = Declaration(
                     vname,
-                    var_type=VarType(info["typename"], kind=info.get("kind")),
+                    var_type=VarType(info["typename"], kind=kind),
                     dims=(
                         tuple(info["dims"]) if info.get("dims") is not None else None
                     ),

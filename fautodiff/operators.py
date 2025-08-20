@@ -8,13 +8,119 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from typing import Any, ClassVar, Iterable, Iterator, List, Optional, Tuple, Union
 
-from .var_type import VarType
-
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")  # pattern for valid variable names
 
 # Suffix used for adjoint variables.  This is set by ``generator`` when a
 # different suffix is desired but defaults to ``_ad``.
 AD_SUFFIX = "_ad"
+
+
+
+@dataclass
+class Kind:
+    """Representation of a Fortran kind."""
+
+    var: Operator
+    val: int = field(default=None)
+
+    def __post_init__(self):
+        """Validate the kind."""
+        if not isinstance(self.var, Operator):
+            raise ValueError(f"var must be an Operator: {type(self.var)}")
+        if self.val is not None and not isinstance(self.val, int):
+            raise ValueError(f"val must be an int or None: {type(self.val)}")
+        if self.val is None and not isinstance(self.var, OpInt):
+            raise ValueError("val must be provided if var is not OpInt")
+        if self.val is None:
+            self.val = self.var.val
+
+    def copy(self) -> "Kind":
+        """Create a copy of this kind."""
+        return Kind(var=self.var, val=self.val)
+
+    def __str__(self) -> str:
+        """Return a string representation of the kind."""
+        return str(self.var.val)
+
+
+@dataclass
+class VarType:
+    """Representation of a Fortran variable type."""
+
+    typename: str
+    kind: Optional[Kind] = None
+    char_len: Optional[str] = None
+
+    def __post_init__(self):
+        """Validate the variable type."""
+        if not isinstance(self.typename, str):
+            raise ValueError(f"typename must be a string: {type(self.typename)}")
+        if self.kind is not None and not isinstance(self.kind, Kind):
+            raise ValueError(f"kind must be an Kind or None: {type(self.kind)}")
+        if self.char_len is not None and not isinstance(self.char_len, str):
+            raise ValueError(f"char_len must be a string or None: {type(self.char_len)}")
+
+    def copy(self) -> "VarType":
+        return VarType(
+            typename=self.typename,
+            kind=self.kind.copy() if self.kind else None,
+            char_len=self.char_len,
+        )
+
+    def __str__(self) -> str:
+        parts = []
+        if self.kind is not None:
+            if isinstance(self.kind.var, OpInt):
+                parts.append(str(self.kind.var))
+            else:
+                parts.append(f"kind={self.kind.var}")
+        if self.char_len is not None:
+            parts.append(f"len={self.char_len}")
+        if parts:
+            return f"{self.typename}(" + ",".join(parts) + ")"
+        return self.typename
+
+    def is_real_type(self) -> bool:
+        typename = self.typename.lower()
+        return typename.startswith("real") or typename.startswith("double")
+
+    def is_complex_type(self) -> bool:
+        return self.typename.lower().startswith("complex")
+
+    def is_integer_type(self) -> bool:
+        return self.typename.lower().startswith("integer")
+
+    def _binary_result(self, other: "VarType") -> "VarType":
+        if other is None:
+            return self.copy()
+        if self.kind is not None and other.kind is not None:
+            kind = self.kind if self.kind.val > other.kind.val else other.kind
+        else:
+            kind = self.kind or other.kind
+        if self.is_complex_type() and other.is_complex_type():
+            return VarType("complex", kind=kind)
+        if self.is_complex_type():
+            return VarType("complex", kind=self.kind)
+        if other.is_complex_type():
+            return VarType("complex", kind=other.kind)
+        if self.is_real_type() and other.is_real_type():
+            return VarType("real", kind=kind)
+        if self.is_real_type():
+            return VarType("real", kind=self.kind)
+        if other.is_real_type():
+            return VarType("real", kind=other.kind)
+        if self.is_integer_type() and other.is_integer_type():
+            return VarType("integer", kind=kind)
+        raise NotImplementedError(
+            f"Cannot determine result type for {self} and {other}"
+        )
+
+    def __add__(self, other: "VarType") -> "VarType":
+        return self._binary_result(other)
+
+    __sub__ = __add__
+    __mul__ = __add__
+    __truediv__ = __add__
 
 
 @dataclass
@@ -285,8 +391,8 @@ class AryIndex:
 class Operator:
     """Abstract fortran oprations."""
 
-    args: Optional[List[Optional[Operator]]] = None
-    var_type: Optional[VarType] = None
+    args: Optional[List[Optional[Operator]]]
+    var_type: VarType = None
     macro_name: Optional[str] = None
     PRIORITY: ClassVar[int] = -999
 
@@ -597,24 +703,24 @@ class Operator:
             if isinstance(other, OpInt) and other.val == 1:
                 return self
             if isinstance(self, OpInt) and self.val == 0:
-                return OpInt(0, target=self.target, kind=self.kind)
+                return OpInt(0, target=self.target, kind=other.var_type.kind)
             if isinstance(other, OpInt) and other.val == 0:
-                return OpInt(0, target=other.target, kind=other.kind)
+                return OpInt(0, target=other.target, kind=self.var_type.kind)
             if isinstance(self, OpInt) and self.val == -1:
                 return -other
             if isinstance(other, OpInt) and other.val == -1:
                 return -self
             if isinstance(self, OpInt) and isinstance(other, OpInt):
-                return OpInt(self.val * other.val, target=self.target, kind=self.kind)
+                return OpInt(self.val * other.val, target=self.target, var_type=self.var_type)
             if (
                 isinstance(self, OpReal)
                 and isinstance(other, OpReal)
-                and self.kind == other.kind
+                and self.var_type == other.var_type
                 and self.val == str(float(self.val))
                 and other.val == str(float(other.val))
             ):
                 return OpReal(
-                    val=str(float(self.val) * float(other.val)), kind=self.kind
+                    val=str(float(self.val) * float(other.val)), var_type=self.var_type
                 )
             if (
                 isinstance(self, OpReal)
@@ -625,10 +731,10 @@ class Operator:
                     return OpInt(
                         int(self.val) * other.val,
                         target=other.target,
-                        kind=other.kind,
+                        var_type=other.var_type,
                     )
                 else:
-                    return OpReal(val=str(float(self.val) * other.val), kind=self.kind)
+                    return OpReal(val=str(float(self.val) * other.val), var_type=self.var_type)
             if (
                 isinstance(other, OpReal)
                 and isinstance(self, OpInt)
@@ -638,10 +744,10 @@ class Operator:
                     return OpInt(
                         int(other.val) * self.val,
                         target=self.target,
-                        kind=self.kind,
+                        var_type=self.var_type,
                     )
                 else:
-                    return OpReal(val=str(float(other.val) * self.val), kind=other.kind)
+                    return OpReal(val=str(float(other.val) * self.val), var_type=other.var_type)
             if isinstance(self, OpNeg):
                 return -(self.args[0] * other)
             if isinstance(other, OpNeg):
@@ -792,7 +898,6 @@ class Operator:
 @dataclass
 class OpLeaf(Operator):
 
-    kind: Optional[str] = None
     PRIORITY: ClassVar[int] = 0
 
     def collect_vars(
@@ -845,12 +950,11 @@ class OpInt(OpNum):
     dims: ClassVar[Optional[Tuple[str]]] = None
 
     def __init__(
-        self, val: int, kind: Optional[str] = None, target: Optional[OpVar] = None
+        self, val: int, kind: Optional[Kind] = None, target: Optional[OpVar] = None
     ):
         super().__init__(
             args=[],
             var_type=VarType("integer", kind=kind),
-            kind=kind,
         )
         if val < 0:
             raise ValueError(f"val must be >= 0: {val}")
@@ -858,11 +962,11 @@ class OpInt(OpNum):
         self.target = target
 
     def __new__(
-        cls, val: int, kind: Optional[str] = None, target: Optional[OpVar] = None
+        cls, val: int, kind: Optional[Kind] = None, target: Optional[OpVar] = None
     ):
         if val < 0:
             instance = super().__new__(cls)
-            instance.__init__(-val, kind, target)
+            instance.__init__(-val, kind=kind, target=target)
             return -instance
         else:
             return super().__new__(cls)
@@ -872,7 +976,7 @@ class OpInt(OpNum):
             self.__class__,
             (
                 self.val,
-                self.kind,
+                self.var_type,
                 self.target,
             ),
         )
@@ -880,24 +984,48 @@ class OpInt(OpNum):
     def __str__(self) -> str:
         if self.macro_name:
             return self.macro_name
-        kind = None
         if self.target is not None:
-            kind = self.target.kind
-            if self.target.is_real_type or getattr(
-                self.target, "is_complex_type", False
-            ):
-                if self.kind is not None:
-                    kind = self.kind
-                if kind == "8":
+            kind = self.target.var_type.kind
+            if self.target.is_real_type or self.target.is_complex_type:
+                if isinstance(kind, OpInt) and kind.val == 8:
                     return f"{self.val}.0d0"
-                if kind is not None and kind != "4":
-                    return f"{self.val}.0_{kind}"
-                return f"{self.val}.0"
-        if self.kind is not None:
-            kind = self.kind
+                if isinstance(kind, OpInt) and kind.val == 4 or kind is None:
+                    return f"{self.val}.0"
+                return f"{self.val}.0_{kind}"
+        kind = self.var_type.kind
         if kind is not None and kind != "4":
             return f"{self.val}_{kind}"
         return str(self.val)
+
+
+@dataclass
+class OpReal(OpNum):
+
+    val: str = field(default="-999.0e99")
+    expo: int = field(default=0)
+
+    def __init__(self, val, kind: Optional[Kind] = None, expo: int = 0):
+        super().__init__(
+            args=[],
+            var_type=VarType("real", kind=kind),
+        )
+        self.val = val
+        self.expo = expo
+
+    def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
+        kind = self.var_type.kind
+        if kind is not None:
+            if isinstance(kind.var, OpInt) and kind.var.val == 8:
+                return f"{self.val}d{self.expo}"
+            if isinstance(kind.var, OpInt) and kind.var.val == 4:
+                return f"{self.val}e{self.expo}"
+            if self.expo != 0:
+                return f"{self.val}e{self.expo}_{kind.var}"
+            else:
+                return f"{self.val}_{kind.var}"
+        return self.val
 
 
 @dataclass
@@ -943,36 +1071,6 @@ class OpFalse(OpLeaf):
         if self.macro_name:
             return self.macro_name
         return ".false."
-
-
-@dataclass
-class OpReal(OpNum):
-
-    val: str = field(default="-999.0e99")
-    expo: int = field(default=0)
-
-    def __init__(self, val, kind=None, expo=None):
-        super().__init__(
-            args=[],
-            var_type=VarType("real", kind=kind),
-            kind=kind,
-        )
-        self.val = val
-
-    def __str__(self) -> str:
-        if self.macro_name:
-            return self.macro_name
-        if self.kind is not None:
-            if self.kind == "4":
-                return f"{self.val}e{self.expo}"
-            if self.kind == "8":
-                return f"{self.val}d{self.expo}"
-            if self.kind != "4":
-                if self.expo != 0:
-                    return f"{self.val}e{self.expo}_{self.kind}"
-                else:
-                    return f"{self.val}_{self.kind}"
-        return str(self.val)
 
 
 @dataclass

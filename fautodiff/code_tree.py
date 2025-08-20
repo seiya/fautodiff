@@ -25,6 +25,7 @@ FWD_SUFFIX = "_fwd_ad"
 REV_SUFFIX = "_rev_ad"
 
 from .operators import (
+    VarType,
     AryIndex,
     OpChar,
     Operator,
@@ -42,7 +43,6 @@ from .operators import (
     OpVar,
 )
 from .var_list import VarList
-from .var_type import VarType
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -2222,7 +2222,7 @@ class CallStatement(Node):
                     init_nodes.append(
                         Assignment(
                             lhs.add_suffix(AD_SUFFIX),
-                            OpReal("0.0", kind=lhs.kind_val or lhs.kind),
+                            OpReal("0.0", kind=lhs.kind),
                         )
                     )
                     ad_nodes.extend(
@@ -2255,7 +2255,7 @@ class CallStatement(Node):
             ad_nodes = init_nodes + [ad_call] + ad_nodes
             loads = []
             blocks = []
-            for var in ad_call.assigned_vars():
+            for var in self.assigned_vars():
                 if not var.name.endswith(AD_SUFFIX):
                     if self.org_node is not None:
                         node = self.org_node
@@ -2942,8 +2942,6 @@ class Declaration(Node):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Optional["Declaration"]:
-        if self.parameter:
-            return self.deep_clone()
         target_names = targets.names()
         if self.intent is not None or self.name in target_names:
             return self.deep_clone()
@@ -3191,7 +3189,7 @@ class Assignment(Node):
         lhs = self.lhs
         if lhs in targets:
             return self.deep_clone()
-        if not lhs.ad_target and not lhs.name.endswith(AD_SUFFIX): # e.g., requests_ad for mpi
+        if not lhs.ad_target and not lhs.name.endswith(AD_SUFFIX) and lhs.add_suffix(AD_SUFFIX) in targets: # e.g., requests_ad for mpi
             return Assignment(lhs.add_suffix(AD_SUFFIX), self.rhs)
         return None
 
@@ -3285,7 +3283,7 @@ class ClearAssignment(Node):
         ad_comment = ""
         if self.ad_info is not None:
             ad_comment = f" ! {self.ad_info}"
-        zero = OpReal("0.0", kind=self.lhs.kind_val or self.lhs.kind)
+        zero = OpReal("0.0", kind=self.lhs.kind)
         return [f"{space}{self.lhs} = {zero}{ad_comment}\n"]
 
     def assigned_vars(
