@@ -660,17 +660,6 @@ class Node:
             else:
                 assigns.append(Assignment(grad_lhs, expr, ad_info=ad_info))
                 assigned_advars.push(grad_lhs)
-        else:
-            routine = self.get_routine()
-            if (
-                routine is not None
-                and not lhs.name.endswith(AD_SUFFIX)
-                and routine.get_var(f"{lhs.name}{AD_SUFFIX}") is not None
-            ):
-                ad_info = self.info.get("code") if self.info is not None else None
-                lhs_ad = lhs.add_suffix(AD_SUFFIX)
-                assigns.append(Assignment(lhs_ad, rhs, ad_info=ad_info))
-                assigned_advars.push(lhs_ad)
         return assigns
 
     def _generate_ad_reverse(
@@ -928,16 +917,6 @@ class Node:
             if lhs not in rhs_vars:
                 # If lhs does not appear in rhs, its gradient is cleared
                 assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
-        else:
-            routine = self.get_routine()
-            if (
-                routine is not None
-                and not lhs.name.endswith(AD_SUFFIX)
-                and routine.get_var(f"{lhs.name}{AD_SUFFIX}") is not None
-            ):
-                ad_info = self.info.get("code") if self.info is not None else None
-                lhs_ad = lhs.add_suffix(AD_SUFFIX)
-                assigns.append(Assignment(lhs_ad, rhs, ad_info=ad_info))
         assigns.extend(extras)
         return assigns
 
@@ -3201,6 +3180,20 @@ class Assignment(Node):
         if self.ad_info is not None:
             ad_comment = f" ! {self.ad_info}"
         return [f"{space}{self.lhs} = {rhs}{ad_comment}\n"]
+
+    def prune_for(
+        self,
+        targets: VarList,
+        mod_vars: Optional[List[OpVar]] = None,
+        decl_map: Optional[Dict[str, "Declaration"]] = None,
+        base_targets: Optional[VarList] = None,
+    ) -> Optional["Assignment"]:
+        lhs = self.lhs
+        if lhs in targets:
+            return self.deep_clone()
+        if not lhs.ad_target and not lhs.name.endswith(AD_SUFFIX): # e.g., requests_ad for mpi
+            return Assignment(lhs.add_suffix(AD_SUFFIX), self.rhs)
+        return None
 
     def required_vars(
         self,

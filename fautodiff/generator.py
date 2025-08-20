@@ -1454,6 +1454,8 @@ def _generate_ad_subroutine(
             if not any(v for v in grad_args if v.name == name):
                 if subroutine.is_declared(name):
                     var = subroutine.get_var(name)
+                    if var is not None and not var.ad_target: # skip if not ad_target
+                        continue
                 else:
                     var = None
             else:
@@ -1761,8 +1763,20 @@ def _generate_ad_subroutine(
         if var.name in mod_all_var_names or var.is_constant:
             continue
         decl = subroutine.decls.find_by_name(var.name) if subroutine.decls else None
-        if decl is not None and (decl.parameter or getattr(decl, "constant", False)):
-            continue
+        if decl is not None:
+            if decl.parameter or getattr(decl, "constant", False):
+                continue
+            if not reverse and var.name.endswith(AD_SUFFIX) and not decl.ad_target():
+                found = False
+                org_name = var.name.removesuffix(AD_SUFFIX)
+                for node in subroutine.ad_content.iter_children():
+                    if isinstance(node, Assignment) and node.lhs.name == org_name:
+                        assign = Assignment(node.lhs.add_suffix(AD_SUFFIX), node.rhs)
+                        subroutine.ad_content.insert_before(node.get_id(), assign)
+                        found = True
+                        break
+                if found:
+                    continue
         required_vnames.append(str(var))
     if len(required_vnames) > 0:
         _warn(

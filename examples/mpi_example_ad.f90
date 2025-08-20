@@ -58,7 +58,7 @@ contains
 
     call MPI_Comm_rank(comm, rank, ierr)
     call MPI_Comm_size(comm, size, ierr)
-    reqs_ad(:) = MPI_REQUEST_NULL ! reqs(:) = MPI_REQUEST_NULL
+    reqs_ad(:) = MPI_REQUEST_NULL
     reqs(:) = MPI_REQUEST_NULL
     x(:) = x(:) + rank
     pn = rank - 1
@@ -100,7 +100,7 @@ contains
 
     call MPI_Comm_rank(comm, rank, ierr)
     call MPI_Comm_size(comm, size, ierr)
-    reqs_ad(:) = MPI_REQUEST_NULL ! reqs(:) = MPI_REQUEST_NULL
+    reqs_ad(:) = MPI_REQUEST_NULL
     pn = rank - 1
     pp = rank + 1
     if (pn >= 1) then
