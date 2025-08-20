@@ -23,6 +23,7 @@ from typing import (
 AD_SUFFIX = "_ad"
 FWD_SUFFIX = "_fwd_ad"
 REV_SUFFIX = "_rev_ad"
+EXTRA_AD_VARS: Set[str] = set()
 
 from .operators import (
     AryIndex,
@@ -661,16 +662,15 @@ class Node:
                 assigns.append(Assignment(grad_lhs, expr, ad_info=ad_info))
                 assigned_advars.push(grad_lhs)
         else:
-            routine = self.get_routine()
+            lhs_ad = lhs.add_suffix(AD_SUFFIX)
             if (
-                routine is not None
-                and not lhs.name.endswith(AD_SUFFIX)
-                and routine.get_var(f"{lhs.name}{AD_SUFFIX}") is not None
+                not lhs.name.endswith(AD_SUFFIX)
+                and ((assigned_advars is not None and lhs_ad in assigned_advars) or lhs_ad.name in EXTRA_AD_VARS)
             ):
                 ad_info = self.info.get("code") if self.info is not None else None
-                lhs_ad = lhs.add_suffix(AD_SUFFIX)
                 assigns.append(Assignment(lhs_ad, rhs, ad_info=ad_info))
-                assigned_advars.push(lhs_ad)
+                if assigned_advars is not None:
+                    assigned_advars.push(lhs_ad)
         return assigns
 
     def _generate_ad_reverse(
@@ -929,14 +929,9 @@ class Node:
                 # If lhs does not appear in rhs, its gradient is cleared
                 assigns.append(ClearAssignment(grad_lhs, ad_info=ad_info))
         else:
-            routine = self.get_routine()
-            if (
-                routine is not None
-                and not lhs.name.endswith(AD_SUFFIX)
-                and routine.get_var(f"{lhs.name}{AD_SUFFIX}") is not None
-            ):
+            lhs_ad = lhs.add_suffix(AD_SUFFIX)
+            if not lhs.name.endswith(AD_SUFFIX) and lhs_ad.name in EXTRA_AD_VARS:
                 ad_info = self.info.get("code") if self.info is not None else None
-                lhs_ad = lhs.add_suffix(AD_SUFFIX)
                 assigns.append(Assignment(lhs_ad, rhs, ad_info=ad_info))
         assigns.extend(extras)
         return assigns

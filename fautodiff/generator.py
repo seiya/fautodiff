@@ -60,6 +60,7 @@ from .operators import (
     OpReal,
     OpTrue,
     OpVar,
+    Operator,
 )
 from .var_type import VarType
 
@@ -593,6 +594,67 @@ def _collect_calls(node: Node, calls: Optional[set] = None) -> set:
     for child in getattr(node, "iter_children", lambda: [])():
         _collect_calls(child, calls)
     return calls
+
+
+def _collect_ad_suffix_vars(
+    node: Node,
+    routine_map: Dict[str, Any],
+    generic_map: Dict[str, Any],
+    reverse: bool,
+) -> Set[str]:
+    """Collect variable names with ``AD_SUFFIX`` required by call statements."""
+
+    names: Set[str] = set()
+    if isinstance(node, CallStatement):
+        arg_info = Node.get_arg_info(node, routine_map, generic_map)
+        if arg_info is not None:
+            targets: List[List[str]] = []
+            if reverse:
+                if arg_info.get("args_fwd_rev_ad"):
+                    targets.append(arg_info["args_fwd_rev_ad"])
+                if arg_info.get("args_rev_ad"):
+                    targets.append(arg_info["args_rev_ad"])
+            else:
+                if arg_info.get("args_fwd_ad"):
+                    targets.append(arg_info["args_fwd_ad"])
+            for args_target in targets:
+                params = list(arg_info["args"])
+                if node.result is not None:
+                    params_no_res = params[:-1]
+                else:
+                    params_no_res = params
+                ordered: List[Operator] = [None] * len(params_no_res)
+                used = [False] * len(params_no_res)
+                pos = 0
+                arg_keys = node.arg_keys or [None] * len(node.args)
+                for arg, key in zip(node.args, arg_keys):
+                    if key is None:
+                        while pos < len(params_no_res) and used[pos]:
+                            pos += 1
+                        if pos < len(params_no_res):
+                            ordered[pos] = arg
+                            used[pos] = True
+                            pos += 1
+                    else:
+                        if key in params_no_res:
+                            idx = params_no_res.index(key)
+                            ordered[idx] = arg
+                            used[idx] = True
+                if node.result is not None:
+                    ordered.append(node.result)
+                ad_args = CallStatement.rename_args(
+                    ordered, arg_info["args"], args_target
+                )
+                for var in ad_args:
+                    if (
+                        isinstance(var, OpVar)
+                        and var.name.endswith(AD_SUFFIX)
+                        and not var.ad_target
+                    ):
+                        names.add(var.name)
+    for child in getattr(node, "iter_children", lambda: [])():
+        names.update(_collect_ad_suffix_vars(child, routine_map, generic_map, reverse))
+    return names
 
 
 def _dependency_graph(routines: List[Routine]) -> Dict[str, set]:
@@ -1217,12 +1279,38 @@ def _generate_ad_subroutine(
             ad_block.append(Assignment(lhs, zero))
         subroutine.ad_content = ad_block
         return subroutine, False, set()
+    extra_fwd = _collect_ad_suffix_vars(
+        routine_org.content, routine_map, generic_map, False
+    )
+    extra_rev = _collect_ad_suffix_vars(
+        routine_org.content, routine_map, generic_map, True
+    )
+    extra_advars = extra_fwd | extra_rev
+    code_tree.EXTRA_AD_VARS = extra_advars
+    if reverse:
+        cont_children = []
+        for node in subroutine.content.iter_children():
+            if isinstance(node, Assignment):
+                name_ad = f"{node.lhs.name}{AD_SUFFIX}"
+                if name_ad in extra_advars:
+                    cont_children.append(
+                        Assignment(
+                            node.lhs.add_suffix(AD_SUFFIX),
+                            node.rhs.deep_clone(),
+                            ad_info=node.info.get("code") if node.info else None,
+                        )
+                    )
+                    continue
+            cont_children.append(node)
+        subroutine.content._children = cont_children
 
     saved_vars: List[OpVar] = []
     if reverse:
         assigned_advars = None
     else:
-        assigned_advars = VarList(in_grad_args + mod_ad_vars + save_ad_vars)
+        assigned_advars = VarList(
+            in_grad_args + mod_ad_vars + save_ad_vars + [OpVar(name) for name in extra_advars]
+        )
     return_flags = [node.flag() for node in routine_org.content.collect_return()]
     # Generate AD statements from the original routine body
     if reverse:
@@ -1256,6 +1344,14 @@ def _generate_ad_subroutine(
     for node in nodes:
         if not node.is_effectively_empty():
             ad_code.append(node)
+
+    if reverse:
+        filtered = []
+        for node in ad_code.iter_children():
+            if isinstance(node, ClearAssignment) and node.lhs.name in extra_advars:
+                continue
+            filtered.append(node)
+        ad_code._children = filtered
 
     # print(subroutine.name)
     # print(render_program(ad_code)) # for debugging
