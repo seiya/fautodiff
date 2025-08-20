@@ -97,9 +97,8 @@ from .operators import (
     ARG_TYPE_INTRINSICS,
     INTRINSIC_FUNCTIONS,
     NONDIFF_INTRINSICS,
-    Kind,
-    VarType,
     AryIndex,
+    Kind,
     OpAdd,
     OpAry,
     OpChar,
@@ -121,6 +120,7 @@ from .operators import (
     OpTrue,
     OpType,
     OpVar,
+    VarType,
 )
 
 _KIND_RE = re.compile(r"([\+\-])?([\d\.]+)([edED][\+\-]?\d+)?(?:_(.*))?$")
@@ -613,23 +613,28 @@ def _get_kind(var: Union[str, Operator], decl_map: dict) -> Kind:
         name = var
     else:
         raise TypeError(f"Unsupported kind type: {type(var)}")
-    if name in decl_map and decl_map[name].init_val is not None:
+    if name in decl_map:
         init_val = decl_map[name].init_val
-        m = re.match(
-            r"selected_real_kind\((\d+),\s*(\d+)\)", init_val, re.I
-        )
-        if m:
-            val = _eval_selected_real_kind(
-                int(m.group(1)), int(m.group(2))
-            )
-        elif init_val.isdigit():
-            val = int(init_val)
-        else:
-            val = _eval_kind(init_val)
-            if val is None:
-                val = _eval_iso_kind(val) or init_val
-        return Kind(OpVar(name), val=val)
-    raise RuntimeError(f"Unsupported kind for {name}. ")
+        if init_val is not None:
+            m = re.match(r"selected_real_kind\((\d+),\s*(\d+)\)", init_val, re.I)
+            if m:
+                val = _eval_selected_real_kind(int(m.group(1)), int(m.group(2)))
+                return Kind(OpVar(name), val=val, use_kind_keyword=True)
+            elif init_val.isdigit():
+                val = int(init_val)
+                return Kind(OpVar(name), val=val, use_kind_keyword=False)
+            else:
+                val = _eval_kind(init_val)
+                if val is None:
+                    val = _eval_iso_kind(init_val) or init_val
+                return Kind(OpVar(name), val=val, use_kind_keyword=True)
+        val = _eval_iso_kind(name)
+        if val is not None:
+            return Kind(OpVar(name), val=val, use_kind_keyword=False)
+    val = _eval_iso_kind(name)
+    if val is not None:
+        return Kind(OpVar(name), val=val, use_kind_keyword=False)
+    return Kind(OpVar(name))
 
 
 def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
@@ -662,9 +667,7 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
         kind_name = stmt.items[1]
         expo = None
         sign = None
-        m = re.match(
-            r"([+-])?(\d+(?:\.\d*)?)([eEdD])?([+-]?\d+)?", val
-        )
+        m = re.match(r"([+-])?(\d+(?:\.\d*)?)([eEdD])?([+-]?\d+)?", val)
         if m:
             sign, val, ed, expo = m.groups()
             if kind_name is None and ed is not None:
@@ -678,14 +681,20 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
         return ret
 
     if isinstance(stmt, Fortran2003.Signed_Real_Literal_Constant):
-        print(stmt)
-        print(stmt.items)
-        val = None
-        kind = None
-        expo = None
-        sign = None
+        text = stmt.items[0]
+        kind_name = stmt.items[1]
+        m = re.match(r"([+-])?(\d+(?:\.\d*)?)([eEdD])?([+-]?\d+)?", text)
+        if m:
+            sign, val, ed, expo = m.groups()
+        else:
+            sign, val, ed, expo = None, text, None, None
+        if kind_name is None and ed is not None:
+            if ed.lower() == "d":
+                kind_name = OpInt(8)
+        expo = int(expo) if expo is not None else 0
+        kind = _get_kind(kind_name, decl_map) if kind_name else None
         ret = OpReal(val=val, kind=kind, expo=expo)
-        if sign is not None and sign[0] == "-":
+        if sign == "-":
             ret = -ret
         return ret
 
@@ -696,32 +705,42 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
             var_type = real.var_type + imag.var_type
         else:
             var_type = imag.var_type
-        return OpComplex(real, imag, var_type=var_type)
+        kind = var_type.kind if var_type else None
+        return OpComplex(real, imag, kind=kind)
 
     if isinstance(stmt, Fortran2003.Name):
         name = stmt.string
         if name in decl_map:
             decl = decl_map[name]
-        elif name in type_map:
+            return OpVar(
+                name=name,
+                var_type=decl.var_type.copy(),
+                dims=decl.dims,
+                ad_target=decl.ad_target(),
+                is_constant=decl.parameter or getattr(decl, "constant", False),
+                allocatable=getattr(decl, "allocatable", False),
+                pointer=getattr(decl, "pointer", False),
+                optional=getattr(decl, "optional", False),
+                declared_in=decl.declared_in,
+            )
+        if name in type_map:
             decl = type_map[name]
-        elif name in macro_table:
+            return OpVar(
+                name=name,
+                var_type=decl.var_type.copy(),
+                dims=decl.dims,
+                ad_target=decl.ad_target(),
+                is_constant=decl.parameter or getattr(decl, "constant", False),
+                allocatable=getattr(decl, "allocatable", False),
+                pointer=getattr(decl, "pointer", False),
+                optional=getattr(decl, "optional", False),
+                declared_in=decl.declared_in,
+            )
+        if name in macro_table:
             op = OpVar(name=name, is_constant=True)
             op.macro_name = name
             return op
-        else:
-            raise ValueError(f"Not found in the declaration section: {name}")
-
-        return OpVar(
-            name=name,
-            var_type=decl.var_type.copy(),
-            dims=decl.dims,
-            ad_target=decl.ad_target(),
-            is_constant=decl.parameter or getattr(decl, "constant", False),
-            allocatable=getattr(decl, "allocatable", False),
-            pointer=getattr(decl, "pointer", False),
-            optional=getattr(decl, "optional", False),
-            declared_in=decl.declared_in,
-        )
+        return OpVar(name=name, is_constant=True)
 
     if isinstance(stmt, Fortran2003.Part_Ref):
         name = stmt.items[0].string
@@ -1538,7 +1557,13 @@ def _search_use(
         for vname, info in vars_map.items():
             if only is None or vname in only:
                 kind_name = info.get("kind_name")
-                kind = _get_kind(kind_name, decl_map) if kind_name is not None else None
+                if kind_name is not None:
+                    kind = _get_kind(kind_name, decl_map)
+                elif info.get("kind") is not None:
+                    val = info["kind"]
+                    kind = Kind(OpInt(val), val=val)
+                else:
+                    kind = None
                 decl_map[vname] = Declaration(
                     vname,
                     var_type=VarType(info["typename"], kind=kind),

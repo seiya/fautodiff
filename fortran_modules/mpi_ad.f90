@@ -398,7 +398,7 @@ contains
   end subroutine mpi_allreduce_fwd_ad_r4
 
   subroutine mpi_allreduce_rev_ad_r4(sendbuf, sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
-    real, intent(in) :: sendbuf(..)
+    real, intent(in), target, contiguous :: sendbuf(..)
     real, intent(inout), target, contiguous :: sendbuf_ad(..)
     real, intent(inout), target, contiguous :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
@@ -412,7 +412,8 @@ contains
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
     select case(op)
     case (MPI_SUM)
-      sb_ad(1:count) = rb_ad(1:count)
+      call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
+      sb_ad(1:count) = rb(1:count)
     case (MPI_MAX, MPI_MIN)
       call c_f_pointer(c_loc(sendbuf), sb, [count])
       call MPI_Allreduce(sendbuf, rb, count, datatype, op, comm, ierr)
@@ -443,7 +444,7 @@ contains
   end subroutine mpi_allreduce_fwd_ad_r8
 
   subroutine mpi_allreduce_rev_ad_r8(sendbuf, sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
-    real(8), intent(in) :: sendbuf(..)
+    real(8), intent(in), target, contiguous :: sendbuf(..)
     real(8), intent(inout), target, contiguous :: sendbuf_ad(..)
     real(8), intent(inout), target, contiguous :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
@@ -457,7 +458,8 @@ contains
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
     select case(op)
     case (MPI_SUM)
-      sb_ad(1:count) = rb_ad(1:count)
+      call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
+      sb_ad(1:count) = rb(1:count)
     case (MPI_MAX, MPI_MIN)
       call c_f_pointer(c_loc(sendbuf), sb, [count])
       call MPI_Allreduce(sendbuf, rb, count, datatype, op, comm, ierr)
@@ -508,9 +510,11 @@ contains
     end if
 
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
+    sb_ad => rb_ad
     select case(op)
     case (MPI_SUM)
-      sb_ad(1:count) = rb_ad(1:count)
+      call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
+      sb_ad(1:count) = rb(1:count)
     case (MPI_MAX, MPI_MIN)
       call c_f_pointer(c_loc(recvbuf), sb, [count])
       call MPI_Allreduce(sb, rb, count, datatype, op, comm, ierr)
@@ -560,9 +564,11 @@ contains
     end if
 
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
+    sb_ad => rb_ad
     select case(op)
     case (MPI_SUM)
-      sb_ad(1:count) = rb_ad(1:count)
+      call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
+      sb_ad(1:count) = rb(1:count)
     case (MPI_MAX, MPI_MIN)
       call c_f_pointer(c_loc(recvbuf), sb, [count])
       call MPI_Allreduce(sb, rb, count, datatype, op, comm, ierr)

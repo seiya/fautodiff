@@ -25,8 +25,8 @@ FWD_SUFFIX = "_fwd_ad"
 REV_SUFFIX = "_rev_ad"
 
 from .operators import (
-    VarType,
     AryIndex,
+    Kind,
     OpChar,
     Operator,
     OpFalse,
@@ -41,6 +41,7 @@ from .operators import (
     OpReal,
     OpTrue,
     OpVar,
+    VarType,
 )
 from .var_list import VarList
 
@@ -490,18 +491,17 @@ class Node:
                 )
             return arg_info
         argtypes: List[str] = []
-        argkinds: List[Optional[str]] = []
+        argkinds: List[Optional[int]] = []
         argdims: List[Optional[int]] = []
         for arg in routine.args:
             if not isinstance(arg, Operator):
                 raise ValueError(f"Unsupported argument type: {type(arg)}")
             argtypes.append(arg.var_type.typename)
-            kind = (
-                arg.var_type.kind_val
-                if arg.var_type.kind_val is not None
-                else arg.var_type.kind
-            )
-            argkinds.append(kind)
+            kind = arg.var_type.kind
+            if isinstance(kind, Kind):
+                argkinds.append(kind.val)
+            else:
+                argkinds.append(kind)
             if isinstance(arg, OpVar) and arg.dims:
                 if arg.index:
                     if len(arg.index) != len(arg.dims):
@@ -625,6 +625,11 @@ class Node:
 
         if lhs.ad_target:
             grad_lhs = lhs.add_suffix(AD_SUFFIX)
+            if (
+                grad_lhs.kind is None
+                and lhs.var_type.typename.lower() == "double precision"
+            ):
+                grad_lhs.kind = Kind(OpInt(8), val=8, use_kind_keyword=False)
             ad_info = self.info.get("code") if self.info is not None else None
 
             # Allow certain intrinsic functions to provide their own AD handler
@@ -729,6 +734,11 @@ class Node:
         assigns: List[Node] = []
         if lhs.ad_target:
             grad_lhs = lhs.add_suffix(AD_SUFFIX)
+            if (
+                grad_lhs.kind is None
+                and lhs.var_type.typename.lower() == "double precision"
+            ):
+                grad_lhs.kind = Kind(OpInt(8), val=8, use_kind_keyword=False)
             ad_info = self.info.get("code") if self.info is not None else None
 
             # Intrinsic functions may provide their own reverse-mode handler
@@ -890,6 +900,11 @@ class Node:
 
             # not the special case
             grad_lhs = lhs.add_suffix(AD_SUFFIX)
+            if (
+                grad_lhs.kind is None
+                and lhs.var_type.typename.lower() == "double precision"
+            ):
+                grad_lhs.kind = Kind(OpInt(8), val=8, use_kind_keyword=False)
             ad_info = self.info.get("code") if self.info is not None else None
 
             if lhs in rhs_vars:
@@ -2724,7 +2739,7 @@ class Declaration(Node):
 
     def deep_clone(self) -> "Declaration":
         dims = tuple(self.dims) if self.dims else None
-        return Declaration(
+        clone = Declaration(
             name=self.name,
             var_type=self.var_type.copy(),
             dims=dims,
@@ -2744,6 +2759,8 @@ class Declaration(Node):
             type_def=self.type_def,
             declared_in=self.declared_in,
         )
+        clone.donot_prune = getattr(self, "donot_prune", False)
+        return clone
 
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         if self.intent in ("in", "inout") or self.save:
@@ -2910,7 +2927,7 @@ class Declaration(Node):
             type_def = type_map[self.type_def.name]
             typename = f"type({type_def.name})"
         init_val = (
-            str(OpReal("0.0", kind=self.var_type.kind_val or self.var_type.kind))
+            str(OpReal("0.0", kind=self.var_type.kind))
             if not (self.allocatable or self.pointer)
             else None
         )
@@ -2919,7 +2936,6 @@ class Declaration(Node):
             var_type=VarType(
                 typename,
                 kind=self.var_type.kind,
-                kind_val=self.var_type.kind_val,
             ),
             dims=self.dims,
             init_val=init_val,
@@ -2942,6 +2958,8 @@ class Declaration(Node):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Optional["Declaration"]:
+        if getattr(self, "donot_prune", False):
+            return self.deep_clone()
         target_names = targets.names()
         if self.intent is not None or self.name in target_names:
             return self.deep_clone()
@@ -3189,7 +3207,11 @@ class Assignment(Node):
         lhs = self.lhs
         if lhs in targets:
             return self.deep_clone()
-        if not lhs.ad_target and not lhs.name.endswith(AD_SUFFIX) and lhs.add_suffix(AD_SUFFIX) in targets: # e.g., requests_ad for mpi
+        if (
+            not lhs.ad_target
+            and not lhs.name.endswith(AD_SUFFIX)
+            and lhs.add_suffix(AD_SUFFIX) in targets
+        ):  # e.g., requests_ad for mpi
             return Assignment(lhs.add_suffix(AD_SUFFIX), self.rhs)
         return None
 

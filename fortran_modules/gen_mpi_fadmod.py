@@ -18,7 +18,7 @@ from typing import Dict, List, Set
 
 from fautodiff import parser
 from fautodiff.code_tree import Declaration, Interface
-from fautodiff.var_type import VarType
+from fautodiff.operators import VarType
 
 _MODE_RE = re.compile(r"mpi_(.*?)(_fwd_rev_ad|_fwd_ad|_rev_ad)(?:_(.*))?$", re.I)
 

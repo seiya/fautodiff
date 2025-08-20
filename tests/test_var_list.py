@@ -4,9 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff.operators import AryIndex, OpInt, OpNeg, OpRange, OpVar
+from fautodiff.operators import AryIndex, OpInt, OpNeg, OpRange, OpVar, VarType
 from fautodiff.var_list import VarList
-from fautodiff.var_type import VarType
 
 
 class TestVarList(unittest.TestCase):

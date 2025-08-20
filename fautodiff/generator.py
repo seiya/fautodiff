@@ -51,9 +51,8 @@ from .code_tree import (
     render_program,
 )
 from .operators import (
-    Kind,
-    VarType,
     AryIndex,
+    Kind,
     OpComplex,
     OpFunc,
     OpInt,
@@ -62,6 +61,7 @@ from .operators import (
     OpReal,
     OpTrue,
     OpVar,
+    VarType,
 )
 
 code_tree.AD_SUFFIX = AD_SUFFIX
@@ -693,7 +693,11 @@ def _load_fadmods(
                             vt = None
                             typename = info.get("typename")
                             kind_name = info.get("kind", None)
-                            kind = Kind(OpInt(int(kind_name))) if kind_name is not None else None
+                            kind = (
+                                Kind(OpInt(int(kind_name)))
+                                if kind_name is not None
+                                else None
+                            )
                             vt = VarType(typename, kind=kind)
                             vars.append(
                                 OpVar(
@@ -741,7 +745,7 @@ def _write_fadmod(mod: Module, routine_map: Dict[str, Any], directory: Path) -> 
             if isinstance(d, Declaration):
                 info = {"typename": d.var_type.typename}
                 if d.var_type.kind is not None:
-                    info["kind"] = d.var_type.kind
+                    info["kind"] = d.var_type.kind.val
                 if d.dims is not None:
                     info["dims"] = list(d.dims)
                 if d.parameter:
@@ -1188,18 +1192,21 @@ def _generate_ad_subroutine(
         and not has_save_grad_input
     ):
         for arg in out_grad_args:
+            kind = arg.var_type.kind
+            if kind is None and arg.var_type.typename.lower() == "double precision":
+                kind = Kind(OpInt(8), val=8, use_kind_keyword=False)
             lhs = OpVar(
                 arg.name,
-                kind=arg.var_type.kind,
+                kind=kind,
             )
             if arg.is_complex_type:
                 zero = OpComplex(
-                    OpReal("0.0", kind=arg.var_type.kind),
-                    OpReal("0.0", kind=arg.var_type.kind),
-                    kind=arg.var_type.kind,
+                    OpReal("0.0", kind=kind),
+                    OpReal("0.0", kind=kind),
+                    kind=kind,
                 )
             else:
-                zero = OpReal("0.0", kind=arg.var_type.kind)
+                zero = OpReal("0.0", kind=kind)
             ad_block.append(Assignment(lhs, zero))
         subroutine.ad_content = ad_block
         return subroutine, False, set()
@@ -1440,7 +1447,7 @@ def _generate_ad_subroutine(
             if not any(v for v in grad_args if v.name == name):
                 if subroutine.is_declared(name):
                     var = subroutine.get_var(name)
-                    if var is not None and not var.ad_target: # skip if not ad_target
+                    if var is not None and not var.ad_target:  # skip if not ad_target
                         continue
                 else:
                     var = None
@@ -1453,15 +1460,22 @@ def _generate_ad_subroutine(
                     index = AryIndex((None,) * len(var.dims))
                 else:
                     index = None
+                kind = var.var_type.kind
+                if kind is None and var.var_type.typename.lower() == "double precision":
+                    kind = Kind(OpInt(8), val=8, use_kind_keyword=False)
                 if var.is_complex_type:
                     zero = OpComplex(
-                        OpReal("0.0", kind=var.var_type.kind),
-                        OpReal("0.0", kind=var.var_type.kind),
-                        kind=var.var_type.kind,
+                        OpReal("0.0", kind=kind),
+                        OpReal("0.0", kind=kind),
+                        kind=kind,
                     )
                 else:
-                    zero = OpReal(0.0, kind=var.var_type.kind)
-                subroutine.ad_init.append(Assignment(OpVar(name, index=index), zero))
+                    zero = OpReal(0.0, kind=kind)
+                vt = var.var_type.copy()
+                vt.kind = kind
+                subroutine.ad_init.append(
+                    Assignment(OpVar(name, index=index, var_type=vt), zero)
+                )
 
     var_names = []
     for var in subroutine.collect_vars():

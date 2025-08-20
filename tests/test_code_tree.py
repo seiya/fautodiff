@@ -23,9 +23,8 @@ from fautodiff.code_tree import (
     Subroutine,
     render_program,
 )
-from fautodiff.operators import OpFuncUser, OpInt, OpRange, OpReal, OpVar
+from fautodiff.operators import OpFuncUser, OpInt, OpRange, OpReal, OpVar, VarType
 from fautodiff.var_list import VarList
-from fautodiff.var_type import VarType
 
 
 class TestOpVar(unittest.TestCase):
