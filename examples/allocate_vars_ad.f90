@@ -28,8 +28,12 @@ contains
       res_ad = res_ad + arr_ad(i) * x + x_ad * arr(i) ! res = res + arr(i) * x
       res = res + arr(i) * x
     end do
-    deallocate(arr_ad)
-    deallocate(arr)
+    if (allocated(arr_ad)) then
+      deallocate(arr_ad)
+    end if
+    if (allocated(arr)) then
+      deallocate(arr)
+    end if
 
     return
   end subroutine allocate_and_sum_fwd_ad
@@ -57,8 +61,12 @@ contains
     do i = n, 1, - 1
       x_ad = arr_ad(i) * i + x_ad ! arr(i) = i * x
     end do
-    deallocate(arr_ad)
-    deallocate(arr)
+    if (allocated(arr_ad)) then
+      deallocate(arr_ad)
+    end if
+    if (allocated(arr)) then
+      deallocate(arr)
+    end if
 
     return
   end subroutine allocate_and_sum_rev_ad
@@ -91,8 +99,12 @@ contains
       z_ad = z_ad + htmp_ad(i) * y + y_ad * htmp(i) ! z = z + htmp(i) * y
       z = z + htmp(i) * y
     end do
-    deallocate(htmp_ad)
-    deallocate(htmp)
+    if (allocated(htmp_ad)) then
+      deallocate(htmp_ad)
+    end if
+    if (allocated(htmp)) then
+      deallocate(htmp)
+    end if
 
     return
   end subroutine save_alloc_fwd_ad
@@ -121,6 +133,9 @@ contains
       y_ad = z_ad * htmp(i) + y_ad ! z = z + htmp(i) * y
     end do
     htmp(1:n) = htmp_save_42_ad(1:n)
+    if (allocated(htmp_save_42_ad)) then
+      deallocate(htmp_save_42_ad)
+    end if
     x_ad = htmp_ad * 2.0 * x + x_ad ! htmp = x**2
     do i = n, 1, - 1
       htmp_ad(i) = z_ad * y ! z = z + htmp(i) * y
@@ -130,9 +145,6 @@ contains
     x_ad = htmp_ad + x_ad ! htmp = x
     if (allocated(htmp_ad)) then
       deallocate(htmp_ad)
-    end if
-    if (allocated(htmp_save_42_ad)) then
-      deallocate(htmp_save_42_ad)
     end if
     if (allocated(htmp)) then
       deallocate(htmp)
@@ -218,7 +230,9 @@ contains
       x_ad = x_ad + mod_arr_diff_ad(i) * mod_arr(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
       x = x + mod_arr(i) * mod_arr_diff(i)
     end do
-    deallocate(mod_arr_diff_ad)
+    if (allocated(mod_arr_diff_ad)) then
+      deallocate(mod_arr_diff_ad)
+    end if
 
     return
   end subroutine module_vars_finalize_fwd_ad
