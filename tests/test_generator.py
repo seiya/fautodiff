@@ -1,4 +1,3 @@
-import json
 import sys
 import unittest
 from pathlib import Path
@@ -190,22 +189,21 @@ class TestGenerator(unittest.TestCase):
 
     def test_module_vars_example_fadmod(self):
         code_tree.Node.reset()
-        fadmod = Path("module_vars.fadmod")
-        if fadmod.exists():
-            fadmod.unlink()
+        fadmod_path = Path("module_vars.fadmod")
+        if fadmod_path.exists():
+            fadmod_path.unlink()
         generator.generate_ad("examples/module_vars.f90", warn=False)
-        data = json.loads(fadmod.read_text())
-        variables = data.get("variables", {})
-        self.assertIn("c", variables)
+        fm = fadmod.FadmodBase.load(fadmod_path)
+        self.assertIn("c", fm.variables_raw)
 
     def test_fadmod_variable_defaults(self):
         code_tree.Node.reset()
-        fadmod = Path("module_vars.fadmod")
-        if fadmod.exists():
-            fadmod.unlink()
+        fadmod_path = Path("module_vars.fadmod")
+        if fadmod_path.exists():
+            fadmod_path.unlink()
         generator.generate_ad("examples/module_vars.f90", warn=False)
-        data = json.loads(fadmod.read_text())
-        var_a = data.get("variables", {}).get("a")
+        fm = fadmod.FadmodBase.load(fadmod_path)
+        var_a = fm.variables_raw.get("a")
         self.assertIsNotNone(var_a)
         self.assertIn("typename", var_a)
         self.assertNotIn("parameter", var_a)
@@ -276,12 +274,12 @@ class TestGenerator(unittest.TestCase):
 
     def test_fadmod_includes_skip(self):
         code_tree.Node.reset()
-        fadmod = Path("directives.fadmod")
-        if fadmod.exists():
-            fadmod.unlink()
+        fadmod_path = Path("directives.fadmod")
+        if fadmod_path.exists():
+            fadmod_path.unlink()
         generator.generate_ad("examples/directives.f90", warn=False)
-        data = json.loads(fadmod.read_text())
-        routines = data.get("routines", {})
+        fm = fadmod.FadmodBase.load(fadmod_path)
+        routines = fm.routines
         self.assertIn("skip_me", routines)
         self.assertTrue(routines["skip_me"].get("skip"))
 
@@ -315,8 +313,8 @@ class TestGenerator(unittest.TestCase):
             src_path = Path(tmp) / "test.f90"
             src_path.write_text(src)
             generated = generator.generate_ad(str(src_path), warn=False, fadmod_dir=tmp)
-            fadmod = json.loads((Path(tmp) / "test.fadmod").read_text())
-            routines = fadmod.get("routines", {})
+            fm = fadmod.FadmodBase.load(Path(tmp) / "test.fadmod")
+            routines = fm.routines
 
         self.assertNotIn("foo_fwd_ad", generated)
         self.assertNotIn("foo_rev_ad", generated)
@@ -356,8 +354,8 @@ class TestGenerator(unittest.TestCase):
             src_path = Path(tmp) / "test.f90"
             src_path.write_text(src)
             generated = generator.generate_ad(str(src_path), warn=False, fadmod_dir=tmp)
-            fadmod = json.loads((Path(tmp) / "test.fadmod").read_text())
-            routines = fadmod.get("routines", {})
+            fm = fadmod.FadmodBase.load(Path(tmp) / "test.fadmod")
+            routines = fm.routines
 
         self.assertIn("foo_fwd_ad", generated)
         self.assertIn("foo_rev_ad", generated)
@@ -626,10 +624,12 @@ class TestGenerator(unittest.TestCase):
             """
         )
 
-        fadmod = Path(__file__).resolve().parents[1] / "fortran_modules" / "mpi.fadmod"
-        data = json.loads(fadmod.read_text())
-        routines = data.get("routines", {})
-        generics = data.get("generics", {})
+        fadmod_path = (
+            Path(__file__).resolve().parents[1] / "fortran_modules" / "mpi.fadmod"
+        )
+        fm = fadmod.FadmodBase.load(fadmod_path)
+        routines = fm.routines
+        generics = fm.generics
         self.assertIn("MPI_Start", routines)
         self.assertEqual(routines["MPI_Start"]["name_fwd_ad"], "MPI_Start_fwd_ad")
         self.assertIn("MPI_Wait", routines)
