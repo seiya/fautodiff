@@ -30,6 +30,11 @@ class TestFadmod(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "unsupported fadmod version 99"):
                 fadmod.FadmodBase.load(path)
 
+    def test_invalid_variable_entry(self):
+        data = {"routines": {}, "variables": {"x": {"constant": True}}}
+        with self.assertRaisesRegex(RuntimeError, "missing 'typename'"):
+            fadmod.FadmodV1.from_dict(data)
+
 
 if __name__ == "__main__":
     unittest.main()

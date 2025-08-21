@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from .code_tree import Declaration, Module
 from .operators import Kind, OpInt, OpVar, VarType
@@ -56,6 +56,19 @@ class FadmodBase(ABC):
 
         Path(path).write_text(json.dumps(self.dump(), indent=2))
 
+    @abstractmethod
+    def variable_declarations(
+        self, kind_resolver: Optional[Callable[[Any], Kind]] = None
+    ) -> Dict[str, Declaration]:
+        """Return mapping of variable names to :class:`Declaration` objects.
+
+        ``kind_resolver`` converts ``kind`` entries from the fadmod file to a
+        :class:`~fautodiff.operators.Kind` instance.  It is passed either a
+        string or an operator and must return a ``Kind``.  Subclasses should
+        use it when a ``kind`` is expressed symbolically.  When ``None`` the
+        raw value is used directly.
+        """
+
 
 class FadmodV1(FadmodBase):
     """Implementation of fadmod schema version 1."""
@@ -65,24 +78,93 @@ class FadmodV1(FadmodBase):
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "FadmodV1":
         routines = data.get("routines", {})
+        if not isinstance(routines, dict):
+            raise RuntimeError("'routines' must be an object")
         variables_raw = data.get("variables", {})
+        if not isinstance(variables_raw, dict):
+            raise RuntimeError("'variables' must be an object")
         generics = data.get("generics", {})
+        if generics is None:
+            generics = {}
+        if not isinstance(generics, dict):
+            raise RuntimeError("'generics' must be an object")
+
         variables: List[OpVar] = []
         for name, info in variables_raw.items():
-            kind_name = info.get("kind")
-            kind = Kind(OpInt(int(kind_name))) if kind_name is not None else None
-            vt = VarType(info["typename"], kind=kind)
+            if not isinstance(name, str):
+                raise RuntimeError("variable names must be strings")
+            if not isinstance(info, dict):
+                raise RuntimeError(f"variable '{name}' must map to an object")
+            typename = info.get("typename")
+            if not isinstance(typename, str):
+                raise RuntimeError(f"variable '{name}' missing 'typename' field")
+            kind_val = info.get("kind")
+            if kind_val is not None and not isinstance(kind_val, int):
+                raise RuntimeError(f"variable '{name}' field 'kind' must be int")
+            dims_val = info.get("dims")
+            if dims_val is not None:
+                if not isinstance(dims_val, list) or any(
+                    not isinstance(d, str) for d in dims_val
+                ):
+                    raise RuntimeError(
+                        f"variable '{name}' field 'dims' must be list of strings"
+                    )
+            for key in ["parameter", "constant", "allocatable", "pointer", "optional"]:
+                if key in info and not isinstance(info[key], bool):
+                    raise RuntimeError(
+                        f"variable '{name}' field '{key}' must be boolean"
+                    )
+            if "access" in info and not isinstance(info["access"], str):
+                raise RuntimeError(f"variable '{name}' field 'access' must be a string")
+            if "init_val" in info and not isinstance(
+                info["init_val"], (int, float, str)
+            ):
+                raise RuntimeError(
+                    f"variable '{name}' field 'init_val' must be a scalar or string"
+                )
+
+            kind = Kind(OpInt(kind_val)) if kind_val is not None else None
+            vt = VarType(typename, kind=kind)
             variables.append(
                 OpVar(
                     name=name,
                     var_type=vt,
-                    dims=info.get("dims"),
+                    dims=tuple(dims_val) if dims_val is not None else None,
                     is_constant=info.get("constant", False),
                     allocatable=info.get("allocatable", False),
                     pointer=info.get("pointer", False),
+                    optional=info.get("optional", False),
                 )
             )
         return cls(routines, variables, generics, variables_raw)
+
+    def variable_declarations(
+        self, kind_resolver: Optional[Callable[[Any], Kind]] = None
+    ) -> Dict[str, Declaration]:
+        decls: Dict[str, Declaration] = {}
+        for name, info in self.variables_raw.items():
+            kind: Optional[Kind] = None
+            kind_name = info.get("kind_name")
+            if kind_name is not None and kind_resolver is not None:
+                kind = kind_resolver(kind_name)
+            elif info.get("kind") is not None:
+                val = info["kind"]
+                kind = Kind(OpInt(val), val=val)
+            vt = VarType(info["typename"], kind=kind)
+            decls[name] = Declaration(
+                name,
+                var_type=vt,
+                dims=tuple(info["dims"]) if info.get("dims") is not None else None,
+                intent=None,
+                parameter=info.get("parameter", False),
+                constant=info.get("constant", False),
+                init_val=info.get("init_val"),
+                access=info.get("access"),
+                allocatable=info.get("allocatable", False),
+                pointer=info.get("pointer", False),
+                optional=info.get("optional", False),
+            )
+        return decls
 
     def dump(self) -> Dict[str, Any]:
         data = {
