@@ -3418,16 +3418,21 @@ class SaveAssignment(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         lines: List[str] = []
-        if self.lhs.allocatable and not self.pushpop:
+        if self.lhs.allocatable and not self.pushpop and not self.load:
             lhs0 = self.lhs.change_index(None)
             rhs0 = self.rhs.change_index(None)
-            if not self.load and self.var.declared_in == "routine":
+            if self.var.declared_in == "routine":
                 lines.append(f"{space}allocate({lhs0}, mold={rhs0})\n")
             else:
                 lines.append(f"{space}if (.not. allocated({lhs0})) then\n")
                 lines.append(f"{space}  allocate({lhs0}, mold={rhs0})\n")
                 lines.append(f"{space}end if\n")
         lines.append(f"{space}{self.lhs} = {self.rhs}\n")
+        if self.load and self.rhs.allocatable and not self.pushpop:
+            rhs0 = self.rhs.change_index(None)
+            lines.append(f"{space}if (allocated({rhs0})) then\n")
+            lines.append(f"{space}  deallocate({rhs0})\n")
+            lines.append(f"{space}end if\n")
         return lines
 
     def is_effectively_empty(self) -> bool:
@@ -3750,6 +3755,8 @@ class Allocate(Node):
         # allocated/associated outside of the current routine.  Guard the
         # (de)allocation so we do not operate on them twice.  Local pointer
         # variables have a well defined state so do not require this check.
+        if isinstance(node, Deallocate):
+            return node
         check = is_mod_var or (
             var.intent in ("in", "inout") and (var.allocatable or var.pointer)
         )
@@ -3801,8 +3808,20 @@ class Deallocate(Node):
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
-        names = ", ".join(str(v) for v in self.vars)
-        return [f"{space}deallocate({names})\n"]
+        lines: List[str] = []
+        for v in self.vars:
+            func = "associated" if v.pointer else "allocated"
+            name = str(v)
+            cond = f"{func}({name})"
+            ref = v.ref_var
+            while isinstance(ref, OpVar):
+                func_ref = "associated" if ref.pointer else "allocated"
+                cond = f"{func_ref}({ref.change_index(None)}) .and. {cond}"
+                ref = ref.ref_var
+            lines.append(f"{space}if ({cond}) then\n")
+            lines.append(f"{space}  deallocate({name})\n")
+            lines.append(f"{space}end if\n")
+        return lines
 
     def generate_ad(
         self,
@@ -3849,8 +3868,18 @@ class Deallocate(Node):
 
             else:
                 if var.ad_target:
-                    nodes.append(Deallocate([ad_var.change_index(None)], ad_code=True))
-                nodes.append(Deallocate([var.change_index(None)], ad_code=True))
+                    ad_clean = ad_var.change_index(None)
+                    nodes.append(
+                        Allocate._add_if(
+                            Deallocate([ad_clean], ad_code=True), ad_clean, is_mod_var
+                        )
+                    )
+                var_clean = var.change_index(None)
+                nodes.append(
+                    Allocate._add_if(
+                        Deallocate([var_clean], ad_code=True), var_clean, is_mod_var
+                    )
+                )
         return nodes
 
     def is_effectively_empty(self) -> bool:

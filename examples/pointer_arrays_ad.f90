@@ -37,9 +37,15 @@ contains
       res_ad = res_ad + p_ad(i) + mod_p_ad(i) ! res = res + p(i) + mod_p(i)
       res = res + p(i) + mod_p(i)
     end do
-    deallocate(p_ad)
-    deallocate(p)
-    deallocate(mod_p_ad)
+    if (associated(p_ad)) then
+      deallocate(p_ad)
+    end if
+    if (associated(p)) then
+      deallocate(p)
+    end if
+    if (associated(mod_p_ad)) then
+      deallocate(mod_p_ad)
+    end if
 
     return
   end subroutine pointer_allocate_fwd_ad
@@ -67,7 +73,9 @@ contains
     if (associated(mod_p_ad)) then
       deallocate(mod_p_ad)
     end if
-    deallocate(p_ad)
+    if (associated(p_ad)) then
+      deallocate(p_ad)
+    end if
 
     return
   end subroutine pointer_allocate_rev_ad
@@ -98,7 +106,9 @@ contains
       res = res + p(i)
     end do
     p => null()
-    deallocate(mod_p_ad)
+    if (associated(mod_p_ad)) then
+      deallocate(mod_p_ad)
+    end if
 
     return
   end subroutine pointer_subarray_fwd_ad
