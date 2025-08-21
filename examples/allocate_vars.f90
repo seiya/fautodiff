@@ -26,6 +26,29 @@ contains
     return
   end subroutine allocate_and_sum
 
+  subroutine allocate_in_if(n, x, res)
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(out) :: res
+    real, allocatable :: arr(:)
+    integer :: i
+
+    if (n > 0) then
+      allocate(arr(n))
+      do i = 1, n
+        arr(i) = i * x
+      end do
+      res = 0.0
+      do i = 1, n
+        res = res + arr(i) * x
+      end do
+    else
+      res = 0.0
+    end if
+
+    return
+  end subroutine allocate_in_if
+
   subroutine save_alloc(n, x, y, z)
     integer, intent(in) :: n
     real, intent(in) :: x(n), y

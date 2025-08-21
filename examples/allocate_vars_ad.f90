@@ -71,6 +71,76 @@ contains
     return
   end subroutine allocate_and_sum_rev_ad
 
+  subroutine allocate_in_if_fwd_ad(n, x, x_ad, res, res_ad)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(in)  :: x_ad
+    real, intent(out) :: res
+    real, intent(out) :: res_ad
+    real, allocatable :: arr_ad(:)
+    integer :: i
+    real, allocatable :: arr(:)
+
+    if (n > 0) then
+      allocate(arr(n))
+      allocate(arr_ad(n))
+      do i = 1, n
+        arr_ad(i) = x_ad * i ! arr(i) = i * x
+        arr(i) = i * x
+      end do
+      res_ad = 0.0 ! res = 0.0
+      res = 0.0
+      do i = 1, n
+        res_ad = res_ad + arr_ad(i) * x + x_ad * arr(i) ! res = res + arr(i) * x
+        res = res + arr(i) * x
+      end do
+    else
+      res_ad = 0.0 ! res = 0.0
+      res = 0.0
+    end if
+
+    return
+  end subroutine allocate_in_if_fwd_ad
+
+  subroutine allocate_in_if_rev_ad(n, x, x_ad, res_ad)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(inout) :: x_ad
+    real, intent(inout) :: res_ad
+    real, allocatable :: arr_ad(:)
+    integer :: i
+    real, allocatable :: arr(:)
+
+    if (n > 0) then
+      allocate(arr(n))
+      allocate(arr_ad(n))
+    end if
+
+    if (n > 0) then
+      do i = 1, n
+        arr(i) = i * x
+      end do
+      do i = n, 1, - 1
+        arr_ad(i) = res_ad * x ! res = res + arr(i) * x
+        x_ad = res_ad * arr(i) + x_ad ! res = res + arr(i) * x
+      end do
+      res_ad = 0.0 ! res = 0.0
+      do i = n, 1, - 1
+        x_ad = arr_ad(i) * i + x_ad ! arr(i) = i * x
+      end do
+      if (allocated(arr_ad)) then
+        deallocate(arr_ad)
+      end if
+      if (allocated(arr)) then
+        deallocate(arr)
+      end if
+    else
+      res_ad = 0.0 ! res = 0.0
+    end if
+
+    return
+  end subroutine allocate_in_if_rev_ad
+
   subroutine save_alloc_fwd_ad(n, x, x_ad, y, y_ad, z, z_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x(n)
@@ -119,12 +189,12 @@ contains
     real, allocatable :: htmp_ad(:)
     real, allocatable :: htmp(:)
     integer :: i
-    real, allocatable :: htmp_save_42_ad(:)
+    real, allocatable :: htmp_save_65_ad(:)
 
     allocate(htmp(n))
     htmp = x
-    allocate(htmp_save_42_ad, mold=htmp)
-    htmp_save_42_ad(1:n) = htmp(1:n)
+    allocate(htmp_save_65_ad, mold=htmp)
+    htmp_save_65_ad(1:n) = htmp(1:n)
     htmp = x**2
 
     allocate(htmp_ad(n))
@@ -132,9 +202,9 @@ contains
       htmp_ad(i) = z_ad * y ! z = z + htmp(i) * y
       y_ad = z_ad * htmp(i) + y_ad ! z = z + htmp(i) * y
     end do
-    htmp(1:n) = htmp_save_42_ad(1:n)
-    if (allocated(htmp_save_42_ad)) then
-      deallocate(htmp_save_42_ad)
+    htmp(1:n) = htmp_save_65_ad(1:n)
+    if (allocated(htmp_save_65_ad)) then
+      deallocate(htmp_save_65_ad)
     end if
     x_ad = htmp_ad * 2.0 * x + x_ad ! htmp = x**2
     do i = n, 1, - 1
