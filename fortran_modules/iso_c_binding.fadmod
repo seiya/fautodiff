@@ -1,8 +1,10 @@
 {
+  "version": 1,
+  "routines": {},
   "variables": {
     "c_null_ptr": {
-        "typename": "type(c_ptr)",
-        "parameter": true
+      "typename": "type(c_ptr)",
+      "parameter": true
     }
   }
 }

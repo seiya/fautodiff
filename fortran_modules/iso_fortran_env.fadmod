@@ -1,4 +1,6 @@
 {
+  "version": 1,
+  "routines": {},
   "variables": {
     "int8": {"typename": "integer", "parameter": true},
     "int16": {"typename": "integer", "parameter": true},
