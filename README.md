@@ -93,6 +93,8 @@ bin/fautodiff -M examples examples/cross_mod_a.f90
 bin/fautodiff -I examples examples/cross_mod_b.f90
 ```
 
+The structure of these files is documented in [doc/fadmod.md](doc/fadmod.md).
+
 Generate code programmatically from Python:
 ```python
 from fautodiff.generator import generate_ad

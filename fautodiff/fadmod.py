@@ -86,13 +86,17 @@ class FadmodV1(FadmodBase):
 
     def dump(self) -> Dict[str, Any]:
         data = {
-            "version": self.version,
             "routines": self.routines,
             "variables": self.variables_raw,
         }
         if self.generics:
             data["generics"] = self.generics
         return data
+
+    def write(self, path: Union[str, Path]) -> None:
+        data = {"version": self.version}
+        data.update(self.dump())
+        Path(path).write_text(json.dumps(data, indent=2))
 
     @classmethod
     def from_module(cls, mod: Module, routine_map: Dict[str, Any]) -> "FadmodV1":
