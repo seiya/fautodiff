@@ -120,9 +120,6 @@ contains
       htmp_ad(i) = z_ad * y ! z = z + htmp(i) * y
       y_ad = z_ad * htmp(i) + y_ad ! z = z + htmp(i) * y
     end do
-    if (.not. allocated(htmp)) then
-      allocate(htmp, mold=htmp_save_42_ad)
-    end if
     htmp(1:n) = htmp_save_42_ad(1:n)
     x_ad = htmp_ad * 2.0 * x + x_ad ! htmp = x**2
     do i = n, 1, - 1
@@ -131,8 +128,15 @@ contains
     end do
     z_ad = 0.0 ! z = 0.0
     x_ad = htmp_ad + x_ad ! htmp = x
-    deallocate(htmp_ad)
-    deallocate(htmp)
+    if (allocated(htmp_ad)) then
+      deallocate(htmp_ad)
+    end if
+    if (allocated(htmp_save_42_ad)) then
+      deallocate(htmp_save_42_ad)
+    end if
+    if (allocated(htmp)) then
+      deallocate(htmp)
+    end if
 
     return
   end subroutine save_alloc_rev_ad
