@@ -1,4 +1,5 @@
 {
+  "version": 1,
   "routines": {
     "MPI_Comm_rank": {
       "args": [
@@ -329,7 +330,7 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
         null,
@@ -515,8 +516,8 @@
         "integer"
       ],
       "kind": [
-        "8",
-        "8",
+        8,
+        8,
         null,
         null,
         null,
@@ -702,8 +703,8 @@
         "integer"
       ],
       "kind": [
-        "8",
-        "8",
+        8,
+        8,
         null,
         null,
         null,
@@ -885,7 +886,7 @@
       ],
       "kind": [
         null,
-        "8",
+        8,
         null,
         null,
         null,
@@ -1090,10 +1091,10 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
-        "8",
+        8,
         null,
         null,
         null,
@@ -1306,10 +1307,10 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
-        "8",
+        8,
         null,
         null,
         null,
@@ -1509,10 +1510,10 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
-        "8",
+        8,
         null,
         null,
         null,
@@ -1707,7 +1708,7 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
         null,
@@ -1886,7 +1887,7 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
         null,
@@ -2144,12 +2145,12 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
         null,
         null,
-        "8",
+        8,
         null,
         null,
         null,
@@ -2386,7 +2387,7 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
         null,
@@ -2626,7 +2627,7 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
         null,
@@ -2754,7 +2755,7 @@
         null,
         null,
         null,
-        "MPI_ADDRESS_KIND",
+        null,
         null,
         null,
         null,
@@ -2856,11 +2857,11 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
         null,
-        "MPI_ADDRESS_KIND",
+        null,
         null,
         null,
         null,
@@ -2966,7 +2967,7 @@
         null,
         null,
         null,
-        "MPI_ADDRESS_KIND",
+        null,
         null,
         null,
         null,
@@ -3068,11 +3069,11 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
         null,
-        "MPI_ADDRESS_KIND",
+        null,
         null,
         null,
         null,
@@ -3182,7 +3183,7 @@
         null,
         null,
         null,
-        "MPI_ADDRESS_KIND",
+        null,
         null,
         null,
         null,
@@ -3293,11 +3294,11 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
         null,
-        "MPI_ADDRESS_KIND",
+        null,
         null,
         null,
         null,
@@ -3520,7 +3521,7 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
         null,
@@ -3760,7 +3761,7 @@
         "integer"
       ],
       "kind": [
-        "8",
+        8,
         null,
         null,
         null,

@@ -79,7 +79,13 @@ def _collect_routines(
                 types.append(
                     decls.get(arg).var_type.typename.lower() if decls.get(arg) else None
                 )
-                kinds.append(decls.get(arg).var_type.kind if decls.get(arg) else None)
+                raw_kind = decls.get(arg).var_type.kind if decls.get(arg) else None
+                if raw_kind is not None:
+                    kind_str = str(raw_kind).strip()
+                    kind = int(kind_str) if kind_str.isdigit() else None
+                else:
+                    kind = None
+                kinds.append(kind)
             info["intents"] = intents
             info["dims"] = dims
             info["type"] = types
@@ -310,7 +316,9 @@ def main() -> None:
         mod = parser.parse_file(tmp.name, decl_map=decl_map)[0]
     routines = _collect_routines(mod, routines_mpi, assumed_rank)
     generics = _interfaces_to_generics(mod)
-    data = {"routines": routines, "variables": variables, "generics": generics}
+    data = {"version": 1, "routines": routines, "variables": variables}
+    if generics:
+        data["generics"] = generics
     print(json.dumps(data, indent=2, default=str))
 
 

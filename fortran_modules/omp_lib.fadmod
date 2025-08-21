@@ -1,4 +1,5 @@
 {
+  "version": 1,
   "routines": {
     "omp_get_num_threads": {
       "module": "omp_lib",
@@ -16,5 +17,6 @@
       "type": ["integer"],
       "kind": [null]
     }
-  }
+  },
+  "variables": {}
 }
