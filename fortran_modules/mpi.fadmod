@@ -643,6 +643,7 @@
       ],
       "name_rev_ad": "MPI_Allreduce_rev_ad",
       "args_rev_ad": [
+        "sendbuf",
         "sendbuf_ad",
         "recvbuf_ad",
         "count",
@@ -652,6 +653,7 @@
         "ierr"
       ],
       "intents_rev_ad": [
+        "in",
         "inout",
         "inout",
         "in",
@@ -733,6 +735,7 @@
       ],
       "name_rev_ad": "MPI_Allreduce_rev_ad",
       "args_rev_ad": [
+        "sendbuf",
         "sendbuf_ad",
         "recvbuf_ad",
         "count",
@@ -742,6 +745,7 @@
         "ierr"
       ],
       "intents_rev_ad": [
+        "in",
         "inout",
         "inout",
         "in",
@@ -821,6 +825,8 @@
       ],
       "name_rev_ad": "MPI_Allreduce_rev_ad",
       "args_rev_ad": [
+        "sendbuf_ad",
+        "recvbuf",
         "recvbuf_ad",
         "count",
         "datatype",
@@ -829,6 +835,8 @@
         "ierr"
       ],
       "intents_rev_ad": [
+        "in",
+        "in",
         "inout",
         "in",
         "in",
@@ -907,6 +915,8 @@
       ],
       "name_rev_ad": "MPI_Allreduce_rev_ad",
       "args_rev_ad": [
+        "sendbuf_ad",
+        "recvbuf",
         "recvbuf_ad",
         "count",
         "datatype",
@@ -915,6 +925,8 @@
         "ierr"
       ],
       "intents_rev_ad": [
+        "in",
+        "in",
         "inout",
         "in",
         "in",

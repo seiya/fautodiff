@@ -4,8 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff.operators import OpFunc, OpInt, OpRange, OpVar
-from fautodiff.var_type import VarType
+from fautodiff.operators import Kind, OpFunc, OpInt, OpRange, OpVar, VarType
 
 
 class TestOperatorsBasic(unittest.TestCase):
@@ -15,19 +14,25 @@ class TestOperatorsBasic(unittest.TestCase):
     def test_opint_str_with_kind(self):
         target = OpVar("x", var_type=VarType("real"))
         self.assertEqual(str(OpInt(2, target=target)), "2.0")
-        target = OpVar("y", var_type=VarType("real", kind="4"))
+        target = OpVar("y", var_type=VarType("real", kind=Kind(OpInt(4))))
         self.assertEqual(str(OpInt(3, target=target)), "3.0")
-        target = OpVar("z", var_type=VarType("real", kind="8"))
+        target = OpVar("z", var_type=VarType("real", kind=Kind(OpInt(8))))
         self.assertEqual(str(OpInt(4, target=target)), "4.0d0")
-        target = OpVar("t", var_type=VarType("real", kind="RP"))
+        target = OpVar(
+            "t",
+            var_type=VarType("real", kind=Kind(OpVar("RP"), use_kind_keyword=False)),
+        )
         self.assertEqual(str(OpInt(5, target=target)), "5.0_RP")
         target = OpVar("i", var_type=VarType("integer"))
         self.assertEqual(str(OpInt(6, target=target)), "6")
-        target = OpVar("j", var_type=VarType("integer", kind="4"))
+        target = OpVar("j", var_type=VarType("integer", kind=Kind(OpInt(4))))
         self.assertEqual(str(OpInt(7, target=target)), "7")
-        target = OpVar("k", var_type=VarType("integer", kind="8"))
+        target = OpVar("k", var_type=VarType("integer", kind=Kind(OpInt(8))))
         self.assertEqual(str(OpInt(8, target=target)), "8_8")
-        target = OpVar("l", var_type=VarType("integer", kind="IP"))
+        target = OpVar(
+            "l",
+            var_type=VarType("integer", kind=Kind(OpVar("IP"), use_kind_keyword=False)),
+        )
         self.assertEqual(str(OpInt(9, target=target)), "9_IP")
 
     def test_opvar_suffix_and_eq(self):

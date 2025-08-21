@@ -326,15 +326,31 @@ contains
     end if
   end subroutine mpi_bcast_rev_ad_r8
   subroutine mpi_reduce_fwd_ad_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, root, comm, ierr)
-    real, intent(in) :: sendbuf(..)
-    real, intent(in) :: sendbuf_ad(..)
-    real, intent(out) :: recvbuf(..)
+    real, intent(in), target, contiguous :: sendbuf(..)
+    real, intent(in), target, contiguous :: sendbuf_ad(..)
+    real, intent(out), target, contiguous :: recvbuf(..)
     real, intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, root, comm
     integer, intent(out), optional :: ierr
+    real :: tmp(count)
+    real, pointer :: sb(:), rb(:), sb_ad(:)
+    integer :: ierr2
 
     call MPI_Reduce(sendbuf, recvbuf, count, datatype, op, root, comm, ierr)
-    call MPI_Reduce(sendbuf_ad, recvbuf_ad, count, datatype, op, root, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Reduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      call MPI_Bcast(recvbuf, count, datatype, root, comm, ierr2)
+      call c_f_pointer(c_loc(sendbuf), sb, [count])
+      call c_f_pointer(c_loc(recvbuf), rb, [count])
+      call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
+      tmp = merge(sb_ad, 0.0, sb == rb)
+      call MPI_Reduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_reduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_reduce_fwd_ad_r4
 
   subroutine mpi_reduce_rev_ad_r4(sendbuf_ad, recvbuf_ad, count, datatype, op, root, comm, ierr)
@@ -356,15 +372,31 @@ contains
   end subroutine mpi_reduce_rev_ad_r4
 
   subroutine mpi_reduce_fwd_ad_r8(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, root, comm, ierr)
-    real(8), intent(in) :: sendbuf(..)
-    real(8), intent(in) :: sendbuf_ad(..)
-    real(8), intent(out) :: recvbuf(..)
+    real(8), intent(in), target, contiguous :: sendbuf(..)
+    real(8), intent(in), target, contiguous :: sendbuf_ad(..)
+    real(8), intent(out), target, contiguous :: recvbuf(..)
     real(8), intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, root, comm
     integer, intent(out), optional :: ierr
+    real(8) :: tmp(count)
+    real(8), pointer :: sb(:), rb(:), sb_ad(:)
+    integer :: ierr2
 
     call MPI_Reduce(sendbuf, recvbuf, count, datatype, op, root, comm, ierr)
-    call MPI_Reduce(sendbuf_ad, recvbuf_ad, count, datatype, op, root, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Reduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      call MPI_Bcast(recvbuf, count, datatype, root, comm, ierr2)
+      call c_f_pointer(c_loc(sendbuf), sb, [count])
+      call c_f_pointer(c_loc(recvbuf), rb, [count])
+      call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
+      tmp = merge(sb_ad, 0.0_8, sb == rb)
+      call MPI_Reduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_reduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_reduce_fwd_ad_r8
 
   subroutine mpi_reduce_rev_ad_r8(sendbuf_ad, recvbuf_ad, count, datatype, op, root, comm, ierr)
@@ -384,95 +416,303 @@ contains
     sb_ad(1:count) = sb_ad(1:count) + tmp(1:count)
     if (rank == root) rb_ad(1:count) = 0.0_8
   end subroutine mpi_reduce_rev_ad_r8
+
   subroutine mpi_allreduce_fwd_ad_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
-    real, intent(in) :: sendbuf(..)
-    real, intent(in) :: sendbuf_ad(..)
-    real, intent(out) :: recvbuf(..)
+    real, intent(in), target, contiguous :: sendbuf(..)
+    real, intent(in), target, contiguous :: sendbuf_ad(..)
+    real, intent(out), target, contiguous :: recvbuf(..)
     real, intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
+    real :: tmp(count)
+    real, pointer :: sb(:), rb(:), sb_ad(:)
+    integer :: ierr2
 
     call MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm, ierr)
-    call MPI_Allreduce(sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Allreduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      call c_f_pointer(c_loc(sendbuf), sb, [count])
+      call c_f_pointer(c_loc(recvbuf), rb, [count])
+      call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
+      tmp = merge(sb_ad, 0.0, sb == rb)
+      call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_allreduce_fwd_ad_r4
 
-  subroutine mpi_allreduce_rev_ad_r4(sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
+  subroutine mpi_allreduce_rev_ad_r4(sendbuf, sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
+    real, intent(in), target, contiguous :: sendbuf(..)
     real, intent(inout), target, contiguous :: sendbuf_ad(..)
     real, intent(inout), target, contiguous :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
 
-    real, pointer :: sb_ad(:), rb_ad(:)
+    real, pointer :: sb(:), sb_ad(:), rb_ad(:)
+    real :: rb(count), res(count)
+    integer :: n
+    integer :: mask(count), contrib(count)
 
     call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
-    call MPI_Allreduce(rb_ad, sb_ad, count, datatype, op, comm, ierr)
+    call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
+    select case(op)
+    case (MPI_SUM)
+      sb_ad(1:count) = rb(1:count)
+    case (MPI_MAX, MPI_MIN)
+      call c_f_pointer(c_loc(sendbuf), sb, [count])
+      call MPI_Allreduce(sendbuf, res, count, datatype, op, comm, ierr)
+      do n = 1, count
+        if (sb(n) == rb(n)) then
+          mask(n) = 1
+        else
+          mask(n) = 0
+        end if
+      end do
+      call MPI_Allreduce(mask, contrib, count, MPI_INTEGER, MPI_SUM, comm, ierr)
+      do n = 1, count
+        if (mask(n) == 1) then
+          sb_ad(n) = rb(n) / contrib(n)
+        else
+          sb_ad(n) = 0.0
+        end if
+      end do
+    case default
+      print *, "Error: Unsupported operation for reverse mode Allreduce."
+      call MPI_Abort(comm, -1, ierr)
+    end select
     rb_ad(1:count) = 0.0
   end subroutine mpi_allreduce_rev_ad_r4
 
   subroutine mpi_allreduce_fwd_ad_r8(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
-    real(8), intent(in) :: sendbuf(..)
-    real(8), intent(in) :: sendbuf_ad(..)
-    real(8), intent(out) :: recvbuf(..)
+    real(8), intent(in), target, contiguous :: sendbuf(..)
+    real(8), intent(in), target, contiguous :: sendbuf_ad(..)
+    real(8), intent(out), target, contiguous :: recvbuf(..)
     real(8), intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
+    real(8) :: tmp(count)
+    real(8), pointer :: sb(:), rb(:), sb_ad(:)
+    integer :: ierr2
 
     call MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm, ierr)
-    call MPI_Allreduce(sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Allreduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      call c_f_pointer(c_loc(sendbuf), sb, [count])
+      call c_f_pointer(c_loc(recvbuf), rb, [count])
+      call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
+      tmp = merge(sb_ad, 0.0_8, sb == rb)
+      call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_allreduce_fwd_ad_r8
 
-  subroutine mpi_allreduce_rev_ad_r8(sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
+  subroutine mpi_allreduce_rev_ad_r8(sendbuf, sendbuf_ad, recvbuf_ad, count, datatype, op, comm, ierr)
+    real(8), intent(in), target, contiguous :: sendbuf(..)
     real(8), intent(inout), target, contiguous :: sendbuf_ad(..)
     real(8), intent(inout), target, contiguous :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
 
-    real(8), pointer :: sb_ad(:), rb_ad(:)
+    real(8), pointer :: sb(:), sb_ad(:), rb_ad(:)
+    real(8) :: rb(count), res(count)
+    integer :: n
+    integer :: mask(count), contrib(count)
 
     call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
-  call MPI_Allreduce(rb_ad, sb_ad, count, datatype, op, comm, ierr)
-  rb_ad(1:count) = 0.0_8
-end subroutine mpi_allreduce_rev_ad_r8
-
+    call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
+    select case(op)
+    case (MPI_SUM)
+      sb_ad(1:count) = rb(1:count)
+    case (MPI_MAX, MPI_MIN)
+      call c_f_pointer(c_loc(sendbuf), sb, [count])
+      call MPI_Allreduce(sendbuf, res, count, datatype, op, comm, ierr)
+      do n = 1, count
+        if (sb(n) == res(n)) then
+          mask(n) = 1
+        else
+          mask(n) = 0
+        end if
+      end do
+      call MPI_Allreduce(mask, contrib, count, MPI_INTEGER, MPI_SUM, comm, ierr)
+      do n = 1, count
+        if (mask(n) == 1) then
+          sb_ad(n) = rb_ad(n) / contrib(n)
+        else
+          sb_ad(n) = 0.0_8
+        end if
+      end do
+    case default
+      print *, "Error: Unsupported operation for reverse mode Allreduce."
+      call MPI_Abort(comm, -1, ierr)
+    end select
+    rb_ad(1:count) = 0.0_8
+  end subroutine mpi_allreduce_rev_ad_r8
 
   subroutine mpi_allreduce_fwd_ad_r4_inplace(sendbuf, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
     integer, intent(in) :: sendbuf
-    real, intent(inout) :: recvbuf(..)
-    real, intent(inout) :: recvbuf_ad(..)
+    real, intent(inout), target, contiguous :: recvbuf(..)
+    real, intent(inout), target, contiguous :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
+    real :: rb(count), rb_ad(count), tmp(count)
+    real, pointer :: rbuf(:), rbuf_ad(:)
+    integer :: ierr2
 
-    call MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm, ierr)
-    call MPI_Allreduce(sendbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+    if (sendbuf /= MPI_IN_PLACE) then
+      print *, "Error: sendbuf must be MPI_IN_PLACE for in-place Allreduce."
+      call MPI_abort(comm, -1, ierr)
+    end if
+
+    call c_f_pointer(c_loc(recvbuf), rbuf, [count])
+    call c_f_pointer(c_loc(recvbuf_ad), rbuf_ad, [count])
+    rb(1:count) = rbuf(1:count)
+    rb_ad(1:count) = rbuf_ad(1:count)
+    call MPI_Allreduce(MPI_IN_PLACE, recvbuf, count, datatype, op, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      tmp = merge(rb_ad, 0.0, rb == rbuf)
+      call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_allreduce_fwd_ad_r4_inplace
 
-  subroutine mpi_allreduce_rev_ad_r4_inplace(recvbuf_ad, count, datatype, op, comm, ierr)
+  subroutine mpi_allreduce_rev_ad_r4_inplace(sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+    integer, intent(in) :: sendbuf_ad
+    real, intent(in), target, contiguous :: recvbuf(..)
     real, intent(inout), target, contiguous :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
 
-    call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, op, comm, ierr)
+    real, pointer :: sb(:), sb_ad(:), rb_ad(:)
+    real :: rb(count), res(count)
+    integer :: n
+    integer :: mask(count), contrib(count)
+
+    if (sendbuf_ad /= MPI_IN_PLACE) then
+      print *, "Error: sendbuf_ad must be MPI_IN_PLACE for in-place Allreduce."
+      call MPI_abort(comm, -1, ierr)
+    end if
+
+    call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
+    call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
+    sb_ad => rb_ad
+    select case(op)
+    case (MPI_SUM)
+      sb_ad(1:count) = rb(1:count)
+    case (MPI_MAX, MPI_MIN)
+      call c_f_pointer(c_loc(recvbuf), sb, [count])
+      call MPI_Allreduce(sb, res, count, datatype, op, comm, ierr)
+      do n = 1, count
+        if (sb(n) == res(n)) then
+          mask(n) = 1
+        else
+          mask(n) = 0
+        end if
+      end do
+      call MPI_Allreduce(mask, contrib, count, MPI_INTEGER, MPI_SUM, comm, ierr)
+      do n = 1, count
+        if (mask(n) == 1) then
+          sb_ad(n) = rb_ad(n) / contrib(n)
+        else
+          sb_ad(n) = 0.0
+        end if
+      end do
+    case default
+      print *, "Error: Unsupported operation for reverse mode Allreduce."
+      call MPI_Abort(comm, -1, ierr)
+    end select
   end subroutine mpi_allreduce_rev_ad_r4_inplace
 
   subroutine mpi_allreduce_fwd_ad_r8_inplace(sendbuf, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
     integer, intent(in) :: sendbuf
-    real(8), intent(inout) :: recvbuf(..)
-    real(8), intent(inout) :: recvbuf_ad(..)
+    real(8), intent(inout), target, contiguous :: recvbuf(..)
+    real(8), intent(inout), target, contiguous :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
+    real(8) :: rb(count), rb_ad(count), tmp(count)
+    real(8), pointer :: rbuf(:), rbuf_ad(:)
+    integer :: ierr2
 
-    call MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm, ierr)
-    call MPI_Allreduce(sendbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+    if (sendbuf /= MPI_IN_PLACE) then
+      print *, "Error: sendbuf_ad must be MPI_IN_PLACE for in-place Allreduce."
+      call MPI_abort(comm, -1, ierr)
+    end if
+
+    call c_f_pointer(c_loc(recvbuf), rbuf, [count])
+    call c_f_pointer(c_loc(recvbuf_ad), rbuf_ad, [count])
+    rb(1:count) = rbuf(1:count)
+    rb_ad(1:count) = rbuf_ad(1:count)
+    call MPI_Allreduce(MPI_IN_PLACE, recvbuf, count, datatype, op, comm, ierr)
+    select case (op)
+    case (MPI_SUM)
+      call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case (MPI_MAX, MPI_MIN)
+      tmp = merge(rb_ad, 0.0_8, rb == rbuf)
+      call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
+    case default
+      print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_allreduce_fwd_ad_r8_inplace
 
-  subroutine mpi_allreduce_rev_ad_r8_inplace(recvbuf_ad, count, datatype, op, comm, ierr)
+  subroutine mpi_allreduce_rev_ad_r8_inplace(sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
+    integer, intent(in) :: sendbuf_ad
+    real(8), intent(in), target, contiguous :: recvbuf(..)
     real(8), intent(inout), target, contiguous :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
 
-    call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, op, comm, ierr)
+    real(8), pointer :: sb(:), sb_ad(:), rb_ad(:)
+    real(8) :: rb(count), res(count)
+    integer :: n
+    integer :: mask(count), contrib(count)
+
+    if (sendbuf_ad /= MPI_IN_PLACE) then
+      print *, "Error: sendbuf_ad must be MPI_IN_PLACE for in-place Allreduce."
+      call MPI_abort(comm, -1, ierr)
+    end if
+
+    call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
+    call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
+    sb_ad => rb_ad
+    select case(op)
+    case (MPI_SUM)
+      sb_ad(1:count) = rb(1:count)
+    case (MPI_MAX, MPI_MIN)
+      call c_f_pointer(c_loc(recvbuf), sb, [count])
+      call MPI_Allreduce(sb, rb, count, datatype, op, comm, ierr)
+      do n = 1, count
+        if (sb(n) == rb(n)) then
+          mask(n) = 1
+        else
+          mask(n) = 0
+        end if
+      end do
+      call MPI_Allreduce(mask, contrib, count, MPI_INTEGER, MPI_SUM, comm, ierr)
+      do n = 1, count
+        if (mask(n) == 1) then
+          sb_ad(n) = rb_ad(n) / contrib(n)
+        else
+          sb_ad(n) = 0.0_8
+        end if
+      end do
+    case default
+      print *, "Error: Unsupported operation for reverse mode Allreduce."
+      call MPI_Abort(comm, -1, ierr)
+    end select
   end subroutine mpi_allreduce_rev_ad_r8_inplace
 
   subroutine mpi_scatter_fwd_ad_r4(sendbuf, sendbuf_ad, sendcount, sendtype, recvbuf, recvbuf_ad, recvcount, recvtype, root, comm, ierr)
@@ -864,6 +1104,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer :: i
 
     do i = 1, MAX_REQUESTS
+      if (i == MPI_REQUEST_NULL) cycle
       if (req_map_r4(i)%op_type == 0) exit
     end do
     if (i > MAX_REQUESTS) then
@@ -889,6 +1130,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer, intent(out), optional :: ierr
     integer :: idx
 
+    if (request_ad == MPI_REQUEST_NULL) then
+      return
+    end if
     idx = request_ad
     if (idx < 1 .or. idx > MAX_REQUESTS) then
       print *, "Error: Invalid request_ad in mpi_isend_rev_ad_r4: ", request_ad
@@ -902,6 +1146,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r4(idx)%datatype = 0
     req_map_r4(idx)%op_type = 0
     req_map_r4(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_isend_rev_ad_r4
 
   subroutine mpi_isend_fwd_ad_r8(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
@@ -923,6 +1168,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer :: i
 
     do i = 1, MAX_REQUESTS
+      if (i + MAX_REQUESTS == MPI_REQUEST_NULL) cycle
       if (req_map_r8(i)%op_type == 0) exit
     end do
     if (i > MAX_REQUESTS) then
@@ -948,6 +1194,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer, intent(out), optional :: ierr
     integer :: idx
 
+    if (request_ad == MPI_REQUEST_NULL) then
+      return
+    end if
     idx = request_ad - MAX_REQUESTS  ! Adjust index for r8 requests
     call MPI_Wait(req_map_r8(idx)%request, MPI_STATUS_IGNORE, ierr)
     call update_advar(req_map_r8(idx))
@@ -957,7 +1206,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r8(idx)%datatype = 0
     req_map_r8(idx)%op_type = 0
     req_map_r8(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_isend_rev_ad_r8
+
   subroutine mpi_irecv_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
     real, intent(out) :: buf(..)
     real, intent(out) :: buf_ad(..)
@@ -978,6 +1229,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     real, pointer :: b_ad(:)
 
     do i = 1, MAX_REQUESTS
+      if (i == MPI_REQUEST_NULL) cycle
       if (req_map_r4(i)%op_type == 0) exit
     end do
     if (i > MAX_REQUESTS) then
@@ -1005,6 +1257,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer, intent(out), optional :: ierr
     integer :: idx
 
+    if (request_ad == MPI_REQUEST_NULL) then
+      return
+    end if
     idx = request_ad
     if (idx < 1 .or. idx > MAX_REQUESTS) then
       print *, "Error: Invalid request_ad in mpi_irecv_rev_ad_r4"
@@ -1017,6 +1272,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r4(idx)%datatype = 0
     req_map_r4(idx)%op_type = 0
     req_map_r4(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_irecv_rev_ad_r4
 
   subroutine mpi_irecv_fwd_ad_r8(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
@@ -1038,6 +1294,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer :: i
 
     do i = 1, MAX_REQUESTS
+      if (i + MAX_REQUESTS == MPI_REQUEST_NULL) cycle
       if (req_map_r8(i)%op_type == 0) exit
     end do
     if (i > MAX_REQUESTS) then
@@ -1062,6 +1319,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer, intent(out), optional :: ierr
     integer :: idx
 
+    if (request_ad == MPI_REQUEST_NULL) then
+      return
+    end if
     idx = request_ad - MAX_REQUESTS  ! Adjust index for r8 requests
     if (idx < 1 .or. idx > MAX_REQUESTS) then
       print *, "Error: Invalid request_ad in mpi_irecv_rev_ad_r8"
@@ -1074,6 +1334,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r8(idx)%datatype = 0
     req_map_r8(idx)%op_type = 0
     req_map_r8(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_irecv_rev_ad_r8
   subroutine mpi_put_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real, intent(in) :: origin(..)
@@ -1243,6 +1504,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer :: idx
 
     do idx = 1, MAX_REQUESTS
+      if (idx == MPI_REQUEST_NULL) cycle
        if (req_map_r4(idx)%request == MPI_REQUEST_NULL) exit
     end do
     if (idx > MAX_REQUESTS) then
@@ -1266,6 +1528,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer, intent(out), optional :: ierr
     integer :: idx
 
+    if (request_ad == MPI_REQUEST_NULL) then
+      return
+    end if
     idx = request_ad
     call MPI_Request_free(req_map_r4(idx)%request, ierr)
     if (allocated(req_map_r4(idx)%recvbuf)) deallocate(req_map_r4(idx)%recvbuf)
@@ -1274,6 +1539,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r4(idx)%datatype = 0
     req_map_r4(idx)%op_type = 0
     req_map_r4(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_send_init_rev_ad_r4
 
   subroutine mpi_send_init_fwd_ad_r8(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
@@ -1295,7 +1561,8 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer :: idx
 
     do idx = 1, MAX_REQUESTS
-       if (req_map_r8(idx)%request == MPI_REQUEST_NULL) exit
+      if (idx + MAX_REQUESTS == MPI_REQUEST_NULL) cycle
+      if (req_map_r8(idx)%request == MPI_REQUEST_NULL) exit
     end do
     if (idx > MAX_REQUESTS) then
       print *, "Error: Too many requests in mpi_send_init_fwd_rev_ad_r8"
@@ -1318,6 +1585,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer, intent(out), optional :: ierr
     integer :: idx
 
+    if (request_ad == MPI_REQUEST_NULL) then
+      return
+    end if
     idx = request_ad - MAX_REQUESTS ! Adjust index for real(8) requests
     call MPI_Request_free(req_map_r8(idx)%request, ierr)
     if (allocated(req_map_r8(idx)%recvbuf)) deallocate(req_map_r8(idx)%recvbuf)
@@ -1326,7 +1596,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r8(idx)%datatype = 0
     req_map_r8(idx)%op_type = 0
     req_map_r8(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_send_init_rev_ad_r8
+
   subroutine mpi_recv_init_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
     real, intent(out) :: buf(..)
     real, intent(out) :: buf_ad(..)
@@ -1346,7 +1618,8 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer :: idx
 
     do idx = 1, MAX_REQUESTS
-       if (req_map_r4(idx)%request == MPI_REQUEST_NULL) exit
+      if (idx == MPI_REQUEST_NULL) cycle
+      if (req_map_r4(idx)%request == MPI_REQUEST_NULL) exit
     end do
     if (idx > MAX_REQUESTS) then
       print *, "Error: Too many requests in mpi_recv_init_fwd_rev_ad_r4"
@@ -1368,6 +1641,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer, intent(out), optional :: ierr
     integer :: idx
 
+    if (request_ad == MPI_REQUEST_NULL) then
+      return
+    end if
     idx = request_ad
     if (idx < 1 .or. idx > MAX_REQUESTS) then
       print *, "Error: Invalid request_ad in mpi_recv_init_rev_ad_r4"
@@ -1379,6 +1655,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r4(idx)%datatype = 0
     req_map_r4(idx)%op_type = 0
     req_map_r4(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_recv_init_rev_ad_r4
 
   subroutine mpi_recv_init_fwd_ad_r8(buf, buf_ad, count, datatype, source, tag, comm, request, request_ad, ierr)
@@ -1400,7 +1677,8 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer :: idx
 
     do idx = 1, MAX_REQUESTS
-       if (req_map_r8(idx)%request == MPI_REQUEST_NULL) exit
+      if (idx + MAX_REQUESTS == MPI_REQUEST_NULL) cycle
+      if (req_map_r8(idx)%request == MPI_REQUEST_NULL) exit
     end do
     if (idx > MAX_REQUESTS) then
       print *, "Error: Too many requests in mpi_recv_init_fwd_rev_ad_r8"
@@ -1422,6 +1700,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer, intent(out), optional :: ierr
     integer :: idx
 
+    if (request_ad == MPI_REQUEST_NULL) then
+      return
+    end if
     idx = request_ad - MAX_REQUESTS ! Adjust index for real(8) requests
     if (idx < 1 .or. idx > MAX_REQUESTS) then
       print *, "Error: Invalid request_ad in mpi_recv_init_rev_ad_r8"
@@ -1433,6 +1714,7 @@ end subroutine mpi_allreduce_rev_ad_r8
     req_map_r8(idx)%datatype = 0
     req_map_r8(idx)%op_type = 0
     req_map_r8(idx)%request = MPI_REQUEST_NULL
+    request_ad = MPI_REQUEST_NULL
   end subroutine mpi_recv_init_rev_ad_r8
   subroutine mpi_start_fwd_ad(request, request_ad, ierr)
     integer, intent(inout) :: request, request_ad
@@ -1447,6 +1729,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer, intent(out), optional :: ierr
     integer :: idx
 
+    if (request_ad == MPI_REQUEST_NULL) then
+      return
+    end if
     if (request_ad < 0 .and. request_ad >= -MAX_REQUESTS) then
       idx = -request_ad
       call MPI_Wait(req_map_r4(idx)%request, MPI_STATUS_IGNORE, ierr)
@@ -1481,25 +1766,30 @@ end subroutine mpi_allreduce_rev_ad_r8
     integer :: i, idx
 
     do i = 1, count
-       if (array_of_requests_ad(i) < 0 .and. array_of_requests_ad(i) >= -MAX_REQUESTS) then
-          idx = -array_of_requests_ad(i)
-          reqs(i) = req_map_r4(idx)%request
-       else if (array_of_requests_ad(i) < - MAX_REQUESTS .and. array_of_requests_ad(i) >= - MAX_REQUESTS * 2) then
-          idx = -array_of_requests_ad(i) - MAX_REQUESTS
-          reqs(i) = req_map_r8(idx)%request
-       end if
+      if (array_of_requests_ad(i) == MPI_REQUEST_NULL) then
+        reqs(i) = MPI_REQUEST_NULL
+        cycle
+      end if
+      if (array_of_requests_ad(i) < 0 .and. array_of_requests_ad(i) >= -MAX_REQUESTS) then
+        idx = -array_of_requests_ad(i)
+        reqs(i) = req_map_r4(idx)%request
+      else if (array_of_requests_ad(i) < - MAX_REQUESTS .and. array_of_requests_ad(i) >= - MAX_REQUESTS * 2) then
+        idx = -array_of_requests_ad(i) - MAX_REQUESTS
+        reqs(i) = req_map_r8(idx)%request
+      end if
     end do
 
     call MPI_Waitall(count, reqs, MPI_STATUSES_IGNORE, ierr)
 
     do i = 1, count
-       if (array_of_requests_ad(i) < 0 .and. array_of_requests_ad(i) >= -MAX_REQUESTS) then
-          idx = -array_of_requests_ad(i)
-          call update_advar(req_map_r4(idx))
-       else if (array_of_requests_ad(i) < - MAX_REQUESTS .and. array_of_requests_ad(i) >= - MAX_REQUESTS * 2) then
-          idx = -array_of_requests_ad(i) - MAX_REQUESTS
-          call update_advar(req_map_r8(idx))
-       end if
+      if (array_of_requests_ad(i) == MPI_REQUEST_NULL) cycle
+      if (array_of_requests_ad(i) < 0 .and. array_of_requests_ad(i) >= -MAX_REQUESTS) then
+        idx = -array_of_requests_ad(i)
+        call update_advar(req_map_r4(idx))
+      else if (array_of_requests_ad(i) < - MAX_REQUESTS .and. array_of_requests_ad(i) >= - MAX_REQUESTS * 2) then
+        idx = -array_of_requests_ad(i) - MAX_REQUESTS
+        call update_advar(req_map_r8(idx))
+      end if
     end do
   end subroutine mpi_startall_rev_ad
 
@@ -1520,6 +1810,9 @@ end subroutine mpi_allreduce_rev_ad_r8
     real(8), pointer :: ptr_r8(:)
     integer :: idx
 
+    if (request_ad == MPI_REQUEST_NULL) then
+      return
+    end if
     if (request_ad < 0 .and. request_ad >= -MAX_REQUESTS) then
       idx = -request_ad
       call MPI_Start(req_map_r4(idx)%request, ierr)
@@ -1577,6 +1870,10 @@ end subroutine mpi_allreduce_rev_ad_r8
     flag_persistent = .false.
     do i = 1, count
       req = array_of_requests_ad(i)
+      if (req == MPI_REQUEST_NULL) then
+        reqs(i) = MPI_REQUEST_NULL
+        cycle
+      end if
       if (req < 0 .and. req >= -MAX_REQUESTS) then
         idx = -req
         reqs(i) = req_map_r4(idx)%request
@@ -1603,7 +1900,7 @@ end subroutine mpi_allreduce_rev_ad_r8
         print *, "Error: Invalid request_ad in mpi_waitall_rev_ad"
       end if
     end do
-    
+
     if (flag_persistent) then
       call MPI_Startall(count, reqs, ierr)
     end if

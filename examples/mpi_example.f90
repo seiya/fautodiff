@@ -4,8 +4,8 @@ module mpi_example
 
 contains
 
-  subroutine sum_reduce(x, comm)
-    real, intent(inout) :: x
+  subroutine sum_reduce(x, y, comm)
+    real, intent(inout) :: x, y
     integer, intent(in) :: comm
     real :: tmp
     integer :: ierr
@@ -13,30 +13,44 @@ contains
     call MPI_Allreduce(x, tmp, 1, MPI_REAL, MPI_SUM, comm, ierr)
     x = tmp
 
+    call MPI_Allreduce(MPI_IN_PLACE, y, 1, MPI_REAL, MPI_SUM, comm, ierr)
+
     return
   end subroutine sum_reduce
 
   subroutine isend_irecv(x, y, comm)
-    real, intent(inout) :: x(2)
+    real, intent(inout) :: x(3)
     real, intent(out) :: y
     integer, intent(in) :: comm
     integer, parameter :: tag = 0
-    integer :: reqr, reqs
+    integer :: reqs(4)
     integer :: ierr, rank, size
     integer :: pn, pp
 
     call MPI_Comm_rank(comm, rank, ierr)
     call MPI_Comm_size(comm, size, ierr)
 
+    reqs(:) = MPI_REQUEST_NULL
+
     x(:) = x(:) + rank
-    pn = modulo(rank - 1, size)
-    pp = modulo(rank + 1, size)
-    call MPI_Irecv(x(1), 1, MPI_REAL, pn, tag, comm, reqr, ierr)
-    call MPI_Isend(x(2), 1, MPI_REAL, pp, tag, comm, reqs, ierr)
+    pn = rank - 1
+    pp = rank + 1
+    if (pn >= 0) then
+      call MPI_Irecv(x(1), 1, MPI_REAL, pn, tag, comm, reqs(1), ierr)
+      call MPI_Isend(x(2), 1, MPI_REAL, pn, tag+1, comm, reqs(2), ierr)
+    end if
+    if (pp < size) then
+      call MPI_Irecv(x(3), 1, MPI_REAL, pp, tag+1, comm, reqs(3), ierr)
+      call MPI_Isend(x(2), 1, MPI_REAL, pp, tag, comm, reqs(4), ierr)
+    end if
     y = x(2)
-    call MPI_Wait(reqs, MPI_STATUS_IGNORE, ierr)
-    call MPI_Wait(reqr, MPI_STATUS_IGNORE, ierr)
-    y = x(1) + y
+    call MPI_Waitall(4, reqs, MPI_STATUSES_IGNORE, ierr)
+    if (pn >= 0) then
+      y = x(1) + y
+    end if
+    if (pp < size) then
+      y = x(3) + y
+    end if
 
     return
   end subroutine isend_irecv

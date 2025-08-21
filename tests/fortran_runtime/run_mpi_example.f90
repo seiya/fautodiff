@@ -55,30 +55,35 @@ contains
 
   subroutine test_sum_reduce
     real :: x, x_ad
-    real :: x_eps, fd, eps
+    real :: y, y_ad
+    real :: x_eps, y_eps, fd, eps
     real :: inner1, inner2
 
     eps = 1.0e-3
     x = 1.0
-    call sum_reduce(x, comm)
+    y = 1.0
+    call sum_reduce(x, y, comm)
     x_eps = 1.0 + eps
-    call sum_reduce(x_eps, comm)
+    y_eps = 1.0
+    call sum_reduce(x_eps, y_eps, comm)
     fd = (x_eps - x) / eps
     x = 1.0
+    y = 1.0
     x_ad = 1.0
-    call sum_reduce_fwd_ad(x, x_ad, comm)
+    y_ad = 0.0
+    call sum_reduce_fwd_ad(x, x_ad, y, y_ad, comm)
     if (abs((x_ad - fd) / fd) > tol) then
       print *, 'test_sum_reduce_fwd failed', x_ad, fd
       error stop 1
     end if
 
-    inner1 = x_ad**2
+    inner1 = x_ad**2 + y_ad**2
     if (rank == 0) then
       call MPI_reduce(MPI_IN_PLACE, inner1, 1, MPI_REAL, MPI_SUM, 0, comm, ierr)
     else
       call MPI_reduce(inner1, inner1, 1, MPI_REAL, MPI_SUM, 0, comm, ierr)
     end if
-    call sum_reduce_rev_ad(x_ad, comm)
+    call sum_reduce_rev_ad(x, x_ad, y, y_ad, comm)
     inner2 = x_ad
     if (rank == 0) then
       call MPI_reduce(MPI_IN_PLACE, inner2, 1, MPI_REAL, MPI_SUM, 0, comm, ierr)
@@ -95,28 +100,26 @@ contains
   end subroutine test_sum_reduce
 
   subroutine test_isend_irecv
-    real :: x(2), x_ad(2)
+    real :: x(3), x_ad(3)
     real :: y, y_ad
-    real :: x_eps(2), y_eps, fd, eps
+    real :: x_eps(3), y_eps, fd, eps
     real :: inner1, inner2
 
     eps = 1.0e-3
     x(:) = 1.0
     call isend_irecv(x, y, comm)
-    x_eps = 1.0 + eps
+    x_eps(:) = 1.0 + eps
     call isend_irecv(x_eps, y_eps, comm)
     fd = (y_eps - y) / eps
     x(:) = 1.0
     x_ad(:) = 1.0
     call isend_irecv_fwd_ad(x, x_ad, y, y_ad, comm)
     if (abs((y_ad - fd) / fd) > tol) then
-      print *, 'test_sum_reduce_fwd failed', y_ad, fd
+      print *, 'test_isend_irecv_fwd failed', y_ad, fd
       error stop 1
     end if
 
-    inner1 = y_ad**2 + x_ad(1)**2 + x_ad(2)**2
-    ! inner1 = y_ad**2
-    ! x_ad(:) = 0.0
+    inner1 = y_ad**2 + x_ad(1)**2 + x_ad(2)**2 + x_ad(3)**2
     if (rank == 0) then
       call MPI_reduce(MPI_IN_PLACE, inner1, 1, MPI_REAL, MPI_SUM, 0, comm, ierr)
     else

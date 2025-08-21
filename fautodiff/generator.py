@@ -52,6 +52,7 @@ from .code_tree import (
 )
 from .operators import (
     AryIndex,
+    Kind,
     OpComplex,
     OpFunc,
     OpInt,
@@ -60,8 +61,8 @@ from .operators import (
     OpReal,
     OpTrue,
     OpVar,
+    VarType,
 )
-from .var_type import VarType
 
 code_tree.AD_SUFFIX = AD_SUFFIX
 code_tree.FWD_SUFFIX = FWD_SUFFIX
@@ -691,8 +692,13 @@ def _load_fadmods(
                         for name, info in vars_data.items():
                             vt = None
                             typename = info.get("typename")
-                            if typename is not None:
-                                vt = VarType(typename, kind=info.get("kind", None))
+                            kind_name = info.get("kind", None)
+                            kind = (
+                                Kind(OpInt(int(kind_name)))
+                                if kind_name is not None
+                                else None
+                            )
+                            vt = VarType(typename, kind=kind)
                             vars.append(
                                 OpVar(
                                     name=name,
@@ -739,7 +745,7 @@ def _write_fadmod(mod: Module, routine_map: Dict[str, Any], directory: Path) -> 
             if isinstance(d, Declaration):
                 info = {"typename": d.var_type.typename}
                 if d.var_type.kind is not None:
-                    info["kind"] = d.var_type.kind
+                    info["kind"] = d.var_type.kind.val
                 if d.dims is not None:
                     info["dims"] = list(d.dims)
                 if d.parameter:
@@ -841,13 +847,13 @@ def _prepare_fwd_ad_header(
         typ = arg.var_type.typename
         dims = arg.dims
         intent = arg.intent or "inout"
-        kind = arg.var_type.kind
-        kind_val = arg.var_type.kind_val
+        var_type = arg.var_type
+        kind = var_type.kind
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
         arg_info["dims"].append(dims)
-        arg_info["kind"].append(kind_val if kind_val is not None else kind)
+        arg_info["kind"].append(kind.val if kind is not None else None)
 
         # Always pass original argument to the forward AD routine
         args.append(arg)
@@ -856,12 +862,7 @@ def _prepare_fwd_ad_header(
             ad_name = f"{name}{AD_SUFFIX}"
             var = OpVar(
                 ad_name,
-                var_type=VarType(
-                    typ,
-                    kind=kind,
-                    kind_val=kind_val,
-                    kind_keyword=arg.var_type.kind_keyword,
-                ),
+                var_type=var_type,
                 dims=dims,
                 intent=arg.intent,
                 ad_target=True,
@@ -976,24 +977,19 @@ def _prepare_rev_ad_header(
         typ = arg.var_type.typename
         dims = arg.dims
         intent = arg.intent or "inout"
-        kind = arg.var_type.kind
-        kind_val = arg.var_type.kind_val
+        var_type = arg.var_type
+        kind = var_type.kind
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
         arg_info["dims"].append(dims)
-        arg_info["kind"].append(kind_val if kind_val is not None else kind)
+        arg_info["kind"].append(kind.val if kind is not None else None)
         if intent == "out":
             if arg.ad_target and not arg.is_constant:
                 ad_name = f"{name}{AD_SUFFIX}"
                 var = OpVar(
                     ad_name,
-                    var_type=VarType(
-                        typ,
-                        kind=kind,
-                        kind_val=kind_val,
-                        kind_keyword=arg.var_type.kind_keyword,
-                    ),
+                    var_type=var_type,
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1017,12 +1013,7 @@ def _prepare_rev_ad_header(
                 ad_name = f"{name}{AD_SUFFIX}"
                 var = OpVar(
                     ad_name,
-                    var_type=VarType(
-                        typ,
-                        kind=kind,
-                        kind_val=kind_val,
-                        kind_keyword=arg.var_type.kind_keyword,
-                    ),
+                    var_type=var_type,
                     dims=dims,
                     intent="inout",
                     ad_target=True,
@@ -1201,19 +1192,21 @@ def _generate_ad_subroutine(
         and not has_save_grad_input
     ):
         for arg in out_grad_args:
+            kind = arg.var_type.kind
+            if kind is None and arg.var_type.typename.lower() == "double precision":
+                kind = Kind(OpInt(8), val=8, use_kind_keyword=False)
             lhs = OpVar(
                 arg.name,
-                kind=arg.var_type.kind,
-                kind_keyword=arg.var_type.kind_keyword,
+                kind=kind,
             )
             if arg.is_complex_type:
                 zero = OpComplex(
-                    OpReal("0.0", kind=arg.var_type.kind),
-                    OpReal("0.0", kind=arg.var_type.kind),
-                    kind=arg.var_type.kind,
+                    OpReal("0.0", kind=kind),
+                    OpReal("0.0", kind=kind),
+                    kind=kind,
                 )
             else:
-                zero = OpReal("0.0", kind=arg.var_type.kind)
+                zero = OpReal("0.0", kind=kind)
             ad_block.append(Assignment(lhs, zero))
         subroutine.ad_content = ad_block
         return subroutine, False, set()
@@ -1454,6 +1447,8 @@ def _generate_ad_subroutine(
             if not any(v for v in grad_args if v.name == name):
                 if subroutine.is_declared(name):
                     var = subroutine.get_var(name)
+                    if var is not None and not var.ad_target:  # skip if not ad_target
+                        continue
                 else:
                     var = None
             else:
@@ -1465,15 +1460,22 @@ def _generate_ad_subroutine(
                     index = AryIndex((None,) * len(var.dims))
                 else:
                     index = None
+                kind = var.var_type.kind
+                if kind is None and var.var_type.typename.lower() == "double precision":
+                    kind = Kind(OpInt(8), val=8, use_kind_keyword=False)
                 if var.is_complex_type:
                     zero = OpComplex(
-                        OpReal("0.0", kind=var.var_type.kind),
-                        OpReal("0.0", kind=var.var_type.kind),
-                        kind=var.var_type.kind,
+                        OpReal("0.0", kind=kind),
+                        OpReal("0.0", kind=kind),
+                        kind=kind,
                     )
                 else:
-                    zero = OpReal(0.0, kind=var.var_type.kind)
-                subroutine.ad_init.append(Assignment(OpVar(name, index=index), zero))
+                    zero = OpReal(0.0, kind=kind)
+                vt = var.var_type.copy()
+                vt.kind = kind
+                subroutine.ad_init.append(
+                    Assignment(OpVar(name, index=index, var_type=vt), zero)
+                )
 
     var_names = []
     for var in subroutine.collect_vars():
@@ -1761,8 +1763,20 @@ def _generate_ad_subroutine(
         if var.name in mod_all_var_names or var.is_constant:
             continue
         decl = subroutine.decls.find_by_name(var.name) if subroutine.decls else None
-        if decl is not None and (decl.parameter or getattr(decl, "constant", False)):
-            continue
+        if decl is not None:
+            if decl.parameter or getattr(decl, "constant", False):
+                continue
+            if not reverse and var.name.endswith(AD_SUFFIX) and not decl.ad_target():
+                found = False
+                org_name = var.name.removesuffix(AD_SUFFIX)
+                for node in subroutine.ad_content.iter_children():
+                    if isinstance(node, Assignment) and node.lhs.name == org_name:
+                        assign = Assignment(node.lhs.add_suffix(AD_SUFFIX), node.rhs)
+                        subroutine.ad_content.insert_before(node.get_id(), assign)
+                        found = True
+                        break
+                if found:
+                    continue
         required_vnames.append(str(var))
     if len(required_vnames) > 0:
         _warn(

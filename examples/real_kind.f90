@@ -13,7 +13,7 @@ contains
   end subroutine scale_8
 
   subroutine scale_rp(x)
-    real(kind=RP), intent(inout) :: x
+    real(RP), intent(inout) :: x
 
     x = x * 2.0_RP
 

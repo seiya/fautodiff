@@ -23,9 +23,10 @@ contains
     return
   end subroutine foo_fwd_ad
 
-  subroutine foo_rev_ad(x_ad, comm)
+  subroutine foo_rev_ad(x, x_ad, comm)
     use mpi
     use mpi_ad
+    real, intent(inout) :: x
     real, intent(inout) :: x_ad
     integer, intent(in)  :: comm
     real :: tmp_ad
@@ -33,7 +34,7 @@ contains
 
     tmp_ad = x_ad ! x = tmp
     x_ad = 0.0 ! x = tmp
-    call MPI_Allreduce_rev_ad(x_ad, tmp_ad, 1, MPI_REAL, MPI_SUM, comm, ierr) ! call MPI_Allreduce(x, tmp, 1, MPI_REAL, MPI_SUM, comm, ierr)
+    call MPI_Allreduce_rev_ad(x, x_ad, tmp_ad, 1, MPI_REAL, MPI_SUM, comm, ierr) ! call MPI_Allreduce(x, tmp, 1, MPI_REAL, MPI_SUM, comm, ierr)
 
     return
   end subroutine foo_rev_ad

@@ -89,7 +89,10 @@ class TestFortranADCode(unittest.TestCase):
         )
 
     def test_intrinsic_func(self):
-        self._run_test("intrinsic_func", ["casting", "math", "non_diff", "special"])
+        self._run_test(
+            "intrinsic_func",
+            ["casting", "math", "reduction", "non_diff", "special"],
+        )
 
     def test_save_vars(self):
         self._run_test(
@@ -152,7 +155,10 @@ class TestFortranADCode(unittest.TestCase):
         )
 
     def test_exit_cycle(self):
-        self._run_test("exit_cycle", ["do_exit_cycle", "while_exit_cycle"])
+        self._run_test(
+            "exit_cycle",
+            ["do_exit_cycle", "while_exit_cycle", "exit_cycle_with_labels"],
+        )
 
     def test_pointer_arrays(self):
         self._run_test(
@@ -177,7 +183,11 @@ class TestFortranADCode(unittest.TestCase):
     mpifort = shutil.which("mpifort")
 
     def test_mpi_example(self):
-        self._run_test("mpi_example", ["sum_reduce"], use_mpi=True)
+        self._run_test(
+            "mpi_example",
+            ["sum_reduce", "isend_irecv"],
+            use_mpi=True,
+        )
 
     def test_where_forall(self):
         self._run_test("where_forall", ["where_example", "forall_example"])
