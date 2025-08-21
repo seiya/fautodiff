@@ -6,7 +6,6 @@ AD_SUFFIX = "_ad"
 FWD_SUFFIX = "_fwd_ad"
 REV_SUFFIX = "_rev_ad"
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -14,6 +13,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 # Ensure other modules use the same AD suffix
 from . import code_tree as code_tree
+from . import fadmod
 from . import operators as operators
 from .code_tree import (
     Allocate,
@@ -652,122 +652,6 @@ def _dependency_groups(
             strongconnect(v)
 
     return comps, deps
-
-
-def _load_fadmods(
-    mod_names: list[str], search_dirs: list[str]
-) -> tuple[dict, dict, dict]:
-    """Load routine, variable and generic maps from ``mod_names`` using ``search_dirs``."""
-
-    routines = {}
-    variables = {}
-    generics = {}
-    for mod in mod_names:
-        found = False
-        for d in search_dirs:
-            path = Path(d) / f"{mod}.fadmod"
-            if path.exists():
-                found = True
-                try:
-                    data = json.loads(path.read_text())
-                    generics.update(data.pop("generics", {}))
-                    routines_data = data.get("routines", {})
-                    if routines_data:
-                        for name, info in routines_data.items():
-                            if "skip" in info:
-                                continue
-                            nargs = len(info["args"])
-                            for key in ["intents", "dims", "type", "kind"]:
-                                if key in info:
-                                    if len(info[key]) != nargs:
-                                        raise RuntimeError(
-                                            f"invalid routine data: {name} {info}"
-                                        )
-                                else:
-                                    info[key] = [None] * nargs
-                    routines.update(routines_data)
-                    vars_data = data.pop("variables", {})
-                    if vars_data:
-                        vars = []
-                        for name, info in vars_data.items():
-                            vt = None
-                            typename = info.get("typename")
-                            kind_name = info.get("kind", None)
-                            kind = (
-                                Kind(OpInt(int(kind_name)))
-                                if kind_name is not None
-                                else None
-                            )
-                            vt = VarType(typename, kind=kind)
-                            vars.append(
-                                OpVar(
-                                    name=name,
-                                    var_type=vt,
-                                    dims=info.get("dims", None),
-                                    is_constant=info.get("constant", False),
-                                    allocatable=info.get("allocatable", False),
-                                    pointer=info.get("pointer", False),
-                                )
-                            )
-                        variables[mod] = vars
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"invalid fadmod file for module {mod}: {exc}"
-                    ) from exc
-                break
-        if not found:
-            raise RuntimeError(f"fadmod file not found for module {mod}")
-    return routines, variables, generics
-
-
-def _write_fadmod(mod: Module, routine_map: Dict[str, Any], directory: Path) -> None:
-    """Write routine and variable info for ``mod`` to ``<mod.name>.fadmod``."""
-
-    mod_name = mod.name
-    routines_data = {}
-    for r in mod.routines:
-        info = routine_map.get(r.name)
-        if info is None:
-            continue
-        skip = info.get("skip") or (
-            info.get("name_fwd_ad") is None and info.get("name_rev_ad") is None
-        )
-        if skip:
-            routines_data[r.name] = {"skip": True}
-            continue
-        info = dict(info)
-        info["module"] = mod_name
-        routines_data[r.name] = info
-
-    variables_data = {}
-    if mod.decls is not None:
-        for d in mod.decls.iter_children():
-            if isinstance(d, Declaration):
-                info = {"typename": d.var_type.typename}
-                if d.var_type.kind is not None:
-                    info["kind"] = d.var_type.kind.val
-                if d.dims is not None:
-                    info["dims"] = list(d.dims)
-                if d.parameter:
-                    info["parameter"] = True
-                if d.constant:
-                    info["constant"] = True
-                if d.init_val is not None:
-                    info["init_val"] = d.init_val
-                if d.access is not None:
-                    info["access"] = d.access
-                if d.allocatable:
-                    info["allocatable"] = True
-                if d.pointer:
-                    info["pointer"] = True
-                variables_data[d.name] = info
-
-    if not routines_data and not variables_data:
-        return
-
-    path = directory / f"{mod_name}.fadmod"
-    data = {"routines": routines_data, "variables": variables_data}
-    path.write_text(json.dumps(data, indent=2))
 
 
 def _has_modified_module_grad_var(routine_org: Routine, mod_vars: List[OpVar]) -> bool:
@@ -1890,17 +1774,23 @@ def generate_ad(
                     routine_map[r.name] = routine_info["arg_info"]
 
         used_mods = mod_org.find_use_modules()
-        loaded, vars_info, generic_map = _load_fadmods(used_mods, search_dirs)
-        routine_map.update(loaded)
-        generic_routines.update(generic_map)
         const_var_names: List[str] = []
-        for name, vars in vars_info.items():
-            for v in vars:
+        for name in used_mods:
+            fad = None
+            for d in search_dirs:
+                path = Path(d) / f"{name}.fadmod"
+                if path.exists():
+                    fad = fadmod.FadmodBase.load(path)
+                    break
+            if fad is None:
+                raise RuntimeError(f"fadmod file not found for module {name}")
+            routine_map.update(fad.routines)
+            generic_routines.update(fad.generics)
+            for v in fad.variables:
                 if v.is_constant:
                     const_var_names.append(v.name_ext())
-            vars = [v for v in vars if not v.is_constant]
-            if vars:
-                mod_vars.extend(vars)
+                else:
+                    mod_vars.append(v)
 
         # Preprocess routines for allocate/pointer/mpi once
         for routine in mod_org.routines:
@@ -1931,7 +1821,7 @@ def generate_ad(
                 group_subs: Dict[str, Dict[str, Routine]] = {}
                 for name_r in group:
                     routine = routine_lookup[name_r]
-                    _set_call_intents(routine.content, routine_map, generic_map)
+                    _set_call_intents(routine.content, routine_map, generic_routines)
                     if mode in ("forward", "both"):
                         sub, _, mods_called = _generate_ad_subroutine(
                             mod_org,
@@ -2012,11 +1902,8 @@ def generate_ad(
 
         modules.append(render_program(mod))
         if write_fadmod:
-            _write_fadmod(
-                mod_org,
-                routine_map,
-                fadmod_dir,
-            )
+            fad = fadmod.FadmodV1.from_module(mod_org, routine_map)
+            fad.write(fadmod_dir / f"{mod_org.name}.fadmod")
     preamble = parser.file_cpp_lines
     if preamble:
         code = "\n".join(preamble + [""] + modules)

@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff import code_tree, generator
+from fautodiff import code_tree, fadmod, generator
 
 
 class TestGenerator(unittest.TestCase):
@@ -55,12 +55,12 @@ class TestGenerator(unittest.TestCase):
 
     def test_fadmod_function_intents_length(self):
         code_tree.Node.reset()
-        fadmod = Path("simple_math.fadmod")
-        if fadmod.exists():
-            fadmod.unlink()
+        fadmod_path = Path("simple_math.fadmod")
+        if fadmod_path.exists():
+            fadmod_path.unlink()
         generator.generate_ad("examples/simple_math.f90", warn=False)
-        routines, _, _ = generator._load_fadmods(["simple_math"], ["."])
-        info = routines.get("add_numbers")
+        fm = fadmod.FadmodBase.load(fadmod_path)
+        info = fm.routines.get("add_numbers")
         self.assertIsNotNone(info)
         self.assertEqual(len(info["args"]), len(info["intents"]))
         self.assertEqual(info["intents"][-1], "out")

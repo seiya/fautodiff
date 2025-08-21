@@ -4,7 +4,6 @@ This module centralizes all direct interaction with :mod:`fparser` so that the
 rest of the package does not rely on the underlying parser implementation.
 """
 
-import json
 import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -59,6 +58,7 @@ def _eval_kind(expr: str) -> Optional[int]:
 
 from packaging.version import Version, parse
 
+from . import fadmod
 from .code_tree import (
     AD_SUFFIX,
     Allocate,
@@ -993,23 +993,6 @@ def parse_src(
     return modules
 
 
-def _load_fadmod_decls(mod_name: str, search_dirs: list[str]) -> dict:
-    """Return variable declaration info from ``mod_name`` fadmod file."""
-
-    for d in search_dirs:
-        path = Path(d) / f"{mod_name}.fadmod"
-        if path.exists():
-            try:
-                data = json.loads(path.read_text())
-                return data.get("variables", {})
-            except Exception as exc:
-                raise RuntimeError(
-                    f"invalid fadmod file for module {mod_name}: {exc}"
-                ) from exc
-
-    raise RuntimeError(f"fadmod file not found for module {mod_name}")
-
-
 def _parse_decl_stmt(
     stmt,
     constant_vars=None,
@@ -1553,8 +1536,15 @@ def _search_use(
                 d.declared_in = "use"
                 decl_map[d.name] = d
     elif search_dirs:
-        vars_map = _load_fadmod_decls(name, search_dirs)
-        for vname, info in vars_map.items():
+        fad = None
+        for d in search_dirs:
+            path = Path(d) / f"{name}.fadmod"
+            if path.exists():
+                fad = fadmod.FadmodBase.load(path)
+                break
+        if fad is None:
+            raise RuntimeError(f"fadmod file not found for module {name}")
+        for vname, info in fad.variables_raw.items():
             if only is None or vname in only:
                 kind_name = info.get("kind_name")
                 if kind_name is not None:
