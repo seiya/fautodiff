@@ -326,13 +326,14 @@ contains
     end if
   end subroutine mpi_bcast_rev_ad_r8
   subroutine mpi_reduce_fwd_ad_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, root, comm, ierr)
-    real, intent(in) :: sendbuf(..)
-    real, intent(in) :: sendbuf_ad(..)
-    real, intent(out) :: recvbuf(..)
+    real, intent(in), target, contiguous :: sendbuf(..)
+    real, intent(in), target, contiguous :: sendbuf_ad(..)
+    real, intent(out), target, contiguous :: recvbuf(..)
     real, intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, root, comm
     integer, intent(out), optional :: ierr
     real :: tmp(count)
+    real, pointer :: sb(:), rb(:), sb_ad(:)
     integer :: ierr2
 
     call MPI_Reduce(sendbuf, recvbuf, count, datatype, op, root, comm, ierr)
@@ -341,7 +342,10 @@ contains
       call MPI_Reduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
     case (MPI_MAX, MPI_MIN)
       call MPI_Bcast(recvbuf, count, datatype, root, comm, ierr2)
-      tmp = merge(sendbuf_ad, 0.0, sendbuf == recvbuf)
+      call c_f_pointer(c_loc(sendbuf), sb, [count])
+      call c_f_pointer(c_loc(recvbuf), rb, [count])
+      call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
+      tmp = merge(sb_ad, 0.0, sb == rb)
       call MPI_Reduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
     case default
       print *, "Error: unsupported MPI_Op in mpi_reduce_fwd_ad"
@@ -368,13 +372,14 @@ contains
   end subroutine mpi_reduce_rev_ad_r4
 
   subroutine mpi_reduce_fwd_ad_r8(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, root, comm, ierr)
-    real(8), intent(in) :: sendbuf(..)
-    real(8), intent(in) :: sendbuf_ad(..)
-    real(8), intent(out) :: recvbuf(..)
+    real(8), intent(in), target, contiguous :: sendbuf(..)
+    real(8), intent(in), target, contiguous :: sendbuf_ad(..)
+    real(8), intent(out), target, contiguous :: recvbuf(..)
     real(8), intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, root, comm
     integer, intent(out), optional :: ierr
     real(8) :: tmp(count)
+    real(8), pointer :: sb(:), rb(:), sb_ad(:)
     integer :: ierr2
 
     call MPI_Reduce(sendbuf, recvbuf, count, datatype, op, root, comm, ierr)
@@ -383,7 +388,10 @@ contains
       call MPI_Reduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
     case (MPI_MAX, MPI_MIN)
       call MPI_Bcast(recvbuf, count, datatype, root, comm, ierr2)
-      tmp = merge(sendbuf_ad, 0.0_8, sendbuf == recvbuf)
+      call c_f_pointer(c_loc(sendbuf), sb, [count])
+      call c_f_pointer(c_loc(recvbuf), rb, [count])
+      call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
+      tmp = merge(sb_ad, 0.0_8, sb == rb)
       call MPI_Reduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, root, comm, ierr)
     case default
       print *, "Error: unsupported MPI_Op in mpi_reduce_fwd_ad"
@@ -410,13 +418,14 @@ contains
   end subroutine mpi_reduce_rev_ad_r8
 
   subroutine mpi_allreduce_fwd_ad_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
-    real, intent(in) :: sendbuf(..)
-    real, intent(in) :: sendbuf_ad(..)
-    real, intent(out) :: recvbuf(..)
+    real, intent(in), target, contiguous :: sendbuf(..)
+    real, intent(in), target, contiguous :: sendbuf_ad(..)
+    real, intent(out), target, contiguous :: recvbuf(..)
     real, intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
     real :: tmp(count)
+    real, pointer :: sb(:), rb(:), sb_ad(:)
     integer :: ierr2
 
     call MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm, ierr)
@@ -424,7 +433,10 @@ contains
     case (MPI_SUM)
       call MPI_Allreduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
     case (MPI_MAX, MPI_MIN)
-      tmp = merge(sendbuf_ad, 0.0, sendbuf == recvbuf)
+      call c_f_pointer(c_loc(sendbuf), sb, [count])
+      call c_f_pointer(c_loc(recvbuf), rb, [count])
+      call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
+      tmp = merge(sb_ad, 0.0, sb == rb)
       call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
     case default
       print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
@@ -440,21 +452,30 @@ contains
     integer, intent(out), optional :: ierr
 
     real, pointer :: sb(:), sb_ad(:), rb_ad(:)
-    real :: rb(count)
+    real :: rb(count), res(count)
     integer :: n
+    integer :: mask(count), contrib(count)
 
     call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
+    call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
     select case(op)
     case (MPI_SUM)
-      call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
       sb_ad(1:count) = rb(1:count)
     case (MPI_MAX, MPI_MIN)
       call c_f_pointer(c_loc(sendbuf), sb, [count])
-      call MPI_Allreduce(sendbuf, rb, count, datatype, op, comm, ierr)
+      call MPI_Allreduce(sendbuf, res, count, datatype, op, comm, ierr)
       do n = 1, count
         if (sb(n) == rb(n)) then
-          sb_ad(n) = rb_ad(n)
+          mask(n) = 1
+        else
+          mask(n) = 0
+        end if
+      end do
+      call MPI_Allreduce(mask, contrib, count, MPI_INTEGER, MPI_SUM, comm, ierr)
+      do n = 1, count
+        if (mask(n) == 1) then
+          sb_ad(n) = rb(n) / contrib(n)
         else
           sb_ad(n) = 0.0
         end if
@@ -467,13 +488,14 @@ contains
   end subroutine mpi_allreduce_rev_ad_r4
 
   subroutine mpi_allreduce_fwd_ad_r8(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
-    real(8), intent(in) :: sendbuf(..)
-    real(8), intent(in) :: sendbuf_ad(..)
-    real(8), intent(out) :: recvbuf(..)
+    real(8), intent(in), target, contiguous :: sendbuf(..)
+    real(8), intent(in), target, contiguous :: sendbuf_ad(..)
+    real(8), intent(out), target, contiguous :: recvbuf(..)
     real(8), intent(out) :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
     real(8) :: tmp(count)
+    real(8), pointer :: sb(:), rb(:), sb_ad(:)
     integer :: ierr2
 
     call MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, comm, ierr)
@@ -481,7 +503,10 @@ contains
     case (MPI_SUM)
       call MPI_Allreduce(sendbuf_ad, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
     case (MPI_MAX, MPI_MIN)
-      tmp = merge(sendbuf_ad, 0.0_8, sendbuf == recvbuf)
+      call c_f_pointer(c_loc(sendbuf), sb, [count])
+      call c_f_pointer(c_loc(recvbuf), rb, [count])
+      call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
+      tmp = merge(sb_ad, 0.0_8, sb == rb)
       call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
     case default
       print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
@@ -497,21 +522,30 @@ contains
     integer, intent(out), optional :: ierr
 
     real(8), pointer :: sb(:), sb_ad(:), rb_ad(:)
-    real(8) :: rb(count)
+    real(8) :: rb(count), res(count)
     integer :: n
+    integer :: mask(count), contrib(count)
 
     call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
+    call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
     select case(op)
     case (MPI_SUM)
-      call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
       sb_ad(1:count) = rb(1:count)
     case (MPI_MAX, MPI_MIN)
       call c_f_pointer(c_loc(sendbuf), sb, [count])
-      call MPI_Allreduce(sendbuf, rb, count, datatype, op, comm, ierr)
+      call MPI_Allreduce(sendbuf, res, count, datatype, op, comm, ierr)
       do n = 1, count
-        if (sb(n) == rb(n)) then
-          sb_ad(n) = rb_ad(n)
+        if (sb(n) == res(n)) then
+          mask(n) = 1
+        else
+          mask(n) = 0
+        end if
+      end do
+      call MPI_Allreduce(mask, contrib, count, MPI_INTEGER, MPI_SUM, comm, ierr)
+      do n = 1, count
+        if (mask(n) == 1) then
+          sb_ad(n) = rb_ad(n) / contrib(n)
         else
           sb_ad(n) = 0.0_8
         end if
@@ -525,11 +559,12 @@ contains
 
   subroutine mpi_allreduce_fwd_ad_r4_inplace(sendbuf, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
     integer, intent(in) :: sendbuf
-    real, intent(inout) :: recvbuf(..)
-    real, intent(inout) :: recvbuf_ad(..)
+    real, intent(inout), target, contiguous :: recvbuf(..)
+    real, intent(inout), target, contiguous :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
     real :: rb(count), rb_ad(count), tmp(count)
+    real, pointer :: rbuf(:), rbuf_ad(:)
     integer :: ierr2
 
     if (sendbuf /= MPI_IN_PLACE) then
@@ -537,14 +572,16 @@ contains
       call MPI_abort(comm, -1, ierr)
     end if
 
-    rb(1:count) = recvbuf(1:count)
-    rb_ad(1:count) = recvbuf_ad(1:count)
+    call c_f_pointer(c_loc(recvbuf), rbuf, [count])
+    call c_f_pointer(c_loc(recvbuf_ad), rbuf_ad, [count])
+    rb(1:count) = rbuf(1:count)
+    rb_ad(1:count) = rbuf_ad(1:count)
     call MPI_Allreduce(MPI_IN_PLACE, recvbuf, count, datatype, op, comm, ierr)
     select case (op)
     case (MPI_SUM)
       call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
     case (MPI_MAX, MPI_MIN)
-      tmp = merge(rb_ad, 0.0, rb == recvbuf)
+      tmp = merge(rb_ad, 0.0, rb == rbuf)
       call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
     case default
       print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
@@ -560,8 +597,9 @@ contains
     integer, intent(out), optional :: ierr
 
     real, pointer :: sb(:), sb_ad(:), rb_ad(:)
-    real :: rb(count)
+    real :: rb(count), res(count)
     integer :: n
+    integer :: mask(count), contrib(count)
 
     if (sendbuf_ad /= MPI_IN_PLACE) then
       print *, "Error: sendbuf_ad must be MPI_IN_PLACE for in-place Allreduce."
@@ -569,17 +607,25 @@ contains
     end if
 
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
+    call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
     sb_ad => rb_ad
     select case(op)
     case (MPI_SUM)
-      call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
       sb_ad(1:count) = rb(1:count)
     case (MPI_MAX, MPI_MIN)
       call c_f_pointer(c_loc(recvbuf), sb, [count])
-      call MPI_Allreduce(sb, rb, count, datatype, op, comm, ierr)
+      call MPI_Allreduce(sb, res, count, datatype, op, comm, ierr)
       do n = 1, count
-        if (sb(n) == rb(n)) then
-          sb_ad(n) = rb_ad(n)
+        if (sb(n) == res(n)) then
+          mask(n) = 1
+        else
+          mask(n) = 0
+        end if
+      end do
+      call MPI_Allreduce(mask, contrib, count, MPI_INTEGER, MPI_SUM, comm, ierr)
+      do n = 1, count
+        if (mask(n) == 1) then
+          sb_ad(n) = rb_ad(n) / contrib(n)
         else
           sb_ad(n) = 0.0
         end if
@@ -592,11 +638,12 @@ contains
 
   subroutine mpi_allreduce_fwd_ad_r8_inplace(sendbuf, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
     integer, intent(in) :: sendbuf
-    real(8), intent(inout) :: recvbuf(..)
-    real(8), intent(inout) :: recvbuf_ad(..)
+    real(8), intent(inout), target, contiguous :: recvbuf(..)
+    real(8), intent(inout), target, contiguous :: recvbuf_ad(..)
     integer, intent(in) :: count, datatype, op, comm
     integer, intent(out), optional :: ierr
     real(8) :: rb(count), rb_ad(count), tmp(count)
+    real(8), pointer :: rbuf(:), rbuf_ad(:)
     integer :: ierr2
 
     if (sendbuf /= MPI_IN_PLACE) then
@@ -604,14 +651,16 @@ contains
       call MPI_abort(comm, -1, ierr)
     end if
 
-    rb(1:count) = recvbuf(1:count)
-    rb_ad(1:count) = recvbuf_ad(1:count)
+    call c_f_pointer(c_loc(recvbuf), rbuf, [count])
+    call c_f_pointer(c_loc(recvbuf_ad), rbuf_ad, [count])
+    rb(1:count) = rbuf(1:count)
+    rb_ad(1:count) = rbuf_ad(1:count)
     call MPI_Allreduce(MPI_IN_PLACE, recvbuf, count, datatype, op, comm, ierr)
     select case (op)
     case (MPI_SUM)
       call MPI_Allreduce(MPI_IN_PLACE, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
     case (MPI_MAX, MPI_MIN)
-      tmp = merge(rb_ad, 0.0_8, rb == recvbuf)
+      tmp = merge(rb_ad, 0.0_8, rb == rbuf)
       call MPI_Allreduce(tmp, recvbuf_ad, count, datatype, MPI_SUM, comm, ierr)
     case default
       print *, "Error: unsupported MPI_Op in mpi_allreduce_fwd_ad"
@@ -627,8 +676,9 @@ contains
     integer, intent(out), optional :: ierr
 
     real(8), pointer :: sb(:), sb_ad(:), rb_ad(:)
-    real(8) :: rb(count)
+    real(8) :: rb(count), res(count)
     integer :: n
+    integer :: mask(count), contrib(count)
 
     if (sendbuf_ad /= MPI_IN_PLACE) then
       print *, "Error: sendbuf_ad must be MPI_IN_PLACE for in-place Allreduce."
@@ -636,19 +686,27 @@ contains
     end if
 
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
+    call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
     sb_ad => rb_ad
     select case(op)
     case (MPI_SUM)
-      call MPI_Allreduce(rb_ad, rb, count, datatype, MPI_SUM, comm, ierr)
       sb_ad(1:count) = rb(1:count)
     case (MPI_MAX, MPI_MIN)
       call c_f_pointer(c_loc(recvbuf), sb, [count])
       call MPI_Allreduce(sb, rb, count, datatype, op, comm, ierr)
       do n = 1, count
         if (sb(n) == rb(n)) then
-          sb_ad(n) = rb_ad(n)
+          mask(n) = 1
         else
-          sb_ad(n) = 0.0
+          mask(n) = 0
+        end if
+      end do
+      call MPI_Allreduce(mask, contrib, count, MPI_INTEGER, MPI_SUM, comm, ierr)
+      do n = 1, count
+        if (mask(n) == 1) then
+          sb_ad(n) = rb_ad(n) / contrib(n)
+        else
+          sb_ad(n) = 0.0_8
         end if
       end do
     case default
