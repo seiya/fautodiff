@@ -1544,31 +1544,11 @@ def _search_use(
                 break
         if fad is None:
             raise RuntimeError(f"fadmod file not found for module {name}")
-        for vname, info in fad.variables_raw.items():
+        decls = fad.variable_declarations(lambda v: _get_kind(v, decl_map))
+        for vname, decl in decls.items():
             if only is None or vname in only:
-                kind_name = info.get("kind_name")
-                if kind_name is not None:
-                    kind = _get_kind(kind_name, decl_map)
-                elif info.get("kind") is not None:
-                    val = info["kind"]
-                    kind = Kind(OpInt(val), val=val)
-                else:
-                    kind = None
-                decl_map[vname] = Declaration(
-                    vname,
-                    var_type=VarType(info["typename"], kind=kind),
-                    dims=(
-                        tuple(info["dims"]) if info.get("dims") is not None else None
-                    ),
-                    intent=None,
-                    parameter=info.get("parameter", False),
-                    constant=info.get("constant", False),
-                    init_val=info.get("init_val"),
-                    access=info.get("access"),
-                    pointer=info.get("pointer", False),
-                    optional=info.get("optional", False),
-                    declared_in="use",
-                )
+                decl.declared_in = "use"
+                decl_map[vname] = decl
 
 
 def _process_spec_part(
