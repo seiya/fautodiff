@@ -113,9 +113,9 @@ contains
 
     if (n > 0) then
       allocate(arr(n))
-      allocate(arr_ad(n))
     end if
 
+    allocate(arr_ad(n))
     if (n > 0) then
       do i = 1, n
         arr(i) = i * x

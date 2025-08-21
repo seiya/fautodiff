@@ -393,7 +393,15 @@ def _parse_allocate(
         for name in map:
             if map[name]:
                 if name not in mod_var_names or name in local:
-                    var = OpVar(name, index=map[name][0], allocatable=True)
+                    # Mark automatically deallocated arrays as adjoint targets so
+                    # their corresponding `_ad` arrays are allocated in the
+                    # reverse pass.
+                    var = OpVar(
+                        name,
+                        index=map[name][0],
+                        allocatable=True,
+                        ad_target=True,
+                    )
                     node.append(
                         Allocate._add_if(Deallocate([var]), var, name in mod_var_names)
                     )
