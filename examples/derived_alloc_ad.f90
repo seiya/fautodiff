@@ -50,9 +50,13 @@ contains
     integer :: j
 
     do j = 1, m
-      deallocate(obj_ad(j)%arr_ad)
+      if (allocated(obj_ad) .and. allocated(obj_ad(j)%arr_ad)) then
+        deallocate(obj_ad(j)%arr_ad)
+      end if
     end do
-    deallocate(obj_ad)
+    if (allocated(obj_ad)) then
+      deallocate(obj_ad)
+    end if
 
     return
   end subroutine derived_alloc_finalize_fwd_ad

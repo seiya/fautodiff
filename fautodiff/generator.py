@@ -393,8 +393,10 @@ def _parse_allocate(
         for name in map:
             if map[name]:
                 if name not in mod_var_names or name in local:
-                    var = OpVar(name, index=map[name][0])
-                    node.append(Deallocate([var]))
+                    var = OpVar(name, index=map[name][0], allocatable=True)
+                    node.append(
+                        Allocate._add_if(Deallocate([var]), var, name in mod_var_names)
+                    )
 
 
 def _parse_pointer(
