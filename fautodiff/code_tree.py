@@ -4297,10 +4297,23 @@ class BranchBlock(Node):
             block = WhereBlock(cond_blocks)
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
+
         if reverse:
-            loads = []
-            blocks = []
-            for var in block.assigned_vars():
+            for _, body in block.cond_blocks:
+                first = body.first()
+                if isinstance(first, Allocate):
+                    body.remove_child(first)
+            block.cond_blocks = [
+                (cond, body)
+                for cond, body in block.cond_blocks
+                if not body.is_effectively_empty()
+            ]
+
+            loads: List[Node] = []
+            blocks: List[Node] = []
+            assigned = block.assigned_vars()
+            required = block.required_vars()
+            for var in assigned & required:
                 if not var.name.endswith(AD_SUFFIX):
                     load = self._save_vars(var, saved_vars)
                     loads.append(load)
@@ -4713,6 +4726,15 @@ class DoAbst(Node):
                 for node in rev:
                     nodes[0].cond_blocks[0][1].insert_begin(node)
 
+            fwd_body = [
+                fb
+                for fb in fwd_body
+                if not (
+                    isinstance(fb, DoAbst)
+                    and len(fb._body) == 1
+                    and isinstance(fb._body.first(), Allocate)
+                )
+            ]
             new_body.extend(fwd_body)
             for node in nodes:
                 new_body.append(node)

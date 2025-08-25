@@ -8,6 +8,8 @@ program run_allocate_vars
   integer, parameter :: I_allocate_and_sum = 1
   integer, parameter :: I_module_vars = 2
   integer, parameter :: I_save_alloc = 3
+  integer, parameter :: I_allocate_in_if_nonfirst = 4
+  integer, parameter :: I_allocate_in_loop = 5
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -27,6 +29,10 @@ program run_allocate_vars
               i_test = I_module_vars
            case ("save_alloc")
               i_test = I_save_alloc
+           case ("allocate_in_if_nonfirst")
+              i_test = I_allocate_in_if_nonfirst
+           case ("allocate_in_loop")
+              i_test = I_allocate_in_loop
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -44,6 +50,12 @@ program run_allocate_vars
   end if
   if (i_test == I_save_alloc .or. i_test == I_all) then
      call test_save_alloc
+  end if
+  if (i_test == I_allocate_in_if_nonfirst .or. i_test == I_all) then
+     call test_allocate_in_if_nonfirst
+  end if
+  if (i_test == I_allocate_in_loop .or. i_test == I_all) then
+     call test_allocate_in_loop
   end if
 
   stop
@@ -159,6 +171,50 @@ contains
 
     return
   end subroutine test_save_alloc
+
+  subroutine test_allocate_in_if_nonfirst
+    real, parameter :: tol = 3.0e-4
+    integer, parameter :: n = 5
+    real :: x, res
+    real :: x_ad, res_ad
+    real :: res_eps, fd, eps
+
+    eps = 1.0e-3
+    x = 2.0
+    call allocate_in_if_nonfirst(n, x, res)
+    call allocate_in_if_nonfirst(n, x + eps, res_eps)
+    fd = (res_eps - res) / eps
+    x_ad = 1.0
+    call allocate_in_if_nonfirst_fwd_ad(n, x, x_ad, res, res_ad)
+    if (abs((res_ad - fd) / fd) > tol) then
+       print *, 'test_allocate_in_if_nonfirst_fwd failed', res_ad, fd
+       error stop 1
+    end if
+
+    return
+  end subroutine test_allocate_in_if_nonfirst
+
+  subroutine test_allocate_in_loop
+    real, parameter :: tol = 3.0e-4
+    integer, parameter :: n = 5
+    real :: x, res
+    real :: x_ad, res_ad
+    real :: res_eps, fd, eps
+
+    eps = 1.0e-3
+    x = 2.0
+    call allocate_in_loop(n, x, res)
+    call allocate_in_loop(n, x + eps, res_eps)
+    fd = (res_eps - res) / eps
+    x_ad = 1.0
+    call allocate_in_loop_fwd_ad(n, x, x_ad, res, res_ad)
+    if (abs((res_ad - fd) / fd) > tol) then
+       print *, 'test_allocate_in_loop_fwd failed', res_ad, fd
+       error stop 1
+    end if
+
+    return
+  end subroutine test_allocate_in_loop
 
 
 
