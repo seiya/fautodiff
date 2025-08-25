@@ -205,6 +205,7 @@ contains
     do i = 1, n
       arr(i) = i * x
     end do
+
     allocate(arr_ad(n))
     arr_ad = 0.0
     if (n > 0) then
