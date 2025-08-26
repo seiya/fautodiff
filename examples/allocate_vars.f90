@@ -31,29 +31,6 @@ contains
     real, intent(in) :: x
     real, intent(out) :: res
     real, allocatable :: arr(:)
-    integer :: i
-
-    if (n > 0) then
-      allocate(arr(n))
-      do i = 1, n
-        arr(i) = i * x
-      end do
-      res = 0.0
-      do i = 1, n
-        res = res + arr(i) * x
-      end do
-    else
-      res = 0.0
-    end if
-
-    return
-  end subroutine allocate_in_if
-
-  subroutine allocate_in_if_nonfirst(n, x, res)
-    integer, intent(in) :: n
-    real, intent(in) :: x
-    real, intent(out) :: res
-    real, allocatable :: arr(:)
     real, allocatable :: arr2(:)
     integer :: i
 
@@ -64,7 +41,7 @@ contains
     if (n > 0) then
       res = 0.0
       allocate(arr2(n))
-      arr2 = arr
+      arr2(:) = arr(:)
       do i = 1, n
         res = res + arr2(i) * x
       end do
@@ -75,7 +52,7 @@ contains
     deallocate(arr)
 
     return
-  end subroutine allocate_in_if_nonfirst
+  end subroutine allocate_in_if
 
   subroutine allocate_in_loop(n, x, res)
     integer, intent(in) :: n
@@ -90,7 +67,9 @@ contains
       do j = 1, i
         arr(j) = j * x
       end do
-      res = res + arr(i) * x
+      do j = 1, i
+        res = res + arr(j) * x
+      end do
       deallocate(arr)
     end do
 
