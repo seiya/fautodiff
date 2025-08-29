@@ -363,7 +363,7 @@ def _parse_allocate(
         top = True
     else:
         top = False
-    for child in node.iter_children():
+    for child in list(node.iter_children()):
         _parse_allocate(child, mod_vars, map, local)
     if isinstance(node, Allocate):
         for var in node.vars:
@@ -388,6 +388,24 @@ def _parse_allocate(
                 root = root.ref_var
             if root.declared_in == "routine":
                 local.add(name)
+    # Insert deallocations before early returns for arrays that remain allocated
+    if isinstance(node, ReturnStmt):
+        mod_var_names = [v.name_ext() for v in mod_vars]
+        for name in map:
+            if map[name]:
+                if name not in mod_var_names or name in local:
+                    var = OpVar(
+                        name,
+                        index=map[name][0],
+                        allocatable=True,
+                        ad_target=True,
+                    )
+                    node.parent.insert_before(
+                        node.get_id(),
+                        Allocate._add_if(
+                            Deallocate([var]), var, name in mod_var_names
+                        ),
+                    )
     if top:
         mod_var_names = [v.name_ext() for v in mod_vars]
         for name in map:

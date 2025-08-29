@@ -424,4 +424,98 @@ contains
     return
   end subroutine module_vars_finalize_rev_ad
 
+  subroutine allocate_with_early_return_fwd_ad(n, x, x_ad, res, res_ad)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(in)  :: x_ad
+    real, intent(out) :: res
+    real, intent(out) :: res_ad
+    real, allocatable :: arr_ad(:)
+    integer :: i
+    real, allocatable :: arr(:)
+
+    allocate(arr(n))
+    allocate(arr_ad(n))
+    if (n <= 0) then
+      res_ad = 0.0 ! res = 0.0
+      res = 0.0
+      if (allocated(arr_ad)) then
+        deallocate(arr_ad)
+      end if
+      if (allocated(arr)) then
+        deallocate(arr)
+      end if
+      return
+    end if
+    do i = 1, n
+      arr_ad(i) = x_ad * i ! arr(i) = i * x
+      arr(i) = i * x
+    end do
+    res_ad = 0.0 ! res = 0.0
+    res = 0.0
+    do i = 1, n
+      res_ad = res_ad + arr_ad(i) * x + x_ad * arr(i) ! res = res + arr(i) * x
+      res = res + arr(i) * x
+    end do
+    if (allocated(arr_ad)) then
+      deallocate(arr_ad)
+    end if
+    if (allocated(arr)) then
+      deallocate(arr)
+    end if
+
+    return
+  end subroutine allocate_with_early_return_fwd_ad
+
+  subroutine allocate_with_early_return_rev_ad(n, x, x_ad, res_ad)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(inout) :: x_ad
+    real, intent(inout) :: res_ad
+    real, allocatable :: arr_ad(:)
+    logical :: return_flag_156_ad
+    integer :: i
+    real, allocatable :: arr(:)
+
+    return_flag_156_ad = .true.
+    allocate(arr(n))
+    if (n <= 0) then
+      return_flag_156_ad = .false.
+    end if
+    if (return_flag_156_ad) then
+      do i = 1, n
+        arr(i) = i * x
+      end do
+    end if
+
+    if (return_flag_156_ad) then
+      allocate(arr_ad(n))
+      do i = n, 1, - 1
+        arr_ad(i) = res_ad * x ! res = res + arr(i) * x
+        x_ad = res_ad * arr(i) + x_ad ! res = res + arr(i) * x
+      end do
+      res_ad = 0.0 ! res = 0.0
+      do i = n, 1, - 1
+        x_ad = arr_ad(i) * i + x_ad ! arr(i) = i * x
+      end do
+    end if
+    if (n <= 0) then
+      return_flag_156_ad = .true. ! return
+      allocate(arr_ad(n))
+      if (return_flag_156_ad) then
+        res_ad = 0.0 ! res = 0.0
+      end if
+    end if
+    if (return_flag_156_ad) then
+      if (allocated(arr_ad)) then
+        deallocate(arr_ad)
+      end if
+      if (allocated(arr)) then
+        deallocate(arr)
+      end if
+    end if
+
+    return
+  end subroutine allocate_with_early_return_rev_ad
+
 end module allocate_vars_ad
