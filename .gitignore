@@ -204,3 +204,7 @@ cython_debug/
 
 # Debug
 tmp
+
+# Local project config
+.serena
+.vscode/

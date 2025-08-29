@@ -1418,6 +1418,78 @@ class Block(Node):
             assigned_vars = child.check_initial(assigned_vars)
         return assigned_vars
 
+    def remove_redundant_allocates(self) -> None:
+        """Remove duplicate AD allocates within a block scope.
+
+        Intent and scope
+        - This is a conservative clean-up that only targets AD variables
+          (names ending with ``AD_SUFFIX``). Regular/non-AD allocations are left
+          untouched.
+        - The pass is block-local: it tracks allocation state as it walks the
+          statements in order, and resets that state when a matching
+          ``deallocate`` is seen.
+        - DO loop bodies are processed recursively with an independent scope so
+          that deduplication decisions are made within the loop only (as
+          required by the AD reverse-mode semantics).
+
+        What it does
+        - Drops a repeated ``allocate(x_ad)`` when no intervening
+          ``deallocate(x_ad)`` was encountered in the same scope.
+        - Keeps the first ``allocate(x_ad)`` and any regular (non-AD) allocates.
+        - Does not attempt control-flow aware correctness proofs; it simply
+          avoids modifying allocation patterns in complex branches and focuses
+          on obvious duplicates.
+        """
+
+        def _process_block(block: "Block") -> None:
+            allocated: set[str] = set()
+
+            # Iterate over a stable copy because we may remove nodes while
+            # traversing.
+            for stmt in list(block.iter_children()):
+                if isinstance(stmt, DoAbst):
+                    # Recurse with a fresh allocation scope for the loop body
+                    # (loop-local judgments only).
+                    _process_block(stmt._body)
+                    continue
+                if isinstance(stmt, OmpDirective) and stmt.body is not None:
+                    # Treat OpenMP bodies like nested blocks for this pass.
+                    _process_block(stmt.body)
+                    continue
+
+                if isinstance(stmt, Deallocate):
+                    # A deallocate resets the local allocation state only for
+                    # the deallocated AD variables.
+                    for v in stmt.vars:
+                        name = v.name_ext()
+                        if name.endswith(AD_SUFFIX) and name in allocated:
+                            allocated.remove(name)
+                    continue
+
+                if isinstance(stmt, Allocate):
+                    # Keep non-AD allocates as-is; drop duplicate AD allocates
+                    # (when already allocated and not deallocated yet).
+                    kept: list[OpVar] = []
+                    for v in stmt.vars:
+                        name = v.name_ext()
+                        if not name.endswith(AD_SUFFIX):
+                            kept.append(v)
+                            continue
+                        if name in allocated:
+                            # duplicate allocate for AD var; drop
+                            continue
+                        kept.append(v)
+                        allocated.add(name)
+                    if kept:
+                        stmt.vars = kept
+                    else:
+                        # Remove the entire allocate statement if no variables
+                        # remain after filtering.
+                        block.remove_child(stmt)
+                    continue
+
+        _process_block(self)
+
 
 @dataclass
 class Statement(Node):
@@ -3257,7 +3329,6 @@ class Assignment(Node):
 
 @dataclass
 class ClearAssignment(Node):
-
     lhs: OpVar
     info: Optional[dict] = field(repr=False, default=None)
     ad_info: Optional[str] = field(repr=False, default=None)
@@ -4061,7 +4132,6 @@ class PointerAssignment(Node):
 
 @dataclass
 class PointerClear(Node):
-
     var: OpVar
     previous: Optional[OpVar]
     info: Optional[dict] = field(repr=False, default=None)
@@ -4297,10 +4367,23 @@ class BranchBlock(Node):
             block = WhereBlock(cond_blocks)
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
+
         if reverse:
-            loads = []
-            blocks = []
-            for var in block.assigned_vars():
+            for _, body in block.cond_blocks:
+                first = body.first()
+                if isinstance(first, Allocate):
+                    body.remove_child(first)
+            block.cond_blocks = [
+                (cond, body)
+                for cond, body in block.cond_blocks
+                if not body.is_effectively_empty()
+            ]
+
+            loads: List[Node] = []
+            blocks: List[Node] = []
+            assigned = block.assigned_vars()
+            required = block.required_vars()
+            for var in assigned & required:
                 if not var.name.endswith(AD_SUFFIX):
                     load = self._save_vars(var, saved_vars)
                     loads.append(load)
@@ -4565,7 +4648,6 @@ class WhereBlock(BranchBlock):
 
 @dataclass
 class DoAbst(Node):
-
     _body: Block
     label_id: int = field(init=False, default=0)
 
@@ -4603,7 +4685,6 @@ class DoAbst(Node):
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
-
         exitcycle_flags = None
         if reverse:
             exitcycles = self._body.collect_exitcycle()
@@ -4713,6 +4794,15 @@ class DoAbst(Node):
                 for node in rev:
                     nodes[0].cond_blocks[0][1].insert_begin(node)
 
+            fwd_body = [
+                fb
+                for fb in fwd_body
+                if not (
+                    isinstance(fb, DoAbst)
+                    and len(fb._body) == 1
+                    and isinstance(fb._body.first(), Allocate)
+                )
+            ]
             new_body.extend(fwd_body)
             for node in nodes:
                 new_body.append(node)
