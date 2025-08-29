@@ -37,7 +37,6 @@ class TestCLI(unittest.TestCase):
 
 
 class TestCLIUnit(unittest.TestCase):
-
     def test_stdout_output_when_no_o(self):
         src = Path(__file__).resolve().parents[1] / "examples" / "simple_math.f90"
         argv = ["fautodiff", str(src), "--no-fadmod", "--no-warn"]

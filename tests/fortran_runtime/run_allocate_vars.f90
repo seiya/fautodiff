@@ -6,10 +6,10 @@ program run_allocate_vars
 
   integer, parameter :: I_all = 0
   integer, parameter :: I_allocate_and_sum = 1
-  integer, parameter :: I_module_vars = 2
-  integer, parameter :: I_save_alloc = 3
-  integer, parameter :: I_allocate_in_if_nonfirst = 4
-  integer, parameter :: I_allocate_in_loop = 5
+  integer, parameter :: I_allocate_in_if = 2
+  integer, parameter :: I_allocate_in_loop = 3
+  integer, parameter :: I_save_alloc = 4
+  integer, parameter :: I_module_vars = 5
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -25,14 +25,14 @@ program run_allocate_vars
            select case(arg)
            case ("allocate_and_sum")
               i_test = I_allocate_and_sum
-           case ("module_vars")
-              i_test = I_module_vars
-           case ("save_alloc")
-              i_test = I_save_alloc
-           case ("allocate_in_if_nonfirst")
-              i_test = I_allocate_in_if_nonfirst
-           case ("allocate_in_loop")
-              i_test = I_allocate_in_loop
+            case ("allocate_in_if")
+               i_test = I_allocate_in_if
+            case ("allocate_in_loop")
+               i_test = I_allocate_in_loop
+            case ("save_alloc")
+               i_test = I_save_alloc
+            case ("module_vars")
+               i_test = I_module_vars
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -45,17 +45,17 @@ program run_allocate_vars
   if (i_test == I_allocate_and_sum .or. i_test == I_all) then
      call test_allocate_and_sum
   end if
-  if (i_test == I_module_vars .or. i_test == I_all) then
-     call test_module_vars
+  if (i_test == I_allocate_in_if .or. i_test == I_all) then
+     call test_allocate_in_if
+  end if
+  if (i_test == I_allocate_in_loop .or. i_test == I_all) then
+     call test_allocate_in_loop
   end if
   if (i_test == I_save_alloc .or. i_test == I_all) then
      call test_save_alloc
   end if
-  if (i_test == I_allocate_in_if_nonfirst .or. i_test == I_all) then
-     call test_allocate_in_if_nonfirst
-  end if
-  if (i_test == I_allocate_in_loop .or. i_test == I_all) then
-     call test_allocate_in_loop
+  if (i_test == I_module_vars .or. i_test == I_all) then
+     call test_module_vars
   end if
 
   stop
@@ -91,6 +91,87 @@ contains
 
     return
   end subroutine test_allocate_and_sum
+
+  subroutine test_allocate_in_if
+    real, parameter :: tol = 3.0e-4
+    integer, parameter :: n = 5
+    real :: x, res
+    real :: x_ad, res_ad
+    real :: res_eps, fd, eps
+
+    eps = 1.0e-3
+    x = 2.0
+    call allocate_in_if(n, x, res)
+    call allocate_in_if(n, x + eps, res_eps)
+    fd = (res_eps - res) / eps
+    x_ad = 1.0
+    call allocate_in_if_fwd_ad(n, x, x_ad, res, res_ad)
+    if (abs((res_ad - fd) / fd) > tol) then
+       print *, 'test_allocate_in_if_fwd failed', res_ad, fd
+       error stop 1
+    end if
+
+    return
+  end subroutine test_allocate_in_if
+
+  subroutine test_allocate_in_loop
+    real, parameter :: tol = 3.0e-4
+    integer, parameter :: n = 5
+    real :: x, res
+    real :: x_ad, res_ad
+    real :: res_eps, fd, eps
+
+    eps = 1.0e-3
+    x = 2.0
+    call allocate_in_loop(n, x, res)
+    call allocate_in_loop(n, x + eps, res_eps)
+    fd = (res_eps - res) / eps
+    x_ad = 1.0
+    call allocate_in_loop_fwd_ad(n, x, x_ad, res, res_ad)
+    if (abs((res_ad - fd) / fd) > tol) then
+       print *, 'test_allocate_in_loop_fwd failed', res_ad, fd
+       error stop 1
+    end if
+
+    return
+  end subroutine test_allocate_in_loop
+
+  subroutine test_save_alloc
+    real, parameter :: tol = 3.0e-4
+    integer, parameter :: n = 3
+    real :: x(n), y, z
+    real :: x_ad(n), y_ad, z_ad
+    real :: z_eps, fd, eps
+    real :: inner1, inner2
+    integer :: i
+
+    eps = 1.0e-3
+    x = (/1.0, 2.0, 3.0/)
+    y = 2.0
+    call save_alloc(n, x, y, z)
+    y = 2.0 + eps
+    call save_alloc(n, x, y, z_eps)
+    fd = (z_eps - z) / eps
+    x_ad(:) = 0.0
+    y_ad = 1.0
+    call save_alloc_fwd_ad(n, x, x_ad, y, y_ad, z, z_ad)
+    if (abs((z_ad - fd) / fd) > tol) then
+       print *, 'test_save_alloc_fwd failed', z_ad, fd
+       error stop 1
+    end if
+
+    inner1 = z_ad**2
+    x_ad(:) = 0.0
+    y_ad = 0.0
+    call save_alloc_rev_ad(n, x, x_ad, y, y_ad, z_ad)
+    inner2 = y_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_save_alloc_rev failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_save_alloc
 
   subroutine test_module_vars
     integer, parameter :: n = 1
@@ -134,89 +215,5 @@ contains
 
     return
   end subroutine test_module_vars
-
-  subroutine test_save_alloc
-    real, parameter :: tol = 3.0e-4
-    integer, parameter :: n = 3
-    real :: x(n), y, z
-    real :: x_ad(n), y_ad, z_ad
-    real :: z_eps, fd, eps
-    real :: inner1, inner2
-    integer :: i
-
-    eps = 1.0e-3
-    x = (/1.0, 2.0, 3.0/)
-    y = 2.0
-    call save_alloc(n, x, y, z)
-    y = 2.0 + eps
-    call save_alloc(n, x, y, z_eps)
-    fd = (z_eps - z) / eps
-    x_ad(:) = 0.0
-    y_ad = 1.0
-    call save_alloc_fwd_ad(n, x, x_ad, y, y_ad, z, z_ad)
-    if (abs((z_ad - fd) / fd) > tol) then
-       print *, 'test_save_alloc_fwd failed', z_ad, fd
-       error stop 1
-    end if
-
-    inner1 = z_ad**2
-    x_ad(:) = 0.0
-    y_ad = 0.0
-    call save_alloc_rev_ad(n, x, x_ad, y, y_ad, z_ad)
-    inner2 = y_ad
-    if (abs((inner2 - inner1) / inner1) > tol) then
-       print *, 'test_save_alloc_rev failed', inner1, inner2
-       error stop 1
-    end if
-
-    return
-  end subroutine test_save_alloc
-
-  subroutine test_allocate_in_if_nonfirst
-    real, parameter :: tol = 3.0e-4
-    integer, parameter :: n = 5
-    real :: x, res
-    real :: x_ad, res_ad
-    real :: res_eps, fd, eps
-
-    eps = 1.0e-3
-    x = 2.0
-    call allocate_in_if_nonfirst(n, x, res)
-    call allocate_in_if_nonfirst(n, x + eps, res_eps)
-    fd = (res_eps - res) / eps
-    x_ad = 1.0
-    call allocate_in_if_nonfirst_fwd_ad(n, x, x_ad, res, res_ad)
-    if (abs((res_ad - fd) / fd) > tol) then
-       print *, 'test_allocate_in_if_nonfirst_fwd failed', res_ad, fd
-       error stop 1
-    end if
-
-    return
-  end subroutine test_allocate_in_if_nonfirst
-
-  subroutine test_allocate_in_loop
-    real, parameter :: tol = 3.0e-4
-    integer, parameter :: n = 5
-    real :: x, res
-    real :: x_ad, res_ad
-    real :: res_eps, fd, eps
-
-    eps = 1.0e-3
-    x = 2.0
-    call allocate_in_loop(n, x, res)
-    call allocate_in_loop(n, x + eps, res_eps)
-    fd = (res_eps - res) / eps
-    x_ad = 1.0
-    call allocate_in_loop_fwd_ad(n, x, x_ad, res, res_ad)
-    if (abs((res_ad - fd) / fd) > tol) then
-       print *, 'test_allocate_in_loop_fwd failed', res_ad, fd
-       error stop 1
-    end if
-
-    return
-  end subroutine test_allocate_in_loop
-
-
-
 
 end program run_allocate_vars

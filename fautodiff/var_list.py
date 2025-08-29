@@ -588,9 +588,7 @@ class VarList:
 
             index_list = []
             for index2 in other[name]:
-
                 for index1 in self.vars[name]:
-
                     if index1 == index2:
                         index_list.append(None if index1 is None else index1.copy())
                         continue

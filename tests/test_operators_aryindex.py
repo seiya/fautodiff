@@ -8,7 +8,6 @@ from fautodiff.operators import AryIndex, OpInt, OpRange, OpVar
 
 
 class TestAryIndexOps(unittest.TestCase):
-
     def test_equality_and_str(self):
         i = OpVar("i")
         idx1 = AryIndex([1, None, i])

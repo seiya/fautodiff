@@ -927,7 +927,6 @@ class Operator:
 
 @dataclass
 class OpLeaf(Operator):
-
     PRIORITY: ClassVar[int] = 0
 
     def collect_vars(
@@ -973,7 +972,6 @@ class OpNum(OpLeaf):
 
 @dataclass
 class OpInt(OpNum):
-
     val: int = field(default=-999)
     target: Optional[OpVar] = None
     typename: ClassVar[Optional[str]] = "integer"
@@ -1046,7 +1044,6 @@ class OpInt(OpNum):
 
 @dataclass
 class OpReal(OpNum):
-
     val: str = field(default="-999.0e99")
     expo: int = field(default=0)
 
@@ -1084,7 +1081,6 @@ class OpAry(OpLeaf):
 
 @dataclass
 class OpChar(OpLeaf):
-
     name: str = field(default="")
 
     def __init__(self, name: str):
@@ -1121,7 +1117,6 @@ class OpFalse(OpLeaf):
 
 @dataclass
 class OpComplex(OpNum):
-
     real: Operator = field(default=None)
     imag: Operator = field(default=None)
 
@@ -1140,7 +1135,6 @@ class OpComplex(OpNum):
 
 @dataclass
 class OpVar(OpLeaf):
-
     name: str = field(default="")
     index: Optional[AryIndex] = None
     dims: Optional[Tuple[str]] = field(repr=False, default=None)
@@ -1514,7 +1508,6 @@ class OpVar(OpLeaf):
 
 @dataclass
 class OpUnary(Operator):
-
     OP: ClassVar[str] = "undef"
 
     def __post_init__(self):
@@ -1534,7 +1527,6 @@ class OpUnary(Operator):
 
 @dataclass
 class OpNeg(OpUnary):
-
     OP: ClassVar[str] = "-"
     PRIORITY: ClassVar[int] = 4
 
@@ -1550,14 +1542,12 @@ class OpNeg(OpUnary):
 
 @dataclass
 class OpNot(OpUnary):
-
     OP: ClassVar[str] = ".not."
     PRIORITY: ClassVar[int] = 7
 
 
 @dataclass
 class OpBinary(Operator):
-
     OP: ClassVar[str] = "undef"
 
     def __post_init__(self):
@@ -1583,7 +1573,6 @@ class OpBinary(Operator):
 
 @dataclass
 class OpAdd(OpBinary):
-
     OP: ClassVar[str] = "+"
     PRIORITY: ClassVar[int] = 5
 
@@ -1601,7 +1590,6 @@ class OpAdd(OpBinary):
 
 @dataclass
 class OpSub(OpBinary):
-
     OP: ClassVar[str] = "-"
     PRIORITY: ClassVar[int] = 5
 
@@ -1619,7 +1607,6 @@ class OpSub(OpBinary):
 
 @dataclass
 class OpMul(OpBinary):
-
     OP: ClassVar[str] = "*"
     PRIORITY: ClassVar[int] = 4
 
@@ -1639,7 +1626,6 @@ class OpMul(OpBinary):
 
 @dataclass
 class OpDiv(OpBinary):
-
     OP: ClassVar[str] = "/"
     PRIORITY: ClassVar[int] = 4
 
@@ -1663,7 +1649,6 @@ class OpDiv(OpBinary):
 
 @dataclass
 class OpPow(OpBinary):
-
     OP: ClassVar[str] = "**"
     PRIORITY: ClassVar[int] = 2
 
@@ -1805,7 +1790,6 @@ NONDIFF_INTRINSICS = {
 
 @dataclass
 class OpFunc(Operator):
-
     name: str = field(default="")
     PRIORITY: ClassVar[int] = 1
 
@@ -1857,7 +1841,6 @@ class OpFunc(Operator):
         info: Optional[dict] = None,
         warnings: Optional[List[str]] = None,
     ) -> Operator:
-
         if self.name in NONDIFF_INTRINSICS:
             return OpInt(0, target=target)
 
@@ -2155,7 +2138,6 @@ class OpRange(Operator):
 
 @dataclass
 class OpType(Operator):
-
     name: str = field(default="")
     PRIORITY: ClassVar[int] = 1
 

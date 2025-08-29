@@ -831,7 +831,6 @@ class TestParser(unittest.TestCase):
 
 
 class TestParserOmp(unittest.TestCase):
-
     def test_parse_omp_do(self):
         src = textwrap.dedent(
             """

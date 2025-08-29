@@ -154,10 +154,10 @@ class TestFortranADCode(unittest.TestCase):
             "allocate_vars",
             [
                 "allocate_and_sum",
-                "module_vars",
-                "save_alloc",
-                "allocate_in_if_nonfirst",
+                "allocate_in_if",
                 "allocate_in_loop",
+                "save_alloc",
+                "module_vars",
             ],
         )
 

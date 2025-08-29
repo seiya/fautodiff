@@ -1418,6 +1418,78 @@ class Block(Node):
             assigned_vars = child.check_initial(assigned_vars)
         return assigned_vars
 
+    def remove_redundant_allocates(self) -> None:
+        """Remove duplicate AD allocates within a block scope.
+
+        Intent and scope
+        - This is a conservative clean-up that only targets AD variables
+          (names ending with ``AD_SUFFIX``). Regular/non-AD allocations are left
+          untouched.
+        - The pass is block-local: it tracks allocation state as it walks the
+          statements in order, and resets that state when a matching
+          ``deallocate`` is seen.
+        - DO loop bodies are processed recursively with an independent scope so
+          that deduplication decisions are made within the loop only (as
+          required by the AD reverse-mode semantics).
+
+        What it does
+        - Drops a repeated ``allocate(x_ad)`` when no intervening
+          ``deallocate(x_ad)`` was encountered in the same scope.
+        - Keeps the first ``allocate(x_ad)`` and any regular (non-AD) allocates.
+        - Does not attempt control-flow aware correctness proofs; it simply
+          avoids modifying allocation patterns in complex branches and focuses
+          on obvious duplicates.
+        """
+
+        def _process_block(block: "Block") -> None:
+            allocated: set[str] = set()
+
+            # Iterate over a stable copy because we may remove nodes while
+            # traversing.
+            for stmt in list(block.iter_children()):
+                if isinstance(stmt, DoAbst):
+                    # Recurse with a fresh allocation scope for the loop body
+                    # (loop-local judgments only).
+                    _process_block(stmt._body)
+                    continue
+                if isinstance(stmt, OmpDirective) and stmt.body is not None:
+                    # Treat OpenMP bodies like nested blocks for this pass.
+                    _process_block(stmt.body)
+                    continue
+
+                if isinstance(stmt, Deallocate):
+                    # A deallocate resets the local allocation state only for
+                    # the deallocated AD variables.
+                    for v in stmt.vars:
+                        name = v.name_ext()
+                        if name.endswith(AD_SUFFIX) and name in allocated:
+                            allocated.remove(name)
+                    continue
+
+                if isinstance(stmt, Allocate):
+                    # Keep non-AD allocates as-is; drop duplicate AD allocates
+                    # (when already allocated and not deallocated yet).
+                    kept: list[OpVar] = []
+                    for v in stmt.vars:
+                        name = v.name_ext()
+                        if not name.endswith(AD_SUFFIX):
+                            kept.append(v)
+                            continue
+                        if name in allocated:
+                            # duplicate allocate for AD var; drop
+                            continue
+                        kept.append(v)
+                        allocated.add(name)
+                    if kept:
+                        stmt.vars = kept
+                    else:
+                        # Remove the entire allocate statement if no variables
+                        # remain after filtering.
+                        block.remove_child(stmt)
+                    continue
+
+        _process_block(self)
+
 
 @dataclass
 class Statement(Node):
@@ -3257,7 +3329,6 @@ class Assignment(Node):
 
 @dataclass
 class ClearAssignment(Node):
-
     lhs: OpVar
     info: Optional[dict] = field(repr=False, default=None)
     ad_info: Optional[str] = field(repr=False, default=None)
@@ -4061,7 +4132,6 @@ class PointerAssignment(Node):
 
 @dataclass
 class PointerClear(Node):
-
     var: OpVar
     previous: Optional[OpVar]
     info: Optional[dict] = field(repr=False, default=None)
@@ -4578,7 +4648,6 @@ class WhereBlock(BranchBlock):
 
 @dataclass
 class DoAbst(Node):
-
     _body: Block
     label_id: int = field(init=False, default=0)
 
@@ -4616,7 +4685,6 @@ class DoAbst(Node):
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
-
         exitcycle_flags = None
         if reverse:
             exitcycles = self._body.collect_exitcycle()
