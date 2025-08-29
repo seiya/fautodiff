@@ -10,6 +10,7 @@ program run_allocate_vars
   integer, parameter :: I_allocate_in_loop = 3
   integer, parameter :: I_save_alloc = 4
   integer, parameter :: I_module_vars = 5
+  integer, parameter :: I_allocate_with_early_return = 6
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -27,12 +28,14 @@ program run_allocate_vars
               i_test = I_allocate_and_sum
             case ("allocate_in_if")
                i_test = I_allocate_in_if
-            case ("allocate_in_loop")
+           case ("allocate_in_loop")
                i_test = I_allocate_in_loop
-            case ("save_alloc")
+           case ("save_alloc")
                i_test = I_save_alloc
-            case ("module_vars")
+           case ("module_vars")
                i_test = I_module_vars
+           case ("allocate_with_early_return")
+              i_test = I_allocate_with_early_return
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -56,6 +59,9 @@ program run_allocate_vars
   end if
   if (i_test == I_module_vars .or. i_test == I_all) then
      call test_module_vars
+  end if
+  if (i_test == I_allocate_with_early_return .or. i_test == I_all) then
+     call test_allocate_with_early_return
   end if
 
   stop
@@ -98,6 +104,7 @@ contains
     real :: x, res
     real :: x_ad, res_ad
     real :: res_eps, fd, eps
+    real :: inner1, inner2
 
     eps = 1.0e-3
     x = 2.0
@@ -111,6 +118,14 @@ contains
        error stop 1
     end if
 
+    inner1 = res_ad**2
+    call allocate_in_if_rev_ad(n, x, x_ad, res_ad)
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_allocate_in_if_rev failed', inner1, inner2
+       error stop 1
+    end if
+
     return
   end subroutine test_allocate_in_if
 
@@ -120,6 +135,7 @@ contains
     real :: x, res
     real :: x_ad, res_ad
     real :: res_eps, fd, eps
+    real :: inner1, inner2
 
     eps = 1.0e-3
     x = 2.0
@@ -130,6 +146,14 @@ contains
     call allocate_in_loop_fwd_ad(n, x, x_ad, res, res_ad)
     if (abs((res_ad - fd) / fd) > tol) then
        print *, 'test_allocate_in_loop_fwd failed', res_ad, fd
+       error stop 1
+    end if
+
+    inner1 = res_ad**2
+    call allocate_in_loop_rev_ad(n, x, x_ad, res_ad)
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_allocate_in_loop_rev failed', inner1, inner2
        error stop 1
     end if
 
@@ -215,5 +239,61 @@ contains
 
     return
   end subroutine test_module_vars
+
+  subroutine test_allocate_with_early_return
+    real, parameter :: tol = 3.0e-4
+    integer :: n
+    real :: x, res
+    real :: x_ad, res_ad
+    real :: res_eps, fd, eps
+    real :: inner1, inner2
+
+    eps = 1.0e-3
+
+    ! Case 1: n > 0 (normal path)
+    n = 5
+    x = 2.0
+    call allocate_with_early_return(n, x, res)
+    call allocate_with_early_return(n, x + eps, res_eps)
+    fd = (res_eps - res) / eps
+    x_ad = 1.0
+    call allocate_with_early_return_fwd_ad(n, x, x_ad, res, res_ad)
+    if (abs((res_ad - fd) / fd) > tol) then
+       print *, 'test_allocate_with_early_return_fwd n>0 failed', res_ad, fd
+       error stop 1
+    end if
+
+    inner1 = res_ad**2
+    call allocate_with_early_return_rev_ad(n, x, x_ad, res_ad)
+    inner2 = x_ad
+    if (abs((inner2 - inner1) / inner1) > tol) then
+       print *, 'test_allocate_with_early_return_rev n>0 failed', inner1, inner2
+       error stop 1
+    end if
+
+    ! Case 2: n <= 0 (early return path)
+    n = 0
+    x = 3.0
+    call allocate_with_early_return(n, x, res)
+    call allocate_with_early_return(n, x + eps, res_eps)
+    fd = (res_eps - res) / eps
+    x_ad = 1.0
+    call allocate_with_early_return_fwd_ad(n, x, x_ad, res, res_ad)
+    if (abs(res_ad) > tol) then
+       print *, 'test_allocate_with_early_return_fwd n=0 failed', res_ad
+       error stop 1
+    end if
+
+    inner1 = res_ad**2
+    x_ad = 0.0
+    call allocate_with_early_return_rev_ad(n, x, x_ad, res_ad)
+    inner2 = x_ad
+    if (abs(inner2 - inner1) > tol) then
+       print *, 'test_allocate_with_early_return_rev n=0 failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_allocate_with_early_return
 
 end program run_allocate_vars

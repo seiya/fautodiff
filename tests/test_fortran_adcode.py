@@ -158,6 +158,7 @@ class TestFortranADCode(unittest.TestCase):
                 "allocate_in_loop",
                 "save_alloc",
                 "module_vars",
+                "allocate_with_early_return",
             ],
         )
 

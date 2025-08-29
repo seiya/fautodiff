@@ -144,4 +144,30 @@ contains
     return
   end subroutine module_vars_finalize
 
+  subroutine allocate_with_early_return(n, x, res)
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(out) :: res
+    real, allocatable :: arr(:)
+    integer :: i
+
+    allocate(arr(n))
+
+    if (n <= 0) then
+      res = 0.0
+      return
+    end if
+
+    do i = 1, n
+      arr(i) = i * x
+    end do
+    res = 0.0
+    do i = 1, n
+      res = res + arr(i) * x
+    end do
+    deallocate(arr)
+
+    return
+  end subroutine allocate_with_early_return
+
 end module allocate_vars
