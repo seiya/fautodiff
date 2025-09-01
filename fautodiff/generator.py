@@ -1749,12 +1749,6 @@ def _generate_ad_subroutine(
         targets, mod_vars_all, decl_map=subroutine.decl_map, base_targets=targets
     )
 
-    # After pruning, remove duplicate and unused allocate statements.
-    # This is particularly important for reverse mode AD where multiple
-    # allocates for the same variable may appear.
-    # Note: duplicate/unused allocation pruning is implemented in Block but
-    # currently not invoked here to preserve expected outputs in tests.
-
     # Remove arguments that are no longer used after pruning
     used = {v.name for v in subroutine.content.collect_vars()}
     used.update(v.name for v in subroutine.ad_init.collect_vars())
@@ -1776,6 +1770,18 @@ def _generate_ad_subroutine(
             if subroutine.decl_map is not None and name in subroutine.decl_map:
                 del subroutine.decl_map[name]
             subroutine.args.remove(name)
+
+    # After pruning, remove duplicate and unused allocate statements.
+    # This is particularly important for reverse mode AD where multiple
+    # allocates for the same variable may appear.
+    #
+    # Collect module/use variables that are allocatable or pointer so that
+    # the routine-level pass can reason about externally managed variables.
+    mod_allocatable_vars = []
+    for v in mod_vars:
+        if getattr(v, "allocatable", False) or getattr(v, "pointer", False):
+            mod_allocatable_vars.append(v)
+    subroutine.remove_redundant_allocates(mod_allocatable_vars)
 
     # update routine_map with pruned argument information
     arg_info = routine_map.get(routine_org.name)

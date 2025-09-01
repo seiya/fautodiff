@@ -10,6 +10,8 @@ from fautodiff.code_tree import (
     Assignment,
     Block,
     BlockConstruct,
+    Allocate,
+    Deallocate,
     CallStatement,
     ClearAssignment,
     Declaration,
@@ -772,6 +774,172 @@ class TestLoopAnalysis(unittest.TestCase):
         loop = DoLoop(body, index=i, range=OpRange([OpInt(1), OpVar("n")]))
         self.assertEqual({str(v) for v in loop.required_vars()}, {"c", "n"})
         self.assertEqual(set(loop.recurrent_vars()), {"c"})
+
+
+class TestRemoveRedundantAllocates(unittest.TestCase):
+    def _decl_alloc_real(self, name: str) -> Declaration:
+        return Declaration(name=name, var_type=VarType("real"), allocatable=True, dims=(":",))
+
+    def test_remove_alloc_dealloc_without_access(self):
+        # allocate(a); deallocate(a) with no access -> both removed
+        decls = Block([self._decl_alloc_real("a")])
+        body = Block([Allocate([OpVar("a")]), Deallocate([OpVar("a")])])
+        sub = Subroutine("foo", [], decls=decls, content=body)
+        sub.remove_redundant_allocates([])
+        code = "".join(sub.render())
+        self.assertNotIn("allocate(a)", code)
+        self.assertNotIn("deallocate(a)", code)
+
+    def test_keep_first_alloc_on_access_drop_dealloc_and_second_alloc(self):
+        # allocate(a); use a; deallocate(a); allocate(a) -> drop deallocate and 2nd allocate
+        decls = Block([self._decl_alloc_real("a"), Declaration(name="x", var_type=VarType("real"))])
+        body = Block(
+            [
+                Allocate([OpVar("a")]),
+                Assignment(OpVar("x"), OpVar("a")),  # access a
+                Deallocate([OpVar("a")]),
+                Allocate([OpVar("a")]),
+            ]
+        )
+        sub = Subroutine("foo", [], decls=decls, content=body)
+        sub.remove_redundant_allocates([])
+        code = "".join(sub.render())
+        # first allocate remains; deallocate and second allocate removed
+        self.assertIn("allocate(a)\n", code)
+        self.assertEqual(code.count("allocate(a)\n"), 1)
+        self.assertNotIn("deallocate(a)", code)
+
+    def test_drop_first_pair_without_access_keep_second_alloc(self):
+        # allocate(a); deallocate(a); allocate(a) and no access before dealloc -> drop first pair
+        decls = Block([self._decl_alloc_real("a")])
+        body = Block([
+            Allocate([OpVar("a")]),
+            Deallocate([OpVar("a")]),
+            Allocate([OpVar("a")]),
+        ])
+        sub = Subroutine("foo", [], decls=decls, content=body)
+        sub.remove_redundant_allocates([])
+        code = "".join(sub.render())
+        self.assertIn("allocate(a)\n", code)
+        self.assertEqual(code.count("allocate(a)\n"), 1)
+        self.assertNotIn("deallocate(a)", code)
+
+    def test_loop_context_is_separate(self):
+        # Outer allocate/deallocate without access should be removed; loop alloc/use/dealloc remains
+        i = OpVar("i")
+        decls = Block([self._decl_alloc_real("a"), Declaration(name="x", var_type=VarType("real")), Declaration(name="n", var_type=VarType("integer"))])
+        loop_body = Block([
+            Allocate([OpVar("a")]),
+            Assignment(OpVar("x"), OpVar("a")),
+            Deallocate([OpVar("a")]),
+        ])
+        body = Block([
+            Allocate([OpVar("a")]),
+            Deallocate([OpVar("a")]),  # no access -> removed
+            DoLoop(loop_body, index=i, range=OpRange([OpInt(1), OpVar("n")]))
+        ])
+        sub = Subroutine("foo", [], decls=decls, content=body)
+        sub.remove_redundant_allocates([])
+        code = "".join(sub.render())
+        # Outer pair removed; only the loop's allocate/deallocate remain
+        alloc_lines = sum(1 for ln in code.splitlines(True) if ln.strip() == "allocate(a)")
+        dealloc_lines = sum(1 for ln in code.splitlines(True) if ln.strip() == "deallocate(a)")
+        self.assertEqual(alloc_lines, 1)
+        self.assertEqual(dealloc_lines, 1)
+
+    def test_allocate_then_conditional_return_then_use(self):
+        # allocate; if (...) return (with inserted deallocate); later use and final deallocate
+        # The initial allocate must NOT be removed.
+        from fautodiff.code_tree import IfBlock, ReturnStmt
+
+        decls = Block([
+            self._decl_alloc_real("a"),
+            Declaration(name="n", var_type=VarType("integer")),
+            Declaration(name="x", var_type=VarType("real")),
+        ])
+
+        # Body: allocate(a); if (n<=0) then res=0; deallocate(a); return; end if; x=a(1); deallocate(a)
+        cond = (OpVar("n") <= OpInt(0))
+        if_body = Block([
+            Assignment(OpVar("x"), OpReal("0.0")),
+            Deallocate([OpVar("a")]),
+            ReturnStmt(),
+        ])
+        body = Block([
+            Allocate([OpVar("a")]),
+            IfBlock([(cond, if_body)]),
+            Assignment(OpVar("x"), OpVar("a", index=[OpInt(1)])),
+            Deallocate([OpVar("a")]),
+        ])
+
+        sub = Subroutine("foo", [], decls=decls, content=body)
+        sub.remove_redundant_allocates([])
+        code = "".join(sub.render())
+        # Must still contain the first allocate and the final deallocate
+        self.assertIn("allocate(a)\n", code)
+        self.assertIn("deallocate(a)", code)
+
+    def test_if_branch_alloc_then_later_alloc_kept(self):
+        # if (flag) allocate(a); end if; allocate(a) -> keep the post-branch allocate
+        from fautodiff.code_tree import IfBlock
+
+        decls = Block(
+            [
+                self._decl_alloc_real("a"),
+                Declaration(name="flag", var_type=VarType("logical")),
+            ]
+        )
+        ifblk = IfBlock([(OpVar("flag"), Block([Allocate([OpVar("a")])]))])
+        body = Block([ifblk, Allocate([OpVar("a")])])
+        sub = Subroutine("foo", [], decls=decls, content=body)
+        sub.remove_redundant_allocates([])
+        code = "".join(sub.render())
+        # both allocates should remain (one inside branch, one after)
+        alloc_lines = sum(1 for ln in code.splitlines(True) if ln.strip() == "allocate(a)")
+        self.assertEqual(alloc_lines, 2)
+
+    def test_if_branch_deallocate_not_pair_with_outer_allocate(self):
+        # allocate(a); if (flag) deallocate(a); x=a(1); deallocate(a)
+        # outer allocate must remain, and final deallocate remain
+        from fautodiff.code_tree import IfBlock
+
+        decls = Block(
+            [
+                self._decl_alloc_real("a"),
+                Declaration(name="flag", var_type=VarType("logical")),
+                Declaration(name="x", var_type=VarType("real")),
+            ]
+        )
+        ifblk = IfBlock([(OpVar("flag"), Block([Deallocate([OpVar("a")])]))])
+        body = Block(
+            [
+                Allocate([OpVar("a")]),
+                ifblk,
+                Assignment(OpVar("x"), OpVar("a", index=[OpInt(1)])),
+                Deallocate([OpVar("a")]),
+            ]
+        )
+        sub = Subroutine("foo", [], decls=decls, content=body)
+        sub.remove_redundant_allocates([])
+        code = "".join(sub.render())
+        self.assertIn("allocate(a)\n", code)
+        self.assertIn("deallocate(a)", code)
+
+    def test_then_else_cross_pair_not_removed(self):
+        # if (flag) then allocate(a) else deallocate(a) end if
+        # Cross-branch pair must not cancel each other.
+        from fautodiff.code_tree import IfBlock
+
+        decls = Block([self._decl_alloc_real("a"), Declaration(name="flag", var_type=VarType("logical"))])
+        then_b = Block([Allocate([OpVar("a")])])
+        else_b = Block([Deallocate([OpVar("a")])])
+        ifblk = IfBlock([(OpVar("flag"), then_b), (None, else_b)])
+        sub = Subroutine("foo", [], decls=decls, content=Block([ifblk]))
+        sub.remove_redundant_allocates([])
+        code = "".join(sub.render())
+        self.assertIn("if (flag) then\n", code)
+        self.assertIn("allocate(a)\n", code)
+        self.assertIn("deallocate(a)", code)
 
     def test_recurrent_loop_with_different_index(self):
         code = textwrap.dedent(
