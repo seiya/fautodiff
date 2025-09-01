@@ -245,6 +245,13 @@ module mpi_ad
   integer, parameter :: FAD_MPI_OP_RECV = 2
   integer, parameter :: MAX_REQUESTS = 1024
 
+  ! request_ad encoding convention
+  !   MPI_REQUEST_NULL (0): no request
+  !   1..MAX_REQUESTS: non-persistent real(4) request (index = value)
+  !   MAX_REQUESTS+1..2*MAX_REQUESTS: non-persistent real(8) request (index = value - MAX_REQUESTS)
+  !   -1..-MAX_REQUESTS: persistent real(4) request (index = -value)
+  !   -(MAX_REQUESTS+1)..-(2*MAX_REQUESTS): persistent real(8) request (index = -value - MAX_REQUESTS)
+
   type :: req_map_t
      type(c_ptr) :: ptr_advar = c_null_ptr
      integer :: count = 0
@@ -1109,7 +1116,6 @@ contains
     integer :: i
 
     do i = 1, MAX_REQUESTS
-      if (i == MPI_REQUEST_NULL) cycle
       if (req_map_r4(i)%op_type == 0) exit
     end do
     if (i > MAX_REQUESTS) then
@@ -1173,7 +1179,6 @@ contains
     integer :: i
 
     do i = 1, MAX_REQUESTS
-      if (i + MAX_REQUESTS == MPI_REQUEST_NULL) cycle
       if (req_map_r8(i)%op_type == 0) exit
     end do
     if (i > MAX_REQUESTS) then
@@ -1234,7 +1239,6 @@ contains
     real, pointer :: b_ad(:)
 
     do i = 1, MAX_REQUESTS
-      if (i == MPI_REQUEST_NULL) cycle
       if (req_map_r4(i)%op_type == 0) exit
     end do
     if (i > MAX_REQUESTS) then
@@ -1299,7 +1303,6 @@ contains
     integer :: i
 
     do i = 1, MAX_REQUESTS
-      if (i + MAX_REQUESTS == MPI_REQUEST_NULL) cycle
       if (req_map_r8(i)%op_type == 0) exit
     end do
     if (i > MAX_REQUESTS) then
@@ -1513,8 +1516,7 @@ contains
     integer :: idx
 
     do idx = 1, MAX_REQUESTS
-      if (idx == MPI_REQUEST_NULL) cycle
-       if (req_map_r4(idx)%request == MPI_REQUEST_NULL) exit
+      if (req_map_r4(idx)%request == MPI_REQUEST_NULL) exit
     end do
     if (idx > MAX_REQUESTS) then
       print *, "Error: Too many requests in mpi_send_init_fwd_rev_ad_r4"
@@ -1527,7 +1529,7 @@ contains
     req_map_r4(idx)%datatype = datatype
     req_map_r4(idx)%op_type = FAD_MPI_OP_RECV
     call MPI_Recv_init(req_map_r4(idx)%recvbuf, count, datatype, dest, tag, comm, req_map_r4(idx)%request, ierr)
-    request_ad = idx
+    request_ad = -idx
   end subroutine mpi_send_init_fwd_rev_ad_r4
 
   subroutine mpi_send_init_rev_ad_r4(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
@@ -1540,7 +1542,11 @@ contains
     if (request_ad == MPI_REQUEST_NULL) then
       return
     end if
-    idx = request_ad
+    idx = -request_ad
+    if (idx < 1 .or. idx > MAX_REQUESTS) then
+      print *, "Error: Invalid persistent request_ad in mpi_send_init_rev_ad_r4: ", request_ad
+      call MPI_abort(comm, -1, ierr)
+    end if
     call MPI_Request_free(req_map_r4(idx)%request, ierr)
     if (allocated(req_map_r4(idx)%recvbuf)) deallocate(req_map_r4(idx)%recvbuf)
     req_map_r4(idx)%ptr_advar = c_null_ptr
@@ -1570,7 +1576,6 @@ contains
     integer :: idx
 
     do idx = 1, MAX_REQUESTS
-      if (idx + MAX_REQUESTS == MPI_REQUEST_NULL) cycle
       if (req_map_r8(idx)%request == MPI_REQUEST_NULL) exit
     end do
     if (idx > MAX_REQUESTS) then
@@ -1584,7 +1589,7 @@ contains
     req_map_r8(idx)%datatype = datatype
     req_map_r8(idx)%op_type = FAD_MPI_OP_RECV
     call MPI_Recv_init(req_map_r8(idx)%recvbuf, count, datatype, dest, tag, comm, req_map_r8(idx)%request, ierr)
-    request_ad = idx + MAX_REQUESTS ! Offset to distinguish from real(4) requests
+    request_ad = -(idx + MAX_REQUESTS) ! Negative offset denotes persistent r8
   end subroutine mpi_send_init_fwd_rev_ad_r8
 
   subroutine mpi_send_init_rev_ad_r8(buf_ad, count, datatype, dest, tag, comm, request_ad, ierr)
@@ -1597,7 +1602,11 @@ contains
     if (request_ad == MPI_REQUEST_NULL) then
       return
     end if
-    idx = request_ad - MAX_REQUESTS ! Adjust index for real(8) requests
+    idx = -request_ad - MAX_REQUESTS ! Adjust index for persistent real(8) requests
+    if (idx < 1 .or. idx > MAX_REQUESTS) then
+      print *, "Error: Invalid persistent request_ad in mpi_send_init_rev_ad_r8: ", request_ad
+      call MPI_abort(comm, -1, ierr)
+    end if
     call MPI_Request_free(req_map_r8(idx)%request, ierr)
     if (allocated(req_map_r8(idx)%recvbuf)) deallocate(req_map_r8(idx)%recvbuf)
     req_map_r8(idx)%ptr_advar = c_null_ptr
@@ -1627,7 +1636,6 @@ contains
     integer :: idx
 
     do idx = 1, MAX_REQUESTS
-      if (idx == MPI_REQUEST_NULL) cycle
       if (req_map_r4(idx)%request == MPI_REQUEST_NULL) exit
     end do
     if (idx > MAX_REQUESTS) then
@@ -1640,7 +1648,7 @@ contains
     req_map_r4(idx)%datatype = datatype
     req_map_r4(idx)%op_type = FAD_MPI_OP_SEND
     call MPI_Send_init(buf_ad, count, datatype, source, tag, comm, req_map_r4(idx)%request, ierr)
-    request_ad = idx
+    request_ad = -idx
   end subroutine mpi_recv_init_fwd_rev_ad_r4
 
   subroutine mpi_recv_init_rev_ad_r4(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
@@ -1653,7 +1661,7 @@ contains
     if (request_ad == MPI_REQUEST_NULL) then
       return
     end if
-    idx = request_ad
+    idx = -request_ad
     if (idx < 1 .or. idx > MAX_REQUESTS) then
       print *, "Error: Invalid request_ad in mpi_recv_init_rev_ad_r4"
       call MPI_abort(comm, -1, ierr)
@@ -1686,7 +1694,6 @@ contains
     integer :: idx
 
     do idx = 1, MAX_REQUESTS
-      if (idx + MAX_REQUESTS == MPI_REQUEST_NULL) cycle
       if (req_map_r8(idx)%request == MPI_REQUEST_NULL) exit
     end do
     if (idx > MAX_REQUESTS) then
@@ -1699,7 +1706,7 @@ contains
     req_map_r8(idx)%datatype = datatype
     req_map_r8(idx)%op_type = FAD_MPI_OP_SEND
     call MPI_Send_init(buf_ad, count, datatype, source, tag, comm, req_map_r8(idx)%request, ierr)
-    request_ad = idx + MAX_REQUESTS ! Offset to distinguish from real(4) requests
+    request_ad = -(idx + MAX_REQUESTS) ! Negative offset denotes persistent r8
   end subroutine mpi_recv_init_fwd_rev_ad_r8
 
   subroutine mpi_recv_init_rev_ad_r8(buf_ad, count, datatype, source, tag, comm, request_ad, ierr)
@@ -1712,7 +1719,7 @@ contains
     if (request_ad == MPI_REQUEST_NULL) then
       return
     end if
-    idx = request_ad - MAX_REQUESTS ! Adjust index for real(8) requests
+    idx = -request_ad - MAX_REQUESTS ! Adjust index for persistent real(8) requests
     if (idx < 1 .or. idx > MAX_REQUESTS) then
       print *, "Error: Invalid request_ad in mpi_recv_init_rev_ad_r8"
       call MPI_abort(comm, -1, ierr)

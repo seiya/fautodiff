@@ -19,6 +19,7 @@ PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_cont
            run_intrinsic_func.out run_real_kind.out run_save_vars.out run_store_vars.out \
            run_directives.out run_parameter_var.out run_module_vars.out run_call_module_vars.out run_allocate_vars.out \
            run_exit_cycle.out run_pointer_arrays.out run_derived_alloc.out run_mpi_example.out \
+                  run_mpi_persistent.out \
                    run_stack.out run_where_forall.out run_omp_loops.out run_return_example.out run_self_reference.out \
            run_macro_args.out run_macro_multistmt.out run_use_module_conflict.out run_stop_example.out
 PROGRAMS = $(addprefix $(OUTDIR)/,$(PROGRAM_NAMES))
@@ -34,10 +35,16 @@ $(OUTDIR)/run_%.out: $(OUTDIR)/run_%.o
 $(OUTDIR)/run_mpi_example.out: $(OUTDIR)/run_mpi_example.o
 	$(MPIFC) $(FFLAGS) -o $@ $^
 
+$(OUTDIR)/run_mpi_persistent.out: $(OUTDIR)/run_mpi_persistent.o $(OUTDIR)/mpi_ad.o
+	$(MPIFC) $(FFLAGS) -o $@ $^
+
 $(OUTDIR)/run_%.o: run_%.f90
 	$(FC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
 
 $(OUTDIR)/run_mpi_example.o: run_mpi_example.f90
+	$(MPIFC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
+
+$(OUTDIR)/run_mpi_persistent.o: run_mpi_persistent.f90
 	$(MPIFC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
 
 $(OUTDIR)/%.o: %.f90
@@ -72,6 +79,7 @@ $(OUTDIR)/run_exit_cycle.o: $(OUTDIR)/exit_cycle.o $(OUTDIR)/exit_cycle_ad.o $(O
 $(OUTDIR)/run_pointer_arrays.o: $(OUTDIR)/pointer_arrays.o $(OUTDIR)/pointer_arrays_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_derived_alloc.o: $(OUTDIR)/derived_alloc.o $(OUTDIR)/derived_alloc_ad.o $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/run_mpi_example.o: $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
+$(OUTDIR)/run_mpi_persistent.o: $(OUTDIR)/mpi_ad.o
 $(OUTDIR)/run_where_forall.o: $(OUTDIR)/where_forall.o $(OUTDIR)/where_forall_ad.o
 
 $(OUTDIR)/run_return_example.o: $(OUTDIR)/return_example.o $(OUTDIR)/return_example_ad.o
