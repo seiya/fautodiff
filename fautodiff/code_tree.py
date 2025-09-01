@@ -4719,10 +4719,43 @@ class BranchBlock(Node):
             raise RuntimeError(f"Invalid class type: {type(self)}")
 
         if reverse:
+            # Avoid duplicated allocated-guards for AD allocations.
+            # When an original block like:
+            #   if (allocated(v)) deallocate(v)
+            # is transformed for reverse mode, we invert the condition and
+            # generate an inner guard around `allocate(v_ad, ...)`.
+            # This results in nested identical guards:
+            #   if (.not. allocated(v_ad)) then
+            #     if (.not. allocated(v_ad)) then
+            #       allocate(v_ad, mold=v)
+            #     end if
+            #     v_ad = 0
+            #   end if
+            # Flatten such inner guards when their condition equals the outer one.
+            new_cond_blocks = []
+            for cond, body in block.cond_blocks:
+                first = body.first()
+                if cond is not None and isinstance(first, IfBlock):
+                    inner = first
+                    # Only consider a simple single-branch guard
+                    if len(inner.cond_blocks) == 1:
+                        inner_cond, inner_body = inner.cond_blocks[0]
+                        if inner_cond is not None and str(inner_cond) == str(cond):
+                            # Replace the inner guard with its body to avoid duplication
+                            body.remove_child(first)
+                            body.insert_begin(inner_body)
+                new_cond_blocks.append((cond, body))
+            block.cond_blocks = new_cond_blocks
+
+            # Do not remove AD-variable allocations. Keep only pruning of
+            # leading non-AD allocations if they appear here for any reason.
             for _, body in block.cond_blocks:
                 first = body.first()
                 if isinstance(first, Allocate):
-                    body.remove_child(first)
+                    # Remove only if allocating non-AD variables
+                    vars = getattr(first, "vars", [])
+                    if not any(getattr(v, "name", "").endswith(AD_SUFFIX) for v in vars):
+                        body.remove_child(first)
             block.cond_blocks = [
                 (cond, body)
                 for cond, body in block.cond_blocks
