@@ -558,6 +558,32 @@ def _parse_mpi_calls(
                             node.associated_vars = vars
 
 
+def _mark_mpi_rev_calls_donot_prune(node: Node) -> None:
+    """Mark reverse-mode MPI calls as non-prunable.
+
+    Reverse-mode MPI wrappers have hidden side effects (request wait/free,
+    internal maps update, gradient accumulation). Ensure DCE never drops them
+    by setting ``donot_prune=True``.
+    """
+    if isinstance(node, CallStatement):
+        name = node.name.lower()
+        # Focus on nonblocking and their finalizers in reverse mode
+        keep_names = {
+            "mpi_isend_rev_ad",
+            "mpi_irecv_rev_ad",
+            "mpi_wait_rev_ad",
+            "mpi_waitall_rev_ad",
+            "mpi_start_rev_ad",
+            "mpi_startall_rev_ad",
+            "mpi_send_init_rev_ad",
+            "mpi_recv_init_rev_ad",
+        }
+        if name in keep_names:
+            node.donot_prune = True
+    for child in getattr(node, "iter_children", lambda: [])():
+        _mark_mpi_rev_calls_donot_prune(child)
+
+
 def _set_call_intents(
     node: Node, routine_map: Dict[str, Any], generic_map: Dict[str, Any]
 ) -> None:
@@ -1165,6 +1191,9 @@ def _generate_ad_subroutine(
     # print(render_program(routine_org))
 
     if not ad_code.is_effectively_empty():
+        # Before any pruning, mark reverse MPI calls to avoid being dropped
+        if reverse:
+            _mark_mpi_rev_calls_donot_prune(ad_code)
         # Declare any temporary gradient variables introduced by AD code
         for var in ad_code.assigned_vars(without_savevar=True):
             name = var.name
