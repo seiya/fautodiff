@@ -204,11 +204,11 @@ contains
     integer :: pn
     integer :: pp
 
-    allocate(z_ad(3))
-    z_ad = 0.0
     call MPI_Comm_rank(comm, rank, ierr)
     call MPI_Comm_size(comm, size, ierr)
     reqs_ad(:) = MPI_REQUEST_NULL
+    allocate(z_ad(3))
+    z_ad = 0.0
     pn = rank - 1
     pp = rank + 1
     if (pn >= 0) then

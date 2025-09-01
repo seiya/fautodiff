@@ -47,12 +47,12 @@ contains
     integer :: i
     real, allocatable :: arr(:)
 
+    allocate(arr_ad(n))
     allocate(arr(n))
     do i = 1, n
       arr(i) = i * x
     end do
 
-    allocate(arr_ad(n))
     do i = n, 1, - 1
       arr_ad(i) = res_ad * x ! res = res + arr(i) * x
       x_ad = res_ad * arr(i) + x_ad ! res = res + arr(i) * x
@@ -131,13 +131,13 @@ contains
     real, allocatable :: arr(:)
     real, allocatable :: arr2(:)
 
+    allocate(arr_ad(n))
+    arr_ad = 0.0
     allocate(arr(n))
     do i = 1, n
       arr(i) = i * x
     end do
 
-    allocate(arr_ad(n))
-    arr_ad = 0.0
     if (n > 0) then
       allocate(arr2(n))
       arr2(:) = arr(:)
@@ -292,13 +292,13 @@ contains
     integer :: i
     real, allocatable :: htmp_save_93_ad(:)
 
+    allocate(htmp_ad(n))
     allocate(htmp(n))
     htmp = x
     allocate(htmp_save_93_ad, mold=htmp)
     htmp_save_93_ad(1:n) = htmp(1:n)
     htmp = x**2
 
-    allocate(htmp_ad(n))
     do i = n, 1, - 1
       htmp_ad(i) = z_ad * y ! z = z + htmp(i) * y
       y_ad = z_ad * htmp(i) + y_ad ! z = z + htmp(i) * y
@@ -478,6 +478,7 @@ contains
     real, allocatable :: arr(:)
 
     return_flag_156_ad = .true.
+    allocate(arr_ad(n))
     allocate(arr(n))
     if (n <= 0) then
       return_flag_156_ad = .false.
@@ -489,7 +490,6 @@ contains
     end if
 
     if (return_flag_156_ad) then
-      allocate(arr_ad(n))
       do i = n, 1, - 1
         arr_ad(i) = res_ad * x ! res = res + arr(i) * x
         x_ad = res_ad * arr(i) + x_ad ! res = res + arr(i) * x
@@ -501,7 +501,6 @@ contains
     end if
     if (n <= 0) then
       return_flag_156_ad = .true. ! return
-      allocate(arr_ad(n))
       if (return_flag_156_ad) then
         res_ad = 0.0 ! res = 0.0
       end if

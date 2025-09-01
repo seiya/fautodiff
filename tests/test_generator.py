@@ -699,8 +699,8 @@ class TestGenerator(unittest.TestCase):
 
     def test_reverse_dealloc_guard_deduplicated(self):
         code_tree.Node.reset()
-        import textwrap
         import re
+        import textwrap
         from tempfile import TemporaryDirectory
 
         src = textwrap.dedent(
@@ -736,6 +736,52 @@ class TestGenerator(unittest.TestCase):
             self.assertGreaterEqual(len(guards), 1)
             # Ensure allocation of z_ad with mold=z exists
             self.assertRegex(generated, r"allocate\(z_ad(?:\([^)]*\))?, mold=z\)")
+
+    def test_reverse_fwblock_ad_alloc_near_primal(self):
+        """In reverse mode, allocate AD arrays right before primal allocate.
+
+        Ensure sizes computed in fw_block (e.g., m = n + 1) appear before the
+        AD allocation, and that the AD allocation is placed immediately before
+        the corresponding primal allocate, not at the routine top.
+        """
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module m
+            contains
+              subroutine foo(n, x, y)
+                integer, intent(in) :: n
+                real, intent(in) :: x
+                real, intent(out) :: y
+                real, allocatable :: a(:)
+                integer :: m
+                m = n + 1
+                allocate(a(m))
+                a = x
+                y = sum(a)
+                deallocate(a)
+              end subroutine foo
+            end module m
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            p = Path(tmp) / "m.f90"
+            p.write_text(src)
+            generated = generator.generate_ad(str(p), warn=False, mode="reverse")
+        lines = generated.splitlines()
+        # Find indices of key lines
+        import re as _re
+
+        idx_assign = next(
+            i for i, l in enumerate(lines) if _re.search(r"m\s*=\s*n\s*\+\s*1", l)
+        )
+        idx_alloc_ad = next(i for i, l in enumerate(lines) if "allocate(a_ad(" in l)
+        # Order: compute size -> allocate a_ad
+        self.assertLess(idx_assign, idx_alloc_ad)
 
 
 def _make_example_test(src: Path):

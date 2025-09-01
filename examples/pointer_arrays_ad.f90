@@ -57,10 +57,11 @@ contains
     real, pointer :: p_ad(:)
     integer :: i
 
+    allocate(p_ad(n))
+
     if (.not. associated(mod_p_ad)) then
       allocate(mod_p_ad, mold=mod_p)
     end if
-    allocate(p_ad(n))
     do i = n, 1, - 1
       p_ad(i) = res_ad ! res = res + p(i) + mod_p(i)
       mod_p_ad(i) = res_ad ! res = res + p(i) + mod_p(i)
