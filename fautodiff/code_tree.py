@@ -359,7 +359,8 @@ class Node:
         # contains statements. Deletion should target those statements (children
         # of a Block) rather than the container's internals.
         raise NotImplementedError(
-            f"Deletion from parent type {type(parent).__name__} is not supported")
+            f"Deletion from parent type {type(parent).__name__} is not supported"
+        )
 
     # ------------------------------------------------------------------
     # variable analysis helpers
@@ -2754,7 +2755,9 @@ class Routine(Node):
         if self.ad_content is not None:
             blocks.append(self.ad_content)
 
-        def traverse(node: Node, loop_ctx: Tuple[int, ...], branch_depth: int = 0) -> None:
+        def traverse(
+            node: Node, loop_ctx: Tuple[int, ...], branch_depth: int = 0
+        ) -> None:
             # Loop contexts: treat Do/Forall bodies as separate contexts
             if isinstance(node, (DoAbst, ForallBlock)):
                 # Enter loop context
@@ -2923,14 +2926,20 @@ class Routine(Node):
                                     # check if any access in (i+1, j)
                                     accessed = False
                                     for mid in children[i + 1 : j]:
-                                        if mid.has_reference_to(OpVar(vn)) or mid.has_assignment_to(OpVar(vn)):
+                                        if mid.has_reference_to(
+                                            OpVar(vn)
+                                        ) or mid.has_assignment_to(OpVar(vn)):
                                             accessed = True
                                             break
                                     if not accessed:
                                         rm_names.append(vn)
                             if rm_names:
-                                node.vars = [v for v in node.vars if v.name not in rm_names]
-                                cand.vars = [v for v in cand.vars if v.name not in rm_names]
+                                node.vars = [
+                                    v for v in node.vars if v.name not in rm_names
+                                ]
+                                cand.vars = [
+                                    v for v in cand.vars if v.name not in rm_names
+                                ]
                                 if not node.vars:
                                     try:
                                         block.remove_child(node)
@@ -4620,16 +4629,21 @@ class BranchBlock(Node):
             if cond is None:
                 return None
             c = cond.deep_clone()
+
             def _rewrite(op: Operator) -> Operator:
                 from .operators import OpFunc, OpLogic
+
                 if isinstance(op, OpFunc) and op.name in ("allocated", "associated"):
                     args = list(op.args)
                     if args and isinstance(args[0], OpVar):
                         args[0] = args[0].add_suffix(AD_SUFFIX)
                     return OpFunc(op.name, args=args)
                 if isinstance(op, OpLogic):
-                    return OpLogic(op.op, args=[_rewrite(op.args[0]), _rewrite(op.args[1])])
+                    return OpLogic(
+                        op.op, args=[_rewrite(op.args[0]), _rewrite(op.args[1])]
+                    )
                 return op
+
             return _rewrite(c)
 
         for cond, block in self.cond_blocks:
@@ -4675,9 +4689,14 @@ class BranchBlock(Node):
                 _scan(block)
 
                 def _collect_guard_vars(op: Operator) -> tuple[bool, set[str]]:
-                    from .operators import OpFunc, OpLogic, OpVar as _OpVar
+                    from .operators import OpFunc, OpLogic
+                    from .operators import OpVar as _OpVar
+
                     # returns (is_pure_guard, var_names)
-                    if isinstance(op, OpFunc) and op.name in ("allocated", "associated"):
+                    if isinstance(op, OpFunc) and op.name in (
+                        "allocated",
+                        "associated",
+                    ):
                         args = list(op.args)
                         if not args or not isinstance(args[0], _OpVar):
                             return (False, set())
@@ -4690,8 +4709,13 @@ class BranchBlock(Node):
 
                 if has_dealloc:
                     is_guard, vars_in_cond = _collect_guard_vars(cond)
-                    if is_guard and vars_in_cond and vars_in_cond.issubset(dealloc_names):
+                    if (
+                        is_guard
+                        and vars_in_cond
+                        and vars_in_cond.issubset(dealloc_names)
+                    ):
                         from .operators import OpNot
+
                         # Replace to use AD vars and invert for allocation in reverse
                         cond = _cond_use_advar(cond)
                         cond = OpNot([cond])
@@ -4754,7 +4778,9 @@ class BranchBlock(Node):
                 if isinstance(first, Allocate):
                     # Remove only if allocating non-AD variables
                     vars = getattr(first, "vars", [])
-                    if not any(getattr(v, "name", "").endswith(AD_SUFFIX) for v in vars):
+                    if not any(
+                        getattr(v, "name", "").endswith(AD_SUFFIX) for v in vars
+                    ):
                         body.remove_child(first)
             block.cond_blocks = [
                 (cond, body)

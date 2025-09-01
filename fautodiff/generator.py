@@ -402,9 +402,7 @@ def _parse_allocate(
                     )
                     node.parent.insert_before(
                         node.get_id(),
-                        Allocate._add_if(
-                            Deallocate([var]), var, name in mod_var_names
-                        ),
+                        Allocate._add_if(Deallocate([var]), var, name in mod_var_names),
                     )
     if top:
         mod_var_names = [v.name_ext() for v in mod_vars]
@@ -1475,7 +1473,10 @@ def _generate_ad_subroutine(
                 if isinstance(node, Deallocate):
                     for v in node.vars:
                         name = v.name
-                        if getattr(node, "index", None) is not None and name not in idx_map:
+                        if (
+                            getattr(node, "index", None) is not None
+                            and name not in idx_map
+                        ):
                             idx_map[name] = node.index
                 for ch in getattr(node, "iter_children", lambda: [])():
                     idx_map.update(_collect_dealloc_indices(ch))
@@ -1485,7 +1486,11 @@ def _generate_ad_subroutine(
                 idx_map: dict[str, Any] = {}
                 if isinstance(node, Allocate):
                     for v in node.vars:
-                        if v.name.endswith(AD_SUFFIX) and v.index is not None and v.name not in idx_map:
+                        if (
+                            v.name.endswith(AD_SUFFIX)
+                            and v.index is not None
+                            and v.name not in idx_map
+                        ):
                             idx_map[v.name] = v.index
                 for ch in getattr(node, "iter_children", lambda: [])():
                     idx_map.update(_collect_ad_allocate_indices(ch))
@@ -1502,71 +1507,129 @@ def _generate_ad_subroutine(
                 return req
 
             if reverse and not fw_block.is_effectively_empty():
-                req_ad = _collect_required_ad_vars(fw_block)
-                # Map base var -> index from dealloc nodes (reverse of forward alloc)
-                dealloc_idx = _collect_dealloc_indices(ad_block)
-                ad_alloc_idx = _collect_ad_allocate_indices(ad_block)
-                pre_alloc = Block([])
+                # Insert AD allocations immediately before each primal allocate
+                # in the forward block, so any size expressions computed in
+                # fw_block are already available.
                 mod_var_names = [v.name for v in mod_vars]
-                for name_ad in sorted(req_ad):
-                    decl = subroutine.decls.find_by_name(name_ad)
-                    if decl is None:
-                        continue
-                    if not decl.allocatable and not decl.pointer:
-                        continue
-                    base = name_ad.removesuffix(AD_SUFFIX)
-                    index = dealloc_idx.get(base)
-                    if index is None:
-                        index = ad_alloc_idx.get(name_ad)
-                    var_ad = OpVar(name_ad)
-                    if index is None:
-                        # Without shape information, we cannot safely allocate
-                        # an allocatable array here.
-                        continue
-                    var_ad = var_ad.change_index(index)
-                    # allocate guarded for module/pointer cases
-                    is_mod = base in mod_var_names
-                    pre_alloc.append(Allocate._add_if(Allocate([var_ad]), var_ad, is_mod))
-                    # Zero-initialize here so later duplicate clears can be dropped
-                    pre_alloc.append(ClearAssignment(OpVar(name_ad)))
-                if not pre_alloc.is_effectively_empty():
-                    fw_block.insert_begin(pre_alloc)
 
-                # Remove redundant ClearAssignment for these AD vars from the
-                # reverse block since we've already zeroed them in fw_block.
+                allocated_ad_names: set[str] = set()
+
+                def _insert_for_block(block: Block) -> None:
+                    children = list(block.iter_children())
+                    for ch in children:
+                        # Recurse into nested blocks
+                        if isinstance(ch, IfBlock):
+                            for _, b in ch.cond_blocks:
+                                _insert_for_block(b)
+                            continue
+                        if isinstance(ch, SelectBlock):
+                            for _, b in ch.cond_blocks:
+                                _insert_for_block(b)
+                            continue
+                        if isinstance(ch, WhereBlock):
+                            for _, b in ch.cond_blocks:
+                                _insert_for_block(b)
+                            continue
+                        if isinstance(ch, DoAbst):
+                            _insert_for_block(ch._body)
+                            continue
+                        if isinstance(ch, OmpDirective) and ch.body is not None:
+                            body = ch.body
+                            if isinstance(body, Block):
+                                _insert_for_block(body)
+                            continue
+
+                        # Handle the allocate site
+                        if isinstance(ch, Allocate):
+                            pre = Block([])
+                            for var in ch.vars:
+                                if not var.ad_target:
+                                    continue
+                                name_ad = f"{var.name}{AD_SUFFIX}"
+                                decl = subroutine.decls.find_by_name(name_ad)
+                                if decl is None:
+                                    continue
+                                if not decl.allocatable and not decl.pointer:
+                                    continue
+                                is_mod = var.is_module_var(mod_var_names)
+                                mold = None
+                                ad_var = OpVar(name_ad)
+                                if is_mod:
+                                    # For module variables, prefer mold-based
+                                    # allocation (or size(...) for derived types)
+                                    if var.var_type.typename.startswith(
+                                        ("type", "class")
+                                    ):
+                                        # build index via size() for each dim
+                                        idx_list: list[Any] = []
+                                        ndim = (
+                                            len(var.index)
+                                            if var.index is not None
+                                            else 0
+                                        )
+                                        vclean = var.change_index(None)
+                                        for n in range(ndim):
+                                            idx_list.append(
+                                                OpFunc(
+                                                    "size", args=[vclean, OpInt(n + 1)]
+                                                )
+                                            )
+                                        index = AryIndex(idx_list) if idx_list else None
+                                    else:
+                                        mold = var
+                                        index = None
+                                else:
+                                    index = var.index
+                                if index is not None:
+                                    ad_var = ad_var.change_index(index)
+                                # Note: Block.insert_before inserts Block children
+                                # in reverse, so append Clear before Allocate to
+                                # render as: allocate -> clear
+                                if not var.var_type.typename.startswith(
+                                    ("type", "class")
+                                ):
+                                    pre.append(
+                                        ClearAssignment(ad_var.change_index(None))
+                                    )
+                                node = Allocate([ad_var], mold=mold)
+                                pre.append(Allocate._add_if(node, ad_var, is_mod))
+                                allocated_ad_names.add(name_ad)
+                            if not pre.is_effectively_empty():
+                                block.insert_before(ch.get_id(), pre)
+
+                _insert_for_block(fw_block)
+
+                # Remove redundant ClearAssignment in the reverse block for
+                # variables we have just zero-initialized in fw_block.
                 def _prune_clears(node: Node, names: set[str]) -> None:
                     if isinstance(node, Block):
                         to_remove = []
-                        for ch in list(node.iter_children()):
-                            # recurse
-                            _prune_clears(ch, names)
-                            # remove clear of pre-zeroed ad var
-                            if isinstance(ch, ClearAssignment):
-                                v = ch.lhs
+                        for c in list(node.iter_children()):
+                            _prune_clears(c, names)
+                            if isinstance(c, ClearAssignment):
+                                v = c.lhs
                                 if v is not None and v.name in names:
-                                    to_remove.append(ch)
+                                    to_remove.append(c)
                         for n in to_remove:
                             node.remove_child(n)
                     else:
-                        for ch in getattr(node, 'iter_children', lambda: [])():
-                            _prune_clears(ch, names)
+                        for c in getattr(node, "iter_children", lambda: [])():
+                            _prune_clears(c, names)
 
-                if req_ad:
-                    _prune_clears(ad_block, req_ad)
+                if allocated_ad_names:
+                    _prune_clears(ad_block, allocated_ad_names)
 
-                # After removing inner clears, some conditional blocks that were
-                # generated to guard clears may now be empty. Drop such empty
-                # branches to avoid emitting:
-                #   if (allocated(z_ad)) then
-                #   end if
+                # After pruning, drop empty conditional blocks introduced for clears
                 def _drop_empty_branches(node: Node) -> None:
                     if isinstance(node, Block):
                         to_remove = []
                         for ch in list(node.iter_children()):
                             _drop_empty_branches(ch)
-                            from .code_tree import IfBlock, WhereBlock, SelectBlock
-                            if isinstance(ch, IfBlock):
-                                # remove empty bodies
+                            from .code_tree import IfBlock as _If
+                            from .code_tree import SelectBlock as _Se
+                            from .code_tree import WhereBlock as _Wh
+
+                            if isinstance(ch, _If):
                                 ch.cond_blocks = [
                                     (cond, body)
                                     for cond, body in ch.cond_blocks
@@ -1574,7 +1637,7 @@ def _generate_ad_subroutine(
                                 ]
                                 if len(ch.cond_blocks) == 0:
                                     to_remove.append(ch)
-                            elif isinstance(ch, WhereBlock):
+                            elif isinstance(ch, _Wh):
                                 ch.cond_blocks = [
                                     (cond, body)
                                     for cond, body in ch.cond_blocks
@@ -1582,7 +1645,7 @@ def _generate_ad_subroutine(
                                 ]
                                 if len(ch.cond_blocks) == 0:
                                     to_remove.append(ch)
-                            elif isinstance(ch, SelectBlock):
+                            elif isinstance(ch, _Se):
                                 ch.cond_blocks = [
                                     (conds, body)
                                     for conds, body in ch.cond_blocks
@@ -1593,7 +1656,7 @@ def _generate_ad_subroutine(
                         for n in to_remove:
                             node.remove_child(n)
                     else:
-                        for ch in getattr(node, 'iter_children', lambda: [])():
+                        for ch in getattr(node, "iter_children", lambda: [])():
                             _drop_empty_branches(ch)
 
                 _drop_empty_branches(ad_block)
@@ -1985,7 +2048,8 @@ def _generate_ad_subroutine(
             to_remove = []
             for ch in list(node.iter_children()):
                 _drop_empty_branches_global(ch)
-                from .code_tree import IfBlock, WhereBlock, SelectBlock
+                from .code_tree import IfBlock, SelectBlock, WhereBlock
+
                 if isinstance(ch, IfBlock):
                     ch.cond_blocks = [
                         (cond, body)
