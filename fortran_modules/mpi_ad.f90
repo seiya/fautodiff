@@ -325,6 +325,7 @@ contains
       b_ad(1:count) = 0.0_8
     end if
   end subroutine mpi_bcast_rev_ad_r8
+
   subroutine mpi_reduce_fwd_ad_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, root, comm, ierr)
     real, intent(in), target, contiguous :: sendbuf(..)
     real, intent(in), target, contiguous :: sendbuf_ad(..)
@@ -926,6 +927,7 @@ contains
     rb_ad(1:recvcount*size) = 0.0_8
     deallocate(tmp)
   end subroutine mpi_alltoall_rev_ad_r8
+
   subroutine mpi_recv_fwd_ad_r4(buf, buf_ad, count, datatype, source, tag, comm, status, ierr)
     real, intent(out) :: buf(..)
     real, intent(out) :: buf_ad(..)
@@ -971,6 +973,7 @@ contains
     call MPI_Send(b_ad, count, datatype, source, tag, comm, ierr)
     b_ad(1:count) = 0.0_8
   end subroutine mpi_recv_rev_ad_r8
+
   subroutine mpi_send_fwd_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, ierr)
     real, intent(in) :: buf(..)
     real, intent(in) :: buf_ad(..)
@@ -1014,6 +1017,7 @@ contains
     call MPI_Recv(tmp, count, datatype, dest, tag, comm, MPI_STATUS_IGNORE, ierr)
     b_ad(1:count) = b_ad(1:count) + tmp(1:count)
   end subroutine mpi_send_rev_ad_r8
+
   subroutine mpi_sendrecv_fwd_ad_r4(sendbuf, sendbuf_ad, sendcount, sendtype, dest, sendtag, &
                                     recvbuf, recvbuf_ad, recvcount, recvtype, source, recvtag, &
                                     comm, status, ierr)
@@ -1085,6 +1089,7 @@ contains
     sb_ad(1:sendcount) = sb_ad(1:sendcount) + tmp(1:sendcount)
     rb_ad(1:recvcount) = 0.0_8
   end subroutine mpi_sendrecv_rev_ad_r8
+
   subroutine mpi_isend_fwd_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
     real, intent(in) :: buf(..)
     real, intent(in) :: buf_ad(..)
@@ -1336,6 +1341,7 @@ contains
     req_map_r8(idx)%request = MPI_REQUEST_NULL
     request_ad = MPI_REQUEST_NULL
   end subroutine mpi_irecv_rev_ad_r8
+
   subroutine mpi_put_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real, intent(in) :: origin(..)
     real, intent(in) :: origin_ad(..)
@@ -1387,6 +1393,7 @@ contains
     tmp = 0.0_8
     call MPI_Put(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
   end subroutine mpi_put_rev_ad_r8
+
   subroutine mpi_get_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
     real, intent(out) :: origin(..)
     real, intent(out) :: origin_ad(..)
@@ -1434,6 +1441,7 @@ contains
     call MPI_Accumulate(o_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, MPI_SUM, win, ierr)
     o_ad(1:origin_count) = 0.0_8
   end subroutine mpi_get_rev_ad_r8
+
   subroutine mpi_accumulate_fwd_ad_r4(origin, origin_ad, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, op, win, ierr)
     real, intent(in) :: origin(..)
     real, intent(in) :: origin_ad(..)
@@ -1485,6 +1493,7 @@ contains
     tmp = 0.0_8
     call MPI_Put(tmp, origin_count, origin_datatype, target_rank, target_disp, target_count, target_datatype, win, ierr)
   end subroutine mpi_accumulate_rev_ad_r8
+
   subroutine mpi_send_init_fwd_ad_r4(buf, buf_ad, count, datatype, dest, tag, comm, request, request_ad, ierr)
     real, intent(in) :: buf(..)
     real, intent(in) :: buf_ad(..)
@@ -1716,6 +1725,7 @@ contains
     req_map_r8(idx)%request = MPI_REQUEST_NULL
     request_ad = MPI_REQUEST_NULL
   end subroutine mpi_recv_init_rev_ad_r8
+
   subroutine mpi_start_fwd_ad(request, request_ad, ierr)
     integer, intent(inout) :: request, request_ad
     integer, intent(out), optional :: ierr
@@ -2285,10 +2295,10 @@ contains
       end if
     type is (req_map_r8_t)
       call c_f_pointer(req_map%ptr_advar, ptr_r8, [req_map%count])
-      if (req_map%op_type == FAD_MPI_OP_SEND) then
+      if (req_map%op_type == FAD_MPI_OP_RECV) then
           ptr_r8(:) = ptr_r8(:) + req_map%recvbuf(:req_map%count)
           req_map%recvbuf = 0.0_8
-      else if (req_map%op_type == FAD_MPI_OP_RECV) then
+      else if (req_map%op_type == FAD_MPI_OP_SEND) then
           ptr_r8(:) = 0.0_8
       end if
     end select
