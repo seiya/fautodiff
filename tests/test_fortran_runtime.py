@@ -54,6 +54,42 @@ class TestFortranRuntime(unittest.TestCase):
                 raise
             self.assertEqual(run.stdout.strip(), "OK")
 
+    def _run_mpi(self, exe: Path, arg: str | None = None):
+        mpirun = shutil.which("mpirun") or "mpirun"
+        cmd = [mpirun, "-np", "2"]
+        try:
+            # May be needed in some CI environments
+            if os.geteuid() == 0:
+                cmd.append("--allow-run-as-root")
+        except AttributeError:
+            # os.geteuid not available on some platforms (e.g., Windows)
+            pass
+        if arg is not None:
+            cmd += [str(exe), arg]
+        else:
+            cmd += [str(exe)]
+        subprocess.run(cmd, check=True)
+
+    def test_mpi_example_runtime(self):
+        """Build and run the MPI example runtime driver with 2 ranks."""
+        if shutil.which("mpifort") is None or shutil.which("mpirun") is None:
+            self.skipTest("MPI toolchain not available (mpifort/mpirun)")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            exe = self._build(tmp, "run_mpi_example")
+            # Run two representative subtests
+            self._run_mpi(exe, "sum_reduce")
+            self._run_mpi(exe, "isend_irecv")
+
+    def test_mpi_persistent_runtime(self):
+        """Build and run the persistent MPI runtime driver with 2 ranks."""
+        if shutil.which("mpifort") is None or shutil.which("mpirun") is None:
+            self.skipTest("MPI toolchain not available (mpifort/mpirun)")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            exe = self._build(tmp, "run_mpi_persistent")
+            self._run_mpi(exe)
+
 
 if __name__ == "__main__":
     unittest.main()
