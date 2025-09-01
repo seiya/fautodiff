@@ -204,6 +204,7 @@ cython_debug/
 
 # Debug
 tmp
+tmp_*
 
 # Local project config
 .serena

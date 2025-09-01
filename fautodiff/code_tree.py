@@ -298,9 +298,68 @@ class Node:
         return False
 
     def remove_child(self, child: "Node") -> None:
-        """Remove ``child`` from this node. Override in subclasses."""
+        """Remove ``child`` from this node. Override in subclasses.
+        
+        Only ``Block`` overrides this to remove from its sequence of
+        children. For other node types this is a no-op.
+        """
         # Only ``Block`` implements actual removal.
         pass
+
+    def delete(self) -> None:
+        """Delete this node from its parent.
+
+        - Raises ``RuntimeError`` if this node has no parent.
+        - Removes itself from a parent ``Block``.
+        - If the parent ``Block`` becomes empty, recursively deletes the parent
+          as well, unless that ``Block`` is the body of a ``BranchBlock``
+          (to avoid corrupting branching structure).
+        - If the direct parent is a ``BranchBlock`` and this node is the branch
+          body ``Block``, clear the body instead of removing the branch tuple;
+          if all branches then become empty, delete the ``BranchBlock``.
+        """
+        parent = getattr(self, "parent", None)
+        if parent is None:
+            raise RuntimeError("Cannot delete a root node without a parent")
+
+        # Special handling: when the direct parent is a BranchBlock, the children
+        # are branch body Blocks. Deleting a branch entirely would break the
+        # branching structure, so clear the body instead.
+
+        if isinstance(parent, BranchBlock):
+            if isinstance(self, Block):
+                # Clear the branch body instead of removing the (cond, block) pair
+                self._children = []
+                # If all branch bodies became empty, delete the BranchBlock
+                if parent.is_effectively_empty():
+                    gp = getattr(parent, "parent", None)
+                    if gp is not None:
+                        parent.delete()
+                return
+            # Otherwise, the parent being BranchBlock means this node should not
+            # be directly attached (BranchBlock only holds body Blocks). Fall
+            # through to conservative handling below.
+
+        # Normal case: parent is a Block (sequence of statements)
+        if isinstance(parent, Block):
+            parent.remove_child(self)
+            # If the parent Block is now empty, delete it as well unless it is
+            # the body of a BranchBlock.
+            grandparent = getattr(parent, "parent", None)
+            if len(parent) == 0 or parent.is_effectively_empty():
+                if isinstance(grandparent, BranchBlock):
+                    # Keep the empty body to preserve branch structure.
+                    return
+                if grandparent is not None:
+                    parent.delete()
+            return
+
+        # Fallback: for non-Block parents we do not have a generic removal API.
+        # Typical nodes (loops, directives, etc.) hold a Block body which in turn
+        # contains statements. Deletion should target those statements (children
+        # of a Block) rather than the container's internals.
+        raise NotImplementedError(
+            f"Deletion from parent type {type(parent).__name__} is not supported")
 
     # ------------------------------------------------------------------
     # variable analysis helpers

@@ -1186,5 +1186,49 @@ class TestOmpDirective(unittest.TestCase):
         )
 
 
+class TestNodeDelete(unittest.TestCase):
+    def test_delete_from_block(self):
+        a = Assignment(OpVar("a"), OpInt(1))
+        b = Assignment(OpVar("b"), OpInt(2))
+        blk = Block([a, b])
+        # Sanity precondition
+        self.assertEqual(render_program(blk), "a = 1\n" "b = 2\n")
+        # Delete first statement
+        a.delete()
+        self.assertEqual(len(blk), 1)
+        self.assertEqual(render_program(blk), "b = 2\n")
+
+    def test_delete_last_stmt_keeps_empty_branch(self):
+        # if (a > 0) then;  b = 1; else; b = 2; end if
+        b = OpVar("b")
+        cond1 = OpVar("a") > OpInt(0)
+        body1 = Block([Assignment(b, OpInt(1))])
+        body2 = Block([Assignment(b, OpInt(2))])
+        ifblk = IfBlock([(cond1, body1), (None, body2)])
+        prog = Block([ifblk])
+        # Delete the only statement in the first branch body; structure must remain
+        body1.first().delete()
+        self.assertEqual(
+            render_program(prog),
+            "if (a > 0) then\n" "else\n" "  b = 2\n" "end if\n",
+        )
+
+    def test_delete_branch_bodies_then_remove_if(self):
+        # Place IfBlock under a parent block so it can be removed when empty
+        b = OpVar("b")
+        cond1 = OpVar("a") > OpInt(0)
+        body1 = Block([Assignment(b, OpInt(1))])
+        body2 = Block([Assignment(b, OpInt(2))])
+        ifblk = IfBlock([(cond1, body1), (None, body2)])
+        prog = Block([ifblk])
+        # Delete entire branch bodies via their Block.delete()
+        body1.delete()
+        # IfBlock still present because second branch has content
+        self.assertIn("end if\n", render_program(prog))
+        body2.delete()
+        # With both branches empty, the IfBlock should be deleted from prog
+        self.assertEqual(len(prog), 0)
+        self.assertEqual(render_program(prog), "")
+
 if __name__ == "__main__":
     unittest.main()
