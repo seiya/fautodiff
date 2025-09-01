@@ -270,7 +270,35 @@ class TestGenerator(unittest.TestCase):
             self.assertIn("allocate(a(n))", generated)
             self.assertIn("deallocate(a)", generated)
             self.assertIn("allocate(a_ad(n))", generated)
-            self.assertIn("deallocate(a_ad)", generated)
+        self.assertIn("deallocate(a_ad)", generated)
+
+    def test_forward_allocate_also_allocates_derivative(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module m
+            contains
+              subroutine foo(n, x)
+                integer, intent(in) :: n
+                real, intent(inout) :: x
+                real, allocatable :: a(:)
+                allocate(a(n))
+                a = x
+                x = sum(a)
+                deallocate(a)
+              end subroutine foo
+            end module m
+            """
+        )
+        with TemporaryDirectory() as tmp:
+            p = Path(tmp) / "m.f90"
+            p.write_text(src)
+            generated = generator.generate_ad(str(p), warn=False, mode="forward")
+        self.assertIn("allocate(a_ad(n))", generated)
+        self.assertIn("deallocate(a_ad)", generated)
 
     def test_fadmod_includes_skip(self):
         code_tree.Node.reset()

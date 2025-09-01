@@ -4614,6 +4614,24 @@ class BranchBlock(Node):
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         cond_blocks = []
+
+        def _cond_use_advar(cond: Optional[Operator]) -> Optional[Operator]:
+            # Replace allocated/associated(var) to allocated/associated(var_ad)
+            if cond is None:
+                return None
+            c = cond.deep_clone()
+            def _rewrite(op: Operator) -> Operator:
+                from .operators import OpFunc, OpLogic
+                if isinstance(op, OpFunc) and op.name in ("allocated", "associated"):
+                    args = list(op.args)
+                    if args and isinstance(args[0], OpVar):
+                        args[0] = args[0].add_suffix(AD_SUFFIX)
+                    return OpFunc(op.name, args=args)
+                if isinstance(op, OpLogic):
+                    return OpLogic(op.op, args=[_rewrite(op.args[0]), _rewrite(op.args[1])])
+                return op
+            return _rewrite(c)
+
         for cond, block in self.cond_blocks:
             nodes = block.generate_ad(
                 saved_vars,
@@ -4626,6 +4644,20 @@ class BranchBlock(Node):
                 return_flags,
                 warnings,
             )
+            # If reverse-mode and original branch is a deallocate-guard like
+            # if (allocated(z)) then ... deallocate(z) ..., change the condition
+            # to check the AD variable: if (allocated(z_ad)) then ...
+            if reverse and cond is not None:
+                has_dealloc = False
+                def _scan(n: Node):
+                    nonlocal has_dealloc
+                    if isinstance(n, Deallocate):
+                        has_dealloc = True
+                    for ch in n.iter_children():
+                        _scan(ch)
+                _scan(block)
+                if has_dealloc:
+                    cond = _cond_use_advar(cond)
             if reverse:
                 nodes_new = block.set_for_returnexitcycle(return_flags, exitcycle_flags)
                 if nodes_new:
