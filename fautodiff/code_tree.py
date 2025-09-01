@@ -299,7 +299,7 @@ class Node:
 
     def remove_child(self, child: "Node") -> None:
         """Remove ``child`` from this node. Override in subclasses.
-        
+
         Only ``Block`` overrides this to remove from its sequence of
         children. For other node types this is a no-op.
         """
@@ -1476,78 +1476,6 @@ class Block(Node):
         for child in self.iter_children():
             assigned_vars = child.check_initial(assigned_vars)
         return assigned_vars
-
-    def remove_redundant_allocates(self) -> None:
-        """Remove duplicate AD allocates within a block scope.
-
-        Intent and scope
-        - This is a conservative clean-up that only targets AD variables
-          (names ending with ``AD_SUFFIX``). Regular/non-AD allocations are left
-          untouched.
-        - The pass is block-local: it tracks allocation state as it walks the
-          statements in order, and resets that state when a matching
-          ``deallocate`` is seen.
-        - DO loop bodies are processed recursively with an independent scope so
-          that deduplication decisions are made within the loop only (as
-          required by the AD reverse-mode semantics).
-
-        What it does
-        - Drops a repeated ``allocate(x_ad)`` when no intervening
-          ``deallocate(x_ad)`` was encountered in the same scope.
-        - Keeps the first ``allocate(x_ad)`` and any regular (non-AD) allocates.
-        - Does not attempt control-flow aware correctness proofs; it simply
-          avoids modifying allocation patterns in complex branches and focuses
-          on obvious duplicates.
-        """
-
-        def _process_block(block: "Block") -> None:
-            allocated: set[str] = set()
-
-            # Iterate over a stable copy because we may remove nodes while
-            # traversing.
-            for stmt in list(block.iter_children()):
-                if isinstance(stmt, DoAbst):
-                    # Recurse with a fresh allocation scope for the loop body
-                    # (loop-local judgments only).
-                    _process_block(stmt._body)
-                    continue
-                if isinstance(stmt, OmpDirective) and stmt.body is not None:
-                    # Treat OpenMP bodies like nested blocks for this pass.
-                    _process_block(stmt.body)
-                    continue
-
-                if isinstance(stmt, Deallocate):
-                    # A deallocate resets the local allocation state only for
-                    # the deallocated AD variables.
-                    for v in stmt.vars:
-                        name = v.name_ext()
-                        if name.endswith(AD_SUFFIX) and name in allocated:
-                            allocated.remove(name)
-                    continue
-
-                if isinstance(stmt, Allocate):
-                    # Keep non-AD allocates as-is; drop duplicate AD allocates
-                    # (when already allocated and not deallocated yet).
-                    kept: list[OpVar] = []
-                    for v in stmt.vars:
-                        name = v.name_ext()
-                        if not name.endswith(AD_SUFFIX):
-                            kept.append(v)
-                            continue
-                        if name in allocated:
-                            # duplicate allocate for AD var; drop
-                            continue
-                        kept.append(v)
-                        allocated.add(name)
-                    if kept:
-                        stmt.vars = kept
-                    else:
-                        # Remove the entire allocate statement if no variables
-                        # remain after filtering.
-                        block.remove_child(stmt)
-                    continue
-
-        _process_block(self)
 
 
 @dataclass
@@ -2751,6 +2679,300 @@ class Routine(Node):
             ad_init=ad_init,
             ad_content=ad_content,
         )
+
+    def remove_redundant_allocates(self, mod_allocatable_vars: List[OpVar]) -> None:
+        """Remove redundant allocate/deallocate pairs.
+
+        Algorithm (top-down scan):
+        - Track allocatable/pointer variables declared in this routine and
+          combine with ``mod_allocatable_vars``.
+        - For each tracked variable, record allocate, accesses, deallocate
+          events in order. Treat events inside loops separately from the
+          surrounding context.
+        - When a variable is deallocated and later reallocated:
+            * if there was at least one access in-between, drop the
+              deallocate and the subsequent allocate;
+            * if there was no access, drop the prior allocate and that
+              deallocate.
+        - At the end of the scan, if a variable has no access since its last
+          allocate, drop that allocate and its following deallocate (if any).
+        - Avoid crossing loop boundaries when pairing events.
+        """
+
+        # Build the tracked variable name set
+        tracked: Set[str] = set()
+        for v in mod_allocatable_vars or []:
+            if v is None:
+                continue
+            tracked.add(v.name)
+            # Also track the AD counterpart
+            tracked.add(f"{v.name}{AD_SUFFIX}")
+        # Add routine-local allocatable/pointer variables
+        for node in self.decls.iter_children():
+            if isinstance(node, Declaration):
+                if node.allocatable or node.pointer:
+                    tracked.add(node.name)
+
+        if not tracked:
+            return
+
+        # State per (context, var)
+        # context is the tuple of do-loop IDs we are inside
+        class _State:
+            __slots__ = (
+                "allocated",
+                "alloc_node",
+                "dealloc_node",
+                "accessed",
+                "alloc_in_branch",
+            )
+
+            def __init__(self) -> None:
+                self.allocated: bool = False
+                self.alloc_node = None  # type: Optional[Allocate]
+                self.dealloc_node = None  # type: Optional[Deallocate]
+                self.accessed: bool = False
+                self.alloc_in_branch: bool = False
+
+        from collections import defaultdict
+
+        states: Dict[Tuple[int, ...], Dict[str, _State]] = defaultdict(dict)
+        removals_alloc: Dict[int, Set[str]] = defaultdict(set)  # node_id -> var names
+        removals_dealloc: Dict[int, Set[str]] = defaultdict(set)
+
+        def _get_state(ctx: Tuple[int, ...], vname: str) -> _State:
+            st = states[ctx].get(vname)
+            if st is None:
+                st = _State()
+                states[ctx][vname] = st
+            return st
+
+        # Traverse blocks in execution order: content -> ad_init -> ad_content
+        blocks: List[Block] = [self.content]
+        if self.ad_init is not None:
+            blocks.append(self.ad_init)
+        if self.ad_content is not None:
+            blocks.append(self.ad_content)
+
+        def traverse(node: Node, loop_ctx: Tuple[int, ...], branch_depth: int = 0) -> None:
+            # Loop contexts: treat Do/Forall bodies as separate contexts
+            if isinstance(node, (DoAbst, ForallBlock)):
+                # Enter loop context
+                inner_ctx = loop_ctx + (node.get_id(),)
+                for ch in node.iter_children():
+                    traverse(ch, inner_ctx, branch_depth)
+                return
+            # Branch constructs: increase branch depth for their bodies
+            if isinstance(node, (IfBlock, WhereBlock, SelectBlock)):
+                for ch in node.iter_children():
+                    traverse(ch, loop_ctx, branch_depth + 1)
+                return
+
+            # Recurse first into structured blocks to keep source order
+            for ch in node.iter_children():
+                traverse(ch, loop_ctx, branch_depth)
+
+            # Handle events on this node itself
+            if isinstance(node, Allocate):
+                for var in node.vars:
+                    vname = var.name
+                    if vname not in tracked:
+                        continue
+                    st = _get_state(loop_ctx, vname)
+                    if st.dealloc_node is not None:
+                        # We had ALLOC ... (maybe access) ... DEALLOC, now re-ALLOC
+                        if st.accessed:
+                            if st.alloc_in_branch:
+                                # Previous allocation was inside a branch; keep this ALLOC
+                                # (do not remove DEALLOC either), and reset state to this ALLOC
+                                st.alloc_node = node
+                                st.dealloc_node = None
+                                st.allocated = True
+                                st.accessed = False
+                                st.alloc_in_branch = branch_depth > 0
+                            else:
+                                # drop DEALLOC and this ALLOC; keep previous allocation active
+                                removals_dealloc[st.dealloc_node.get_id()].add(vname)
+                                removals_alloc[node.get_id()].add(vname)
+                                st.dealloc_node = None
+                                st.allocated = True
+                        else:
+                            # No access between: drop previous ALLOC & DEALLOC; keep this ALLOC
+                            if st.alloc_node is not None:
+                                removals_alloc[st.alloc_node.get_id()].add(vname)
+                            removals_dealloc[st.dealloc_node.get_id()].add(vname)
+                            st.alloc_node = node
+                            st.dealloc_node = None
+                            st.allocated = True
+                            st.accessed = False
+                            st.alloc_in_branch = branch_depth > 0
+                        continue
+                    if st.allocated:
+                        # Duplicate allocate without deallocate
+                        if st.alloc_in_branch:
+                            # Previous allocation under branch; keep this allocate as a safe re-init
+                            st.alloc_node = node
+                            st.dealloc_node = None
+                            st.allocated = True
+                            st.accessed = False
+                            st.alloc_in_branch = branch_depth > 0
+                        else:
+                            removals_alloc[node.get_id()].add(vname)
+                    else:
+                        st.allocated = True
+                        st.alloc_node = node
+                        st.accessed = False
+                        st.alloc_in_branch = branch_depth > 0
+                return
+
+            if isinstance(node, Deallocate):
+                for var in node.vars:
+                    vname = var.name
+                    if vname not in tracked:
+                        continue
+                    st = _get_state(loop_ctx, vname)
+                    # Do not pair deallocations that occur under a conditional branch;
+                    # they may not dominate later accesses. Be conservative.
+                    if branch_depth == 0:
+                        if st.allocated and st.dealloc_node is None:
+                            st.dealloc_node = node
+                            st.allocated = False
+                    else:
+                        # Duplicate or unmatched deallocate: leave as is (guards exist)
+                        pass
+                return
+
+            # Any other node: mark access if it refers to tracked vars
+            # Exclude Allocate/Deallocate nodes themselves from access logic
+            used = {v.name for v in node.collect_vars(without_index=True)}
+            for vname in used & tracked:
+                # mark access in current context
+                st = _get_state(loop_ctx, vname)
+                if st.alloc_node is not None and st.dealloc_node is None:
+                    st.accessed = True
+                # also propagate access to any ancestor contexts where the
+                # variable remains allocated (e.g., allocate outside a loop,
+                # access inside the loop)
+                if loop_ctx:
+                    for k in range(len(loop_ctx) - 1, -1, -1):
+                        anc = loop_ctx[:k]
+                        stp = _get_state(anc, vname)
+                        if stp.alloc_node is not None and stp.dealloc_node is None:
+                            stp.accessed = True
+
+        for b in blocks:
+            for stmt in b:
+                traverse(stmt, ())
+
+        # Finalize: drop allocate/deallocate with no access
+        for ctx, vmap in states.items():
+            for vname, st in vmap.items():
+                if st.dealloc_node is not None and not st.accessed:
+                    removals_alloc[st.alloc_node.get_id()].add(vname)
+                    removals_dealloc[st.dealloc_node.get_id()].add(vname)
+                # Keep a final unmatched allocate even if no access was detected
+                # inside this routine to avoid risking under-allocation when
+                # subsequent code (e.g., later phases) expects it.
+
+        # Apply removals: filter vars lists; drop empty nodes
+        def _apply(block: Block) -> None:
+            # Simple adjacent ALLOC-DEALLOC contraction at block level
+            children = list(block.iter_children())
+            i = 0
+            while i + 1 < len(children):
+                n1 = children[i]
+                n2 = children[i + 1]
+                if isinstance(n1, Allocate) and isinstance(n2, Deallocate):
+                    s1 = {v.name for v in n1.vars}
+                    s2 = {v.name for v in n2.vars}
+                    inter = s1 & s2
+                    if inter:
+                        n1.vars = [v for v in n1.vars if v.name not in inter]
+                        n2.vars = [v for v in n2.vars if v.name not in inter]
+                        if not n1.vars:
+                            try:
+                                block.remove_child(n1)
+                                children.pop(i)
+                                # do not advance i; re-evaluate at same index
+                                continue
+                            except ValueError:
+                                pass
+                        if not n2.vars:
+                            try:
+                                block.remove_child(n2)
+                                children.pop(i + 1)
+                            except ValueError:
+                                pass
+                i += 1
+
+            # Non-adjacent ALLOC ... (no access) ... DEALLOC contraction
+            children = list(block.iter_children())
+            i = 0
+            while i < len(children):
+                node = children[i]
+                if isinstance(node, Allocate) and node.vars:
+                    vnames = [v.name for v in node.vars]
+                    # find a matching deallocate later in the same block
+                    j = i + 1
+                    while j < len(children):
+                        cand = children[j]
+                        if isinstance(cand, Deallocate) and cand.vars:
+                            rm_names = []
+                            for vn in vnames:
+                                if any(v.name == vn for v in cand.vars):
+                                    # check if any access in (i+1, j)
+                                    accessed = False
+                                    for mid in children[i + 1 : j]:
+                                        if mid.has_reference_to(OpVar(vn)) or mid.has_assignment_to(OpVar(vn)):
+                                            accessed = True
+                                            break
+                                    if not accessed:
+                                        rm_names.append(vn)
+                            if rm_names:
+                                node.vars = [v for v in node.vars if v.name not in rm_names]
+                                cand.vars = [v for v in cand.vars if v.name not in rm_names]
+                                if not node.vars:
+                                    try:
+                                        block.remove_child(node)
+                                        children.pop(i)
+                                        # restart from previous index
+                                        i = max(i - 1, 0)
+                                    except ValueError:
+                                        pass
+                                    break
+                                if not cand.vars:
+                                    try:
+                                        block.remove_child(cand)
+                                        children.pop(j)
+                                    except ValueError:
+                                        pass
+                                    break
+                        j += 1
+                i += 1
+
+            to_remove_nodes: List[Node] = []
+            for node in list(block.iter_children()):
+                if isinstance(node, Allocate):
+                    rm = removals_alloc.get(node.get_id())
+                    if rm:
+                        node.vars = [v for v in node.vars if v.name not in rm]
+                    if not node.vars:
+                        to_remove_nodes.append(node)
+                elif isinstance(node, Deallocate):
+                    rm = removals_dealloc.get(node.get_id())
+                    if rm:
+                        node.vars = [v for v in node.vars if v.name not in rm]
+                    if not node.vars:
+                        to_remove_nodes.append(node)
+                # Recurse
+                for ch in node.iter_children():
+                    if isinstance(ch, Block):
+                        _apply(ch)
+            for n in to_remove_nodes:
+                block.remove_child(n)
+
+        for b in blocks:
+            _apply(b)
 
 
 @dataclass
@@ -4392,6 +4614,24 @@ class BranchBlock(Node):
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
         cond_blocks = []
+
+        def _cond_use_advar(cond: Optional[Operator]) -> Optional[Operator]:
+            # Replace allocated/associated(var) to allocated/associated(var_ad)
+            if cond is None:
+                return None
+            c = cond.deep_clone()
+            def _rewrite(op: Operator) -> Operator:
+                from .operators import OpFunc, OpLogic
+                if isinstance(op, OpFunc) and op.name in ("allocated", "associated"):
+                    args = list(op.args)
+                    if args and isinstance(args[0], OpVar):
+                        args[0] = args[0].add_suffix(AD_SUFFIX)
+                    return OpFunc(op.name, args=args)
+                if isinstance(op, OpLogic):
+                    return OpLogic(op.op, args=[_rewrite(op.args[0]), _rewrite(op.args[1])])
+                return op
+            return _rewrite(c)
+
         for cond, block in self.cond_blocks:
             nodes = block.generate_ad(
                 saved_vars,
@@ -4404,6 +4644,20 @@ class BranchBlock(Node):
                 return_flags,
                 warnings,
             )
+            # If reverse-mode and original branch is a deallocate-guard like
+            # if (allocated(z)) then ... deallocate(z) ..., change the condition
+            # to check the AD variable: if (allocated(z_ad)) then ...
+            if reverse and cond is not None:
+                has_dealloc = False
+                def _scan(n: Node):
+                    nonlocal has_dealloc
+                    if isinstance(n, Deallocate):
+                        has_dealloc = True
+                    for ch in n.iter_children():
+                        _scan(ch)
+                _scan(block)
+                if has_dealloc:
+                    cond = _cond_use_advar(cond)
             if reverse:
                 nodes_new = block.set_for_returnexitcycle(return_flags, exitcycle_flags)
                 if nodes_new:

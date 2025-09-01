@@ -1463,6 +1463,141 @@ def _generate_ad_subroutine(
                 return Block(children)
 
             fw_block = _prune_fw_allocates_simple(fw_block, ad_block)
+
+            # In reverse mode, the forward block (fw_block) may reference
+            # derivative arrays (e.g., z_ad) before the reverse AD logic
+            # allocates them. Proactively allocate required AD arrays here
+            # using sizes derived from the original forward allocate/deallocate
+            # indices captured in ad_block.
+            def _collect_dealloc_indices(node: Node) -> dict[str, Any]:
+                idx_map: dict[str, Any] = {}
+                # DFS over all nodes; capture deallocate indices for base vars
+                if isinstance(node, Deallocate):
+                    for v in node.vars:
+                        name = v.name
+                        if getattr(node, "index", None) is not None and name not in idx_map:
+                            idx_map[name] = node.index
+                for ch in getattr(node, "iter_children", lambda: [])():
+                    idx_map.update(_collect_dealloc_indices(ch))
+                return idx_map
+
+            def _collect_ad_allocate_indices(node: Node) -> dict[str, Any]:
+                idx_map: dict[str, Any] = {}
+                if isinstance(node, Allocate):
+                    for v in node.vars:
+                        if v.name.endswith(AD_SUFFIX) and v.index is not None and v.name not in idx_map:
+                            idx_map[v.name] = v.index
+                for ch in getattr(node, "iter_children", lambda: [])():
+                    idx_map.update(_collect_ad_allocate_indices(ch))
+                return idx_map
+
+            def _collect_required_ad_vars(node: Node) -> set[str]:
+                req: set[str] = set()
+                # Scan all variables referenced anywhere in fw_block
+                for var in node.collect_vars():
+                    if getattr(var, "name", None) and var.name.endswith(AD_SUFFIX):
+                        req.add(var.name)
+                for ch in getattr(node, "iter_children", lambda: [])():
+                    req |= _collect_required_ad_vars(ch)
+                return req
+
+            if reverse and not fw_block.is_effectively_empty():
+                req_ad = _collect_required_ad_vars(fw_block)
+                # Map base var -> index from dealloc nodes (reverse of forward alloc)
+                dealloc_idx = _collect_dealloc_indices(ad_block)
+                ad_alloc_idx = _collect_ad_allocate_indices(ad_block)
+                pre_alloc = Block([])
+                mod_var_names = [v.name for v in mod_vars]
+                for name_ad in sorted(req_ad):
+                    decl = subroutine.decls.find_by_name(name_ad)
+                    if decl is None:
+                        continue
+                    if not decl.allocatable and not decl.pointer:
+                        continue
+                    base = name_ad.removesuffix(AD_SUFFIX)
+                    index = dealloc_idx.get(base)
+                    if index is None:
+                        index = ad_alloc_idx.get(name_ad)
+                    var_ad = OpVar(name_ad)
+                    if index is None:
+                        # Without shape information, we cannot safely allocate
+                        # an allocatable array here.
+                        continue
+                    var_ad = var_ad.change_index(index)
+                    # allocate guarded for module/pointer cases
+                    is_mod = base in mod_var_names
+                    pre_alloc.append(Allocate._add_if(Allocate([var_ad]), var_ad, is_mod))
+                    # Zero-initialize here so later duplicate clears can be dropped
+                    pre_alloc.append(ClearAssignment(OpVar(name_ad)))
+                if not pre_alloc.is_effectively_empty():
+                    fw_block.insert_begin(pre_alloc)
+
+                # Remove redundant ClearAssignment for these AD vars from the
+                # reverse block since we've already zeroed them in fw_block.
+                def _prune_clears(node: Node, names: set[str]) -> None:
+                    if isinstance(node, Block):
+                        to_remove = []
+                        for ch in list(node.iter_children()):
+                            # recurse
+                            _prune_clears(ch, names)
+                            # remove clear of pre-zeroed ad var
+                            if isinstance(ch, ClearAssignment):
+                                v = ch.lhs
+                                if v is not None and v.name in names:
+                                    to_remove.append(ch)
+                        for n in to_remove:
+                            node.remove_child(n)
+                    else:
+                        for ch in getattr(node, 'iter_children', lambda: [])():
+                            _prune_clears(ch, names)
+
+                if req_ad:
+                    _prune_clears(ad_block, req_ad)
+
+                # After removing inner clears, some conditional blocks that were
+                # generated to guard clears may now be empty. Drop such empty
+                # branches to avoid emitting:
+                #   if (allocated(z_ad)) then
+                #   end if
+                def _drop_empty_branches(node: Node) -> None:
+                    if isinstance(node, Block):
+                        to_remove = []
+                        for ch in list(node.iter_children()):
+                            _drop_empty_branches(ch)
+                            from .code_tree import IfBlock, WhereBlock, SelectBlock
+                            if isinstance(ch, IfBlock):
+                                # remove empty bodies
+                                ch.cond_blocks = [
+                                    (cond, body)
+                                    for cond, body in ch.cond_blocks
+                                    if not body.is_effectively_empty()
+                                ]
+                                if len(ch.cond_blocks) == 0:
+                                    to_remove.append(ch)
+                            elif isinstance(ch, WhereBlock):
+                                ch.cond_blocks = [
+                                    (cond, body)
+                                    for cond, body in ch.cond_blocks
+                                    if not body.is_effectively_empty()
+                                ]
+                                if len(ch.cond_blocks) == 0:
+                                    to_remove.append(ch)
+                            elif isinstance(ch, SelectBlock):
+                                ch.cond_blocks = [
+                                    (conds, body)
+                                    for conds, body in ch.cond_blocks
+                                    if not body.is_effectively_empty()
+                                ]
+                                if len(ch.cond_blocks) == 0:
+                                    to_remove.append(ch)
+                        for n in to_remove:
+                            node.remove_child(n)
+                    else:
+                        for ch in getattr(node, 'iter_children', lambda: [])():
+                            _drop_empty_branches(ch)
+
+                _drop_empty_branches(ad_block)
+
             if not fw_block.is_effectively_empty():
                 subroutine.content.extend(fw_block)
 
@@ -1749,12 +1884,6 @@ def _generate_ad_subroutine(
         targets, mod_vars_all, decl_map=subroutine.decl_map, base_targets=targets
     )
 
-    # After pruning, remove duplicate and unused allocate statements.
-    # This is particularly important for reverse mode AD where multiple
-    # allocates for the same variable may appear.
-    # Note: duplicate/unused allocation pruning is implemented in Block but
-    # currently not invoked here to preserve expected outputs in tests.
-
     # Remove arguments that are no longer used after pruning
     used = {v.name for v in subroutine.content.collect_vars()}
     used.update(v.name for v in subroutine.ad_init.collect_vars())
@@ -1776,6 +1905,18 @@ def _generate_ad_subroutine(
             if subroutine.decl_map is not None and name in subroutine.decl_map:
                 del subroutine.decl_map[name]
             subroutine.args.remove(name)
+
+    # After pruning, remove duplicate and unused allocate statements.
+    # This is particularly important for reverse mode AD where multiple
+    # allocates for the same variable may appear.
+    #
+    # Collect module/use variables that are allocatable or pointer so that
+    # the routine-level pass can reason about externally managed variables.
+    mod_allocatable_vars = []
+    for v in mod_vars:
+        if getattr(v, "allocatable", False) or getattr(v, "pointer", False):
+            mod_allocatable_vars.append(v)
+    subroutine.remove_redundant_allocates(mod_allocatable_vars)
 
     # update routine_map with pruned argument information
     arg_info = routine_map.get(routine_org.name)
@@ -1836,6 +1977,48 @@ def _generate_ad_subroutine(
         routine_map,
         reverse=reverse,
     )
+
+    # Final cleanup: drop any empty conditional blocks that may have been
+    # left after previous pruning passes (e.g., guards around removed clears).
+    def _drop_empty_branches_global(node: Node) -> None:
+        if isinstance(node, Block):
+            to_remove = []
+            for ch in list(node.iter_children()):
+                _drop_empty_branches_global(ch)
+                from .code_tree import IfBlock, WhereBlock, SelectBlock
+                if isinstance(ch, IfBlock):
+                    ch.cond_blocks = [
+                        (cond, body)
+                        for cond, body in ch.cond_blocks
+                        if not body.is_effectively_empty()
+                    ]
+                    if len(ch.cond_blocks) == 0:
+                        to_remove.append(ch)
+                elif isinstance(ch, WhereBlock):
+                    ch.cond_blocks = [
+                        (cond, body)
+                        for cond, body in ch.cond_blocks
+                        if not body.is_effectively_empty()
+                    ]
+                    if len(ch.cond_blocks) == 0:
+                        to_remove.append(ch)
+                elif isinstance(ch, SelectBlock):
+                    ch.cond_blocks = [
+                        (conds, body)
+                        for conds, body in ch.cond_blocks
+                        if not body.is_effectively_empty()
+                    ]
+                    if len(ch.cond_blocks) == 0:
+                        to_remove.append(ch)
+            for n in to_remove:
+                node.remove_child(n)
+        else:
+            for ch in getattr(node, "iter_children", lambda: [])():
+                _drop_empty_branches_global(ch)
+
+    for blk in (subroutine.content, subroutine.ad_init, subroutine.ad_content):
+        if blk is not None:
+            _drop_empty_branches_global(blk)
 
     return subroutine, uses_pushpop, called_mods
 
