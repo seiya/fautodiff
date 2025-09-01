@@ -695,7 +695,47 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad(
                 str(src_path), warn=False, search_dirs=["fortran_modules"]
             )
-            self.assertIn("MPI_Send_rev_ad", generated)
+        self.assertIn("MPI_Send_rev_ad", generated)
+
+    def test_reverse_dealloc_guard_deduplicated(self):
+        code_tree.Node.reset()
+        import textwrap
+        import re
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module m
+              real, allocatable :: z(:)
+            contains
+              subroutine init()
+                allocate(z(3))
+              end subroutine init
+              subroutine foo()
+                if (allocated(z)) then
+                  deallocate(z)
+                end if
+              end subroutine foo
+            end module m
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            p = Path(tmp) / "m.f90"
+            p.write_text(src)
+            generated = generator.generate_ad(str(p), warn=False, mode="reverse")
+            # No nested duplicate guard of the same condition inside the block
+            self.assertIsNone(
+                re.search(
+                    r"if \.not\. allocated\(z_ad\) then[\s\S]*?if \.not\. allocated\(z_ad\) then",
+                    generated,
+                )
+            )
+            # At least one guard should exist for safety
+            guards = re.findall(r"if \(\.not\. allocated\(z_ad\)\) then", generated)
+            self.assertGreaterEqual(len(guards), 1)
+            # Ensure allocation of z_ad with mold=z exists
+            self.assertRegex(generated, r"allocate\(z_ad(?:\([^)]*\))?, mold=z\)")
 
 
 def _make_example_test(src: Path):
