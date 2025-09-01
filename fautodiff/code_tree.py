@@ -4644,20 +4644,57 @@ class BranchBlock(Node):
                 return_flags,
                 warnings,
             )
-            # If reverse-mode and original branch is a deallocate-guard like
-            # if (allocated(z)) then ... deallocate(z) ..., change the condition
-            # to check the AD variable: if (allocated(z_ad)) then ...
+            # If reverse-mode and the original branch is a deallocate-guard like
+            #   if (allocated(z)) then
+            #     ...
+            #     deallocate(z)
+            #   end if
+            # then the reverse block will allocate the AD variable. In that case,
+            # the condition must be inverted and applied to the AD variable so that
+            # we emit e.g.:
+            #   if (.not. allocated(z_ad)) then
+            #     allocate(z_ad)
+            #   end if
             if reverse and cond is not None:
+                # Only transform conditions that are pure allocate/associated guards
+                # for variables that are actually deallocated within this block.
                 has_dealloc = False
+                dealloc_names: set[str] = set()
+
                 def _scan(n: Node):
                     nonlocal has_dealloc
                     if isinstance(n, Deallocate):
                         has_dealloc = True
+                        for v in n.vars:
+                            # base variable name (without AD suffix)
+                            name = v.name
+                            dealloc_names.add(name)
                     for ch in n.iter_children():
                         _scan(ch)
+
                 _scan(block)
+
+                def _collect_guard_vars(op: Operator) -> tuple[bool, set[str]]:
+                    from .operators import OpFunc, OpLogic, OpVar as _OpVar
+                    # returns (is_pure_guard, var_names)
+                    if isinstance(op, OpFunc) and op.name in ("allocated", "associated"):
+                        args = list(op.args)
+                        if not args or not isinstance(args[0], _OpVar):
+                            return (False, set())
+                        return (True, {args[0].name})
+                    if isinstance(op, OpLogic):
+                        ok1, s1 = _collect_guard_vars(op.args[0])
+                        ok2, s2 = _collect_guard_vars(op.args[1])
+                        return (ok1 and ok2, s1 | s2)
+                    return (False, set())
+
                 if has_dealloc:
-                    cond = _cond_use_advar(cond)
+                    is_guard, vars_in_cond = _collect_guard_vars(cond)
+                    if is_guard and vars_in_cond and vars_in_cond.issubset(dealloc_names):
+                        from .operators import OpNot
+                        # Replace to use AD vars and invert for allocation in reverse
+                        cond = _cond_use_advar(cond)
+                        cond = OpNot([cond])
             if reverse:
                 nodes_new = block.set_for_returnexitcycle(return_flags, exitcycle_flags)
                 if nodes_new:
