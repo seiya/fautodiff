@@ -823,6 +823,53 @@ class TestGenerator(unittest.TestCase):
         pat = r"field_ad\(istart:iend\s*,\s*jend\s*-\s*ihalo\s*\+\s*1\s*:\s*jend\)\s*=\s*send_ad\(\s*:\s*,\s*:\s*\)\s*\+\s*field_ad\(istart:iend\s*,\s*jend\s*-\s*ihalo\s*\+\s*1\s*:\s*jend\)"
         self.assertIsNotNone(_re.search(pat, generated))
 
+    def test_reverse_slice_clear_minimal(self):
+        """Minimal reproducer: ensure slice clears are kept in reverse mode.
+
+        Checks that repeated overwrites of a slice of htmp generate
+        corresponding htmp_ad slice clears and they are not pruned.
+        """
+        code_tree.Node.reset()
+        import re
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        # Compact minimal program: overwrite a slice three times, then use it
+        src = textwrap.dedent(
+            """
+            module m
+            contains
+              subroutine s(n, dt, h, k1, k2, k3, y)
+                integer, intent(in) :: n
+                real, intent(in) :: dt
+                real, intent(in) :: h(n), k1(n), k2(n), k3(n)
+                real, intent(out) :: y
+                real :: htmp(n)
+
+                htmp(:) = h(:) + dt*k1(:)
+                htmp(:) = h(:) + dt*k2(:)
+                htmp(:) = h(:) + dt*k3(:)
+                y = sum(htmp)
+              end subroutine s
+            end module m
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            p = Path(tmp) / "mini.f90"
+            p.write_text(src)
+            generated = generator.generate_ad(
+                str(p), warn=False, search_dirs=[tmp], write_fadmod=False, mode="reverse"
+            )
+
+        self.assertIn("subroutine s_rev_ad", generated)
+        clears = re.findall(r"htmp_ad\s*\(.*?\)\s*=\s*0\.0", generated)
+        # In reverse, we clear after the last two overwrites when traversing
+        # statements backward; the earliest overwrite need not clear again.
+        self.assertGreaterEqual(
+            len(clears), 2, f"Expected >=2 htmp_ad slice clears, found {len(clears)}.\n\n{generated}"
+        )
+
 
 def _make_example_test(src: Path):
     def test(self):
