@@ -241,7 +241,6 @@ contains
         z(i,j) = z_save_62_ad
         x_ad(i,j) = z_ad(i,j) + x_ad(i,j) ! z(i,j) = x(i,j) + scalar
         scalar_ad = z_ad(i,j) + scalar_ad ! z(i,j) = x(i,j) + scalar
-        z_ad(i,j) = 0.0 ! z(i,j) = x(i,j) + scalar
         ary_ad(i,j) = scalar_ad * z(i,j) ! scalar = ary(i,j) * z(i,j)
         z_ad(i,j) = scalar_ad * ary(i,j) ! scalar = ary(i,j) * z(i,j)
         ary(i,j) = ary_save_60_ad

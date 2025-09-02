@@ -783,6 +783,46 @@ class TestGenerator(unittest.TestCase):
         # Order: compute size -> allocate a_ad
         self.assertLess(idx_assign, idx_alloc_ad)
 
+    def test_reverse_accumulate_on_conditional_slice(self):
+        # Ensure reverse AD accumulates into intent(inout) gradients inside branches
+        code_tree.Node.reset()
+        import textwrap
+        from unittest.mock import patch
+
+        import fautodiff.parser as parser
+
+        src = textwrap.dedent(
+            """
+            module halo
+            contains
+              subroutine exchange(istart, iend, jstart, jend, ihalo, nbr, field)
+                integer, intent(in) :: istart, iend, jstart, jend, ihalo, nbr
+                real, intent(inout) :: field(:,:)
+                real, allocatable :: send(:,:)
+                integer :: nx
+
+                nx = iend - istart + 1
+                allocate(send(nx, ihalo))
+                if (nbr /= -1) then
+                  send(:,:) = field(istart:iend, jend-ihalo+1:jend)
+                end if
+                if (allocated(send)) then
+                  deallocate(send)
+                end if
+              end subroutine exchange
+            end module halo
+            """
+        )
+
+        modules = parser.parse_src(src)
+        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
+            generated = generator.generate_ad("halo.f90", warn=False, mode="reverse")
+
+        # Accumulation into field_ad slice inside the conditional (ignore whitespace)
+        import re as _re
+        pat = r"field_ad\(istart:iend\s*,\s*jend\s*-\s*ihalo\s*\+\s*1\s*:\s*jend\)\s*=\s*send_ad\(\s*:\s*,\s*:\s*\)\s*\+\s*field_ad\(istart:iend\s*,\s*jend\s*-\s*ihalo\s*\+\s*1\s*:\s*jend\)"
+        self.assertIsNotNone(_re.search(pat, generated))
+
 
 def _make_example_test(src: Path):
     def test(self):

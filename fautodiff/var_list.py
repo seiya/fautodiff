@@ -82,19 +82,44 @@ class VarList:
         return False
 
     def __str__(self) -> str:
-        """Human readable representation used for debugging."""
+        """Human readable representation used for debugging.
 
-        ary = []
-        for var in self:
-            ary.append(str(var))
-        res = ", ".join(ary)
+        Render full-array coverage explicitly as ':' for each dimension so
+        that strings like 'v(:,:)' appear even when the internal representation
+        uses ``None`` for entire coverage.
+        """
 
-        # Append information about excluded indices if present.
-        ary = []
-        for var in self.iter_exclude():
-            ary.append(str(var))
-        if ary:
-            res = f"{res}, exclude: {', '.join(ary)}"
+        def _format(name: str, index: Optional[AryIndex]) -> str:
+            # For explicit indices, reconstruct nested variable for accurate printing
+            if index is not None:
+                var = self._get_var(name, index, self.dims.get(name, [0]))
+                return str(var)
+            # For full coverage (None), render ':' per dimension at each nesting level
+            dims_counts = list(self.dims.get(name, [0]))
+            parts = name.split("%")
+            out = []
+            for i, part in enumerate(parts):
+                out.append(part)
+                if i < len(dims_counts):
+                    cnt = dims_counts[i]
+                    if cnt and cnt > 0:
+                        out.append("(" + ",".join([":"] * cnt) + ")")
+                if i < len(parts) - 1:
+                    out.append("%")
+            return "".join(out)
+
+        parts: List[str] = []
+        for name in self.names():
+            for index in self.vars[name]:
+                parts.append(_format(name, index))
+        res = ", ".join(parts)
+
+        excl: List[str] = []
+        for name in sorted(self.exclude.keys()):
+            for index in self.exclude[name]:
+                excl.append(_format(name, index))
+        if excl:
+            res = f"{res}, exclude: {', '.join(excl)}"
         return res
 
     def __len__(self) -> int:
@@ -277,12 +302,13 @@ class VarList:
             self._update_dims(name, var.ndims_ext())
 
         # If ``var`` references the entire array (all dimensions are ``:``)
-        # then any previously recorded indices can be replaced by a single
-        # ``None`` entry representing the full variable.
+        # then record a single ``None`` entry representing the full variable.
+        # Using ``None`` ensures fast membership checks (treat as always-covered)
+        # and avoids conservative failures when bounds include symbolic values.
         if isinstance(var_index, AryIndex) and all(
             AryIndex.dim_is_entire(dim) for dim in var_index
         ):
-            self.vars[name] = [var_index]
+            self.vars[name] = [None]
             if name in self.exclude:
                 del self.exclude[name]
             return
@@ -720,8 +746,13 @@ class VarList:
             if index in exclude:
                 exclude.remove(index)
             else:
-                var = self._get_var(name, index, self.dims[name])
-                self.push(var, not_reorganize=True)
+                # Preserve full coverage without clearing excludes
+                if index is None:
+                    if None not in self.vars[name]:
+                        self.vars[name].append(None)
+                else:
+                    var = self._get_var(name, index, self.dims[name])
+                    self.push(var, not_reorganize=True)
         if exclude:
             self.exclude[name] = exclude
         elif name in self.exclude:
