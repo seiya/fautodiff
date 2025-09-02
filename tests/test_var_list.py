@@ -214,7 +214,7 @@ class TestVarList(unittest.TestCase):
         vl.add_exclude(OpVar("b", index=AryIndex([OpInt(2)])))
         # Pushing entire array b(:) should replace index list and clear exclude
         vl.push(OpVar("b", index=AryIndex([OpRange([None])])))
-        self.assertEqual(vl["b"], [AryIndex([OpRange([None])])])
+        self.assertEqual(vl["b"], [None])
         self.assertNotIn("b", vl.exclude)
 
 
