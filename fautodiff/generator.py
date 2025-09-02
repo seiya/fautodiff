@@ -1637,7 +1637,11 @@ def _generate_ad_subroutine(
                             _prune_clears(c, names)
                             if isinstance(c, ClearAssignment):
                                 v = c.lhs
-                                if v is not None and v.name in names:
+                                # Only prune clears that target the whole variable.
+                                # Slice clears (e.g., var_ad(i:j, k:l) = 0) are
+                                # required in reverse mode between overwrites and
+                                # must not be removed.
+                                if v is not None and v.index is None and v.name in names:
                                     to_remove.append(c)
                         for n in to_remove:
                             node.remove_child(n)
