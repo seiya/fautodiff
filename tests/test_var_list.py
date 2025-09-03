@@ -4,11 +4,174 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff.operators import AryIndex, OpInt, OpNeg, OpRange, OpVar, VarType
+from fautodiff.operators import AryIndex, OpInt, OpNeg, OpRange, OpVar, VarType, Operator
 from fautodiff.var_list import VarList
 
 
+def v(name, *idx_dims) -> OpVar:
+    """Helper to build OpVar with optional AryIndex from dims list.
+
+    Each element of idx_dims can be:
+    - None: entire dimension
+    - int: fixed index
+    - tuple: (start, end[, step]) where items may be int, OpVar or Operator
+    - OpVar: fixed index symbolically
+    - Operator: fixed index symbolically
+    """
+    if idx_dims:
+        dims = []
+        for d in idx_dims:
+            if d is None:
+                dims.append(None)
+            elif isinstance(d, int):
+                dims.append(OpInt(d))
+            elif isinstance(d, tuple):
+                def to_op(item):
+                    if isinstance(item, Operator):
+                        return item
+                    if item is None:
+                        return None
+                    if isinstance(item, int):
+                        return OpInt(item)
+                    raise ValueError(f"invalid item in tuple for idx dim: {item}")
+
+                start = to_op(d[0])
+                end = to_op(d[1])
+                if len(d) > 2:
+                    step = to_op(d[2])
+                else:
+                    step = None
+                dims.append(OpRange([start, end, step]))
+            elif isinstance(d, Operator):
+                dims.append(d)
+            else:
+                raise ValueError(f"invalid idx dim: {d}")
+        index = AryIndex(dims)
+    else:
+        index = None
+
+    # A bit of a hack to give it a type for some tests
+    var_type = VarType("real")
+
+    # Handle derived types
+    if "%" in name:
+        raise ValueError("Derived types not supported")
+    else:
+        var = OpVar(name, index=index, var_type=var_type)
+
+    # Set dims for multi-dim arrays
+    if index:
+        var.dims = (":",) * len(index)
+
+    return var
+
+
 class TestVarList(unittest.TestCase):
+    def test_entire_contains_slices(self):
+        vl = VarList()
+        vl.push(v("A", (1, 10), (1, 5)))
+        self.assertIn(v("A", (1, 10), (1, 5)), vl)
+        # Mark entire coverage on second dim, still contains
+        vl.push(v("A", (1, 10), None))
+        self.assertIn(v("A", (3, 7), (2, 4)), vl)
+
+    def test_push_merge_adjacent_int_and_range(self):
+        vl = VarList()
+        vl.push(v("B", (1, 10)))
+        vl.push(v("B", 11))  # adjacent int -> should merge conservatively
+        self.assertIn(v("B", (1, 11)), vl)
+
+    def test_remove_int_from_range(self):
+        vl = VarList()
+        vl.push(v("C", (1, 2)))
+        vl.remove(v("C", 2))
+        self.assertEqual(str(vl), "C(1)")
+
+    def test_remove_subslice_splits(self):
+        vl = VarList()
+        vl.push(v("C", (1, 10)))
+        vl.remove(v("C", (3, 7)))
+        # Remaining should still include outer edges
+        self.assertIn(v("C", 1), vl)
+        self.assertIn(v("C", 10), vl)
+        # Removed center no longer covered
+        self.assertNotIn(v("C", 5), vl)
+
+    def test_contains_superset_is_not_contained(self):
+        # Storing a subrange must not imply containment of a larger superset
+        vl = VarList()
+        vl.push(v("D", (2, 8)))
+        # exact is contained
+        self.assertIn(v("D", (2, 8)), vl)
+        # wider range is considered contained partially
+        self.assertIn(v("D", (1, 10)), vl)
+        # full coverage is also considered contained partially
+        self.assertIn(v("D", None), vl)
+
+    def test_contains_scalar_vs_range(self):
+        # Storing a single index imply containment of a surrounding range
+        vl = VarList()
+        vl.push(v("E", 5))
+        self.assertIn(v("E", 5), vl)
+        self.assertIn(v("E", (1, 10)), vl)
+
+    def test_vars_in(self):
+        vl = VarList()
+        v1 = OpVar("x", index=[OpVar("i")])
+        v2 = OpVar("x", index=[OpVar("j")])
+        vl.push(v1)
+        self.assertIn(v1, vl)
+        self.assertIn(v2, vl)
+
+    def test_expression_bounds_exact_match(self):
+        ihalo = OpVar("ihalo")
+        jend = OpVar("jend")
+        vl = VarList()
+        # push expression range exactly
+        vl.push(v("F", (jend - ihalo + OpInt(1), jend)))
+        # exact same AST should be found
+        self.assertIn(v("F", (jend - ihalo + OpInt(1), jend)), vl)
+
+    def test_expression_bounds_uncertain_overlap(self):
+        ihalo = OpVar("ihalo")
+        jend = OpVar("jend")
+        vl = VarList()
+        vl.push(v("G", (jend - ihalo + OpInt(1), jend)))
+        # Overlap with (jend+1:je) is uncertain -> should not claim containment
+        je = OpVar("je")
+        self.assertNotIn(v("G", (jend + OpInt(1), je)), vl)
+
+    def test_remove_expression_exact(self):
+        ihalo = OpVar("ihalo")
+        jend = OpVar("jend")
+        vl = VarList()
+        expr = v("H", (jend - ihalo + OpInt(1), jend))
+        vl.push(expr)
+        vl.remove(expr)
+        # removal of exact range should clear entry
+        self.assertNotIn(expr, vl)
+
+    def test_negative_stride_normalized_in_push(self):
+        i0 = OpInt(1)
+        i5 = OpInt(5)
+        # Build (5:1:-1) to be normalized into (1:5)
+        vl = VarList()
+        vl.push(OpVar("S", index=AryIndex([OpRange([i5, i0, OpInt(-1)])])))
+        self.assertIn(v("S", (1, 5)), vl)
+
+    def test_push_and_contains_scalar(self):
+        vl = VarList()
+        vl.push(v("A"))
+        self.assertIn(v("A"), vl)
+        self.assertNotIn(v("B"), vl)
+
+    def test_push_and_contains_full_array(self):
+        vl = VarList()
+        vl.push(v("A", None))
+        self.assertIn(v("A", None), vl)
+        self.assertIn(v("A", 5), vl)
+        self.assertIn(v("A", (1, 10)), vl)
+
     def test_generate_different_vars(self):
         i = OpVar("i")
         j1 = OpVar("j1")
@@ -82,7 +245,8 @@ class TestVarList(unittest.TestCase):
         vref = OpVar("vref", index=[n])
         var = OpVar("ary", index=[m], ref_var=vref)
         vl = VarList([var])
-        self.assertIn("vref%ary", vl.names())
+        v = OpVar("ary", ref_var=OpVar("vref"))
+        self.assertIn(v.name_ext(), vl.names())
         self.assertIn(var, vl)
         self.assertEqual(str(vl), "vref(n)%ary(m)")
         self.assertEqual(AryIndex([n, m]), vl.vars["vref%ary"][0])
@@ -121,7 +285,7 @@ class TestVarList(unittest.TestCase):
         vl = VarList()
         vl.push(v1)
         vl.push(v2)
-        self.assertEqual(str(vl), "v(0,1:ny), v(1:nx,1:ny)")
+        self.assertEqual(str(vl), "v(0:nx,1:ny)")
         v3 = OpVar("v", index=[None, None])
         vl.push(v3)
         self.assertEqual(str(vl), "v(:,:)")
@@ -216,6 +380,189 @@ class TestVarList(unittest.TestCase):
         vl.push(OpVar("b", index=AryIndex([OpRange([None])])))
         self.assertEqual(vl["b"], [None])
         self.assertNotIn("b", vl.exclude)
+
+    def test_merge_adjacent_integers(self):
+        vl = VarList()
+        vl.push(v("A", 1))
+        vl.push(v("A", 3))
+        vl.push(v("A", 2))
+        self.assertIn(v("A", (1, 3)), vl)
+        self.assertEqual(len(vl.vars["A"]), 1)
+
+    def test_merge_adjacent_ranges(self):
+        vl = VarList()
+        vl.push(v("A", (1, 5)))
+        vl.push(v("A", (6, 10)))
+        self.assertIn(v("A", (1, 10)), vl)
+        self.assertEqual(len(vl.vars["A"]), 1)
+
+    def test_merge_overlapping_ranges(self):
+        vl = VarList()
+        vl.push(v("A", (1, 7)))
+        vl.push(v("A", (5, 12)))
+        self.assertIn(v("A", (1, 12)), vl)
+        self.assertEqual(len(vl.vars["A"]), 1)
+
+    def test_merge_integer_into_range(self):
+        vl = VarList()
+        vl.push(v("A", (2, 5)))
+        vl.push(v("A", 1))
+        self.assertIn(v("A", (1, 5)), vl)
+        vl.push(v("A", 6))
+        self.assertIn(v("A", (1, 6)), vl)
+
+    def test_remove_from_range(self):
+        vl = VarList()
+        vl.push(v("A", (1, 10)))
+        vl.remove(v("A", 5))
+        self.assertNotIn(v("A", 5), vl)
+        self.assertIn(v("A", 4), vl)
+        self.assertIn(v("A", 6), vl)
+        self.assertIn(v("A", (1, 4)), vl)
+        self.assertIn(v("A", (6, 10)), vl)
+        self.assertEqual(len(vl.vars["A"]), 2)
+
+    def test_remove_sub_range(self):
+        vl = VarList()
+        vl.push(v("A", (1, 10)))
+        vl.remove(v("A", (4, 6)))
+        self.assertNotIn(v("A", 5), vl)
+        self.assertIn(v("A", 3), vl)
+        self.assertIn(v("A", 7), vl)
+        self.assertIn(v("A", (1, 3)), vl)
+        self.assertIn(v("A", (7, 10)), vl)
+
+    def test_remove_from_ends_of_range(self):
+        vl = VarList()
+        vl.push(v("A", (1, 10)))
+        vl.remove(v("A", 1))
+        self.assertIn(v("A", (2, 10)), vl)
+        vl.remove(v("A", 10))
+        self.assertIn(v("A", (2, 9)), vl)
+
+    def test_exclude_from_full_coverage(self):
+        vl = VarList()
+        vl.push(v("A", None))
+        vl.remove(v("A", 5))
+        self.assertIn(v("A", 1), vl)
+        self.assertNotIn(v("A", 5), vl)
+        self.assertIn(v("A", 10), vl)
+        self.assertIn(v("A", 5), vl.iter_exclude())
+
+    def test_push_overwrites_exclude(self):
+        vl = VarList()
+        vl.push(v("A", None))
+        vl.remove(v("A", 5))
+        self.assertNotIn(v("A", 5), vl)
+        vl.push(v("A", 5))
+        self.assertIn(v("A", 5), vl)
+        self.assertNotIn(v("A", 5), vl.iter_exclude())
+
+    def test_multi_dimensional(self):
+        vl = VarList()
+        vl.push(v("A", (1, 5), 1))
+        vl.push(v("A", (6, 10), 1))
+        self.assertIn(v("A", (1, 10), 1), vl)
+        self.assertNotIn(v("A", (1, 10), 2), vl)
+
+    def test_derived_type(self):
+        vl = VarList()
+        va = v("a", (1, 10))
+        va.ref_var = v("s")
+        vl.push(va)
+        v1 = v("a", 5); v1.ref_var = v("s")
+        self.assertIn(v1, vl)
+        v2 = v("b", 5); v2.ref_var = v("s")
+        self.assertNotIn(v2, vl)
+
+    def test_range_with_variables_containment(self):
+        n = OpVar("n")
+        m = OpVar("m")
+        vl = VarList()
+        vl.push(v("A", (1, n)))
+
+        # With conservative check, we can't know if 5 is in (1,n)
+        self.assertIn(v("A", 5), vl)
+        self.assertIn(v("A", (1, 5)), vl)
+        self.assertIn(v("A", (1, m)), vl)
+        # But exact match should work
+        self.assertIn(v("A", (1, n)), vl)
+
+    def test_range_with_variables_removal(self):
+        n = OpVar("n")
+        vl = VarList()
+        vl.push(v("A", (1, 10)))
+        vl.remove(v("A", (1, n)))
+
+        # Since we can't determine the range of n, it should be excluded
+        self.assertIn(v("A", (1, n)), vl.iter_exclude())
+        # The original range should still be there, but __contains__ will use the exclude list
+        self.assertIn(v("A", (1, 10)), vl)
+        self.assertNotIn(v("A", (1, n)), vl)
+
+    def test_str_representation(self):
+        vl = VarList()
+        vl.push(v("A", (1, 10)))
+        vl.push(v("B", None))
+        va = v("a"); va.ref_var = v("s", 5)
+        vl.push(va)
+        vb = v("b", 5); vb.ref_var = v("p")
+        vl.push(vb)
+        vl.dims["B"] = [2]  # B is 2D
+        s = str(vl)
+        self.assertIn("A(1:10)", s)
+        self.assertIn("B(:,:)", s)
+        self.assertIn("s(5)%a", s)
+        self.assertIn("p%b(5)", s)
+
+    def test_negative_stride_coverage(self):
+        vl = VarList()
+        vl.push(v("A", (10, 1, -1)))
+        self.assertIn(v("A", 5), vl)
+        self.assertIn(v("A", (2, 8)), vl)
+        self.assertNotIn(v("A", 11), vl)
+
+    def test_remove_with_negative_stride(self):
+        vl = VarList()
+        vl.push(v("A", (1, 10)))
+        vl.remove(v("A", (5, 1, -1)))
+        self.assertNotIn(v("A", 3), vl)
+        self.assertIn(v("A", 6), vl)
+        self.assertIn(v("A", (6, 10)), vl)
+        self.assertEqual(len(vl.vars["A"]), 1)
+
+    def test_intersection(self):
+        vl1 = VarList()
+        vl1.push(v("A", (1, 10)))
+        vl1.push(v("B", (1, 5)))
+
+        vl2 = VarList()
+        vl2.push(v("A", (5, 15)))
+        vl2.push(v("C", (1, 5)))
+
+        vl_intersect = vl1 & vl2
+        self.assertIn(v("A", (5, 10)), vl_intersect)
+        self.assertNotIn(v("A", 4), vl_intersect)
+        self.assertNotIn(v("A", 11), vl_intersect)
+        self.assertNotIn(v("B"), vl_intersect)
+        self.assertNotIn(v("C"), vl_intersect)
+
+    def test_intersection_with_variable_bounds(self):
+        n = OpVar("n")
+        vl1 = VarList()
+        vl1.push(v("A", (1, n)))
+        vl2 = VarList()
+        vl2.push(v("A", (1, 10)))
+
+        # Cannot determine intersection for sure
+        vl_intersect = vl1 & vl2
+        self.assertNotIn(v("A"), vl_intersect)
+
+        # But with identical variable bounds, it should work
+        vl3 = VarList()
+        vl3.push(v("A", (1, n)))
+        vl_intersect2 = vl1 & vl3
+        self.assertIn(v("A", (1, n)), vl_intersect2)
 
 
 if __name__ == "__main__":

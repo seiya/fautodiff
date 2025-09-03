@@ -264,6 +264,54 @@ class TestNodeMethods(unittest.TestCase):
             "a = 1\n" "return\n",
         )
 
+    def test_prune_with_recurent_variable_in_loop(self):
+        code = textwrap.dedent(
+        """\
+        do while (a < 10)
+          count = count + 1
+          a = a + 1
+        end do
+        """
+        )
+        loop = DoWhile(
+            Block([
+                Assignment(OpVar("count"), OpVar("count") + OpInt(1)),
+                Assignment(OpVar("a"), OpVar("a") + OpInt(1))
+                ]),
+            cond=OpVar("a") < OpInt(10),
+        )
+        pruned = loop.prune_for(VarList([OpVar("count")]))
+        self.assertEqual(render_program(pruned), code)
+
+    def test_prune_assignment_to_same_var(self):
+        code = textwrap.dedent(
+        """\
+        do i = n, 2, - 1
+          x_ad(i) = x_ad(i) * x(i)
+        end do
+        """
+        )
+        i = OpVar("i")
+        n = OpVar("n")
+        x = OpVar("x", index=[i])
+        x_ad = OpVar("x_ad", index=[i])
+        sa1 = SaveAssignment(x, id=1)
+        sa2 = SaveAssignment(x, id=2)
+        loop = DoLoop(
+            Block([
+                sa1.to_load(),
+                sa2,
+                Assignment(x, x * OpReal(2.0)),
+                sa2.to_load(),
+                Assignment(x_ad, x_ad * x),
+                sa1.to_load()
+                ]),
+            index=i,
+            range=OpRange([n, OpInt(2), -OpInt(1)]),
+        )
+        pruned = loop.prune_for(VarList([OpVar("x_ad"), OpVar("x", index=[2])]))
+        self.assertEqual(render_program(pruned), code)
+
     def test_conditional_return_resets_targets(self):
         a = OpVar("a")
         b = OpVar("b")
@@ -1002,7 +1050,7 @@ class TestRemoveRedundantAllocates(unittest.TestCase):
             range=OpRange([OpInt(1), OpVar("n")]),
         )
         self.assertEqual("".join(loop.render()), code)
-        self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "c", "n"})
+        self.assertEqual({str(v) for v in loop.required_vars()}, {"a", "c", "n"})
         self.assertEqual(set(loop.recurrent_vars()), {"a"})
 
     def test_recurrent_loop_with_self_reference_and_different_index(self):
@@ -1032,7 +1080,7 @@ class TestRemoveRedundantAllocates(unittest.TestCase):
             range=OpRange([OpInt(1), OpVar("n")]),
         )
         self.assertEqual("".join(loop.render()), code)
-        self.assertEqual({str(v) for v in loop.required_vars()}, {"a(1:n)", "c", "n"})
+        self.assertEqual({str(v) for v in loop.required_vars()}, {"a", "c", "n"})
         self.assertEqual(set(loop.recurrent_vars()), {"a"})
 
     def test_has_modified_indices_simple(self):

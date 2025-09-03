@@ -2041,16 +2041,27 @@ def _generate_ad_subroutine(
         if decl is not None:
             if decl.parameter or getattr(decl, "constant", False):
                 continue
-            if not reverse and var.name.endswith(AD_SUFFIX) and not decl.ad_target():
-                found = False
+            # For non-AD-target mirror variables (e.g. integer request arrays),
+            # insert an initialization for the "_ad" variable mirroring the
+            # original assignment site. We do this by locating the first
+            # assignment to the original variable in the primal content and
+            # inserting the mirrored assignment immediately before it.
+            if var.name.endswith(AD_SUFFIX) and not decl.ad_target():
                 org_name = var.name.removesuffix(AD_SUFFIX)
-                for node in subroutine.ad_content.iter_children():
-                    if isinstance(node, Assignment) and node.lhs.name == org_name:
-                        assign = Assignment(node.lhs.add_suffix(AD_SUFFIX), node.rhs)
-                        subroutine.ad_content.insert_before(node.get_id(), assign)
-                        found = True
-                        break
-                if found:
+
+                def _insert_mirror_init(node: Node) -> bool:
+                    # Depth-first search for first matching assignment
+                    for ch in getattr(node, "iter_children", lambda: [])():
+                        if isinstance(ch, Assignment) and ch.lhs.name == org_name:
+                            assign = Assignment(ch.lhs.add_suffix(AD_SUFFIX), ch.rhs)
+                            # Insert before in the parent block
+                            ch.parent.insert_before(ch.get_id(), assign)
+                            return True
+                        if _insert_mirror_init(ch):
+                            return True
+                    return False
+
+                if _insert_mirror_init(subroutine.content):
                     continue
         required_vnames.append(str(var))
     if len(required_vnames) > 0:

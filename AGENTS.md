@@ -14,6 +14,7 @@ This file provides guidelines for contributors about the repository and develop 
 - The names of modules, functions, subroutines, variables, etc. in the generated code should be the original code names followed by “_ad” as much as possible.
 - Fortran modules in this repository must use file names that match the module
   name (e.g. ``my_mod`` resides in ``my_mod.f90``).
+- When fixing a problem, first add a failing test that reproduces the error to an appropriate script under `tests/`. Then implement a fix so that the new test passes. Repeat this process until the original issue is resolved.
 
 ## 4. Commit and PR Guidelines
 - Aim for one topic per commit and write clear messages.

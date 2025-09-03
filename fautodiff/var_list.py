@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterator, List, Optional
+from typing import Dict, Iterator, List, Tuple, Optional, Union
 
-from .operators import AryIndex, OpInt, OpNeg, OpRange, OpVar
+from .operators import AryIndex, OpInt, OpNeg, OpRange, OpVar, Operator
+from .var_dict import VarDict
 
 
 @dataclass
@@ -18,11 +19,12 @@ class VarList:
     understand which elements of an array are accessed.
     """
 
-    vars: dict[str, List[AryIndex]] = field(default_factory=dict)
+    vars: dict[str, List[AryIndex|None]] = field(default_factory=dict)
     dims: dict[str, List[int]] = field(default_factory=dict)
     exclude: dict[str, List[AryIndex]] = field(default_factory=dict)
+    _context: List[Tuple[OpVar, List[OpVar], OpRange]] = field(default_factory=list)
 
-    def __init__(self, vars: Optional[List[OpVar]] = None):
+    def __init__(self, vars: Optional[List[OpVar]] = None, context: Optional[List[Tuple[OpVar, List[OpVar], OpRange]]] = None):
         """Initialise the container.
 
         Parameters
@@ -35,6 +37,7 @@ class VarList:
         self.vars = {}
         self.dims = {}
         self.exclude = {}
+        self._context = context if context is not None else []
 
         # Add provided variables while skipping expensive reorganisations.
         if vars is not None:
@@ -55,10 +58,97 @@ class VarList:
             var_list.dims[name] = list(dims)
         for name, indices in self.exclude.items():
             var_list.exclude[name] = list(indices)
+        var_list._context = list(self._context)
         return var_list
 
+    def push_context(self, context: Tuple[OpVar, List[OpVar], OpRange]) -> None:
+        if not isinstance(context[0], OpVar):
+            raise ValueError(f"Must be OpVar: {type(context[0])}")
+        if not isinstance(context[1], list):
+            raise ValueError(f"Must be list of OpVar: {type(context[1])}")
+        if not isinstance(context[2], OpRange):
+            raise ValueError(f"Must be OpRange: {type(context[2])}")
+        range = context[2]
+        if isinstance(range[2], OpNeg):
+            range = OpRange([range[1], range[0], range[2].args[0]])
+        if range[2] == OpInt(1):
+            range = OpRange([range[0], range[1]])
+        self._context.append((context[0], context[1], range))
+
+    def pop_context(self) -> None:
+        if len(self._context) == 0:
+            raise RuntimeError(f"Context is empty")
+        base_var, vars, range = self._context.pop()
+        for name in list(self.vars):
+            vl = VarList()
+            vl.vars[name] = self.vars[name]
+            vl.dims[name] = self.dims[name]
+            if name in self.exclude:
+                for index in self.exclude[name]:
+                    index_new = None
+                    skip = False
+                    for j, dim in enumerate(index):
+                        if dim is None:
+                            continue
+                        dim_new = dim.replace_with(base_var, range)
+                        if dim_new is not dim:
+                            if index_new is None:
+                                index_new = index.copy()
+                            index_new[j] = dim_new
+                        else:
+                            for var in vars:
+                                if var in dim.collect_vars(without_index=True):
+                                    skip = True
+                                    break
+                            if skip:
+                                break
+                    if skip:
+                        continue
+                    vl.remove(OpVar(name, index=index if index_new is None else index_new))
+                if name in vl.exclude and vl.exclude[name]:
+                    self.exclude[name] = vl.exclude[name]
+                else:
+                    del self.exclude[name]
+
+            if not name in vl.vars:
+                del self.vars[name]
+                if name in self.dims:
+                    del self.dims[name]
+                if name in self.exclude:
+                    del self.exclude[name]
+                continue
+
+            index_list: List[Optional[AryIndex]] = []
+            for index in vl.vars[name]:
+                if index is None:
+                    index_list.append(None)
+                    continue
+                index_new: Optional[AryIndex] = None
+                for j, dim in enumerate(index):
+                    if dim is None:
+                        continue
+                    dim_new = dim.replace_with(base_var, range)
+                    if dim_new is not dim:
+                        if index_new is None:
+                            index_new = index.copy()
+                        index_new[j] = dim_new
+                    else:
+                        for var in vars:
+                            dim_new = dim.replace_with(var, OpRange([None, None]))
+                            if dim_new is not dim:
+                                if index_new is None:
+                                    index_new = index.copy()
+                                index_new[j] = dim_new
+                                break
+                if index_new is None:
+                    index_list.append(index)
+                else:
+                    index_list.append(index_new)
+            self.vars[name] = index_list
+            self._reorganize(name)
+
     def __contains__(self, item: OpVar) -> bool:
-        """Return ``True`` if ``item`` is in the list and not excluded."""
+        """Return ``True`` if ``item`` is partially in the list."""
 
         if not isinstance(item, OpVar):
             raise ValueError(f"Must be OpVar: {type(item)}")
@@ -75,9 +165,13 @@ class VarList:
         # Compare against recorded index patterns.
         index_list = self.vars[name]
         for index in index_list:
+            # Stored entry that represents full coverage always contains
             if index is None:
                 return True
-            if index <= index_item or index >= index_item:
+            # Query asks for full coverage but we only have partial indices
+            if index_item is None:
+                return True
+            if AryIndex.check_overlap(index_item, index):
                 return True
         return False
 
@@ -92,7 +186,8 @@ class VarList:
         def _format(name: str, index: Optional[AryIndex]) -> str:
             # For explicit indices, reconstruct nested variable for accurate printing
             if index is not None:
-                var = self._get_var(name, index, self.dims.get(name, [0]))
+                dims = self.dims.get(name, [0])
+                var = self._get_var(name, index, dims)
                 return str(var)
             # For full coverage (None), render ':' per dimension at each nesting level
             dims_counts = list(self.dims.get(name, [0]))
@@ -132,7 +227,7 @@ class VarList:
 
         return self.vars[key]
 
-    def _get_var(self, name: str, index: Optional[AryIndex], dims: List[int]) -> OpVar:
+    def _get_var(self, name: str, index: Optional[Union[AryIndex,List[Operator]]], dims: List[int]) -> OpVar:
         """Construct an ``OpVar`` from stored data.
 
         Parameters
@@ -151,7 +246,10 @@ class VarList:
         pos = name.rfind("%")
         if pos >= 0:
             name_ref = name[:pos]
-            index_ref = index[: -dims[-1]] if index is not None else None
+            if index is not None:
+                index_ref = index[: -dims[-1]] if dims[-1] > 0 else index
+            else:
+                index_ref = None
             var_ref = self._get_var(name_ref, index_ref, dims[:-1])
             name = name[pos + 1 :]
             index = index[-dims[-1] :] if index is not None else None
@@ -192,15 +290,15 @@ class VarList:
                 names.append(name)
         return names
 
-    @staticmethod
-    def _get_int(op) -> Optional[int]:
-        """Return integer value of ``op`` if it represents a literal."""
-
-        if isinstance(op, OpInt):
-            return op.val
-        if isinstance(op, OpNeg) and isinstance(op.args[0], OpInt):
-            return -op.args[0].val
-        return None
+    def _get_op(self, op: Optional[Union[Operator, int]]) -> Optional[Operator]:
+        """Resolve variables from context and normalise integers to OpInt."""
+        if isinstance(op, int):
+            return OpInt(op)
+        if op is None:
+            return None
+        for var, range in self._context.items():
+            op = op.replace_with(var, range)
+        return op
 
     def _update_dims(self, name: str, ndims: List[int]):
         """Update stored dimension information for ``name``."""
@@ -252,6 +350,18 @@ class VarList:
                 self._reorganize(name)
             self._update_dims(name, other.dims[name])
 
+        # Merge context
+        for i, cont in enumerate(other._context):
+            if (len(self._context) <= i
+                or self._context[i][0] != cont[0]
+                or self._context[i][2] != cont[2]):
+                print(self._context)
+                print(other._context)
+                raise RuntimeError("context is not consistent")
+            for var in cont[1]:
+                if var not in self._context[i][1]:
+                    self._context[i][1].append(var)
+
     @staticmethod
     def _force_stride_one(var) -> OpVar:
         """Return a copy of ``var`` with negative strides normalised."""
@@ -262,15 +372,14 @@ class VarList:
         if isinstance(var.index, AryIndex):
             index_new = []
             for idx in var.index:
-                if isinstance(idx, OpRange) and VarList._get_int(idx[2]) == -1:
+                if isinstance(idx, OpRange) and AryIndex._get_int(idx[2]) == -1:
                     index_new.append(OpRange([idx[1], idx[0]]))
                     replaced = True
                 else:
                     index_new.append(idx)
             if replaced:
-                index = AryIndex(index_new)
+                var = var.change_index(AryIndex(index_new))
 
-        # Recursively normalise any referenced variable.
         ref_var = var.ref_var
         if ref_var is not None:
             ref_var = VarList._force_stride_one(ref_var)
@@ -327,7 +436,7 @@ class VarList:
         var = self._force_stride_one(var)
 
         found = False
-        for pos, index in enumerate(self.vars[name]):
+        for pos, index in enumerate(list(self.vars[name])):
             if index is None or index == var_index:
                 return
             if var_index is None:
@@ -350,68 +459,79 @@ class VarList:
                 found = True
                 break
 
-            if isinstance(dim1, OpRange):
-                if not (dim1[2] is None or self._get_int(dim1[2]) == 1):
-                    continue  # stride must be 1
-                i0 = self._get_int(dim1[0])
-                i1 = self._get_int(dim1[1])
-            if isinstance(dim2, OpRange):
-                if not (dim2[2] is None or self._get_int(dim2[2]) == 1):
-                    continue  # stride must be 1
-                j0 = self._get_int(dim2[0])
-                j1 = self._get_int(dim2[1])
-
+            # both are OpRange
             if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
-                # both are range
-                if (
-                    i0 is None or i1 is None or j0 is None or j1 is None
-                ):  # either is non-integer
-                    continue
-                if (isinstance(i1, int) and isinstance(j0, int) and i1 < j0) or (
-                    isinstance(j1, int) and isinstance(i0, int) and j1 < i0
-                ):
-                    continue  # no overlap
-                i0 = None if (i0 is None or j0 is None) else min(i0, j0)
-                i1 = None if (i1 is None or j1 is None) else max(i1, j1)
-                index[i] = OpRange([i0, j1])  # replaced
-                found = True
-                break
+                i0, i1 = dim1[0], dim1[1]
+                j0, j1 = dim2[0], dim2[1]
 
-            v1 = self._get_int(dim1)
-            v2 = self._get_int(dim2)
-
-            if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
-                # neither is range
-                if v1 is None or v2 is None:  # either is non-integer
-                    continue
-                if abs(v1 - v2) == 1:  # merge
-                    index[i] = OpRange(sorted([v1, v2]))  # replaced
+                # Check for overlapping
+                k0 = None
+                k1 = None
+                if dim1.strict_in(j0):
+                    k0 = i0
+                elif dim2.strict_in(i0):
+                    k0 = j0
+                if dim1.strict_in(j1):
+                    k1 = i1
+                elif dim2.strict_in(i1):
+                    k1 = j1
+                if k0 is not None and k1 is not None:
+                    index[i] = OpRange([k0, k1])
                     found = True
                     break
+
+                # Check for adjacency: e.g., (:k) and (k+1:)
+                if i1 is not None and j0 is not None:
+                    diff = j0 - i1
+                    if isinstance(diff, OpInt) and diff.val == 1:
+                        index[i] = OpRange([i0, j1])
+                        found = True
+                        break
+                if j1 is not None and i0 is not None:
+                    diff = i0 - j1
+                    if isinstance(diff, OpInt) and diff.val == 1:
+                        index[i] = OpRange([j0, i1])
+                        found = True
+                        break
+                continue
+
+
+            # both are scalar
+            if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
+                diff = AryIndex._get_int(dim1 - dim2)
+                if isinstance(diff, int):
+                    if diff == 1:
+                        index[i] = OpRange([dim2, dim1])
+                        found = True
+                        break
+                    elif diff == -1:
+                        index[i] = OpRange([dim1, dim2])
+                        found = True
+                        break
                 continue
 
             # one is range and the other is not
-
-            if isinstance(dim1, OpRange):
-                range = dim1
-                v = v2
-            else:
-                range = dim2
-                v = v1
-            i0 = self._get_int(range[0])
-            i1 = self._get_int(range[1])
-
-            if i0 is None or i1 is None or v is None:  # either is not integer
-                continue
-
-            if i0 is not None and v == i0 - 1:
-                i0 -= 1
-            if i1 is not None and v == i1 + 1:
-                i1 += 1
-            if (i0 is None or i0 <= v) and (i1 is None or v <= i1):
-                index[i] = OpRange([i0, i1])  # replace
-                found = True
-                break
+            if isinstance(dim1, OpRange) and not isinstance(dim2, OpRange):
+                rng, scalar = dim1, dim2
+            elif not isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
+                rng, scalar = dim2, dim1
+            else: # unexpected
+                raise RuntimeError(f"Unexpected: {type(dim1)} {type(dim2)}")
+            i0, i1 = rng[0], rng[1]
+            # Check adjacency at start
+            if i0 is not None:
+                diff = i0 - scalar
+                if isinstance(diff, OpInt) and diff.val == 1:
+                    index[i] = OpRange([scalar, i1])
+                    found = True
+                    break
+            # Check adjacency at end
+            if i1 is not None:
+                diff = scalar - i1
+                if isinstance(diff, OpInt) and diff.val == 1:
+                    index[i] = OpRange([i0, scalar])
+                    found = True
+                    break
 
         if found:
             if not not_reorganize:
@@ -426,174 +546,171 @@ class VarList:
             raise ValueError("Must be OpVar")
 
         name = var.name_ext()
-        var_index = var.concat_index()
 
         if name not in self.vars:
             return
 
-        if var_index is None:
+        var = self._force_stride_one(var) # Normalise negative strides before removal
+        var_index = var.concat_index()
+
+        if var_index is None or all(dim is None for dim in var_index.dims):
             del self.vars[name]
             return
 
-        var = self._force_stride_one(var)
-
-        for pos, index in enumerate(self.vars[name]):
+        added = False
+        index_list: List[AryIndex] = []
+        for index in self.vars[name]:
             if index == var_index:
-                self.vars[name].remove(index)
+                # removed
                 continue
             if index is None:
-                self.add_exclude(var)
+                index_list.append(index)
+                if not added:
+                    self.add_exclude(var)
+                    added = True
                 continue
 
             i = AryIndex.get_diff_dim(index, var_index)
-            if i < 0:
+            # If indices differ in multiple dimensions, add to the exclude list
+            if i < 0 and index != var_index:
+                index_list.append(index)
+                if not added:
+                    self.add_exclude(var)
+                    added = True
                 continue
 
             index = index.copy()
-            self.vars[name][pos] = index
 
             dim1 = index[i]
             dim2 = var_index[i] if var_index is not None else None
 
             if AryIndex.dim_is_entire(dim1):
-                self.add_exclude(var)
+                index_list.append(index)
+                if not added:
+                    self.add_exclude(var)
+                    added = True
                 continue
 
             if AryIndex.dim_is_entire(dim2):
-                self.vars[name].remove(index)  # remove all
+                # removed
                 continue
 
-            if isinstance(dim1, OpRange):
-                if not (dim1[2] is None or self._get_int(dim1[2]) == 1):
-                    self.add_exclude(var)
-                    continue
-                i0 = self._get_int(dim1[0])
-                i1 = self._get_int(dim1[1])
-            if isinstance(dim2, OpRange):
-                if not (dim2[2] is None or self._get_int(dim2[2]) == 1):
-                    continue
-                j0 = self._get_int(dim2[0])
-                j1 = self._get_int(dim2[1])
-
+            # both are OpRange
             if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
-                if (
-                    (dim1[0] is not None and i0 is None)
-                    or (dim1[1] is not None and i1 is None)
-                    or (dim2[0] is not None and j0 is None)
-                    or (dim2[1] is not None and j1 is None)
-                ):
-                    continue  # either is variable, cannot judge overlap
-                if (i1 is not None and j0 is not None and i1 < j0) or (
-                    j1 is not None and i0 is not None and j1 < i0
-                ):
-                    continue  # no overlap
-                if (j0 is None or (i0 is not None and j0 <= i0)) and (
-                    j1 is None or (i1 is not None and i1 <= j1)
-                ):
-                    self.vars[name].remove(index)
+                i0, i1 = dim1[0], dim1[1]
+                j0, j1 = dim2[0], dim2[1]
+
+                if i0 is None:
+                    diff0 = 0 if j0 is None else 999
+                else:
+                    diff0 = AryIndex._get_int(j0 - i0) if j0 is not None else -999
+                if i1 is None:
+                    diff1 = 0 if j1 is None else 999
+                else:
+                    diff1 = AryIndex._get_int(i1 - j1) if j1 is not None else -999
+
+                if diff0 is None or diff1 is None:
+                    index_list.append(index)
+                    if not added:
+                        self.add_exclude(var)
+                        added = True
                     continue
-                if (
-                    j0 is not None
-                    and j1 is not None
-                    and (i0 is None or (i0 is not None and i0 < j0))
-                    and (i1 is None or (i1 is not None and j1 < i1))
-                ):
-                    if i0 is not None and i0 == j0 - 1:
-                        index[i] = OpInt(i0)  # replaced
+
+                if diff0 > 0:
+                    if diff0 == 1:
+                        index[i] = i0
                     else:
-                        index[i] = OpRange([dim1[0], j0 - 1])  # replaced
-                    if i1 is not None and j1 + 1 == i1:
+                        index[i] = OpRange([i0, j0-1])
+                    index_list.append(index)
+                    if diff1 > 0:
                         index_new = index.copy()
-                        index_new[i] = OpInt(i1)
-                        self.vars[name].append(index_new)  # added
-                    else:
-                        index_new = index.copy()
-                        index_new[i] = OpRange([j1 + 1, dim1[1]])
-                        self.vars[name].append(index_new)  # added
-                    continue
-                if (j0 is None or (i0 is not None and j0 <= i0)) and (
-                    j1 is not None and ((i1 is None) or (i1 is not None and j1 < i1))
-                ):
-                    if i1 is not None and j1 + 1 == i1:
-                        index[i] = OpInt(i1)  # replaced
-                    else:
-                        index[i] = OpRange([j1 + 1, dim1[1]])  # replaced
-                    continue
-                if (
-                    j0 is not None
-                    and ((i0 is None) or (i0 is not None and i0 < j0))
-                    and (j1 is None or (i1 is not None and i1 <= j1))
-                ):
-                    if i0 is not None and i0 == j0 - 1:
-                        index[i] = OpInt(i0)  # replaced
-                    else:
-                        index[i] = OpRange([dim1[0], j0 - 1])  # replaced
-                    continue
-                raise RuntimeError(f"Unexpected: {dim1} {dim2}")
+                        if diff1 == 1:
+                            index_new[i] = i1
+                        else:
+                            index_new[i] = OpRange([j1+1, i1])
+                        index_list.append(index_new)
+                else: # diff0 <= 0 (= j0 <= i0 or j0 is None)
+                    if diff1 == 1:
+                        index[i] = i1
+                    elif diff1 > 1:
+                        index[i] = OpRange([j1+1, i1])
+                    else: # diff1 <= 0 (= i1 <= j1 of j1 is None)
+                        # removed
+                        continue
+                    index_list.append(index)
                 continue
 
-            v1 = self._get_int(dim1)
-            v2 = self._get_int(dim2)
-
+            # both are scalar
             if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
-                continue  # neither is range
-
-            # one is range and the other is not
-
-            if isinstance(dim1, OpRange):
-                if v2 is None:
+                index_list.append(index)
+                if not added:
                     self.add_exclude(var)
-                    continue
-
-                if (i0 is not None and v2 < i0) or (i1 is not None and i1 < v2):
-                    continue  # outside
-                if (i0 is not None and i0 + 1 < v2) or (i1 is not None and v2 < i1 - 1):
-                    self.add_exclude(var)
-                    continue
-                if i0 is not None and v2 == i0:
-                    if i1 is not None and v2 + 1 == i1:
-                        index[i] = OpInt(i1)  # replaced
-                    else:
-                        index[i] = OpRange([v2 + 1, dim1[1]])  # replaced
-                    continue
-                if i1 is not None and v2 == i1:
-                    if i0 is not None and i0 == v2 - 1:
-                        index[i] = OpInt(i0)  # replaced
-                    else:
-                        index[i] = OpRange([dim1[0], v2 - 1])  # replaced
-                    continue
-                if i0 is not None and i0 == v2 - 1:
-                    index[i] = OpInt(i0)  # replaced
-                else:
-                    index[i] = OpRange([dim1[0], v2 - 1])  # replaced
-                if i1 is not None and v2 + 1 == i1:
-                    index_new = index.copy()
-                    index_new[i] = OpInt(i1)
-                    self.vars[name].append(index_new)  # added
-                else:
-                    index_new = index.copy()
-                    index_new[i] = OpRange([v2 + 1, dim1[1]])
-                    self.vars[name].append(index_new)  # added
+                    added = True
                 continue
 
-            if isinstance(dim2, OpRange):
-                if isinstance(v1, int):
-                    if (j0 is not None and v1 < j0) or (j1 is not None and j1 < v1):
-                        continue  # outside
-                self.vars[name].remove(index)
+            # dim1 is range and dim2 is scalar
+            if isinstance(dim1, OpRange):
+                if not (dim1[2] is None or AryIndex._get_int(dim1[2]) == 1):
+                    index_list.append(index)
+                    if not added:
+                        self.add_exclude(var)
+                        added = True
+                    continue
+                if dim1.strict_in(dim2):
+                    index_list.append(index)
+                    if dim2 == dim1[0]:
+                        index[i] = dim1[1] if dim1[1] == dim1[0] + 1 else OpRange([dim1[0]+1, dim1[1]])
+                    elif dim2 == dim1[1]:
+                        index[i] = dim1[0] if dim1[0] == dim1[1] - 1 else OpRange([dim1[0], dim1[1]-1])
+                    else:
+                        index[i] = dim1[0] if dim1[0] == dim2 - 1 else OpRange([dim1[0], dim2-1])
+                        index_new = index.copy()
+                        index_new[i] = dim1[1] if dim1[1] == dim2 + 1 else OpRange([dim2+1, dim1[1]])
+                        index_list.append(index_new)
+                    continue
+                d0 = AryIndex._get_int(dim1[0] - dim2)
+                d1 = AryIndex._get_int(dim2 - dim1[1])
+                index_list.append(index)
+                if (isinstance(d0, int) and d0 > 0) or (isinstance(d1, int) and d1 > 0): # outside of the range
+                    continue # do not change
+                if not added:
+                    self.add_exclude(var)
+                    added = True
+                continue
 
+            # dim2 is range and dim1 is scalar
+            if isinstance(dim2, OpRange):
+                if not (dim2[2] is None or AryIndex._get_int(dim2[2]) == 1):
+                    index_list.append(index)
+                    continue
+                if dim2.strict_in(dim1):
+                    # removed
+                    continue
+                index_list.append(index)
+                if not added:
+                    self.add_exclude(var)
+                    added = True
+                continue
+
+        self.vars[name] = index_list
         self._reorganize(name)
-        if not self[name]:
+        if not self.vars[name]:
             del self.vars[name]
+            if name in self.dims:
+                del self.dims[name]
+            if name in self.exclude:
+                del self.exclude[name]
 
     def add_exclude(self, var: OpVar):
         """Mark ``var`` as excluded from the list."""
 
         name = var.name_ext()
-        var_index = var.concat_index()
         self._update_dims(name, var.ndims_ext())
         if name not in self.exclude:
             self.exclude[name] = []
+        var_index = var.concat_index()
+        if var_index is None:
+            raise ValueError("index must not be None for exclude")
         if var_index not in self.exclude[name]:
             self.exclude[name].append(var_index)
 
@@ -644,19 +761,20 @@ class VarList:
                         continue
 
                     if isinstance(dim1, OpRange):
-                        i0 = self._get_int(dim1[0])
-                        i1 = self._get_int(dim1[1])
-                        i2 = self._get_int(dim1[2])
+                        i0 = AryIndex._get_int(dim1[0])
+                        i1 = AryIndex._get_int(dim1[1])
+                        i2 = AryIndex._get_int(dim1[2]) if dim1[2] is not None else 1
                         if not (isinstance(i2, int) and abs(i2) == 1):
                             continue  # assumes no overlap
                         if not (isinstance(dim2, OpInt) or isinstance(dim2, OpRange)):
                             index[i] = dim2
                             index_list.append(index)
                             continue
+
                     if isinstance(dim2, OpRange):
-                        j0 = self._get_int(dim2[0])
-                        j1 = self._get_int(dim2[1])
-                        j2 = self._get_int(dim2[2])
+                        j0 = AryIndex._get_int(dim2[0])
+                        j1 = AryIndex._get_int(dim2[1])
+                        j2 = AryIndex._get_int(dim2[2]) if dim2[2] is not None else 1
                         if not (isinstance(j2, int) and abs(j2) == 1):
                             continue  # assumes no overlap
                         if not (isinstance(dim1, OpInt) or isinstance(dim1, OpRange)):
@@ -664,8 +782,8 @@ class VarList:
                             index_list.append(index)
                             continue
 
-                    v1 = self._get_int(dim1)
-                    v2 = self._get_int(dim2)
+                    v1 = AryIndex._get_int(dim1)
+                    v2 = AryIndex._get_int(dim2)
                     if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
                         # both are not range
                         if v1 is not None and v2 is not None:  # both are int
@@ -713,8 +831,8 @@ class VarList:
                             raise RuntimeError(f"Unexpected: {type(dim2)}")
                         range = dim2
                         v = v1
-                    i0 = self._get_int(range[0])
-                    i1 = self._get_int(range[1])
+                    i0 = AryIndex._get_int(range[0])
+                    i1 = AryIndex._get_int(range[1])
 
                     if (i0 is not None and v < i0) or (
                         i1 is not None and i1 < v
@@ -733,9 +851,6 @@ class VarList:
         if name not in self.vars:
             raise ValueError(f"Not found: {name}")
 
-        if len(self.vars[name]) == 1:
-            return
-
         index_list = self.vars[name]
         self.vars[name] = []
         if name in self.exclude:
@@ -744,7 +859,8 @@ class VarList:
             exclude = []
         for index in index_list:
             if index in exclude:
-                exclude.remove(index)
+                if index is not None:
+                    exclude.remove(index)
             else:
                 # Preserve full coverage without clearing excludes
                 if index is None:

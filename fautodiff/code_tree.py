@@ -44,6 +44,7 @@ from .operators import (
     VarType,
 )
 from .var_list import VarList
+from .var_dict import VarDict
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -3569,12 +3570,6 @@ class Assignment(Node):
         lhs = self.lhs
         if lhs in targets:
             return self.deep_clone()
-        if (
-            not lhs.ad_target
-            and not lhs.name.endswith(AD_SUFFIX)
-            and lhs.add_suffix(AD_SUFFIX) in targets
-        ):  # e.g., requests_ad for mpi
-            return Assignment(lhs.add_suffix(AD_SUFFIX), self.rhs)
         return None
 
     def required_vars(
@@ -3837,12 +3832,7 @@ class SaveAssignment(Node):
     ) -> Optional[SaveAssignment]:
         if isinstance(self, PushPop) and self.pointer and self.load:
             return self
-        found = False
-        for var in self.iter_assign_vars():
-            if var in targets:
-                found = True
-                break
-        if not found:
+        if self.lhs not in targets:
             return None
         if self.load and self.var.ref_var is None:
             name = self.var.name_ext()
@@ -5264,10 +5254,12 @@ class DoLoop(DoAbst):
     range: OpRange
     label: Optional[str] = field(default=None)
     do: ClassVar[bool] = True
+    context: Tuple[OpVar, List[OpVar], OpRange] = field(default_factory=tuple)
 
     def __post_init__(self):
         super().__post_init__()
         self.build_do_index_list([])
+        self.build_context()
         if not isinstance(self.range, OpRange):
             raise ValueError(f"range must be OpRange: f{type(self.range)}")
 
@@ -5289,10 +5281,33 @@ class DoLoop(DoAbst):
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         yield self.index
 
-    def build_do_index_list(self, index_list: List[str]):
+    def build_do_index_list(self, index_list: List[str]) -> None:
         self.do_index_list = [self.index.name]
         self.do_index_list.extend(index_list)
         self._body.build_do_index_list(self.do_index_list)
+
+    def build_context(self) -> None:
+        index = self.index
+        range = self.range
+        idx_vars: List[OpVar] = []
+        for child in self._body.iter_children():
+            if isinstance(child, Assignment):
+                lhs = child.lhs
+                if lhs in idx_vars or not lhs.var_type.is_integer_type:
+                    continue
+                rhs = child.rhs
+                rhs_vars = rhs.collect_vars()
+                if index in rhs_vars:
+                    found = True
+                else:
+                    found = False
+                    for var in idx_vars:
+                        if var in rhs_vars:
+                            found = True
+                            break
+                if found:
+                    idx_vars.append(lhs)
+        self.context = (index, idx_vars, range)
 
     def _build_index_map(self) -> dict:
         # build index map: variable name -> position of the loop index in the array index
@@ -5487,14 +5502,16 @@ class DoLoop(DoAbst):
         without_savevar: bool = False,
     ) -> VarList:
         if vars is None:
-            vars = VarList()
+            vars_for_body = VarList()
         else:
-            vars = vars.copy()
-            vars.update_index_downward(self._build_index_map(), self.index)
-        vars = self._body.required_vars(vars, no_accumulate, without_savevar)
+            vars_for_body = vars.copy()
+        vars_for_body.push_context(self.context)
+
+        vars = self._body.required_vars(vars_for_body, no_accumulate, without_savevar)
 
         if self.index in vars:
             vars.remove(self.index)
+
         index_map = self._build_index_map()
         if (
             self.range[2] is None
@@ -5524,7 +5541,7 @@ class DoLoop(DoAbst):
                             index[do_index] = self.range[0] - step
                     index_new.append(index)
                 vars.vars[name] = index_new
-        vars.update_index_upward(index_map, range=self.range)
+        vars.pop_context()
         for var in self.range.collect_vars():
             vars.push(var)
         return vars
@@ -5535,17 +5552,26 @@ class DoLoop(DoAbst):
         without_savevar: bool = False,
         check_init_advars: bool = False,
     ) -> VarList:
+        vars_for_body = vars.copy() if vars is not None else VarList()
+        vars_for_body.push_context(self.context)
+
         vars = self._body.assigned_vars(
-            vars, without_savevar=without_savevar, check_init_advars=check_init_advars
+            vars_for_body, without_savevar=without_savevar, check_init_advars=check_init_advars
         )
-        vars.update_index_upward(self._build_index_map(), range=self.range)
-        if not check_init_advars:
+
+        vars.pop_context()
+        if self.do and not check_init_advars:
             vars.push(self.index)
         return vars
 
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.copy()
+        vars.push_context(self.context)
         vars = self._body.unrefered_advars(vars)
-        vars.update_index_upward(self._build_index_map(), range=self.range)
+        vars.pop_context()
         return vars
 
     def prune_for(
@@ -5555,24 +5581,28 @@ class DoLoop(DoAbst):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Optional[Node]:
+        targets_for_body = targets.copy()
+        targets_for_body.push_context(self.context)
+
         targets = targets.copy()
         flag = True
         if base_targets is None:
             base_targets = targets.copy()
         while flag:
             flag = False
-            new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
-            for var in new_body.required_vars(targets):
+            new_body = self._body.prune_for(targets_for_body, mod_vars, decl_map, base_targets)
+
+            for var in new_body.required_vars(targets_for_body):
                 if var.name == self.index.name:
                     continue
                 if var.index is not None and set(self.do_index_list) <= set(
                     var.index_list()
                 ):
                     continue
-                if var not in targets:
-                    targets.push(var)
+                if var not in targets_for_body:
+                    targets_for_body.push(var)
                     flag = True
-        new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
+        new_body = self._body.prune_for(targets_for_body, mod_vars, decl_map, base_targets)
 
         if new_body.is_effectively_empty():
             return None
@@ -5583,15 +5613,15 @@ class DoLoop(DoAbst):
             assigned_vars = VarList()
         else:
             assigned_vars = assigned_vars.copy()
-        assigned_vars.update_index_downward(
-            self._build_index_map(), do_index_var=self.index
-        )
-        # assigned_vars.merge(self._body.assigned_vars(check_init_advars = True))
+        assigned_vars.push_context(self.context)
+
         for var in self._body.assigned_vars(check_init_advars=True):
             if not set(self.do_index_list) <= set(var.index_list()):
                 assigned_vars.push(var)
+
         assigned_vars = self._body.check_initial(assigned_vars)
-        assigned_vars.update_index_upward(self._build_index_map(), range=self.range)
+        assigned_vars.pop_context()
+
         return assigned_vars
 
 
@@ -5639,13 +5669,16 @@ class DoWhile(DoAbst):
         no_accumulate: bool = False,
         without_savevar: bool = False,
     ) -> VarList:
+        vars_for_body = vars.copy() if vars is not None else VarList()
+
         if vars is None:
             vars = VarList()
         else:
             vars = vars.copy()
         for var in self.cond.collect_vars():
             vars.push(var)
-        vars = self._body.required_vars(vars, no_accumulate, without_savevar)
+        vars = self._body.required_vars(vars_for_body, no_accumulate, without_savevar)
+
         for var in self.cond.collect_vars():
             vars.push(var)
         return vars
@@ -5661,6 +5694,11 @@ class DoWhile(DoAbst):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Node:
+        if targets:
+            targets = targets.copy()
+        else:
+            targets = VarList()
+
         if base_targets is None:
             base_targets = targets.copy()
         new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
@@ -5669,6 +5707,7 @@ class DoWhile(DoAbst):
         for var in self.cond.collect_vars():
             targets.push(var)
         new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
+
         if new_body.is_effectively_empty():
             return Block([])
         return DoWhile(new_body, self.cond, self.label)
@@ -5678,8 +5717,10 @@ class DoWhile(DoAbst):
             assigned_vars = VarList()
         else:
             assigned_vars = assigned_vars.copy()
+
+        assigned_vars_for_body = assigned_vars.copy()
         assigned_vars.merge(self._body.assigned_vars(check_init_advars=True))
-        assigned_vars = self._body.check_initial(assigned_vars)
+        assigned_vars = self._body.check_initial(assigned_vars_for_body)
         return assigned_vars
 
 
