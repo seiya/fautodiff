@@ -4835,7 +4835,7 @@ class BranchBlock(Node):
             vars = VarList()
         else:
             vars = vars.copy()
-        vars_new = VarList()
+        vars_new = vars.copy_context()
         cover_all = False  # if else or case default exists
         to_remove = set()
         origin_savevars = {name for name in vars.names() if Node.is_savevar(name)}
@@ -4921,7 +4921,7 @@ class BranchBlock(Node):
         return node
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
-        vars_list = VarList()
+        vars_list = assigned_vars.copy_context()
         for block in self.iter_children():
             vars_list.merge(block.check_initial(assigned_vars))
         return vars_list

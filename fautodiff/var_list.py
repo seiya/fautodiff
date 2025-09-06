@@ -61,6 +61,10 @@ class VarList:
         var_list._context = list(self._context)
         return var_list
 
+    def copy_context(self) -> VarList:
+        """Return a new variable list with the context copied from self"""
+        return VarList(context = self._context)
+
     def push_context(self, context: Tuple[OpVar, List[OpVar], OpRange]) -> None:
         if not isinstance(context[0], OpVar):
             raise ValueError(f"Must be OpVar: {type(context[0])}")
@@ -104,7 +108,10 @@ class VarList:
                                 break
                     if skip:
                         continue
-                    vl.remove(OpVar(name, index=index if index_new is None else index_new))
+                    idx = index if index_new is None else index_new
+                    dims = self.dims[name] if name in self.dims else None
+                    v = self._get_var(name, index=idx, dims=dims)
+                    vl.remove(v)
                 if name in vl.exclude and vl.exclude[name]:
                     self.exclude[name] = vl.exclude[name]
                 else:
