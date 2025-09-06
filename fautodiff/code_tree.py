@@ -5718,9 +5718,9 @@ class DoWhile(DoAbst):
         else:
             assigned_vars = assigned_vars.copy()
 
-        assigned_vars_for_body = assigned_vars.copy()
+        assigned_vars = assigned_vars.copy()
         assigned_vars.merge(self._body.assigned_vars(check_init_advars=True))
-        assigned_vars = self._body.check_initial(assigned_vars_for_body)
+        assigned_vars = self._body.check_initial(assigned_vars)
         return assigned_vars
 
 
