@@ -773,6 +773,282 @@ class TestNodeMethods(unittest.TestCase):
         dowhile.check_initial()
         self.assertEqual(render_program(dowhile), code)
 
+    def test_check_initial_loop_private_1d_pattern1_nonaccumulate(self):
+        code = textwrap.dedent(
+            """\
+        do i = n, 1, - 1
+          work_ad(2) = z_ad * 2.0
+          work_ad(1) = z_ad * 1.0
+          do k = 2, 1, - 1
+            work_ad(k) = z_ad + work_ad(k)
+            var_ad(k,i) = work_ad(k)
+          end do
+        end do
+        """
+        )
+        i = OpVar("i")
+        k = OpVar("k")
+        var_ad = OpVar("var_ad", index=[k,i])
+        work_ad = OpVar("work_ad", index=[k])
+        work_ad1 = OpVar("work_ad", index=[1])
+        work_ad2 = OpVar("work_ad", index=[2])
+        z_ad = OpVar("z_ad")
+        loop = DoLoop(
+            Block([
+                Assignment(work_ad2, z_ad * OpReal("2.0"), accumulate=True),
+                Assignment(work_ad1, z_ad * OpReal("1.0"), accumulate=True),
+                DoLoop(
+                    Block([
+                        Assignment(work_ad, z_ad, accumulate=True),
+                        Assignment(var_ad, work_ad, accumulate=True)
+                    ]),
+                    index=k,
+                    range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
+                )
+            ]),
+            index=i,
+            range=OpRange([OpVar("n"), OpInt(1), OpInt(-1)]),
+        )
+        loop.check_initial()
+        self.assertEqual(render_program(loop), code)
+
+    def test_check_initial_loop_private_1d_pattern2_nonaccumulate(self):
+        code = textwrap.dedent(
+            """\
+        do i = n, 1, - 1
+          do k = 2, 1, - 1
+            work_ad(k) = z_ad * k
+          end do
+          do k = 2, 1, - 1
+            work_ad(k) = z_ad + work_ad(k)
+            var_ad(k,i) = work_ad(k)
+          end do
+        end do
+        """
+        )
+        i = OpVar("i")
+        k = OpVar("k")
+        var_ad = OpVar("var_ad", index=[k,i])
+        work_ad = OpVar("work_ad", index=[k])
+        z_ad = OpVar("z_ad")
+        loop = DoLoop(
+            Block([
+                DoLoop(
+                    Block([
+                        Assignment(work_ad, z_ad * k, accumulate=True)
+                    ]),
+                    index=k,
+                    range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
+                ),
+                DoLoop(
+                    Block([
+                        Assignment(work_ad, z_ad, accumulate=True),
+                        Assignment(var_ad, work_ad, accumulate=True)
+                    ]),
+                    index=k,
+                    range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
+                )
+            ]),
+            index=i,
+            range=OpRange([OpVar("n"), OpInt(1), OpInt(-1)]),
+        )
+        loop.check_initial()
+        self.assertEqual(render_program(loop), code)
+
+    def test_check_initial_loop_private_1d_pattern3_nonaccumulate(self):
+        code = textwrap.dedent(
+            """\
+        do i = n, 1, - 1
+          do k = 2, 1, - 1
+            work_ad(k) = z_ad * k
+          end do
+          var_ad(k,i) = work_ad(1) + work_ad(2)
+        end do
+        """
+        )
+        i = OpVar("i")
+        k = OpVar("k")
+        var_ad = OpVar("var_ad", index=[k,i])
+        work_ad = OpVar("work_ad", index=[k])
+        work_ad1 = OpVar("work_ad", index=[1])
+        work_ad2 = OpVar("work_ad", index=[2])
+        z_ad = OpVar("z_ad")
+        loop = DoLoop(
+            Block([
+                DoLoop(
+                    Block([
+                        Assignment(work_ad, z_ad * k, accumulate=True)
+                    ]),
+                    index=k,
+                    range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
+                ),
+                Assignment(var_ad, work_ad1 + work_ad2, accumulate=True)
+            ]),
+            index=i,
+            range=OpRange([OpVar("n"), OpInt(1), OpInt(-1)]),
+        )
+        loop.check_initial()
+        self.assertEqual(render_program(loop), code)
+
+    def test_check_initial_loop_private_2d_pattern1_nonaccumulate(self):
+        code = textwrap.dedent(
+            """\
+        do j = m, 1, - 1
+          do i = n, 1, - 1
+            work_ad(2,i) = z_ad * 2.0
+            work_ad(1,i) = z_ad * 1.0
+          end do
+          do i = n, 1, - 1
+            var_ad(i,j) = work_ad(1,i) + work_ad(2,i)
+          end do
+        end do
+        """
+        )
+        i = OpVar("i")
+        j = OpVar("j")
+        n = OpVar("n")
+        m = OpVar("m")
+        work_ad1 = OpVar("work_ad", index=[1, i])
+        work_ad2 = OpVar("work_ad", index=[2, i])
+        var_ad = OpVar("var_ad", index=[i,j])
+        z_ad = OpVar("z_ad")
+        loop = DoLoop(
+            Block([
+                DoLoop(
+                    Block([
+                        Assignment(work_ad2, z_ad * OpReal("2.0"), accumulate=True),
+                        Assignment(work_ad1, z_ad * OpReal("1.0"), accumulate=True),
+                    ]),
+                    index=i,
+                    range=OpRange([n, OpInt(1), OpInt(-1)])
+                ),
+                DoLoop(
+                    Block([
+                        Assignment(var_ad, work_ad1 + work_ad2, accumulate=True)
+                    ]),
+                    index=i,
+                    range=OpRange([n, OpInt(1), OpInt(-1)])
+                )
+            ]),
+            index=j,
+            range=OpRange([m, OpInt(1), OpInt(-1)]),
+        )
+        loop.check_initial()
+        self.assertEqual(render_program(loop), code)
+
+    def test_check_initial_loop_private_2d_pattern2_nonaccumulate(self):
+        code = textwrap.dedent(
+            """\
+        do j = m, 1, - 1
+          do i = n, 1, - 1
+            do k = 2, 1, - 1
+              work_ad(k,i) = z_ad * k
+            end do
+          end do
+          do i = n, 1, - 1
+            var_ad(i,j) = work_ad(1,i) + work_ad(2,i)
+          end do
+        end do
+        """
+        )
+        i = OpVar("i")
+        j = OpVar("j")
+        k = OpVar("k")
+        n = OpVar("n")
+        m = OpVar("m")
+        work_ad = OpVar("work_ad", index=[k, i])
+        work_ad1 = OpVar("work_ad", index=[1, i])
+        work_ad2 = OpVar("work_ad", index=[2, i])
+        var_ad = OpVar("var_ad", index=[i,j])
+        z_ad = OpVar("z_ad")
+        loop = DoLoop(
+            Block([
+                DoLoop(
+                    Block([
+                        DoLoop(
+                            Block([
+                                Assignment(work_ad, z_ad * k, accumulate=True)
+                            ]),
+                            index=k,
+                            range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
+                        )
+                    ]),
+                    index=i,
+                    range=OpRange([n, OpInt(1), OpInt(-1)])
+                ),
+                DoLoop(
+                    Block([
+                        Assignment(var_ad, work_ad1 + work_ad2, accumulate=True)
+                    ]),
+                    index=i,
+                    range=OpRange([n, OpInt(1), OpInt(-1)])
+                )
+            ]),
+            index=j,
+            range=OpRange([m, OpInt(1), OpInt(-1)]),
+        )
+        loop.check_initial()
+        self.assertEqual(render_program(loop), code)
+
+    def test_check_initial_loop_private_2d_pattern3_nonaccumulate(self):
+        code = textwrap.dedent(
+            """\
+        do j = m, 1, - 1
+          do i = n, 1, - 1
+            do k = 2, 1, - 1
+              work_ad(k,i) = z_ad * k
+            end do
+          end do
+          do i = n, 1, - 1
+            do k = 2, 1, - 1
+              var_ad(i,j) = work_ad(k,i) + var_ad(i,j)
+            end do
+          end do
+        end do
+        """
+        )
+        i = OpVar("i")
+        j = OpVar("j")
+        k = OpVar("k")
+        n = OpVar("n")
+        m = OpVar("m")
+        work_ad = OpVar("work_ad", index=[k, i])
+        var_ad = OpVar("var_ad", index=[i,j])
+        z_ad = OpVar("z_ad")
+        loop = DoLoop(
+            Block([
+                DoLoop(
+                    Block([
+                        DoLoop(
+                            Block([
+                                Assignment(work_ad, z_ad * k, accumulate=True)
+                            ]),
+                            index=k,
+                            range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
+                        )
+                    ]),
+                    index=i,
+                    range=OpRange([n, OpInt(1), OpInt(-1)])
+                ),
+                DoLoop(
+                    Block([
+                        DoLoop(
+                            Block([
+                                Assignment(var_ad, work_ad, accumulate=True)
+                            ]),
+                            index=k,
+                            range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
+                        )
+                    ]),
+                    index=i,
+                    range=OpRange([n, OpInt(1), OpInt(-1)])
+                )
+            ]),
+            index=j,
+            range=OpRange([m, OpInt(1), OpInt(-1)]),
+        )
+        loop.check_initial()
+        self.assertEqual(render_program(loop), code)
 
 class TestPushPop(unittest.TestCase):
     def test_push(self):
