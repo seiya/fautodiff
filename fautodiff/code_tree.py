@@ -1470,6 +1470,57 @@ class Block(Node):
                         continue
                 new_children.append(child)
             children = new_children
+
+        # Dirty tracking pass: drop redundant loads when no mutation occurred
+        if children:
+            var_dirty: Dict[str, bool] = {}
+            dirty_by_id: Dict[Tuple[str, int], bool] = {}
+            active_saves: Dict[str, Set[int]] = {}
+
+            filtered: List[Node] = []
+            for child in children:
+                # Handle SaveAssignment specially (non-pushpop)
+                if isinstance(child, SaveAssignment) and not child.pushpop:
+                    name = child.var.name_ext()
+                    if child.load:
+                        key = (name, child.id)
+                        # If save is external (no entry yet), keep the first load conservatively
+                        if key in dirty_by_id:
+                            needed = dirty_by_id[key] or var_dirty.get(name, False)
+                        else:
+                            needed = True
+                        if not needed:
+                            # Drop this load because nothing modified the var since save
+                            continue
+                        # Consume/reset the dirtiness for this save id
+                        dirty_by_id[key] = False
+                        if name in active_saves:
+                            var_dirty[name] = any(dirty_by_id.get((name, sid), False) for sid in active_saves[name])
+                        else:
+                            var_dirty[name] = False
+                        filtered.append(child)
+                    else:
+                        # Save: begin a new clean segment for this id
+                        if name not in active_saves:
+                            active_saves[name] = set()
+                        active_saves[name].add(child.id)
+                        dirty_by_id[(name, child.id)] = False
+                        filtered.append(child)
+                    continue
+
+                # For other nodes, detect real writes to variables
+                assigned = child.assigned_vars(VarList(), without_savevar=True)
+                wrote_names = set(v.name_ext() for v in assigned)
+                if wrote_names:
+                    for nm in wrote_names:
+                        var_dirty[nm] = True
+                        if nm in active_saves:
+                            for sid in active_saves[nm]:
+                                dirty_by_id[(nm, sid)] = True
+                filtered.append(child)
+
+            children = filtered
+
         return Block(children)
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
@@ -3830,8 +3881,12 @@ class SaveAssignment(Node):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Optional[SaveAssignment]:
+        # For pointer push/pop loads, conservatively keep them
         if isinstance(self, PushPop) and self.pointer and self.load:
             return self
+        # Keep only if the assigned variable is part of the targets. Whether a
+        # load is needed should be determined by required-vars propagation in the
+        # surrounding Block (which will add the LHS when later statements use it).
         if self.lhs not in targets:
             return None
         if self.load and self.var.ref_var is None:
