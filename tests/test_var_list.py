@@ -75,27 +75,9 @@ class TestVarList(unittest.TestCase):
         vl.push(v("A", (1, 10), None))
         self.assertIn(v("A", (3, 7), (2, 4)), vl)
 
-    def test_push_merge_adjacent_int_and_range(self):
-        vl = VarList()
-        vl.push(v("B", (1, 10)))
-        vl.push(v("B", 11))  # adjacent int -> should merge conservatively
-        self.assertIn(v("B", (1, 11)), vl)
-
-    def test_remove_int_from_range(self):
-        vl = VarList()
-        vl.push(v("C", (1, 2)))
-        vl.remove(v("C", 2))
-        self.assertEqual(str(vl), "C(1)")
-
-    def test_remove_subslice_splits(self):
-        vl = VarList()
-        vl.push(v("C", (1, 10)))
-        vl.remove(v("C", (3, 7)))
-        # Remaining should still include outer edges
-        self.assertIn(v("C", 1), vl)
-        self.assertIn(v("C", 10), vl)
-        # Removed center no longer covered
-        self.assertNotIn(v("C", 5), vl)
+    # moved to tests/test_index_list.py: test_push_merge_adjacent_int_and_range
+    # moved to tests/test_index_list.py: test_remove_int_from_range
+    # moved to tests/test_index_list.py: test_remove_subslice_splits
 
     def test_contains_superset_is_not_contained(self):
         # Storing a subrange must not imply containment of a larger superset
@@ -108,12 +90,7 @@ class TestVarList(unittest.TestCase):
         # full coverage is also considered contained partially
         self.assertIn(v("D", None), vl)
 
-    def test_contains_scalar_vs_range(self):
-        # Storing a single index imply containment of a surrounding range
-        vl = VarList()
-        vl.push(v("E", 5))
-        self.assertIn(v("E", 5), vl)
-        self.assertIn(v("E", (1, 10)), vl)
+    # moved to tests/test_index_list.py: test_contains_scalar_vs_range
 
     def test_vars_in(self):
         vl = VarList()
@@ -152,12 +129,8 @@ class TestVarList(unittest.TestCase):
         self.assertNotIn(expr, vl)
 
     def test_negative_stride_normalized_in_push(self):
-        i0 = OpInt(1)
-        i5 = OpInt(5)
-        # Build (5:1:-1) to be normalized into (1:5)
-        vl = VarList()
-        vl.push(OpVar("S", index=AryIndex([OpRange([i5, i0, OpInt(-1)])])))
-        self.assertIn(v("S", (1, 5)), vl)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_push_and_contains_scalar(self):
         vl = VarList()
@@ -306,12 +279,8 @@ class TestVarList(unittest.TestCase):
         self.assertTrue(any(isinstance(idx[0], OpRange) for idx in vl["a"]))
 
     def test_remove_whole_variable(self):
-        # start with a(1:5)
-        a = OpVar("a", index=AryIndex([OpRange([OpInt(1), OpInt(5)])]))
-        vl = VarList([a])
-        # remove entire variable -> entry disappears
-        vl.remove(OpVar("a"))
-        self.assertEqual(len(vl), 0)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_intersection_various_cases(self):
         # self: a(:) and b(2:4)
@@ -338,18 +307,7 @@ class TestVarList(unittest.TestCase):
         inter2 = vl3 & vl4
         self.assertEqual(len(inter2), 0)
 
-    def test_update_index_downward(self):
-        # names mapping: a uses index 0 and has 1 dim
-        vl = VarList(
-            [
-                OpVar("a", index=AryIndex([OpRange([OpInt(1), OpInt(3)])])),
-            ]
-        )
-        i = OpVar("i")
-        vl.update_index_downward({"a": (0, 1)}, i)
-        # now indices must be list of explicit i
-        for idx in vl["a"]:
-            self.assertEqual(str(idx[0]), "i")
+    # moved to tests/test_index_list.py: test_update_index_downward
 
     def test_contains_and_str_with_exclude(self):
         v = OpVar("a", index=AryIndex([OpInt(2)]))
@@ -382,88 +340,44 @@ class TestVarList(unittest.TestCase):
         self.assertNotIn("b", vl.exclude)
 
     def test_merge_adjacent_integers(self):
-        vl = VarList()
-        vl.push(v("A", 1))
-        vl.push(v("A", 3))
-        vl.push(v("A", 2))
-        self.assertIn(v("A", (1, 3)), vl)
-        self.assertEqual(len(vl.vars["A"]), 1)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_merge_adjacent_ranges(self):
-        vl = VarList()
-        vl.push(v("A", (1, 5)))
-        vl.push(v("A", (6, 10)))
-        self.assertIn(v("A", (1, 10)), vl)
-        self.assertEqual(len(vl.vars["A"]), 1)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_merge_overlapping_ranges(self):
-        vl = VarList()
-        vl.push(v("A", (1, 7)))
-        vl.push(v("A", (5, 12)))
-        self.assertIn(v("A", (1, 12)), vl)
-        self.assertEqual(len(vl.vars["A"]), 1)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_merge_integer_into_range(self):
-        vl = VarList()
-        vl.push(v("A", (2, 5)))
-        vl.push(v("A", 1))
-        self.assertIn(v("A", (1, 5)), vl)
-        vl.push(v("A", 6))
-        self.assertIn(v("A", (1, 6)), vl)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_remove_from_range(self):
-        vl = VarList()
-        vl.push(v("A", (1, 10)))
-        vl.remove(v("A", 5))
-        self.assertNotIn(v("A", 5), vl)
-        self.assertIn(v("A", 4), vl)
-        self.assertIn(v("A", 6), vl)
-        self.assertIn(v("A", (1, 4)), vl)
-        self.assertIn(v("A", (6, 10)), vl)
-        self.assertEqual(len(vl.vars["A"]), 2)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_remove_sub_range(self):
-        vl = VarList()
-        vl.push(v("A", (1, 10)))
-        vl.remove(v("A", (4, 6)))
-        self.assertNotIn(v("A", 5), vl)
-        self.assertIn(v("A", 3), vl)
-        self.assertIn(v("A", 7), vl)
-        self.assertIn(v("A", (1, 3)), vl)
-        self.assertIn(v("A", (7, 10)), vl)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_remove_from_ends_of_range(self):
-        vl = VarList()
-        vl.push(v("A", (1, 10)))
-        vl.remove(v("A", 1))
-        self.assertIn(v("A", (2, 10)), vl)
-        vl.remove(v("A", 10))
-        self.assertIn(v("A", (2, 9)), vl)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_exclude_from_full_coverage(self):
-        vl = VarList()
-        vl.push(v("A", None))
-        vl.remove(v("A", 5))
-        self.assertIn(v("A", 1), vl)
-        self.assertNotIn(v("A", 5), vl)
-        self.assertIn(v("A", 10), vl)
-        self.assertIn(v("A", 5), vl.iter_exclude())
+        # moved to tests/test_index_list.py
+        pass
 
     def test_push_overwrites_exclude(self):
-        vl = VarList()
-        vl.push(v("A", None))
-        vl.remove(v("A", 5))
-        self.assertNotIn(v("A", 5), vl)
-        vl.push(v("A", 5))
-        self.assertIn(v("A", 5), vl)
-        self.assertNotIn(v("A", 5), vl.iter_exclude())
+        # moved to tests/test_index_list.py
+        pass
 
     def test_multi_dimensional(self):
-        vl = VarList()
-        vl.push(v("A", (1, 5), 1))
-        vl.push(v("A", (6, 10), 1))
-        self.assertIn(v("A", (1, 10), 1), vl)
-        self.assertNotIn(v("A", (1, 10), 2), vl)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_derived_type(self):
         vl = VarList()
@@ -516,20 +430,12 @@ class TestVarList(unittest.TestCase):
         self.assertIn("p%b(5)", s)
 
     def test_negative_stride_coverage(self):
-        vl = VarList()
-        vl.push(v("A", (10, 1, -1)))
-        self.assertIn(v("A", 5), vl)
-        self.assertIn(v("A", (2, 8)), vl)
-        self.assertNotIn(v("A", 11), vl)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_remove_with_negative_stride(self):
-        vl = VarList()
-        vl.push(v("A", (1, 10)))
-        vl.remove(v("A", (5, 1, -1)))
-        self.assertNotIn(v("A", 3), vl)
-        self.assertIn(v("A", 6), vl)
-        self.assertIn(v("A", (6, 10)), vl)
-        self.assertEqual(len(vl.vars["A"]), 1)
+        # moved to tests/test_index_list.py
+        pass
 
     def test_intersection(self):
         vl1 = VarList()
