@@ -104,8 +104,8 @@ class TestNodeMethods(unittest.TestCase):
                 Assignment(OpVar("a"), OpInt(1)),
             ]
         )
-        self.assertTrue(blk.has_assignment_to(OpVar("a")))
-        self.assertFalse(blk.has_assignment_to(OpVar("b")))
+        self.assertTrue(blk.has_assignment_to("a"))
+        self.assertFalse(blk.has_assignment_to("b"))
 
         inner = DoLoop(
             Block(
@@ -122,9 +122,9 @@ class TestNodeMethods(unittest.TestCase):
         outer = DoLoop(
             Block([inner]), index=OpVar("j"), range=OpRange([OpInt(1), OpVar("m")])
         )
-        self.assertTrue(outer.has_assignment_to(OpVar("a")))
-        self.assertFalse(outer.has_assignment_to(OpVar("b")))
-        self.assertFalse(outer.has_assignment_to(OpVar("c")))
+        self.assertTrue(outer.has_assignment_to("a"))
+        self.assertFalse(outer.has_assignment_to("b"))
+        self.assertFalse(outer.has_assignment_to("c"))
 
     def test_has_reference_to(self):
         inner = Block(
@@ -134,9 +134,9 @@ class TestNodeMethods(unittest.TestCase):
         )
         loop = DoLoop(inner, index=OpVar("i"), range=OpRange([OpInt(1), OpInt(10)]))
         outer = Block([loop])
-        self.assertTrue(outer.has_reference_to(OpVar("a")))
-        self.assertFalse(outer.has_reference_to(OpVar("c")))
-        self.assertFalse(outer.has_reference_to(OpVar("b")))
+        self.assertTrue(outer.has_reference_to("a"))
+        self.assertFalse(outer.has_reference_to("c"))
+        self.assertFalse(outer.has_reference_to("b"))
 
     def test_ids_and_clone(self):
         blk = Block([Assignment(OpVar("a"), OpInt(1))])
@@ -200,9 +200,9 @@ class TestNodeMethods(unittest.TestCase):
         decls = Block([Declaration(name="a", var_type=VarType("real"))])
         body = Block([Assignment(OpVar("b"), OpVar("a"))])
         blk = BlockConstruct(decls, body)
-        self.assertFalse(blk.has_reference_to(OpVar("a")))
-        self.assertFalse(blk.has_assignment_to(OpVar("a")))
-        self.assertTrue(blk.has_assignment_to(OpVar("b")))
+        self.assertFalse(blk.has_reference_to("a"))
+        self.assertFalse(blk.has_assignment_to("a"))
+        self.assertTrue(blk.has_assignment_to("b"))
         vars = VarList([OpVar("a")])
         vars = blk.required_vars(vars)
         self.assertEqual({str(v) for v in vars}, {"a"})
@@ -1589,8 +1589,8 @@ class TestRemoveRedundantAllocates(unittest.TestCase):
             """\
         do j = m, 1, - 1
           do i = n, 1, - 1
-            work_ad(1) = x_ad(i,j)
-            work_ad(2) = y_ad(i,j)
+            work_ad(1) = x_ad(i,j) + work_ad(1)
+            work_ad(2) = y_ad(i,j) + work_ad(2)
             x_ad(i,j) = work_ad(1) * x(i,j) + x_ad(i,j)
             y_ad(i,j) = work_ad(2) * y(i,j) + y_ad(i,j)
           end do
@@ -1620,6 +1620,7 @@ class TestRemoveRedundantAllocates(unittest.TestCase):
         outer = DoLoop(
             Block([inner]), index=j, range=OpRange([OpVar("m"), OpInt(1), OpInt(-1)])
         )
+        self.assertEqual("".join(outer.render()), code)
         self.assertEqual(
             {str(v) for v in outer.required_vars()},
             {
@@ -1632,7 +1633,7 @@ class TestRemoveRedundantAllocates(unittest.TestCase):
                 "m",
             },
         )
-        self.assertEqual(set(outer.recurrent_vars()), {"work_ad"})
+        self.assertEqual(set(outer.recurrent_vars()), set())
 
         code = textwrap.dedent(
             """\
@@ -1696,8 +1697,8 @@ class TestRemoveRedundantAllocates(unittest.TestCase):
             {str(v) for v in outer.required_vars()},
             {"x_ad(1:n,1:m)", "y_ad(1:n,1:m)", "work(1:2)", "work_ad(1:2)", "n", "m"},
         )
-        self.assertEqual(set(outer.recurrent_vars()), {"work_ad", "work"})
         outer = outer.prune_for(VarList([x_ad, y_ad]))
+        self.assertEqual(set(outer.recurrent_vars()), set())
         self.assertEqual("".join(outer.render()), code)
 
 

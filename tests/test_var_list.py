@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fautodiff.operators import AryIndex, OpInt, OpNeg, OpRange, OpVar, VarType, Operator
-from fautodiff.var_list import VarList
+from fautodiff.var_list import VarList, IndexList
 
 
 def v(name, *idx_dims) -> OpVar:
@@ -222,7 +222,7 @@ class TestVarList(unittest.TestCase):
         self.assertIn(v.name_ext(), vl.names())
         self.assertIn(var, vl)
         self.assertEqual(str(vl), "vref(n)%ary(m)")
-        self.assertEqual(AryIndex([n, m]), vl.vars["vref%ary"][0])
+        self.assertEqual(AryIndex([n, m]), vl["vref%ary"][0])
         self.assertEqual([var], list(v for v in vl))
 
     def test_merge(self):
@@ -327,7 +327,7 @@ class TestVarList(unittest.TestCase):
         vl2 = VarList([v2])
         vl1.merge(vl2)
         # a indices merged; at least one index recorded
-        self.assertIn("a", vl1.vars)
+        self.assertIn("a", vl1.names())
         self.assertTrue(len(vl1["a"]) >= 1)
 
     def test_push_entire_replaces_and_clears_exclude(self):
@@ -336,8 +336,7 @@ class TestVarList(unittest.TestCase):
         vl.add_exclude(OpVar("b", index=AryIndex([OpInt(2)])))
         # Pushing entire array b(:) should replace index list and clear exclude
         vl.push(OpVar("b", index=AryIndex([OpRange([None])])))
-        self.assertEqual(vl["b"], [None])
-        self.assertNotIn("b", vl.exclude)
+        self.assertEqual(vl["b"], IndexList([None], dims=[1]))
 
     def test_merge_adjacent_integers(self):
         # moved to tests/test_index_list.py
@@ -409,7 +408,7 @@ class TestVarList(unittest.TestCase):
         vl.remove(v("A", (1, n)))
 
         # Since we can't determine the range of n, it should be excluded
-        self.assertIn(v("A", (1, n)), vl.iter_exclude())
+        self.assertIn(AryIndex([OpRange([1, n])]), vl["A"].exclude)
         # The original range should still be there, but __contains__ will use the exclude list
         self.assertIn(v("A", (1, 10)), vl)
         self.assertNotIn(v("A", (1, n)), vl)
@@ -422,7 +421,7 @@ class TestVarList(unittest.TestCase):
         vl.push(va)
         vb = v("b", 5); vb.ref_var = v("p")
         vl.push(vb)
-        vl.dims["B"] = [2]  # B is 2D
+        vl["B"].dims = [2]  # B is 2D
         s = str(vl)
         self.assertIn("A(1:10)", s)
         self.assertIn("B(:,:)", s)

@@ -21,10 +21,16 @@ class IndexList:
     def copy(self) -> "IndexList":
         return IndexList(indices=list(self.indices), exclude=list(self.exclude), dims=list(self.dims))
 
-    # --- Convenience API for managing internal data ---
-    def get_indices(self) -> List[Optional[AryIndex]]:
-        return self.indices
+    def __len__(self) -> int:
+        return len(self.indices)
 
+    def __iter__(self) -> Iterator[Optional[AryIndex]]:
+        return iter(self.indices)
+
+    def __getitem__(self, index: int) -> Optional[AryIndex]:
+        return self.indices[index]
+
+    # --- Convenience API for managing internal data ---
     def set_indices(self, indices: List[Optional[AryIndex]]) -> None:
         self.indices = list(indices)
 
@@ -33,9 +39,6 @@ class IndexList:
 
     def has_indices(self) -> bool:
         return bool(self.indices)
-
-    def get_exclude(self) -> List[AryIndex]:
-        return self.exclude
 
     def set_exclude(self, exclude: List[AryIndex]) -> None:
         self.exclude = list(exclude)
@@ -47,14 +50,11 @@ class IndexList:
     def clear_exclude(self) -> None:
         self.exclude = []
 
-    def get_dims(self) -> List[int]:
-        return self.dims
-
     def set_dims(self, dims: List[int]) -> None:
         self.dims = list(dims)
 
     # --- Context handling ---
-    def _replace_index_for_exit(self, index: AryIndex, base_var: OpVar, range: OpRange, vars: List[OpVar]) -> Optional[AryIndex]:
+    def _replace_index(self, index: AryIndex, base_var: OpVar, range: OpRange, vars: List[OpVar], exclude: bool = False) -> Optional[AryIndex]:
         """Return transformed index for context exit.
 
         - Replace occurrences of base_var in dims by the given range.
@@ -70,7 +70,7 @@ class IndexList:
                 if index_new is None:
                     index_new = index.copy()
                 index_new[j] = dim_new
-            else:
+            elif not exclude:
                 for v in vars:
                     dim_new2 = dim.replace_with(v, OpRange([None, None]))
                     if dim_new2 is not dim:
@@ -119,22 +119,36 @@ class IndexList:
         then removes those covered regions from the tracked indices.
         """
         base_var, vars, range = context
-        # Transform excludes
-        transformed_ex: List[AryIndex] = []
+        idx_list = IndexList()
+        idx_list.indices = list(self.indices)
+        idx_list.dims = list(self.dims)
         for ex in list(self.exclude):
             if ex is None:
-                continue
-            ex_new = self._replace_index_for_exit(ex, base_var, range, vars)
-            if ex_new is not None:
-                transformed_ex.append(ex_new)
-        # Apply removals based on transformed excludes
-        for ex in transformed_ex:
-            self.remove_index(ex)
-        # Update exclude list
-        if transformed_ex:
-            self.set_exclude(transformed_ex)
+                raise RuntimeError("Unexpected")
+            ex_new = self._replace_index(ex, base_var, range, vars, exclude=True)
+            idx_list.remove_index(ex_new)
+        if idx_list.exclude:
+            self.exclude = idx_list.exclude
         else:
             self.clear_exclude()
+
+        if not idx_list.indices:
+            self.indices = []
+            self.dims = []
+            self.clear_exclude
+
+        indices: List[Optional[AryIndex]] = []
+        for idx in self.indices:
+            if idx is None:
+                indices.append(None)
+                continue
+            idx_new = self._replace_index(idx, base_var, range, vars)
+            if idx_new is None:
+                indices.append(idx)
+            else:
+                indices.append(idx_new)
+        self.indices = indices
+        self.reorganize()
 
     # --- High-level helpers used by VarList ---
     def make_opvar(self, full_name: str, index: Optional[Union[AryIndex, List[Operator]]]) -> OpVar:
@@ -778,42 +792,6 @@ class VarList:
             for var in vars:
                 self.push(var, not_reorganize=True)
 
-    # Compatibility accessors expected by tests
-    @property
-    def vars(self) -> VarDict[str, List[Optional[AryIndex]]]:
-        """Expose indices per name as VarDict for backward compatibility."""
-        vd: VarDict[str, List[Optional[AryIndex]]] = VarDict()
-        for name in self._store.keys():
-            il = self._store[name]
-            if il.indices:
-                vd[name] = list(il.indices)
-        return vd
-
-    @property
-    def exclude(self) -> VarDict[str, List[AryIndex]]:
-        """Expose exclude per name as VarDict for backward compatibility."""
-        vd: VarDict[str, List[AryIndex]] = VarDict()
-        for name in self._store.keys():
-            il = self._store[name]
-            if il.exclude:
-                vd[name] = list(il.exclude)
-        return vd
-
-    class _DimsView:
-        def __init__(self, owner: "VarList"):
-            self._owner = owner
-
-        def __getitem__(self, key: str) -> List[int]:
-            return self._owner.get_dims(key)
-
-        def __setitem__(self, key: str, value: List[int]) -> None:
-            self._owner.set_dims(key, value)
-
-    @property
-    def dims(self) -> "VarList._DimsView":
-        """Provide a mapping-like view to dims for compatibility with tests."""
-        return VarList._DimsView(self)
-
     def copy(self) -> VarList:
         """Return a deep copy of the variable list."""
 
@@ -851,7 +829,7 @@ class VarList:
             il = self._store[name]
             il.exit_context((base_var, vars, range))
             # drop empty entries
-            if not il.get_indices():
+            if not il.indices:
                 del self._store[name]
 
     def __contains__(self, item: OpVar) -> bool:
@@ -889,24 +867,20 @@ class VarList:
 
         return len(self.names())
 
-    def __getitem__(self, key: str):
-        """Return index list for ``key``."""
+    def __getitem__(self, name: str) -> IndexList:
+        """Return index list for ``name``."""
 
-        return self.get_indices(key)
+        return self._store[name]
 
-    # _get_var moved into IndexList.make_opvar
+    def __setitem__(self, name: str, item: IndexList) -> None:
+        if not isinstance(item, IndexList):
+            raise ValueError(f"item must be IndexList: {type(item)}")
+        self._store[name] = item
 
     def __iter__(self) -> Iterator[OpVar]:
         """Iterate over stored variables as ``OpVar`` objects."""
         for name in self.names():
             yield from self._store[name].iter_opvars(name)
-
-    def iter_exclude(self) -> Iterator[OpVar]:
-        """Iterate over indices that are explicitly excluded."""
-
-        for name in sorted(self._store.keys()):
-            for index in self._store[name].get_exclude():
-                yield self._store[name].make_opvar(name, index)
 
     # --- New public API over unified store ---
     def names(self) -> List[str]:
@@ -922,36 +896,15 @@ class VarList:
         il = self._store.get(name)
         return bool(il and il.indices)
 
-    def get_indices(self, name: str) -> List[Optional[AryIndex]]:
-        il = self._store.get(name)
-        return [] if il is None else il.get_indices()
-
-    def set_indices(self, name: str, indices: List[Optional[AryIndex]]) -> None:
-        if name not in self._store:
-            self._store[name] = IndexList()
-        self._store[name].set_indices(indices)
-
-    def get_exclude(self, name: str) -> List[AryIndex]:
-        il = self._store.get(name)
-        return [] if il is None else il.get_exclude()
-
-    def set_exclude(self, name: str, exclude: List[AryIndex]) -> None:
-        if name not in self._store:
-            self._store[name] = IndexList()
-        self._store[name].set_exclude(exclude)
-
-    def get_dims(self, name: str) -> List[int]:
-        il = self._store.get(name)
-        return [] if il is None else il.get_dims()
-
-    def set_dims(self, name: str, dims: List[int]) -> None:
-        if name not in self._store:
-            self._store[name] = IndexList()
-        self._store[name].set_dims(dims)
+    def dims(self, name: str) -> List[int]:
+        return self._store[name].dims
 
     def remove_name(self, name: str) -> None:
         if name in self._store:
             del self._store[name]
+
+    def get_vars(self, name: str) -> List[OpVar]:
+        return [var for var in self._store[name].iter_opvars(name)]
 
     def _get_op(self, op: Optional[Union[Operator, int]]) -> Optional[Operator]:
         """Resolve variables from context and normalise integers to OpInt."""
