@@ -69,6 +69,21 @@ class TestIndexList(unittest.TestCase):
         self.assertEqual([str(idx) for idx in il.indices], ["2,1:n"])
         self.assertEqual(il.exclude, [])
 
+    def test_push_in_range(self):
+        il = IndexList()
+        i = OpVar("i")
+        il.push(AryIndex([OpRange([i-1,i+1])]))
+        il.push(AryIndex([i]))
+        self.assertEqual(str(il), "(i - 1:i + 1)")
+
+    def test_push_merge(self):
+        il = IndexList()
+        i = OpVar("i")
+        il.push(AryIndex([OpRange([i-2,i-1])]))
+        il.push(AryIndex([OpRange([i+1,i+2])]))
+        il.push(AryIndex([i]))
+        self.assertEqual(str(il), "(i - 2:i + 2)")
+
     def test_push_merge_adjacent_int_and_range(self):
         il = IndexList()
         push(il, "B", v("B", (1, 10)))

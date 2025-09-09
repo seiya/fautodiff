@@ -43,8 +43,8 @@ from .operators import (
     OpVar,
     VarType,
 )
+
 from .var_list import IndexList, VarList
-from .var_dict import VarDict
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -1261,7 +1261,7 @@ class Block(Node):
         )
 
         var_names: List[str] = []
-        do_index = self.do_index_list[-1] if self.do_index_list else None
+        do_index = self.do_index_list[0] if self.do_index_list else None
         if do_index is not None:
             for name in common_var_names:
                 flag = False
@@ -1278,6 +1278,7 @@ class Block(Node):
                     var_names.append(name)
 
         return var_names
+
     def conflict_vars(self) -> List[str]:
         required_vars = self.required_vars()
         assigned_vars = self.assigned_vars()
@@ -5197,9 +5198,9 @@ class DoAbst(Node):
             required_vars = self._body.required_vars()
             assigned_vars = self._body.assigned_vars()
             common_vars = required_vars & assigned_vars
+            conflict_vars = self.conflict_vars() if self.do else []
             loads = []
             if self.do:
-                conflict_vars = self.conflict_vars()
                 for cvar in common_vars:
                     if (
                         cvar.name.endswith(AD_SUFFIX)
@@ -5329,6 +5330,8 @@ class DoAbst(Node):
                             break
                 if flag:
                     var_names.append(name)
+        else:
+            var_names = common_var_names
 
         return var_names
 
@@ -5340,7 +5343,9 @@ class DoLoop(DoAbst):
     index: OpVar
     range: OpRange
     label: Optional[str] = field(default=None)
-    context: Tuple[OpVar, List[OpVar], OpRange] = field(init=False, default_factory=tuple)
+    context: Tuple[OpVar, List[OpVar], OpRange] = field(
+        init=False, default_factory=tuple
+    )
     do: ClassVar[bool] = True
 
     def __post_init__(self):
@@ -5620,7 +5625,9 @@ class DoLoop(DoAbst):
         vars_for_body.push_context(self.context)
 
         vars = self._body.assigned_vars(
-            vars_for_body, without_savevar=without_savevar, check_init_advars=check_init_advars
+            vars_for_body,
+            without_savevar=without_savevar,
+            check_init_advars=check_init_advars,
         )
 
         vars.pop_context()
@@ -5648,25 +5655,29 @@ class DoLoop(DoAbst):
         targets_for_body = targets.copy()
         targets_for_body.push_context(self.context)
 
-        targets = targets.copy()
-        flag = True
         if base_targets is None:
             base_targets = targets.copy()
+        base_targets.push_context(self.context)
+
+        do_index = self.index.name
+        flag = True
         while flag:
             flag = False
-            new_body = self._body.prune_for(targets_for_body, mod_vars, decl_map, base_targets)
-
+            new_body = self._body.prune_for(
+                targets_for_body, mod_vars, decl_map, base_targets
+            )
             for var in new_body.required_vars(targets_for_body):
                 if var.name == self.index.name:
                     continue
-                if var.index is not None and set(self.do_index_list) <= set(
-                    var.index_list()
-                ):
+                if var.index is not None and do_index in var.index_list():
                     continue
                 if var not in targets_for_body:
                     targets_for_body.push(var)
                     flag = True
-        new_body = self._body.prune_for(targets_for_body, mod_vars, decl_map, base_targets)
+
+        new_body = self._body.prune_for(
+            targets_for_body, mod_vars, decl_map, base_targets
+        )
 
         if new_body.is_effectively_empty():
             return None
@@ -5682,15 +5693,11 @@ class DoLoop(DoAbst):
         vars = self._body.assigned_vars(check_init_advars=True)
         do_index = self.index.name
         for varname in vars.names():
-            idx_list = vars[varname]
-            if len(idx_list) > 1: # e.g., x(i) and x(ip)
-                for var in vars.get_vars(varname):
-                    assigned_vars.push(var)
-                continue
-            idx = idx_list[0]
-            if idx is None or do_index not in [str(v) for v in idx.collect_vars()]:
-                var = idx_list.make_opvar(varname, idx)
-                assigned_vars.push(var)
+            for idx in vars[varname]:
+                if idx is None or do_index not in [str(v) for v in idx.collect_vars()]:
+                    for var in vars.get_vars(varname):
+                        assigned_vars.push(var)
+                    continue
 
         assigned_vars = self._body.check_initial(assigned_vars)
         assigned_vars.pop_context()
@@ -5880,21 +5887,15 @@ class BlockConstruct(Node):
         return names
 
     @staticmethod
-    def _save_remove(vars: Optional[VarList], names: List[str]):
+    def _save_remove(vars: Optional[VarList], names: List[str]) -> Dict[str, IndexList]:
         if vars is None:
-            return {}, {}, {}
+            return {}
         saved = {}
-        saved_dims = {}
-        saved_ex = {}
         for name in names:
             if vars.has_name(name):
-                saved[name] = list(vars[name].indices)
-                saved_dims[name] = list(vars[name].dims)
-                ex = vars[name]
-                if ex:
-                    saved_ex[name] = list(ex)
+                saved[name] = vars[name].copy()
                 vars.remove_name(name)
-        return saved, saved_dims, saved_ex
+        return saved
 
     @staticmethod
     def _remove_names(vars: Optional[VarList], names: List[str]):
@@ -5904,14 +5905,9 @@ class BlockConstruct(Node):
             vars.remove_name(name)
 
     @staticmethod
-    def _restore(vars: VarList, saved, saved_dims, saved_ex):
-        for name in saved:
-            if not vars.has_name(name):
-                vars[name] = IndexList()
-            vars[name].set_indices(saved[name])
-            vars[name].set_dims(saved_dims[name])
-            if name in saved_ex:
-                vars[name].set_exclude(saved_ex[name])
+    def _restore(vars: VarList, saved: Dict[str, IndexList]):
+        for name, idx_list in saved.items():
+            vars[name] = idx_list
 
     def required_vars(
         self,
@@ -5920,11 +5916,11 @@ class BlockConstruct(Node):
         without_savevar: bool = False,
     ) -> VarList:
         local_names = self._local_names()
-        saved, saved_dims, saved_ex = self._save_remove(vars, local_names)
+        saved = self._save_remove(vars, local_names)
         vars = self.body.required_vars(vars, no_accumulate, without_savevar)
         vars = self.decls.required_vars(vars, no_accumulate, without_savevar)
         self._remove_names(vars, local_names)
-        self._restore(vars, saved, saved_dims, saved_ex)
+        self._restore(vars, saved)
         return vars
 
     def assigned_vars(
@@ -5934,7 +5930,7 @@ class BlockConstruct(Node):
         check_init_advars: bool = False,
     ) -> VarList:
         local_names = self._local_names()
-        saved, saved_dims, saved_ex = self._save_remove(vars, local_names)
+        saved = self._save_remove(vars, local_names)
         vars = self.body.assigned_vars(
             vars, without_savevar=without_savevar, check_init_advars=check_init_advars
         )
@@ -5942,16 +5938,16 @@ class BlockConstruct(Node):
             vars, without_savevar=without_savevar, check_init_advars=check_init_advars
         )
         self._remove_names(vars, local_names)
-        self._restore(vars, saved, saved_dims, saved_ex)
+        self._restore(vars, saved)
         return vars
 
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
         local_names = self._local_names()
-        saved, saved_dims, saved_ex = self._save_remove(vars, local_names)
+        saved = self._save_remove(vars, local_names)
         vars = self.decls.unrefered_advars(vars)
         vars = self.body.unrefered_advars(vars)
         self._remove_names(vars, local_names)
-        self._restore(vars, saved, saved_dims, saved_ex)
+        self._restore(vars, saved)
         return vars
 
     def prune_for(
@@ -5976,11 +5972,11 @@ class BlockConstruct(Node):
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         local_names = self._local_names()
-        saved, saved_dims, saved_ex = self._save_remove(assigned_vars, local_names)
+        saved = self._save_remove(assigned_vars, local_names)
         vars = self.decls.check_initial(assigned_vars)
         vars = self.body.check_initial(vars)
         self._remove_names(vars, local_names)
-        self._restore(vars, saved, saved_dims, saved_ex)
+        self._restore(vars, saved)
         return vars
 
     # ------------------------------------------------------------------

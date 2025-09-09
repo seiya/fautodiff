@@ -1233,6 +1233,7 @@ def _generate_ad_subroutine(
             targets = VarList(
                 grad_args + out_args + mod_ad_vars + mod_vars + save_ad_vars + save_vars
             )
+        # print(render_program(ad_code))
 
         # Remove statements unrelated to derivative targets
         ad_code = ad_code.prune_for(targets, mod_vars + save_vars, base_targets=targets)
@@ -1261,15 +1262,42 @@ def _generate_ad_subroutine(
         if return_flags:
             for flag in return_flags:
                 fw_block.insert_begin(Assignment(flag, OpTrue()))
-        fw_block.build_parent()
 
+    # For non-AD-target mirror variables (e.g. integer request arrays),
+    # insert an initialization for the "_ad" variable mirroring the
+    # original assignment site. We do this by locating the first
+    # assignment to the original variable in the primal content and
+    # inserting the mirrored assignment immediately before it.
+    target_block = fw_block if reverse else ad_block
+    target_block.build_parent()
+    for var in ad_block.required_vars():
+        if not var.name.endswith(AD_SUFFIX):
+            continue
+        org_name = var.name.removesuffix(AD_SUFFIX)
+        decl = routine_org.get_var(org_name)
+        if decl is not None and not decl.ad_target:
+
+            def _insert_mirror_init(node: Node) -> bool:
+                # Depth-first search for first matching assignment
+                for ch in node.iter_children():
+                    if isinstance(ch, Assignment) and ch.lhs.name == org_name:
+                        assign = Assignment(ch.lhs.add_suffix(AD_SUFFIX), ch.rhs)
+                        # Insert before in the parent block
+                        ch.parent.insert_before(ch.get_id(), assign)
+                        return True
+                    if _insert_mirror_init(ch):
+                        return True
+                return False
+
+            _insert_mirror_init(target_block)
+
+    if reverse:
         _add_fwd_rev_calls(fw_block, routine_map, generic_map)
 
         fw_block = fw_block.prune_for(
             targets, mod_vars + save_vars, base_targets=targets
         )
-        if reverse:
-            _strip_sequential_omp(fw_block, warnings, reverse=True)
+        _strip_sequential_omp(fw_block, warnings, reverse=True)
 
         assigned = routine_org.content.assigned_vars(without_savevar=True)
         required = ad_block.required_vars(without_savevar=True)
@@ -2043,29 +2071,8 @@ def _generate_ad_subroutine(
         if decl is not None:
             if decl.parameter or getattr(decl, "constant", False):
                 continue
-            # For non-AD-target mirror variables (e.g. integer request arrays),
-            # insert an initialization for the "_ad" variable mirroring the
-            # original assignment site. We do this by locating the first
-            # assignment to the original variable in the primal content and
-            # inserting the mirrored assignment immediately before it.
-            if var.name.endswith(AD_SUFFIX) and not decl.ad_target():
-                org_name = var.name.removesuffix(AD_SUFFIX)
-
-                def _insert_mirror_init(node: Node) -> bool:
-                    # Depth-first search for first matching assignment
-                    for ch in getattr(node, "iter_children", lambda: [])():
-                        if isinstance(ch, Assignment) and ch.lhs.name == org_name:
-                            assign = Assignment(ch.lhs.add_suffix(AD_SUFFIX), ch.rhs)
-                            # Insert before in the parent block
-                            ch.parent.insert_before(ch.get_id(), assign)
-                            return True
-                        if _insert_mirror_init(ch):
-                            return True
-                    return False
-
-                if _insert_mirror_init(subroutine.content):
-                    continue
         required_vnames.append(str(var))
+
     if len(required_vnames) > 0:
         _warn(
             warnings,

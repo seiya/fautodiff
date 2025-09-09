@@ -1248,13 +1248,14 @@ class OpVar(OpLeaf):
         if self.ad_target is None and self.var_type is not None:
             typename = self.var_type.typename.lower()
             if typename.startswith(("type", "class")):
-                raise ValueError("ad_target must be set for type or class variable")
-            is_deriv_type = (
-                typename.startswith("real")
-                or typename.startswith("double")
-                or typename.startswith("complex")
-            )
-            self.ad_target = is_deriv_type and not self.is_constant
+                self.ad_type = self.var_type.is_real_type()
+            else:
+                is_deriv_type = (
+                    typename.startswith("real")
+                    or typename.startswith("double")
+                    or typename.startswith("complex")
+                )
+                self.ad_target = is_deriv_type and not self.is_constant
         elif self.ad_target is None:
             self.ad_target = False
 

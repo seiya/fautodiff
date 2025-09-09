@@ -407,7 +407,6 @@ class IndexList:
             if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
                 i0, i1 = dim1[0], dim1[1]
                 j0, j1 = dim2[0], dim2[1]
-
                 # Check for overlapping
                 k0 = None
                 k1 = None
@@ -461,23 +460,28 @@ class IndexList:
             else:  # unexpected
                 raise RuntimeError(f"Unexpected: {type(dim1)} {type(dim2)}")
             i0, i1 = rng[0], rng[1]
+            diff0 = AryIndex._get_int(i0 - scalar) if i0 is not None else 999
+            diff1 = AryIndex._get_int(scalar - i1) if i1 is not None else -999
+            # Check inside
+            if diff0 is not None and diff1 is not None and diff0 < 0 and diff1 < 0:
+                found = True
+                break
             # Check adjacency at start
-            if i0 is not None:
-                diff = i0 - scalar
-                if isinstance(diff, OpInt) and diff.val == 1:
-                    work[i] = OpRange([scalar, i1])
-                    found = True
-                    break
+            if diff0 is not None and diff0 == 1:
+                work[i] = OpRange([scalar, i1])
+                found = True
+                break
             # Check adjacency at end
-            if i1 is not None:
-                diff = scalar - i1
-                if isinstance(diff, OpInt) and diff.val == 1:
-                    work[i] = OpRange([i0, scalar])
-                    found = True
-                    break
+            if diff1 is not None and diff1 == 1:
+                work[i] = OpRange([i0, scalar])
+                found = True
+                break
 
         if not found:
             self.indices.append(var_index)
+
+        if not not_reorganize:
+            self.reorganize()
 
     @staticmethod
     def _force_stride_one(var: OpVar) -> OpVar:
