@@ -67,6 +67,7 @@ def v(name, *idx_dims) -> OpVar:
 
 
 class TestVarList(unittest.TestCase):
+    
     def test_entire_contains_slices(self):
         vl = VarList()
         vl.push(v("A", (1, 10), (1, 5)))

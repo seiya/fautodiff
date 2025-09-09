@@ -5287,7 +5287,6 @@ class DoAbst(Node):
         common_var_names = sorted(
             set(required_var_names) & set(assigned_var_names)
         )
-        print(self.index, common_var_names, "[", required_vars, "]", assigned_vars)
         var_names: List[str] = []
         if self.index is not None:
             do_index = self.index.name
@@ -5303,18 +5302,6 @@ class DoAbst(Node):
                             flag = True
                             break
                 if flag:
-                    var_names.append(name)
-        for name in assigned_var_names:
-            if name.endswith(AD_SUFFIX) and not self.has_reference_to(name):
-                if self.index is not None:
-                    flag = False
-                    for index in assigned_vars[name]:
-                        if index is None or not do_index in index.list():
-                            flag = True
-                            break
-                    if not flag:
-                        continue
-                if name not in var_names:
                     var_names.append(name)
 
         return var_names
@@ -5666,15 +5653,18 @@ class DoLoop(DoAbst):
             assigned_vars = assigned_vars.copy()
         assigned_vars.push_context(self.context)
 
-        recurrent_vars = self.recurrent_vars()
-        #print(self.index, recurrent_vars)
         vars = self._body.assigned_vars(check_init_advars=True)
+        do_index = self.index.name
         for varname in vars.names():
-            if (varname in recurrent_vars or
-                len(vars[varname]) > 1): # e.g., x(i) and x(ip)
+            idx_list = vars[varname]
+            if len(idx_list) > 1: # e.g., x(i) and x(ip)
                 for var in vars.get_vars(varname):
                     assigned_vars.push(var)
                 continue
+            idx = idx_list[0]
+            if idx is None or do_index not in [str(v) for v in idx.collect_vars()]:
+                var = idx_list.make_opvar(varname, idx)
+                assigned_vars.push(var)
 
         assigned_vars = self._body.check_initial(assigned_vars)
         assigned_vars.pop_context()

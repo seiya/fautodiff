@@ -25,7 +25,7 @@ from fautodiff.code_tree import (
     Subroutine,
     render_program,
 )
-from fautodiff.operators import OpFuncUser, OpInt, OpRange, OpReal, OpVar, VarType
+from fautodiff.operators import OpFunc, OpInt, OpRange, OpReal, OpVar, VarType
 from fautodiff.var_list import VarList
 
 
@@ -569,8 +569,11 @@ class TestNodeMethods(unittest.TestCase):
             """\
         do i = 1, n
           a_ad = b_ad + a_ad
-          b_ad = a_ad + b_ad
-          a_ad = b_ad + a_ad
+          b_ad = 0.0
+          b_ad = a_ad
+          a_ad = 0.0
+          a_ad = b_ad
+          b_ad = 0.0
         end do
         """
         )
@@ -582,8 +585,11 @@ class TestNodeMethods(unittest.TestCase):
             Block(
                 [
                     Assignment(a_ad, b_ad, accumulate=True),
+                    ClearAssignment(b_ad),
                     Assignment(b_ad, a_ad, accumulate=True),
+                    ClearAssignment(a_ad),
                     Assignment(a_ad, b_ad, accumulate=True),
+                    ClearAssignment(b_ad),
                 ]
             ),
             index=i,
@@ -782,6 +788,7 @@ class TestNodeMethods(unittest.TestCase):
           do k = 2, 1, - 1
             work_ad(k) = z_ad + work_ad(k)
             var_ad(k,i) = work_ad(k)
+            work_ad(k) = 0.0
           end do
         end do
         """
@@ -800,7 +807,8 @@ class TestNodeMethods(unittest.TestCase):
                 DoLoop(
                     Block([
                         Assignment(work_ad, z_ad, accumulate=True),
-                        Assignment(var_ad, work_ad, accumulate=True)
+                        Assignment(var_ad, work_ad, accumulate=True),
+                        ClearAssignment(work_ad)
                     ]),
                     index=k,
                     range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
@@ -822,6 +830,7 @@ class TestNodeMethods(unittest.TestCase):
           do k = 2, 1, - 1
             work_ad(k) = z_ad + work_ad(k)
             var_ad(k,i) = work_ad(k)
+            work_ad(k) = 0.0
           end do
         end do
         """
@@ -843,7 +852,8 @@ class TestNodeMethods(unittest.TestCase):
                 DoLoop(
                     Block([
                         Assignment(work_ad, z_ad, accumulate=True),
-                        Assignment(var_ad, work_ad, accumulate=True)
+                        Assignment(var_ad, work_ad, accumulate=True),
+                        ClearAssignment(work_ad)
                     ]),
                     index=k,
                     range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
@@ -862,7 +872,8 @@ class TestNodeMethods(unittest.TestCase):
           do k = 2, 1, - 1
             work_ad(k) = z_ad * k
           end do
-          var_ad(k,i) = work_ad(1) + work_ad(2)
+          var_ad(k,i) = sum(work_ad(:))
+          work_ad(:) = 0.0
         end do
         """
         )
@@ -872,6 +883,7 @@ class TestNodeMethods(unittest.TestCase):
         work_ad = OpVar("work_ad", index=[k])
         work_ad1 = OpVar("work_ad", index=[1])
         work_ad2 = OpVar("work_ad", index=[2])
+        work_ada = OpVar("work_ad", index=[None])
         z_ad = OpVar("z_ad")
         loop = DoLoop(
             Block([
@@ -882,7 +894,8 @@ class TestNodeMethods(unittest.TestCase):
                     index=k,
                     range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
                 ),
-                Assignment(var_ad, work_ad1 + work_ad2, accumulate=True)
+                Assignment(var_ad, OpFunc("sum", [work_ada]), accumulate=True),
+                ClearAssignment(work_ada)
             ]),
             index=i,
             range=OpRange([OpVar("n"), OpInt(1), OpInt(-1)]),
@@ -899,7 +912,8 @@ class TestNodeMethods(unittest.TestCase):
             work_ad(1,i) = z_ad * 1.0
           end do
           do i = n, 1, - 1
-            var_ad(i,j) = work_ad(1,i) + work_ad(2,i)
+            var_ad(i,j) = sum(work_ad(:,i))
+            work_ad(:,i) = 0.0
           end do
         end do
         """
@@ -910,6 +924,7 @@ class TestNodeMethods(unittest.TestCase):
         m = OpVar("m")
         work_ad1 = OpVar("work_ad", index=[1, i])
         work_ad2 = OpVar("work_ad", index=[2, i])
+        work_ada = OpVar("work_ad", index=[None, i])
         var_ad = OpVar("var_ad", index=[i,j])
         z_ad = OpVar("z_ad")
         loop = DoLoop(
@@ -924,7 +939,8 @@ class TestNodeMethods(unittest.TestCase):
                 ),
                 DoLoop(
                     Block([
-                        Assignment(var_ad, work_ad1 + work_ad2, accumulate=True)
+                        Assignment(var_ad, OpFunc("sum", [work_ada]), accumulate=True),
+                        ClearAssignment(work_ada)
                     ]),
                     index=i,
                     range=OpRange([n, OpInt(1), OpInt(-1)])
@@ -946,7 +962,8 @@ class TestNodeMethods(unittest.TestCase):
             end do
           end do
           do i = n, 1, - 1
-            var_ad(i,j) = work_ad(1,i) + work_ad(2,i)
+            var_ad(i,j) = sum(work_ad(:,i))
+            work_ad(:,i) = 0.0
           end do
         end do
         """
@@ -959,6 +976,7 @@ class TestNodeMethods(unittest.TestCase):
         work_ad = OpVar("work_ad", index=[k, i])
         work_ad1 = OpVar("work_ad", index=[1, i])
         work_ad2 = OpVar("work_ad", index=[2, i])
+        work_ada = OpVar("work_ad", index=[None, i])
         var_ad = OpVar("var_ad", index=[i,j])
         z_ad = OpVar("z_ad")
         loop = DoLoop(
@@ -978,7 +996,8 @@ class TestNodeMethods(unittest.TestCase):
                 ),
                 DoLoop(
                     Block([
-                        Assignment(var_ad, work_ad1 + work_ad2, accumulate=True)
+                        Assignment(var_ad, OpFunc("sum", [work_ada]), accumulate=True),
+                        ClearAssignment(work_ada)
                     ]),
                     index=i,
                     range=OpRange([n, OpInt(1), OpInt(-1)])
@@ -1002,6 +1021,7 @@ class TestNodeMethods(unittest.TestCase):
           do i = n, 1, - 1
             do k = 2, 1, - 1
               var_ad(i,j) = work_ad(k,i) + var_ad(i,j)
+              work_ad(k,i) = 0.0
             end do
           end do
         end do
@@ -1034,7 +1054,8 @@ class TestNodeMethods(unittest.TestCase):
                     Block([
                         DoLoop(
                             Block([
-                                Assignment(var_ad, work_ad, accumulate=True)
+                                Assignment(var_ad, work_ad, accumulate=True),
+                                ClearAssignment(work_ad)
                             ]),
                             index=k,
                             range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])

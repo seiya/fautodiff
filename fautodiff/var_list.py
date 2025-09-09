@@ -30,6 +30,21 @@ class IndexList:
     def __getitem__(self, index: int) -> Optional[AryIndex]:
         return self.indices[index]
 
+    def __str__(self) -> str:
+        """Human readable representation used for debugging.
+
+        Render full-array coverage explicitly as ':' for each dimension so
+        that strings like '(:,:)' appear even when the internal representation
+        uses ``None`` for entire coverage.
+        """
+
+        res = ", ".join([f"({idx})" for idx in self.indices])
+
+        excl = [f"({idx})" for idx in self.exclude]
+        if excl:
+            res = f"{res}, exclude: {', '.join(excl)}"
+        return res
+
     # --- Convenience API for managing internal data ---
     def set_indices(self, indices: List[Optional[AryIndex]]) -> None:
         self.indices = list(indices)
@@ -119,30 +134,51 @@ class IndexList:
         then removes those covered regions from the tracked indices.
         """
         base_var, vars, range = context
+        # Normalize negative stride ranges to forward direction (e.g., n:1:-1 -> 1:n)
+        rng = range
+        try:
+            if rng[2] is not None and isinstance(rng[2], OpNeg):
+                step = -rng[2]
+                if isinstance(step, OpInt) and step.val == 1:
+                    step = None
+                rng = OpRange([rng[1], rng[0], step])
+            if rng[2] == OpInt(1):
+                rng = OpRange([rng[0], rng[1]])
+        except Exception:
+            # In case range is shorter (len<3), fall back to original
+            rng = range
         idx_list = IndexList()
         idx_list.indices = list(self.indices)
         idx_list.dims = list(self.dims)
         for ex in list(self.exclude):
             if ex is None:
                 raise RuntimeError("Unexpected")
-            ex_new = self._replace_index(ex, base_var, range, vars, exclude=True)
-            idx_list.remove_index(ex_new)
+            ex_new = self._replace_index(ex, base_var, rng, vars, exclude=True)
+            # Use full-featured removal to shrink covered regions instead of just marking excludes
+            try:
+                idx_list.remove_var(OpVar("__tmp__", index=ex_new))
+            except Exception:
+                # Fallback to simplified removal if OpVar creation or removal fails
+                idx_list.remove_index(ex_new)
         if idx_list.exclude:
             self.exclude = idx_list.exclude
         else:
             self.clear_exclude()
 
+        # Adopt indices possibly modified by removals above
         if not idx_list.indices:
             self.indices = []
             self.dims = []
-            self.clear_exclude
+            self.clear_exclude()
+        else:
+            self.indices = list(idx_list.indices)
 
         indices: List[Optional[AryIndex]] = []
         for idx in self.indices:
             if idx is None:
                 indices.append(None)
                 continue
-            idx_new = self._replace_index(idx, base_var, range, vars)
+            idx_new = self._replace_index(idx, base_var, rng, vars)
             if idx_new is None:
                 indices.append(idx)
             else:

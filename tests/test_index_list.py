@@ -56,6 +56,19 @@ def push(il: IndexList, name: str, var: OpVar, not_reorganize: bool = False):
 
 
 class TestIndexList(unittest.TestCase):
+    def test_exit_context_and_remove(self):
+        il = IndexList()
+        il.dims = [2]
+
+        i = OpVar("i")
+        n = OpVar("n")
+        il.push(AryIndex([OpRange([OpInt(1), OpInt(2)]), i]))
+        il.exit_context((i, [i], OpRange([OpInt(1), n])))
+        il.remove_index(AryIndex([OpInt(1), i]))
+        il.exit_context((i, [i], OpRange([OpInt(1), n])))
+        self.assertEqual([str(idx) for idx in il.indices], ["2,1:n"])
+        self.assertEqual(il.exclude, [])
+
     def test_push_merge_adjacent_int_and_range(self):
         il = IndexList()
         push(il, "B", v("B", (1, 10)))
