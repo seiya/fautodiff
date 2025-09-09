@@ -616,7 +616,7 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            src_path = Path(tmp) / "save_alloc.f90"
+            src_path = Path(tmp) / "tmp.f90"
             src_path.write_text(src)
             generated = generator.generate_ad(str(src_path), warn=False)
             lines = generated.splitlines()

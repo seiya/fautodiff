@@ -440,7 +440,11 @@ class Operator:
             raise ValueError(f"args must be a list: {type(self.args)}")
         if self.var_type is None and self.args:
             for arg in self.args:
+                if isinstance(arg, OpRange):
+                    raise ValueError("arg mut not be OpRange")
                 if isinstance(arg, Operator):
+                    if arg.var_type is None:
+                        raise ValueError(f"var_type must not be None: {type(arg)}")
                     self.var_type = arg.var_type.copy()
                     break
         if self.var_type is None:
@@ -464,6 +468,10 @@ class Operator:
             ]
         return clone
 
+    @classmethod
+    def eval(cls, args: List[Optional[Operator]]) -> "Operator":
+        return cls(args)
+
     def copy_with_args(self, args: List[Optional[Operator]]) -> "Operator":
         for i, arg in enumerate(args):
             if isinstance(arg, OpRange):
@@ -474,7 +482,7 @@ class Operator:
                         dims.append(None)
                     else:
                         arg_new[i] = arg.args[j]
-                        dims.append(type(self)(arg_new))
+                        dims.append(type(self).eval(arg_new))
                 return OpRange(dims)
 
         clone = copy.copy(self)
@@ -1564,7 +1572,8 @@ class OpNeg(OpUnary):
     OP: ClassVar[str] = "-"
     PRIORITY: ClassVar[int] = 4
 
-    def copy_with_args(self, args: List[Operator]) -> Operator:
+    @classmethod
+    def eval(cls, args: List[Operator]) -> Operator:
         return - args[0]
 
     def derivative(
@@ -1613,7 +1622,8 @@ class OpAdd(OpBinary):
     OP: ClassVar[str] = "+"
     PRIORITY: ClassVar[int] = 5
 
-    def copy_with_args(self, args: List[Operator]) -> Operator:
+    @classmethod
+    def eval(cls, args: List[Operator]) -> Operator:
         return args[0] + args[1]
 
     def derivative(
@@ -1633,7 +1643,8 @@ class OpSub(OpBinary):
     OP: ClassVar[str] = "-"
     PRIORITY: ClassVar[int] = 5
 
-    def copy_with_args(self, args: List[Operator]) -> Operator:
+    @classmethod
+    def eval(self, args: List[Operator]) -> Operator:
         return args[0] - args[1]
 
     def derivative(
@@ -1653,7 +1664,8 @@ class OpMul(OpBinary):
     OP: ClassVar[str] = "*"
     PRIORITY: ClassVar[int] = 4
 
-    def copy_with_args(self, args: List[Operator]) -> Operator:
+    @classmethod
+    def eval(cls, args: List[Operator]) -> Operator:
         return args[0] * args[1]
 
     def derivative(
@@ -1675,7 +1687,8 @@ class OpDiv(OpBinary):
     OP: ClassVar[str] = "/"
     PRIORITY: ClassVar[int] = 4
 
-    def copy_with_args(self, args: List[Operator]) -> Operator:
+    @classmethod
+    def eval(cls, args: List[Operator]) -> Operator:
         return args[0] / args[1]
 
     def derivative(
@@ -1716,7 +1729,8 @@ class OpPow(OpBinary):
         else:
             return f"{a0}**{a1}"
 
-    def copy_with_args(self, args: List[Operator]) -> Operator:
+    @classmethod
+    def eval(cls, args: List[Operator]) -> Operator:
         return args[0] ** args[1]
 
     def derivative(

@@ -1243,6 +1243,7 @@ def _generate_ad_subroutine(
             ad_code = ad_code.prune_for(
                 targets, mod_vars + save_vars, base_targets=targets
             )
+            # print(render_program(ad_code))
 
     for node in ad_code:
         if not node.is_effectively_empty():
@@ -1353,7 +1354,7 @@ def _generate_ad_subroutine(
                 if i < len(fw_nodes) - 1:
                     flag = False
                     for node in fw_nodes[i + 1 :]:
-                        if node.has_assignment_to(var):
+                        if node.has_assignment_to(var.name_ext()):
                             flag = True
                             break
                     if flag:
@@ -1367,8 +1368,9 @@ def _generate_ad_subroutine(
                         fw_block.remove_child(node_fw)
                         ad_block.remove_child(node_ad)
                         break
-                    if node_ad.has_assignment_to(var):
+                    if node_ad.has_assignment_to(var.name_ext()):
                         break
+        # print(render_program(ad_block))
 
         if not fw_block.is_effectively_empty():
             # Simple prune: drop redundant allocates left in the forward block

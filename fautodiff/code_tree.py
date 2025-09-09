@@ -96,18 +96,24 @@ class Node:
 
     def has_reference_to(self, varname: str) -> bool:
         """Return ``True`` if ``var`` is refered within this node."""
+        if not isinstance(varname, str):
+            raise ValueError(f"varname must be str: {type(varname)}")
         if any(varname == v.name_ext() for v in self.iter_ref_vars()):
             return True
         return any(child.has_reference_to(varname) for child in self.iter_children())
 
     def has_assignment_to(self, varname: str) -> bool:
         """Return ``True`` if ``var`` is assigned within this node."""
+        if not isinstance(varname, str):
+            raise ValueError(f"varname must be str: {type(varname)}")
         if any(varname == v.name_ext() for v in self.iter_assign_vars()):
             return True
         return any(child.has_assignment_to(varname) for child in self.iter_children())
 
     def has_access_to(self, varname: str) -> bool:
         """Return ``True`` if ``var`` is accessed within this node."""
+        if not isinstance(varname, str):
+            raise ValueError(f"varname must be str: {type(varname)}")
         if self.has_assignment_to(varname):
             return True
         if self.has_reference_to(varname):
@@ -1247,6 +1253,31 @@ class Block(Node):
             vars = VarList()
         return vars
 
+    def recurrent_vars(self) -> List[str]:
+        required_vars = self.required_vars(no_accumulate=True)
+        assigned_vars = self.assigned_vars()
+        common_var_names = sorted(
+            set(required_vars.names()) & set(assigned_vars.names())
+        )
+
+        var_names: List[str] = []
+        do_index = self.do_index_list[-1] if self.do_index_list else None
+        if do_index is not None:
+            for name in common_var_names:
+                flag = False
+                for index in required_vars[name]:
+                    if index is None or not do_index in index.list():
+                        flag = True
+                        break
+                if not flag:
+                    for index in assigned_vars[name]:
+                        if index is None or not do_index in index.list():
+                            flag = True
+                            break
+                if flag:
+                    var_names.append(name)
+
+        return var_names
     def conflict_vars(self) -> List[str]:
         required_vars = self.required_vars()
         assigned_vars = self.assigned_vars()
@@ -4433,11 +4464,9 @@ class PointerAssignment(Node):
             lhs_name = self.lhs.name_ext()
             rhs_name = self.rhs.name_ext()
             if lhs_name in names and rhs_name not in names:
-                assigned_vars.set_indices(rhs_name, list(assigned_vars[lhs_name].indices))
-                assigned_vars.set_dims(rhs_name, list(assigned_vars[lhs_name].dims))
+                assigned_vars.clone(lhs_name, rhs_name)
             if rhs_name in names and lhs_name not in names:
-                assigned_vars.set_indices(lhs_name, list(assigned_vars[rhs_name].indices))
-                assigned_vars.set_dims(lhs_name, list(assigned_vars[rhs_name].dims))
+                assigned_vars.clone(rhs_name, lhs_name)
         return assigned_vars
 
 
@@ -5123,7 +5152,7 @@ class DoAbst(Node):
             returns = self._body.collect_return()
             exitcycle_flags = [node.flag() for node in exitcycles + returns]
         else:
-            for vname in self.recurrent_vars:
+            for vname in self.recurrent_vars():
                 assigned_advars.push(OpVar(name=f"{vname}{AD_SUFFIX}"))
 
         nodes = self._body.generate_ad(
@@ -5200,7 +5229,7 @@ class DoAbst(Node):
                 if isinstance(node, PointerAssignment):
                     continue
                 for var in node.assigned_vars():
-                    if (var.name in self.recurrent_vars and
+                    if (var.name in self.recurrent_vars() and
                        (not self.do or var.name in conflict_vars)
                     ):
                         if not var in pushed:
@@ -5256,9 +5285,9 @@ class DoAbst(Node):
 
         body = Block(nodes)
         if self.do:
-            loop = DoLoop(body, self.index, range, label, self.recurrent_vars)
+            loop = DoLoop(body, self.index, range, label)
         else:
-            loop = DoWhile(body, cond, label, self.recurrent_vars)
+            loop = DoWhile(body, cond, label)
         blocks.append(loop)
 
         if reverse:
@@ -5278,15 +5307,12 @@ class DoAbst(Node):
         return f"label_{self.get_id()}_{self.label_id}{AD_SUFFIX}"
 
     def recurrent_vars(self) -> List[str]:
-
         required_vars = self._body.required_vars(no_accumulate=True)
-        required_var_names = required_vars.names()
         assigned_vars = self._body.assigned_vars()
-        assigned_var_names = assigned_vars.names()
-
         common_var_names = sorted(
-            set(required_var_names) & set(assigned_var_names)
+            set(required_vars.names()) & set(assigned_vars.names())
         )
+
         var_names: List[str] = []
         if self.index is not None:
             do_index = self.index.name
@@ -5678,7 +5704,6 @@ class DoWhile(DoAbst):
 
     cond: Operator
     label: Optional[str] = field(default=None)
-    recurrent_vars: List[str] = None
     do: ClassVar[bool] = False
     index: ClassVar[None] = None
 

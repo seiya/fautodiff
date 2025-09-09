@@ -348,7 +348,7 @@ class IndexList:
             new_list.append(idx)
         self.indices = new_list
 
-    def push(self, var_index: AryIndex, not_reorganize: bool = False) -> None:
+    def push(self, var_index: Optional[AryIndex], not_reorganize: bool = False) -> None:
         """Push a raw AryIndex into this IndexList, merging/normalizing indices.
 
         Parameters
@@ -359,8 +359,10 @@ class IndexList:
         - push_cb: callback to VarList.push used by reorganize to replay inserts
         """
         # Entire array coverage -> store as single None and clear excludes
-        if isinstance(var_index, AryIndex) and all(
-            AryIndex.dim_is_entire(dim) for dim in var_index
+        if (var_index is None or
+            isinstance(var_index, AryIndex) and all(
+                AryIndex.dim_is_entire(dim) for dim in var_index
+            )
         ):
             self.indices = [None]
             self.clear_exclude()
@@ -842,6 +844,11 @@ class VarList:
     def copy_context(self) -> VarList:
         """Return a new variable list with the context copied from self"""
         return VarList(context = self._context)
+
+    def clone(self, src: str, dst: str) -> None:
+        if src not in self._store:
+            raise ValueError(f"{src} not in the list")
+        self._store[dst] = self._store[src].copy()
 
     def push_context(self, context: Tuple[OpVar, List[OpVar], OpRange]) -> None:
         if not isinstance(context[0], OpVar):
