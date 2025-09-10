@@ -249,6 +249,85 @@ class TestIndexList(unittest.TestCase):
         # different second dim should not be contained
         self.assertFalse(il.contains(AryIndex([OpRange([OpInt(1), OpInt(10)]), OpInt(2)])))
 
+    def test_contains_with_context_scalar_substitution(self):
+        # Stored numeric range; query contains symbolic i. Context should decide membership.
+        il = IndexList()
+        i = OpVar("i")
+        il.push(AryIndex([OpRange([OpInt(1), OpInt(10)])]))
+
+        # Without context: conservative overlap assumed
+        self.assertTrue(il.contains(AryIndex([i])))
+
+        # With i=11 (outside): not contained
+        ctx_out = [(i, [], OpRange([OpInt(11), OpInt(11)]))]
+        self.assertFalse(il.contains(AryIndex([i]), context=ctx_out))
+
+        # With i=5 (inside): contained
+        ctx_in = [(i, [], OpRange([OpInt(5), OpInt(5)]))]
+        self.assertTrue(il.contains(AryIndex([i]), context=ctx_in))
+
+    def test_contains_with_context_resolves_symbolic_dim(self):
+        # Second dimension is symbolic j; it should match only with the same j from context
+        il = IndexList()
+        j = OpVar("j")
+        il.push(AryIndex([OpRange([OpInt(1), OpInt(10)]), j]))
+
+        # Query a concrete index in second dim = 1
+        idx_item = AryIndex([OpInt(5), OpInt(1)])
+
+        # With context j=1 -> contained
+        ctx1 = [(j, [], OpRange([OpInt(1), OpInt(1)]))]
+        self.assertTrue(il.contains(idx_item, context=ctx1))
+
+        # With context j=2 -> not contained
+        ctx2 = [(j, [], OpRange([OpInt(2), OpInt(2)]))]
+        self.assertFalse(il.contains(idx_item, context=ctx2))
+
+    def test_contains_with_context_range_substitution(self):
+        # Stored range depends on loop var i; providing i as a range should expand bounds accordingly
+        il = IndexList()
+        i = OpVar("i")
+        il.push(AryIndex([OpRange([i - OpInt(1), i + OpInt(1)])]))
+
+        # Context: i iterates from 2 to 4, effective coverage becomes 1:5
+        ctx = [(i, [], OpRange([OpInt(2), OpInt(4)]))]
+
+        self.assertTrue(il.contains(AryIndex([OpInt(1)]), context=ctx))
+        self.assertTrue(il.contains(AryIndex([OpInt(5)]), context=ctx))
+        self.assertFalse(il.contains(AryIndex([OpInt(0)]), context=ctx))
+        # Range fully inside should also be contained
+        self.assertTrue(il.contains(AryIndex([OpRange([OpInt(3), OpInt(4)])]), context=ctx))
+
+    def test_exclude_check_uses_context(self):
+        # Entire coverage with an exclude that depends on a symbol; context should exclude concretized index
+        il = IndexList()
+        # cover entire 1D array
+        push(il, "A", v("A", None))
+        i = OpVar("i")
+        il.add_exclude(AryIndex([i]))
+
+        # Without context, not excluded
+        self.assertTrue(il.contains(AryIndex([OpInt(5)])))
+
+        # With context i=5, excluded
+        ctx = [(i, [], OpRange([OpInt(5), OpInt(5)]))]
+        self.assertFalse(il.contains(AryIndex([OpInt(5)]), context=ctx))
+
+    def test_apply_context_index_slices_vars_only_for_indices(self):
+        # _apply_context_index should slice vars for indices but not for excludes
+        i = OpVar("i")
+        j = OpVar("j")
+        idx = AryIndex([i, j])
+        ctx = [(i, [j], OpRange([OpInt(1), OpInt(3)]))]
+
+        # For indices (for_exclude=False): i -> 1:3, j -> :
+        idx_for_indices = IndexList._apply_context_index(idx, ctx, for_exclude=False)
+        self.assertEqual(str(idx_for_indices), "1:3,:")
+
+        # For excludes (for_exclude=True): i -> 1:3, j unchanged
+        idx_for_exclude = IndexList._apply_context_index(idx, ctx, for_exclude=True)
+        self.assertEqual(str(idx_for_exclude), "1:3,j")
+
 
 if __name__ == "__main__":
     unittest.main()

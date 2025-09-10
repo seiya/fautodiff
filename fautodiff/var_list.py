@@ -68,6 +68,66 @@ class IndexList:
     def set_dims(self, dims: List[int]) -> None:
         self.dims = list(dims)
 
+    # --- Shared context application helper ---
+    @staticmethod
+    def _apply_context_index(
+        idx: Optional[AryIndex],
+        context: Optional[List[Tuple[OpVar, List[OpVar], OpRange]]],
+        for_exclude: bool = False,
+    ) -> Optional[AryIndex]:
+        """Return a new AryIndex with VarList-style context applied.
+
+        - ``context``: list of (base_var, vars, range) tuples.
+        - ``for_exclude``: when True, do NOT apply slicing (":") for variables
+          in the ``vars`` lists; only replace ``base_var`` with its ``range``.
+          When False (indices), also replace occurrences of vars with
+          ``OpRange([None, None])`` if the base variable replacement does not
+          occur for that dimension.
+        """
+        if idx is None or context is None:
+            return idx
+
+        mappings: List[Tuple[OpVar, Operator]] = []
+        slice_vars: List[OpVar] = []
+        for base_var, vars_list, rng in context:
+            try:
+                if rng[2] is not None and isinstance(rng[2], OpNeg):
+                    step = -rng[2]
+                    if isinstance(step, OpInt) and step.val == 1:
+                        step = None
+                    rng = OpRange([rng[1], rng[0], step])
+                if rng[2] == OpInt(1):
+                    rng = OpRange([rng[0], rng[1]])
+            except Exception:
+                pass
+            mappings.append((base_var, rng))
+            # Collect vars to be sliced for indices
+            if vars_list:
+                for v in vars_list:
+                    if v not in slice_vars:
+                        slice_vars.append(v)
+
+        dims_new: List[Optional[Operator]] = []
+        for dim in idx:
+            d = dim
+            if d is not None:
+                replaced = False
+                # First apply base_var replacements
+                for var, rng in mappings:
+                    d_new = d.replace_with(var, rng)
+                    if d_new is not d:
+                        d = d_new
+                        replaced = True
+                # If not exclude and base_var not replaced, slice other vars
+                if not for_exclude and not replaced and slice_vars:
+                    for v in slice_vars:
+                        d_new2 = d.replace_with(v, OpRange([None, None]))
+                        if d_new2 is not d:
+                            d = d_new2
+                            break
+            dims_new.append(d)
+        return AryIndex(dims_new)
+
     # --- Context handling ---
     def _replace_index(self, index: AryIndex, base_var: OpVar, range: OpRange, vars: List[OpVar], exclude: bool = False) -> Optional[AryIndex]:
         """Return transformed index for context exit.
@@ -150,10 +210,15 @@ class IndexList:
         idx_list = IndexList()
         idx_list.indices = list(self.indices)
         idx_list.dims = list(self.dims)
+        # Build VarList-style context list for base_var replacement
+        ctx = [(base_var, vars, rng)]
+
         for ex in list(self.exclude):
             if ex is None:
                 raise RuntimeError("Unexpected")
-            ex_new = self._replace_index(ex, base_var, rng, vars, exclude=True)
+            # Replace base_var using shared context applicator; excludes do not
+            # require the fallback ':' behaviour for other vars.
+            ex_new = IndexList._apply_context_index(ex, ctx, for_exclude=True)
             # Use full-featured removal to shrink covered regions instead of just marking excludes
             try:
                 idx_list.remove_var(OpVar("__tmp__", index=ex_new))
@@ -173,16 +238,13 @@ class IndexList:
         else:
             self.indices = list(idx_list.indices)
 
+        indices_ctx = [(base_var, vars, rng)]
         indices: List[Optional[AryIndex]] = []
         for idx in self.indices:
             if idx is None:
                 indices.append(None)
-                continue
-            idx_new = self._replace_index(idx, base_var, rng, vars)
-            if idx_new is None:
-                indices.append(idx)
             else:
-                indices.append(idx_new)
+                indices.append(IndexList._apply_context_index(idx, indices_ctx, for_exclude=False))
         self.indices = indices
         self.reorganize()
 
@@ -220,16 +282,36 @@ class IndexList:
             dims_t = tuple()
         return OpVar(name=name, index=index, dims=dims_t, ref_var=var_ref)
 
-    def contains(self, index_item: Optional[AryIndex]) -> bool:
-        """Return True if index_item overlaps tracked indices, excluding exclusions."""
-        if index_item in self.exclude:
+    def contains(
+        self,
+        index_item: Optional[AryIndex],
+        context: Optional[List[Tuple[OpVar, List[OpVar], OpRange]]] = None,
+    ) -> bool:
+        """Return True if ``index_item`` overlaps tracked indices, considering optional ``context``.
+
+        When ``context`` is provided, variables inside index expressions are
+        substituted using the mappings before performing overlap checks.
+        """
+        # No context: exact exclude match short-circuits
+        if context is None and index_item in self.exclude:
             return False
+
+        # Optionally apply context substitutions to indices and excludes
+        q = IndexList._apply_context_index(index_item, context, for_exclude=False)
+
+        # Exclude check with context applied
+        for ex in self.exclude:
+            ex_ctx = IndexList._apply_context_index(ex, context, for_exclude=True)
+            # Treat context-applied excludes as regions only when context is provided
+            if context is not None and q is not None and ex_ctx is not None and AryIndex.check_overlap(q, ex_ctx):
+                return False
+
         for index in self.indices:
-            if index is None:
+            idx = IndexList._apply_context_index(index, context, for_exclude=False)
+            # Entire coverage contains anything except explicit excludes handled above
+            if idx is None or q is None:
                 return True
-            if index_item is None:
-                return True
-            if AryIndex.check_overlap(index_item, index):
+            if AryIndex.check_overlap(q, idx):
                 return True
         return False
 
@@ -797,9 +879,6 @@ class IndexList:
 
         out.indices = index_list
         return out
-
-
-
 
 
 @dataclass

@@ -468,6 +468,35 @@ class Operator:
             ]
         return clone
 
+    def simplify(self) -> "Operator":
+        """Return a simplified operator by recursively simplifying arguments
+        and invoking the class' ``eval`` to fold constants and normalize.
+
+        This performs a light-weight pass and relies on each operator's
+        algebra implemented in ``__add__``, ``__sub__``, etc., and ``eval``.
+        """
+        # Leaf or no-arg operators are already simplest
+        if self.args is None or len(self.args) == 0:
+            return self
+
+        # Simplify children first
+        new_args = []
+        changed = False
+        for a in self.args:
+            if isinstance(a, Operator):
+                sa = a.simplify()
+                new_args.append(sa)
+                if sa is not a:
+                    changed = True
+            else:
+                new_args.append(a)
+
+        # Try to re-evaluate with simplified args to trigger folding
+        try:
+            return type(self).eval(new_args)
+        except Exception:
+            return self.copy_with_args(new_args) if changed else self
+
     @classmethod
     def eval(cls, args: List[Optional[Operator]]) -> "Operator":
         return cls(args)
@@ -542,7 +571,12 @@ class Operator:
                 args_new.append(arg)
         if not flag:
             return self
-        return self.copy_with_args(args_new)
+        # Build a new operator from updated args (preserving OpRange lifting)
+        new_op = self.copy_with_args(args_new)
+        # And simplify the result once to fold constants and normalize
+        if isinstance(new_op, Operator):
+            return new_op.simplify()
+        return new_op
 
     def derivative(
         self,
