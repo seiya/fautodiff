@@ -67,7 +67,7 @@ def v(name, *idx_dims) -> OpVar:
 
 
 class TestVarList(unittest.TestCase):
-    
+
     def test_entire_contains_slices(self):
         vl = VarList()
         vl.push(v("A", (1, 10), (1, 5)))
@@ -469,6 +469,59 @@ class TestVarList(unittest.TestCase):
         vl3.push(v("A", (1, n)))
         vl_intersect2 = vl1 & vl3
         self.assertIn(v("A", (1, n)), vl_intersect2)
+
+
+def make_dt_var(chain, index_dims=None):
+    """Create an OpVar for a derived-type chain.
+
+    chain: list of tuples (name, dims_tuple_or_None).
+      - dims use declaration-size tokens, e.g., ("n",) or ("n","m").
+    index_dims: optional list of index Operators for the leaf (slice at use-site); if None, no index.
+    """
+    ref = None
+    for name, dims in chain:
+        if dims is not None:
+            dims = tuple(dims)
+        ref = OpVar(name, var_type=VarType("real"), dims=dims, ref_var=ref)
+    if index_dims is not None:
+        ref = OpVar(
+            ref.name,
+            index=AryIndex(index_dims),
+            var_type=ref.var_type,
+            dims=ref.dims,
+            ref_var=ref.ref_var,
+        )
+    return ref
+
+
+class TestVarListDerivedShape(unittest.TestCase):
+    def test_shape_inferred_from_leaf_dims_in_derived_type(self):
+        # s%a where a has dims ('n',) and s is scalar
+        var = make_dt_var([("s", None), ("a", ("n",))])
+        il = IndexList()
+        il.push_var(var)
+        self.assertTrue(il.contains(AryIndex([OpInt(1)])))
+        self.assertTrue(il.contains(AryIndex([OpVar("n")])))
+        self.assertFalse(il.contains(AryIndex([OpInt(0)])))
+
+    def test_shape_inferred_from_parent_and_leaf_dims(self):
+        # s(i)%a(n,m) -> concatenated dims length 3
+        var = make_dt_var([("s", ("i",)), ("a", ("n", "m"))])
+        il = IndexList()
+        il.push_var(var)
+        self.assertTrue(il.contains(AryIndex([OpInt(1), OpInt(1), OpInt(1)])))
+        self.assertTrue(il.contains(AryIndex([OpVar("i"), OpVar("n"), OpVar("m")])))
+        self.assertFalse(il.contains(AryIndex([OpInt(0), OpInt(1), OpInt(1)])))
+        self.assertFalse(il.contains(AryIndex([OpInt(1), OpInt(0), OpInt(1)])))
+        self.assertFalse(il.contains(AryIndex([OpInt(1), OpInt(1), OpInt(0)])))
+
+    def test_shape_mismatch_raises_for_different_leaf_dims(self):
+        var1 = make_dt_var([("s", None), ("a", ("n",))])
+        il = IndexList()
+        il.push_var(var1)
+        var2 = make_dt_var([("s", None), ("a", ("m",))])
+        with self.assertRaises(ValueError):
+            il.push_var(var2)
 
 
 if __name__ == "__main__":

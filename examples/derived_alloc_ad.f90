@@ -118,7 +118,7 @@ contains
     real :: obj_arr_save_43_ad(m,n)
 
     do n0_ad = ubound(obj, 1), lbound(obj, 1), - 1
-      call fautodiff_stack_pop_r(obj(n0_ad)%arr)
+      call fautodiff_stack_pop_r(obj(n0_ad)%arr(:))
     end do
     do j = 1, m
       obj_arr_save_43_ad(j,1:n) = obj(j)%arr(1:n)
@@ -149,7 +149,7 @@ contains
     integer :: n0_ad
 
     do n0_ad = lbound(obj, 1), ubound(obj, 1)
-      call fautodiff_stack_push_r(obj(n0_ad)%arr)
+      call fautodiff_stack_push_r(obj(n0_ad)%arr(:))
     end do
 
     return

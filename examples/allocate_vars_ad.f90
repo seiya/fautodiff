@@ -294,14 +294,14 @@ contains
     allocate(htmp(n))
     htmp = x
     allocate(htmp_save_93_ad, mold=htmp)
-    htmp_save_93_ad(1:n) = htmp(1:n)
+    htmp_save_93_ad(:) = htmp(:)
     htmp = x**2
 
     do i = n, 1, - 1
       htmp_ad(i) = z_ad * y ! z = z + htmp(i) * y
       y_ad = z_ad * htmp(i) + y_ad ! z = z + htmp(i) * y
     end do
-    htmp(1:n) = htmp_save_93_ad(1:n)
+    htmp(:) = htmp_save_93_ad(:)
     if (allocated(htmp_save_93_ad)) then
       deallocate(htmp_save_93_ad)
     end if

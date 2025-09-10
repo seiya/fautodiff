@@ -363,8 +363,10 @@ def _parse_allocate(
         top = True
     else:
         top = False
+
     for child in list(node.iter_children()):
         _parse_allocate(child, mod_vars, map, local)
+
     if isinstance(node, Allocate):
         for var in node.vars:
             if var.is_constant:
@@ -378,7 +380,7 @@ def _parse_allocate(
                 root = root.ref_var
             if root.declared_in == "routine":
                 local.add(name)
-    if isinstance(node, Deallocate):
+    elif isinstance(node, Deallocate):
         for var in node.vars:
             name = var.name_ext()
             if name in map and map[name]:
@@ -389,7 +391,7 @@ def _parse_allocate(
             if root.declared_in == "routine":
                 local.add(name)
     # Insert deallocations before early returns for arrays that remain allocated
-    if isinstance(node, ReturnStmt):
+    elif isinstance(node, ReturnStmt):
         mod_var_names = [v.name_ext() for v in mod_vars]
         for name in map:
             if map[name]:
@@ -404,6 +406,12 @@ def _parse_allocate(
                         node.get_id(),
                         Allocate._add_if(Deallocate([var]), var, name in mod_var_names),
                     )
+    else:
+        for var in node.collect_vars():
+            name = var.name_ext()
+            if name in map and map[name]:
+                var.dims = tuple(map[name][-1].list())
+
     if top:
         mod_var_names = [v.name_ext() for v in mod_vars]
         for name in map:
@@ -1352,9 +1360,8 @@ def _generate_ad_subroutine(
                 flag = False
                 while (
                     isinstance(item1, SaveAssignment)
-                    and not item1.pushpop
                     and isinstance(item2, SaveAssignment)
-                    and not item2.pushpop
+                    and item1.pushpop == item2.pushpop
                     and item1.var.name == item2.var.name
                     and item1.id == item2.id
                     and item1.load != item2.load

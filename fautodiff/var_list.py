@@ -17,9 +17,20 @@ class IndexList:
     indices: List[Optional[AryIndex]] = field(default_factory=list)
     exclude: List[AryIndex] = field(default_factory=list)
     dims: List[int] = field(default_factory=list)
+    # Shape information per array dimension. For 1D array x(n), shape is (OpRange(1:n), ...).
+    # None means unknown/not set.
+    shape: Optional[Tuple[Optional[OpRange], ...]] = None
+
+    def __post_init__(self) -> None:
+        self._apply_shape()
 
     def copy(self) -> "IndexList":
-        return IndexList(indices=list(self.indices), exclude=list(self.exclude), dims=list(self.dims))
+        return IndexList(
+            indices=list(self.indices),
+            exclude=list(self.exclude),
+            dims=list(self.dims),
+            shape=(tuple(self.shape) if self.shape is not None else None),
+        )
 
     def __len__(self) -> int:
         return len(self.indices)
@@ -48,8 +59,10 @@ class IndexList:
     # --- Convenience API for managing internal data ---
     def set_indices(self, indices: List[Optional[AryIndex]]) -> None:
         self.indices = list(indices)
+        self._apply_shape()
 
     def append_index(self, index: Optional[AryIndex]) -> None:
+        index = self._apply_shape_index(index)
         self.indices.append(index)
 
     def has_indices(self) -> bool:
@@ -58,15 +71,137 @@ class IndexList:
     def set_exclude(self, exclude: List[AryIndex]) -> None:
         self.exclude = list(exclude)
 
-    def add_exclude(self, index: AryIndex) -> None:
+    def add_exclude(self, index: AryIndex, not_reorganize: bool = False) -> None:
         if index not in self.exclude:
             self.exclude.append(index)
+            if not not_reorganize:
+                self.reorganize()
 
     def clear_exclude(self) -> None:
         self.exclude = []
 
     def set_dims(self, dims: List[int]) -> None:
         self.dims = list(dims)
+
+    def set_shape(self, shape: Tuple[Optional[OpRange], ...]) -> None:
+        self.shape = tuple(shape)
+        self._apply_shape()
+
+    # --- Shape helpers ---
+    def _shape_as_index(self) -> Optional[AryIndex]:
+        if self.shape is None:
+            return None
+        return AryIndex(list(self.shape))
+
+    def _apply_shape_index(self, index: AryIndex|None) -> AryIndex | None:
+        if self.shape is None or index is None:
+            return index
+
+        index = index.ascending()
+
+        new_index: List[Operator|None] = []
+        replaced = False
+        for j, dim in enumerate(index):
+            if ((dim is not None and dim == self.shape[j]) or
+                (isinstance(dim, OpRange) and dim[0] is None and dim[1] is None)
+            ):
+                new_index.append(None)
+                replaced = True
+                continue
+            if isinstance(dim, OpRange) and self.shape[j] is not None:
+                shape = self.shape[j]
+                d0, d1, d2 = dim
+                if dim[0] is None and shape[0] is not None:
+                    replaced = True
+                    d0 = shape[0]
+                if dim[1] is None and shape[1] is not None:
+                    replaced = True
+                    d1 = shape[1]
+                if replaced:
+                    dim = OpRange([d0, d1, d2]) if d0 is not None and d0 is not OpInt(1) else OpRange([d0, d1])
+            new_index.append(dim)
+        if replaced:
+            if all(dim is None for dim in new_index):
+                return None
+            return AryIndex(new_index)
+        return index
+
+    def _apply_shape(self) -> None:
+        if self.shape is None:
+            return
+        for i, index in enumerate(self.indices):
+            new_index = self._apply_shape_index(index)
+            if new_index is not index:
+                self.indices[i] = new_index
+
+    @staticmethod
+    def _is_entire_index(index: Optional[AryIndex]) -> bool:
+        if index is None:
+            return True
+        return all(AryIndex.dim_is_entire(dim) for dim in index)
+
+    def _is_full_shape_index(self, index: Optional[AryIndex]) -> bool:
+        """Return True if ``index`` matches the known shape exactly.
+
+        Only returns True when shape information is available and all shape
+        dimensions are explicitly specified (non-None) and equal to ``index``.
+        """
+        if self.shape is None or index is None:
+            return False
+        # If shape exists and lengths differ, raise error as requested
+        if len(index) != len(self.shape):
+            raise ValueError(
+                f"index length {len(index)} does not match shape length {len(self.shape)}"
+            )
+
+        for dim_idx, shp in zip(index, self.shape):
+            if shp is None:
+                return False
+            if dim_idx != shp:
+                return False
+        return True
+
+    def _overlaps_shape(self, index: Optional[AryIndex]) -> bool:
+        """Return True if the given index overlaps the shape domain.
+
+        If no shape is defined, return True.
+        """
+        if self.shape is None:
+            return True
+        if index is None:
+            return True
+        try:
+            if len(index) != len(self.shape):
+                # Dimension mismatch -> conservatively assume no overlap
+                return False
+        except Exception:
+            return False
+
+        for d, s in zip(index, self.shape):
+            if s is None:
+                # Unknown bound -> cannot restrict
+                continue
+            if d is None:
+                continue
+            # If d is a range, check mutual overlap with shape range.
+            if isinstance(d, OpRange):
+                # s contains d OR d contains s implies overlap
+                try:
+                    if d in s or s in d:
+                        continue
+                except Exception:
+                    # Fallback to conservative overlap
+                    return True
+                return False
+            # Scalar/other operator: ensure it's inside shape range
+            try:
+                if d in s:
+                    continue
+            except Exception:
+                # Conservative
+                return True
+            return False
+        return True
 
     # --- Shared context application helper ---
     @staticmethod
@@ -90,16 +225,7 @@ class IndexList:
         mappings: List[Tuple[OpVar, Operator]] = []
         slice_vars: List[OpVar] = []
         for base_var, vars_list, rng in context:
-            try:
-                if rng[2] is not None and isinstance(rng[2], OpNeg):
-                    step = -rng[2]
-                    if isinstance(step, OpInt) and step.val == 1:
-                        step = None
-                    rng = OpRange([rng[1], rng[0], step])
-                if rng[2] == OpInt(1):
-                    rng = OpRange([rng[0], rng[1]])
-            except Exception:
-                pass
+            rng = rng.ascending()
             mappings.append((base_var, rng))
             # Collect vars to be sliced for indices
             if vars_list:
@@ -155,88 +281,269 @@ class IndexList:
                         break
         return index if index_new is None else index_new
 
-    def remove_index(self, var_index: AryIndex) -> None:
-        """Remove coverage specified by var_index from self.indices.
+    def remove(self, var_index: Optional[AryIndex], not_reorganize: bool = False) -> None:
+        """Remove ``var_index`` coverage from this IndexList.
 
-        This is a simplified removal: exact matches and full-coverage cases are removed;
-        partial overlaps are kept and marked by adding the removed index to exclude.
+        This method performs full-featured removal, splitting ranges and updating
+        excludes as needed. It accepts an ``AryIndex`` describing the region to
+        remove. Entire coverage (None or all-entire dims) clears indices.
         """
         if not self.indices:
             return
-        # Full coverage removal clears indices
-        if var_index is None or all(dim is None for dim in var_index):
+
+        if not (var_index is None or isinstance(var_index, AryIndex)):
+            raise ValueError(f"var_index must be None or AryIndex, not {type(var_index)}")
+
+        # Normalization
+        var_index = self._apply_shape_index(var_index)
+        if var_index is not None:
+            var_index = var_index.ascending()
+
+        # If shape is known and var_index is concrete, enforce it is within shape
+        if self.shape is not None and var_index is not None:
+            shape_idx = self._shape_as_index()
+            if shape_idx is not None and shape_idx.check_outside(var_index):
+                raise ValueError(f"remove index outside shape: {self.shape} {var_index}")
+
+        # Removing entire variable clears indices in non-full-coverage cases
+        if IndexList._is_entire_index(var_index) or self._is_full_shape_index(var_index):
             self.indices = []
             return
-        new_list: List[Optional[AryIndex]] = []
-        added_exclude = False
-        for idx in self.indices:
-            if idx is None:
-                # Previously entire array; keep and record exclusion
-                new_list.append(idx)
-                if not added_exclude:
-                    self.add_exclude(var_index)
-                    added_exclude = True
+        # Now var_index is not None
+
+        added = False
+        index_list: List[AryIndex|None] = []
+        for index in self.indices:
+            if index == var_index:
+                # removed exactly
                 continue
-            if idx == var_index:
-                # exact removal
+
+            if index is None and self.shape is None:
+                index_list.append(None)
+                if not added:
+                    self.add_exclude(var_index, not_reorganize=True)
+                    added = True
                 continue
-            # For now, keep partial overlaps and mark exclude
-            new_list.append(idx)
-            if not added_exclude:
-                self.add_exclude(var_index)
-                added_exclude = True
-        self.indices = new_list
+
+            i = AryIndex.get_diff_dim(index, var_index)
+            # If indices differ in multiple dimensions, add to the exclude list
+            if i < 0 and index != var_index:
+                index_list.append(index)
+                if not added:
+                    self.add_exclude(var_index, not_reorganize=True)
+                    added = True
+                continue
+
+            if index is None:
+                work = AryIndex([None] * len(self.shape))
+            else:
+                work = index.copy()
+            if self.shape is not None:
+                work[i] = self.shape[i]
+
+            dim1 = work[i]
+            dim2 = var_index[i]
+
+            if AryIndex.dim_is_entire(dim1):
+                index_list.append(index)
+                if not added:
+                    self.add_exclude(var_index, not_reorganize=True)
+                    added = True
+                continue
+
+            if AryIndex.dim_is_entire(dim2):
+                # removed
+                continue
+
+            # both are OpRange
+            if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
+                i0, i1 = dim1[0], dim1[1]
+                j0, j1 = dim2[0], dim2[1]
+
+                if i0 is None:
+                    diff0 = 0 if j0 is None else 999
+                else:
+                    diff0 = AryIndex._get_int(j0 - i0) if j0 is not None else -999
+                if i1 is None:
+                    diff1 = 0 if j1 is None else 999
+                else:
+                    diff1 = AryIndex._get_int(i1 - j1) if j1 is not None else -999
+
+                if diff0 is None or diff1 is None:
+                    # could be partially overlapped
+                    index_list.append(index)
+                    if not added:
+                        self.add_exclude(var_index, not_reorganize=True)
+                        added = True
+                    continue
+
+                if diff0 > 0:
+                    if diff0 == 1:
+                        work[i] = i0
+                    else:
+                        work[i] = OpRange([i0, j0 - 1])
+                    index_list.append(work)
+                    if diff1 > 0:
+                        index_new = work.copy()
+                        if diff1 == 1:
+                            index_new[i] = i1
+                        else:
+                            index_new[i] = OpRange([j1 + 1, i1])
+                        index_list.append(index_new)
+                else:  # diff0 <= 0 (= j0 <= i0 or j0 is None)
+                    if diff1 == 1:
+                        work[i] = i1
+                    elif diff1 > 1:
+                        work[i] = OpRange([j1 + 1, i1])
+                    else:  # diff1 <= 0 (= i1 <= j1 of j1 is None)
+                        # removed
+                        continue
+                    index_list.append(work)
+                continue
+
+            # both are scalar
+            if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
+                index_list.append(index)
+                if not added:
+                    self.add_exclude(var_index, not_reorganize=True)
+                    added = True
+                continue
+
+            # dim1 is range and dim2 is scalar
+            if isinstance(dim1, OpRange):
+                if not (dim1[2] is None or AryIndex._get_int(dim1[2]) == 1):
+                    index_list.append(index)
+                    if not added:
+                        self.add_exclude(var_index, not_reorganize=True)
+                        added = True
+                    continue
+                if dim1.strict_in(dim2):
+                    index_list.append(work) # work will be modified
+                    if dim2 == dim1[0]:
+                        work[i] = dim1[1] if dim1[1] == dim1[0] + 1 else OpRange([dim1[0] + 1, dim1[1]])
+                    elif dim2 == dim1[1]:
+                        work[i] = dim1[0] if dim1[0] == dim1[1] - 1 else OpRange([dim1[0], dim1[1] - 1])
+                    else:
+                        work[i] = dim1[0] if dim1[0] == dim2 - 1 else OpRange([dim1[0], dim2 - 1])
+                        index_new = work.copy()
+                        index_new[i] = dim1[1] if dim1[1] == dim2 + 1 else OpRange([dim2 + 1, dim1[1]])
+                        index_list.append(index_new)
+                    continue
+                d0 = AryIndex._get_int(dim1[0] - dim2)
+                d1 = AryIndex._get_int(dim2 - dim1[1])
+                index_list.append(index)
+                if (isinstance(d0, int) and d0 > 0) or (isinstance(d1, int) and d1 > 0):
+                    continue  # do not change
+                if not added:
+                    self.add_exclude(var_index, not_reorganize=True)
+                    added = True
+                continue
+
+            # dim2 is range and dim1 is scalar
+            if isinstance(dim2, OpRange):
+                if not (dim2[2] is None or AryIndex._get_int(dim2[2]) == 1):
+                    index_list.append(index)
+                    continue
+                if dim2.strict_in(dim1):
+                    # removed
+                    continue
+                index_list.append(index)
+                if not added:
+                    self.add_exclude(var_index, not_reorganize=True)
+                    added = True
+                continue
+
+        self.indices = index_list
+        if not not_reorganize:
+            self.reorganize()
 
     def exit_context(self, context: Tuple[OpVar, List[OpVar], OpRange]) -> None:
         """Adjust indices/excludes when exiting a loop context.
 
         Transforms exclude indices by replacing the loop index with the loop range,
-        then removes those covered regions from the tracked indices.
+        then removes those covered regions from the tracked indices. Any portion
+        of an exclude not overlapping current indices is kept as a residual
+        exclude (e.g., exclude i with i=1:n and indices covering 1 -> residual 2:n).
         """
         base_var, vars, range = context
         # Normalize negative stride ranges to forward direction (e.g., n:1:-1 -> 1:n)
-        rng = range
-        try:
-            if rng[2] is not None and isinstance(rng[2], OpNeg):
-                step = -rng[2]
-                if isinstance(step, OpInt) and step.val == 1:
-                    step = None
-                rng = OpRange([rng[1], rng[0], step])
-            if rng[2] == OpInt(1):
-                rng = OpRange([rng[0], rng[1]])
-        except Exception:
-            # In case range is shorter (len<3), fall back to original
-            rng = range
+        rng = range.ascending()
+
         idx_list = IndexList()
         idx_list.indices = list(self.indices)
         idx_list.dims = list(self.dims)
+        # Propagate shape so removals can treat full-shape ranges as entire
+        if self.shape is not None:
+            idx_list.set_shape(self.shape)
         # Build VarList-style context list for base_var replacement
         ctx = [(base_var, vars, rng)]
 
+        # Compute residual excludes after subtracting what overlaps current indices
+        new_excludes: List[AryIndex] = []
         for ex in list(self.exclude):
             if ex is None:
                 raise RuntimeError("Unexpected")
             # Replace base_var using shared context applicator; excludes do not
             # require the fallback ':' behaviour for other vars.
             ex_new = IndexList._apply_context_index(ex, ctx, for_exclude=True)
-            # Use full-featured removal to shrink covered regions instead of just marking excludes
-            try:
-                idx_list.remove_var(OpVar("__tmp__", index=ex_new))
-            except Exception:
-                # Fallback to simplified removal if OpVar creation or removal fails
-                idx_list.remove_index(ex_new)
-        if idx_list.exclude:
-            self.exclude = idx_list.exclude
-        else:
-            self.clear_exclude()
+
+            # Residual of ex_new w.r.t. current indices
+            if ex_new is not None:
+                residual = IndexList(indices=[ex_new])
+                for idx in idx_list.indices:
+                    if idx is None:
+                        # For full coverage, keep residual exclude unless it equals full shape
+                        try:
+                            if not self._is_full_shape_index(ex_new):
+                                residual.indices = [ex_new]
+                            else:
+                                residual.indices = []
+                        except Exception:
+                            residual.indices = [ex_new]
+                        break
+                    residual.remove(idx)
+                    if not residual.indices:
+                        break
+                # If symbolic upper bound prevented trimming the leading edge (e.g., 1:n minus 1),
+                # synthesize 2:n when safe (i0 known integer and idx equals i0)
+                if residual.indices == [ex_new]:
+                    try:
+                        ex_dim = ex_new[0]
+                        if isinstance(ex_dim, OpRange) and (ex_dim[2] is None or AryIndex._get_int(ex_dim[2]) == 1):
+                            i0 = ex_dim[0]
+                            i1 = ex_dim[1]
+                            if isinstance(i0, OpInt):
+                                hit_start = False
+                                for idx in idx_list.indices:
+                                    if idx is None:
+                                        continue
+                                    d = idx[0]
+                                    if isinstance(d, OpInt) and d.val == i0.val:
+                                        hit_start = True
+                                        break
+                                if hit_start:
+                                    residual.indices = [AryIndex([OpRange([OpInt(i0.val + 1), i1])])]
+                    except Exception:
+                        pass
+                for r in residual.indices:
+                    if r is not None and r not in new_excludes:
+                        new_excludes.append(r)
+
+            # Remove the covered regions from indices
+            idx_list.remove(ex_new)
 
         # Adopt indices possibly modified by removals above
         if not idx_list.indices:
             self.indices = []
             self.dims = []
-            self.clear_exclude()
         else:
             self.indices = list(idx_list.indices)
+
+        # Update excludes based on computed residuals
+        if new_excludes:
+            self.exclude = new_excludes
+        else:
+            self.clear_exclude()
 
         indices_ctx = [(base_var, vars, rng)]
         indices: List[Optional[AryIndex]] = []
@@ -287,32 +594,83 @@ class IndexList:
         index_item: Optional[AryIndex],
         context: Optional[List[Tuple[OpVar, List[OpVar], OpRange]]] = None,
     ) -> bool:
-        """Return True if ``index_item`` overlaps tracked indices, considering optional ``context``.
+        """Return True if ``index_item`` is covered by indices minus excludes.
 
-        When ``context`` is provided, variables inside index expressions are
-        substituted using the mappings before performing overlap checks.
+        Rules:
+        - For indices, any overlap is sufficient to return True.
+        - For excludes, we must only return False when the query is fully covered
+          by the (context-applied) excludes. If excludes only partially overlap
+          the query, remove those parts and then check the remainder against the
+          stored indices.
         """
-        # No context: exact exclude match short-circuits
-        if context is None and index_item in self.exclude:
+        # Exact exclude match short-circuits in the trivial no-context case
+        # Do not treat a None (entire-domain) query as an exact match to excludes.
+        if context is None and index_item is not None and index_item in self.exclude:
             return False
 
-        # Optionally apply context substitutions to indices and excludes
+        index_item = self._apply_shape_index(index_item)
+
+        # Apply context to the queried index and all excludes
         q = IndexList._apply_context_index(index_item, context, for_exclude=False)
+        # If shape is known, queries fully outside the shape domain are not contained
+        if self.shape is not None and q is not None and not self._overlaps_shape(q):
+            return False
+        excludes_ctx: List[Optional[AryIndex]] = [
+            IndexList._apply_context_index(ex, context, for_exclude=True) for ex in self.exclude
+        ]
 
-        # Exclude check with context applied
-        for ex in self.exclude:
-            ex_ctx = IndexList._apply_context_index(ex, context, for_exclude=True)
-            # Treat context-applied excludes as regions only when context is provided
-            if context is not None and q is not None and ex_ctx is not None and AryIndex.check_overlap(q, ex_ctx):
-                return False
+        # Compute remaining segments of q after subtracting the excludes exactly once
+        remaining_q: List[Optional[AryIndex]]
+        if q is None:
+            # Entire-domain query: if shape is known, scope to shape for more precise handling
+            if self.shape is not None:
+                q0 = self._shape_as_index()
+            else:
+                q0 = None
+            if q0 is None:
+                # Only fully removed if any exclude is entire-domain
+                if any(ex is None for ex in excludes_ctx):
+                    remaining_q = []
+                else:
+                    remaining_q = [None]
+            else:
+                tmp_q = IndexList(indices=[q0])
+                for ex_ in excludes_ctx:
+                    if ex_ is None:
+                        tmp_q.indices = []
+                        break
+                    tmp_q.remove(ex_)
+                    if not tmp_q.indices:
+                        break
+                remaining_q = list(tmp_q.indices)
+        else:
+            tmp_q = IndexList(indices=[q])
+            for ex_ in excludes_ctx:
+                if ex_ is None:
+                    tmp_q.indices = []
+                    break
+                tmp_q.remove(ex_)
+                if not tmp_q.indices:
+                    break
+            remaining_q = list(tmp_q.indices)
 
+        # If nothing remains after removing excludes, not contained
+        if not remaining_q:
+            return False
+
+        # Now test whether any stored index overlaps the remaining query
         for index in self.indices:
             idx = IndexList._apply_context_index(index, context, for_exclude=False)
-            # Entire coverage contains anything except explicit excludes handled above
-            if idx is None or q is None:
+            if idx is None:
+                # Entire coverage; we already ensured q is not fully excluded
                 return True
-            if AryIndex.check_overlap(q, idx):
-                return True
+            # Check against each remaining segment of q
+            for rq in remaining_q:
+                # rq can be None only when q is None; idx is not None here so that's a hit
+                if rq is None:
+                    return True
+                if AryIndex.check_overlap(rq, idx):
+                    return True
         return False
 
     def format_strings(self, full_name: str) -> List[str]:
@@ -363,6 +721,9 @@ class IndexList:
 
     def merge_from(self, other: "IndexList") -> None:
         """Merge indices, excludes, and dims from ``other`` into ``self``."""
+        # update shape
+        if self.shape is None and other.shape is not None:
+            self.set_shape(other.shape)
         # merge indices (preserve existing ordering where possible)
         for idx in other.indices:
             if idx not in self.indices:
@@ -389,6 +750,7 @@ class IndexList:
             self.indices = []
             exclude = list(self.exclude)
             for index in index_list:
+                index = self._apply_shape_index(index)
                 if index in exclude:
                     if index is not None and index in exclude:
                         exclude.remove(index)
@@ -440,20 +802,54 @@ class IndexList:
         - not_reorganize: if True, skip final reorganize pass
         - push_cb: callback to VarList.push used by reorganize to replay inserts
         """
-        # Entire array coverage -> store as single None and clear excludes
-        if (var_index is None or
-            isinstance(var_index, AryIndex) and all(
-                AryIndex.dim_is_entire(dim) for dim in var_index
-            )
-        ):
+        var_index = self._apply_shape_index(var_index)
+        # Entire array coverage: when shape known, use shape value explicitly
+        if IndexList._is_entire_index(var_index) or self._is_full_shape_index(var_index):
             self.indices = [None]
             self.clear_exclude()
             return
 
-        # Remove exclusions that are now explicitly included
-        for ex in list(self.exclude):
-            if var_index >= ex:
-                self.exclude.remove(ex)
+        # If shape is known and var_index is concrete, enforce it is within shape
+        if self.shape is not None and isinstance(var_index, AryIndex):
+            shape_idx = self._shape_as_index()
+            if shape_idx is not None and shape_idx.check_outside(var_index):
+                raise ValueError(f"push index outside shape: {self.shape} {var_index}")
+
+        # Remove or refine exclusions that intersect the newly included region
+        # - If the new index fully covers an exclude, drop it.
+        # - If we currently have full-coverage indices (None present), subtract
+        #   the new index from the exclude to keep residuals only.
+        if self.exclude:
+            # Drop fully covered excludes
+            for ex in list(self.exclude):
+                if var_index >= ex:
+                    self.exclude.remove(ex)
+
+            # Refine partial excludes by subtracting the newly included region
+            refined: List[AryIndex] = []
+            for ex in list(self.exclude):
+                residual = IndexList(indices=[ex])
+                residual.remove(var_index, not_reorganize=True)
+
+                # If unchanged due to symbolic bounds, try trimming exact endpoint hits
+                if residual.indices == [ex]:
+                    # Only handle 1D simple cases here
+                    if isinstance(ex[0], OpRange) and not isinstance(var_index[0], OpRange):
+                        r = ex[0]
+                        v = var_index[0]
+                        # If v equals lower bound: (i0:i1) - i0 -> (i0+1:i1)
+                        if str(v) == str(r[0]):
+                            new_lb = r[0] + OpInt(1)
+                            residual.indices = [AryIndex([OpRange([new_lb, r[1]])])]
+                        # If v equals upper bound: (i0:i1) - i1 -> (i0:i1-1)
+                        elif str(v) == str(r[1]):
+                            new_ub = r[1] - OpInt(1)
+                            residual.indices = [AryIndex([OpRange([r[0], new_ub])])]
+
+                for r in residual.indices:
+                    if r is not None and r not in refined:
+                        refined.append(r)
+            self.exclude = refined
 
         # First occurrence just records the index as-is.
         if not self.indices:
@@ -542,6 +938,13 @@ class IndexList:
             else:  # unexpected
                 raise RuntimeError(f"Unexpected: {type(dim1)} {type(dim2)}")
             i0, i1 = rng[0], rng[1]
+            # If scalar lies within range (including endpoints), nothing to change
+            try:
+                if rng.strict_in(scalar):
+                    found = True
+                    break
+            except Exception:
+                pass
             diff0 = AryIndex._get_int(i0 - scalar) if i0 is not None else 999
             diff1 = AryIndex._get_int(scalar - i1) if i1 is not None else -999
             # Check inside
@@ -596,178 +999,111 @@ class IndexList:
                 )
         return var
 
+    # --- Shape extraction/validation from OpVar ---
+    def _shape_candidate_from_var(self, var: OpVar) -> Optional[List[Optional[OpRange]]]:
+        """Try to build a shape candidate from ``var``'s declared dims, not its slice.
+
+        - Uses ``var.get_dims()`` which may return symbolic size variables per dimension.
+        - For each dimension, synthesize an OpRange([1, size_var]) when size var is known,
+          or None when unknown (":" placeholder).
+        - Returns None when dims are not available.
+        """
+        dims = var.concat_dims()
+        if dims is None:
+            return None
+        cand: List[Optional[OpRange]] = []
+        for d in dims:
+            if d == ":" or d is None:
+                cand.append(None)
+                continue
+            # Build upper bound operator from dim token
+            op_hi: Operator
+            try:
+                # numeric literal string
+                ival = int(str(d))
+                op_hi = OpInt(ival)
+            except Exception:
+                # symbolic variable name
+                op_hi = OpVar(str(d))
+            cand.append(OpRange([OpInt(1), op_hi]))
+        # If all dims are unknown/":" placeholders, do not set shape
+        if all(x is None for x in cand):
+            return None
+        return cand
+
+    def _ensure_or_set_shape_from_var(self, var: OpVar) -> None:
+        """Set ``shape`` from ``var`` if unknown; otherwise verify consistency.
+
+        - If a candidate shape can be extracted from the var's index, use it to
+          set ``self.shape`` when currently None, or compare for equality when
+          already set.
+        - If no candidate can be extracted, but ``self.shape`` exists and the
+          var's index length differs from the shape length, raise an error.
+        """
+        cand = self._shape_candidate_from_var(var)
+        if cand is None:
+            if self.shape is not None:
+                idx = var.concat_index()
+                if idx is not None and len(idx) != len(self.shape):
+                    raise ValueError(
+                        f"inconsistent shape length: expected {len(self.shape)}, got {len(idx)}"
+                    )
+            return
+        if self.shape is None:
+            self.shape = tuple(cand)
+            return
+        if len(cand) != len(self.shape):
+            raise ValueError(
+                f"inconsistent shape length: expected {len(self.shape)}, got {len(cand)}"
+            )
+        for expect, got in zip(self.shape, cand):
+            if expect != got:
+                raise ValueError(f"shape mismatch: expected {self.shape}, got {cand}")
+
     def push_var(self, var: OpVar, not_reorganize: bool = False) -> None:
         """Push a var (OpVar) into this IndexList using merge logic.
 
         Parameters
         - var: OpVar to push (negative strides normalized)
-        - not_reorganize: if True, skip the final reorganize
-        - push_cb: callback that accepts AryIndex for reorganize replay
+        - not_reorganize: if True, skip final reorganize pass
         """
         if not isinstance(var, OpVar):
             raise ValueError(f"Must be OpVar: {type(var)}")
 
+        # Set or validate shape based on the original var (before stride normalization)
+        self._ensure_or_set_shape_from_var(var)
         var = IndexList._force_stride_one(var)
-        self.push(var.concat_index(), not_reorganize)
+        self.push(var.concat_index(), not_reorganize=not_reorganize)
 
     def remove_var(self, var: OpVar) -> None:
         """Remove ``var`` index coverage from this IndexList.
 
-        This is a per-name refactoring of VarList.remove.
+        Wrapper around ``remove`` that accepts an ``OpVar`` and normalises
+        negative strides before delegating.
         """
         if not isinstance(var, OpVar):
             raise ValueError("Must be OpVar")
+        # Set or validate shape based on the original var (before stride normalization)
+        self._ensure_or_set_shape_from_var(var)
         var = IndexList._force_stride_one(var)
-        var_index = var.concat_index()
-        if var_index is None or (hasattr(var_index, "dims") and all(dim is None for dim in var_index.dims)):
-            # Removing entire variable clears indices
-            self.indices = []
-            return
-
-        added = False
-        index_list: List[AryIndex] = []
-        for index in self.indices:
-            if index == var_index:
-                # removed exactly
-                continue
-            if index is None:
-                index_list.append(index)
-                if not added:
-                    self.add_exclude(var_index)
-                    added = True
-                continue
-
-            i = AryIndex.get_diff_dim(index, var_index)
-            # If indices differ in multiple dimensions, add to the exclude list
-            if i < 0 and index != var_index:
-                index_list.append(index)
-                if not added:
-                    self.add_exclude(var_index)
-                    added = True
-                continue
-
-            work = index.copy()
-            dim1 = work[i]
-            dim2 = var_index[i] if var_index is not None else None
-
-            if AryIndex.dim_is_entire(dim1):
-                index_list.append(work)
-                if not added:
-                    self.add_exclude(var_index)
-                    added = True
-                continue
-
-            if AryIndex.dim_is_entire(dim2):
-                # removed
-                continue
-
-            # both are OpRange
-            if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
-                i0, i1 = dim1[0], dim1[1]
-                j0, j1 = dim2[0], dim2[1]
-
-                if i0 is None:
-                    diff0 = 0 if j0 is None else 999
-                else:
-                    diff0 = AryIndex._get_int(j0 - i0) if j0 is not None else -999
-                if i1 is None:
-                    diff1 = 0 if j1 is None else 999
-                else:
-                    diff1 = AryIndex._get_int(i1 - j1) if j1 is not None else -999
-
-                if diff0 is None or diff1 is None:
-                    index_list.append(work)
-                    if not added:
-                        self.add_exclude(var_index)
-                        added = True
-                    continue
-
-                if diff0 > 0:
-                    if diff0 == 1:
-                        work[i] = i0
-                    else:
-                        work[i] = OpRange([i0, j0 - 1])
-                    index_list.append(work)
-                    if diff1 > 0:
-                        index_new = work.copy()
-                        if diff1 == 1:
-                            index_new[i] = i1
-                        else:
-                            index_new[i] = OpRange([j1 + 1, i1])
-                        index_list.append(index_new)
-                else:  # diff0 <= 0 (= j0 <= i0 or j0 is None)
-                    if diff1 == 1:
-                        work[i] = i1
-                    elif diff1 > 1:
-                        work[i] = OpRange([j1 + 1, i1])
-                    else:  # diff1 <= 0 (= i1 <= j1 of j1 is None)
-                        # removed
-                        continue
-                    index_list.append(work)
-                continue
-
-            # both are scalar
-            if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
-                index_list.append(work)
-                if not added:
-                    self.add_exclude(var_index)
-                    added = True
-                continue
-
-            # dim1 is range and dim2 is scalar
-            if isinstance(dim1, OpRange):
-                if not (dim1[2] is None or AryIndex._get_int(dim1[2]) == 1):
-                    index_list.append(work)
-                    if not added:
-                        self.add_exclude(var_index)
-                        added = True
-                    continue
-                if dim1.strict_in(dim2):
-                    index_list.append(work)
-                    if dim2 == dim1[0]:
-                        work[i] = dim1[1] if dim1[1] == dim1[0] + 1 else OpRange([dim1[0] + 1, dim1[1]])
-                    elif dim2 == dim1[1]:
-                        work[i] = dim1[0] if dim1[0] == dim1[1] - 1 else OpRange([dim1[0], dim1[1] - 1])
-                    else:
-                        work[i] = dim1[0] if dim1[0] == dim2 - 1 else OpRange([dim1[0], dim2 - 1])
-                        index_new = work.copy()
-                        index_new[i] = dim1[1] if dim1[1] == dim2 + 1 else OpRange([dim2 + 1, dim1[1]])
-                        index_list.append(index_new)
-                    continue
-                d0 = AryIndex._get_int(dim1[0] - dim2)
-                d1 = AryIndex._get_int(dim2 - dim1[1])
-                index_list.append(work)
-                if (isinstance(d0, int) and d0 > 0) or (isinstance(d1, int) and d1 > 0):
-                    continue  # do not change
-                if not added:
-                    self.add_exclude(var_index)
-                    added = True
-                continue
-
-            # dim2 is range and dim1 is scalar
-            if isinstance(dim2, OpRange):
-                if not (dim2[2] is None or AryIndex._get_int(dim2[2]) == 1):
-                    index_list.append(work)
-                    continue
-                if dim2.strict_in(dim1):
-                    # removed
-                    continue
-                index_list.append(work)
-                if not added:
-                    self.add_exclude(var_index)
-                    added = True
-                continue
-
-        self.indices = index_list
+        self.remove(var.concat_index())
 
     def intersect_with(self, other: "IndexList") -> "IndexList":
         """Return a new IndexList representing the intersection with ``other``."""
         out = IndexList(dims=list(self.dims))
         # Merge dims conservatively
         out.update_dims_compat(other.dims if other.dims else self.dims)
+        # Set shape
+        if self.shape is not None:
+            out.set_shape(self.shape)
+        elif other.shape is not None:
+            out.set_shape(other.shape)
+
+        indices = [out._apply_shape_index(idx) for idx in self.indices]
         index_list: List[Optional[AryIndex]] = []
         for index2 in other.indices:
-            for index1 in self.indices:
+            index2 = out._apply_shape_index(index2)
+            for index1 in indices:
                 if index1 == index2:
                     index_list.append(None if index1 is None else index1.copy())
                     continue
@@ -940,11 +1276,7 @@ class VarList:
             raise ValueError(f"Must be list of OpVar: {type(context[1])}")
         if not isinstance(context[2], OpRange):
             raise ValueError(f"Must be OpRange: {type(context[2])}")
-        range = context[2]
-        if isinstance(range[2], OpNeg):
-            range = OpRange([range[1], range[0], range[2].args[0]])
-        if range[2] == OpInt(1):
-            range = OpRange([range[0], range[1]])
+        range = context[2].ascending()
         self._context.append((context[0], context[1], range))
 
     def pop_context(self) -> None:
@@ -959,14 +1291,26 @@ class VarList:
                 del self._store[name]
 
     def __contains__(self, item: OpVar) -> bool:
-        """Return True if item is (partially) covered by the tracked indices."""
+        return self.contains_with_context(item, without_context=True)
+
+    def contains_with_context(
+        self,
+        item: OpVar,
+        without_context: bool = False,
+    ) -> bool:
+        """Explicit membership check with optional VarList-style context.
+
+        Pass a list of (base_var, vars, range) tuples to apply loop context.
+        When context is None, behaves the same as the default "in" check.
+        """
         if not isinstance(item, OpVar):
             raise ValueError(f"Must be OpVar: {type(item)}")
         name = item.name_ext()
         if not self.has_name(name):
             return False
         index_item = item.concat_index()
-        return self._store[name].contains(index_item)
+        context = None if without_context else self._context
+        return self._store[name].contains(index_item, context=context)
 
     def __str__(self) -> str:
         """Human readable representation used for debugging.
@@ -1096,7 +1440,7 @@ class VarList:
         self._store[name].update_dims_compat(var.ndims_ext()) if self._store[name].dims else self._store[name].set_dims(var.ndims_ext())
         # Delegate push to IndexList
         il = self._store[name]
-        il.push_var(var, not_reorganize)
+        il.push_var(var, not_reorganize=not_reorganize)
 
     def remove(self, var) -> None:
         """Remove ``var`` from the list, splitting ranges as needed."""

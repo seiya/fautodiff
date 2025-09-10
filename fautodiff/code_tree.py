@@ -1333,6 +1333,7 @@ class Block(Node):
                 if isinstance(pruned, ReturnStmt):
                     targets = base_targets.copy()
         children = new_children
+
         if len(children) >= 2:
             i = 0
             while i < len(children) - 1:
@@ -1413,9 +1414,8 @@ class Block(Node):
                         item2 = last._body[-1]
                         while (
                             isinstance(item1, SaveAssignment)
-                            and not item1.pushpop
                             and isinstance(item2, SaveAssignment)
-                            and not item2.pushpop
+                            and item1.pushpop == item2.pushpop
                             and item1.var.name == item2.var.name
                             and item1.id == item2.id
                             and item1.load != item2.load
@@ -3627,7 +3627,7 @@ class Assignment(Node):
         base_targets: Optional[VarList] = None,
     ) -> Optional["Assignment"]:
         lhs = self.lhs
-        if lhs in targets:
+        if targets.contains_with_context(lhs):
             return self.deep_clone()
         return None
 
@@ -3797,6 +3797,8 @@ class SaveAssignment(Node):
                 dims = tuple(dims)
             else:
                 dims = None
+            if self.var.index is None and self.var.dims is not None:
+                self.var.index = AryIndex([None] * len(self.var.dims))
             self.tmpvar = OpVar(
                 self._save_var_name(name, self.id, pushpop=self.pushpop),
                 index=self.var.concat_index(),
@@ -5292,6 +5294,9 @@ class DoAbst(Node):
         blocks.append(loop)
 
         if reverse:
+            if self.do:
+                common_vars.push_context(self.context)
+                common_vars.pop_context()
             for cvar in common_vars:
                 if cvar.name.endswith(AD_SUFFIX):
                     continue
@@ -5609,7 +5614,9 @@ class DoLoop(DoAbst):
                         index[do_index] = self.range[0] - step
                 index_new.append(index)
             vars[name].set_indices(index_new)
+
         vars.pop_context()
+
         for var in self.range.collect_vars():
             vars.push(var)
 
@@ -5652,6 +5659,7 @@ class DoLoop(DoAbst):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Optional[Node]:
+        #print("prune loop", self.index, self.range, self.get_id())
         targets_for_body = targets.copy()
         targets_for_body.push_context(self.context)
 

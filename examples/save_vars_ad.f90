@@ -320,7 +320,7 @@ contains
       end do
     end do
     do j = 1, m
-      ary_save_87_ad(1:n,j) = ary(1:n,j)
+      ary_save_87_ad(:,j) = ary(:,j)
       do i = 1, n
         z(i,j) = ary(i,j) * x(i,j)
         ary(i,j) = ary(i,j) + z(i,j) * y(i,j)
@@ -338,7 +338,7 @@ contains
       end do
     end do
     do j = m, 1, - 1
-      ary(1:n,j) = ary_save_87_ad(1:n,j)
+      ary(:,j) = ary_save_87_ad(:,j)
       do i = n, 1, - 1
         z(i,j) = ary(i,j) * x(i,j)
         z_ad(i,j) = ary_ad(i,j) * y(i,j) + z_ad(i,j) ! ary(i,j) = ary(i,j) + z(i,j) * y(i,j)

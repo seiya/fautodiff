@@ -371,14 +371,15 @@ class TestNodeMethods(unittest.TestCase):
         blk = Block([Assignment(xa, OpInt(0)), Assignment(yi, xi)])
         self.assertEqual({str(v) for v in blk.required_vars()}, {"i"})
 
-        ya = OpVar("y", index=[OpRange([None])])
+        n = OpVar("n")
+        ya = OpVar("y", index=[OpRange([1, n])])
         blk = Block(
             [
                 Assignment(xa, OpInt(0)),
                 DoLoop(
                     Block([Assignment(yi, xi)]),
                     index=i,
-                    range=OpRange([OpInt(1), OpVar("n")]),
+                    range=OpRange([1, n]),
                 ),
             ]
         )
