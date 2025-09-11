@@ -221,14 +221,12 @@ contains
         arr(j) = j * x
       end do
       allocate(arr_ad(i))
-      arr_ad = 0.0
       do j = i, 1, - 1
-        arr_ad(j) = res_ad * x + arr_ad(j) ! res = res + arr(j) * x
+        arr_ad(j) = res_ad * x ! res = res + arr(j) * x
         x_ad = res_ad * arr(j) + x_ad ! res = res + arr(j) * x
       end do
       do j = i, 1, - 1
         x_ad = arr_ad(j) * j + x_ad ! arr(j) = j * x
-        arr_ad(j) = 0.0 ! arr(j) = j * x
       end do
       if (allocated(arr_ad)) then
         deallocate(arr_ad)
@@ -296,14 +294,14 @@ contains
     allocate(htmp(n))
     htmp = x
     allocate(htmp_save_93_ad, mold=htmp)
-    htmp_save_93_ad(1:n) = htmp(1:n)
+    htmp_save_93_ad(:) = htmp(:)
     htmp = x**2
 
     do i = n, 1, - 1
       htmp_ad(i) = z_ad * y ! z = z + htmp(i) * y
       y_ad = z_ad * htmp(i) + y_ad ! z = z + htmp(i) * y
     end do
-    htmp(1:n) = htmp_save_93_ad(1:n)
+    htmp(:) = htmp_save_93_ad(:)
     if (allocated(htmp_save_93_ad)) then
       deallocate(htmp_save_93_ad)
     end if

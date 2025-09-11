@@ -43,7 +43,8 @@ from .operators import (
     OpVar,
     VarType,
 )
-from .var_list import VarList
+
+from .var_list import IndexList, VarList
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -93,23 +94,29 @@ class Node:
         """Return ``True`` if removing this node does not change execution."""
         return all(child.is_effectively_empty() for child in self.iter_children())
 
-    def has_reference_to(self, var: str) -> bool:
+    def has_reference_to(self, varname: str) -> bool:
         """Return ``True`` if ``var`` is refered within this node."""
-        if any(var.is_same_var(v) for v in self.iter_ref_vars()):
+        if not isinstance(varname, str):
+            raise ValueError(f"varname must be str: {type(varname)}")
+        if any(varname == v.name_ext() for v in self.iter_ref_vars()):
             return True
-        return any(child.has_reference_to(var) for child in self.iter_children())
+        return any(child.has_reference_to(varname) for child in self.iter_children())
 
-    def has_assignment_to(self, var: OpVar) -> bool:
+    def has_assignment_to(self, varname: str) -> bool:
         """Return ``True`` if ``var`` is assigned within this node."""
-        if any(var.is_same_var(v) for v in self.iter_assign_vars()):
+        if not isinstance(varname, str):
+            raise ValueError(f"varname must be str: {type(varname)}")
+        if any(varname == v.name_ext() for v in self.iter_assign_vars()):
             return True
-        return any(child.has_assignment_to(var) for child in self.iter_children())
+        return any(child.has_assignment_to(varname) for child in self.iter_children())
 
-    def has_access_to(self, var: OpVar) -> bool:
+    def has_access_to(self, varname: str) -> bool:
         """Return ``True`` if ``var`` is accessed within this node."""
-        if self.has_assignment_to(var):
+        if not isinstance(varname, str):
+            raise ValueError(f"varname must be str: {type(varname)}")
+        if self.has_assignment_to(varname):
             return True
-        if self.has_reference_to(var):
+        if self.has_reference_to(varname):
             return True
         return False
 
@@ -1247,26 +1254,29 @@ class Block(Node):
         return vars
 
     def recurrent_vars(self) -> List[str]:
-        required_vars = self.required_vars()
+        required_vars = self.required_vars(no_accumulate=True)
         assigned_vars = self.assigned_vars()
         common_var_names = sorted(
             set(required_vars.names()) & set(assigned_vars.names())
         )
-        do_index_list = set(self.do_index_list)
+
         var_names: List[str] = []
-        for name in common_var_names:
-            flag = False
-            for index in required_vars[name]:
-                if not (index is not None and do_index_list <= set(index.list())):
-                    flag = True
-                    break
-            if not flag:
-                for index in assigned_vars[name]:
-                    if not (index is not None and do_index_list <= set(index.list())):
+        do_index = self.do_index_list[0] if self.do_index_list else None
+        if do_index is not None:
+            for name in common_var_names:
+                flag = False
+                for index in required_vars[name]:
+                    if index is None or not do_index in index.list():
                         flag = True
                         break
-            if flag:
-                var_names.append(name)
+                if not flag:
+                    for index in assigned_vars[name]:
+                        if index is None or not do_index in index.list():
+                            flag = True
+                            break
+                if flag:
+                    var_names.append(name)
+
         return var_names
 
     def conflict_vars(self) -> List[str]:
@@ -1323,6 +1333,7 @@ class Block(Node):
                 if isinstance(pruned, ReturnStmt):
                     targets = base_targets.copy()
         children = new_children
+
         if len(children) >= 2:
             i = 0
             while i < len(children) - 1:
@@ -1403,9 +1414,8 @@ class Block(Node):
                         item2 = last._body[-1]
                         while (
                             isinstance(item1, SaveAssignment)
-                            and not item1.pushpop
                             and isinstance(item2, SaveAssignment)
-                            and not item2.pushpop
+                            and item1.pushpop == item2.pushpop
                             and item1.var.name == item2.var.name
                             and item1.id == item2.id
                             and item1.load != item2.load
@@ -1469,6 +1479,57 @@ class Block(Node):
                         continue
                 new_children.append(child)
             children = new_children
+
+        # Dirty tracking pass: drop redundant loads when no mutation occurred
+        if children:
+            var_dirty: Dict[str, bool] = {}
+            dirty_by_id: Dict[Tuple[str, int], bool] = {}
+            active_saves: Dict[str, Set[int]] = {}
+
+            filtered: List[Node] = []
+            for child in children:
+                # Handle SaveAssignment specially (non-pushpop)
+                if isinstance(child, SaveAssignment) and not child.pushpop:
+                    name = child.var.name_ext()
+                    if child.load:
+                        key = (name, child.id)
+                        # If save is external (no entry yet), keep the first load conservatively
+                        if key in dirty_by_id:
+                            needed = dirty_by_id[key] or var_dirty.get(name, False)
+                        else:
+                            needed = True
+                        if not needed:
+                            # Drop this load because nothing modified the var since save
+                            continue
+                        # Consume/reset the dirtiness for this save id
+                        dirty_by_id[key] = False
+                        if name in active_saves:
+                            var_dirty[name] = any(dirty_by_id.get((name, sid), False) for sid in active_saves[name])
+                        else:
+                            var_dirty[name] = False
+                        filtered.append(child)
+                    else:
+                        # Save: begin a new clean segment for this id
+                        if name not in active_saves:
+                            active_saves[name] = set()
+                        active_saves[name].add(child.id)
+                        dirty_by_id[(name, child.id)] = False
+                        filtered.append(child)
+                    continue
+
+                # For other nodes, detect real writes to variables
+                assigned = child.assigned_vars(VarList(), without_savevar=True)
+                wrote_names = set(v.name_ext() for v in assigned)
+                if wrote_names:
+                    for nm in wrote_names:
+                        var_dirty[nm] = True
+                        if nm in active_saves:
+                            for sid in active_saves[nm]:
+                                dirty_by_id[(nm, sid)] = True
+                filtered.append(child)
+
+            children = filtered
+
         return Block(children)
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
@@ -2926,9 +2987,8 @@ class Routine(Node):
                                     # check if any access in (i+1, j)
                                     accessed = False
                                     for mid in children[i + 1 : j]:
-                                        if mid.has_reference_to(
-                                            OpVar(vn)
-                                        ) or mid.has_assignment_to(OpVar(vn)):
+                                        if (mid.has_reference_to(vn) or
+                                            mid.has_assignment_to(vn)):
                                             accessed = True
                                             break
                                     if not accessed:
@@ -3567,14 +3627,8 @@ class Assignment(Node):
         base_targets: Optional[VarList] = None,
     ) -> Optional["Assignment"]:
         lhs = self.lhs
-        if lhs in targets:
+        if targets.contains_with_context(lhs):
             return self.deep_clone()
-        if (
-            not lhs.ad_target
-            and not lhs.name.endswith(AD_SUFFIX)
-            and lhs.add_suffix(AD_SUFFIX) in targets
-        ):  # e.g., requests_ad for mpi
-            return Assignment(lhs.add_suffix(AD_SUFFIX), self.rhs)
         return None
 
     def required_vars(
@@ -3743,6 +3797,8 @@ class SaveAssignment(Node):
                 dims = tuple(dims)
             else:
                 dims = None
+            if self.var.index is None and self.var.dims is not None:
+                self.var.index = AryIndex([None] * len(self.var.dims))
             self.tmpvar = OpVar(
                 self._save_var_name(name, self.id, pushpop=self.pushpop),
                 index=self.var.concat_index(),
@@ -3835,14 +3891,13 @@ class SaveAssignment(Node):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Optional[SaveAssignment]:
+        # For pointer push/pop loads, conservatively keep them
         if isinstance(self, PushPop) and self.pointer and self.load:
             return self
-        found = False
-        for var in self.iter_assign_vars():
-            if var in targets:
-                found = True
-                break
-        if not found:
+        # Keep only if the assigned variable is part of the targets. Whether a
+        # load is needed should be determined by required-vars propagation in the
+        # surrounding Block (which will add the LHS when later statements use it).
+        if self.lhs not in targets:
             return None
         if self.load and self.var.ref_var is None:
             name = self.var.name_ext()
@@ -4412,11 +4467,9 @@ class PointerAssignment(Node):
             lhs_name = self.lhs.name_ext()
             rhs_name = self.rhs.name_ext()
             if lhs_name in names and rhs_name not in names:
-                assigned_vars.vars[rhs_name] = list(assigned_vars.vars[lhs_name])
-                assigned_vars.dims[rhs_name] = list(assigned_vars.dims[lhs_name])
+                assigned_vars.clone(lhs_name, rhs_name)
             if rhs_name in names and lhs_name not in names:
-                assigned_vars.vars[lhs_name] = list(assigned_vars.vars[rhs_name])
-                assigned_vars.dims[lhs_name] = list(assigned_vars.dims[rhs_name])
+                assigned_vars.clone(rhs_name, lhs_name)
         return assigned_vars
 
 
@@ -4845,7 +4898,7 @@ class BranchBlock(Node):
             vars = VarList()
         else:
             vars = vars.copy()
-        vars_new = VarList()
+        vars_new = vars.copy_context()
         cover_all = False  # if else or case default exists
         to_remove = set()
         origin_savevars = {name for name in vars.names() if Node.is_savevar(name)}
@@ -4874,8 +4927,8 @@ class BranchBlock(Node):
         if not cover_all:
             vars_new.merge(vars)
         for name in to_remove:
-            if vars_new.vars and name in vars_new.vars:
-                del vars_new.vars[name]
+            if name in vars_new.names():
+                vars_new.remove_name(name)
         for cond, _ in self.cond_blocks:
             if cond is not None:
                 if isinstance(self, (IfBlock, WhereBlock)):
@@ -4931,7 +4984,7 @@ class BranchBlock(Node):
         return node
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
-        vars_list = VarList()
+        vars_list = assigned_vars.copy_context()
         for block in self.iter_children():
             vars_list.merge(block.check_initial(assigned_vars))
         return vars_list
@@ -5063,6 +5116,8 @@ class DoAbst(Node):
     def __post_init__(self):
         super().__post_init__()
         self._body.set_parent(self)
+        if self.index is not None:
+            self.build_do_index_list([])
 
     def iter_children(self) -> Iterator[Node]:
         yield self._body
@@ -5145,9 +5200,9 @@ class DoAbst(Node):
             required_vars = self._body.required_vars()
             assigned_vars = self._body.assigned_vars()
             common_vars = required_vars & assigned_vars
+            conflict_vars = self.conflict_vars() if self.do else []
             loads = []
             if self.do:
-                conflict_vars = self.conflict_vars()
                 for cvar in common_vars:
                     if (
                         cvar.name.endswith(AD_SUFFIX)
@@ -5163,7 +5218,6 @@ class DoAbst(Node):
                     loads.insert(0, load)
 
             pushed = []
-            recurrent_vars = self.recurrent_vars()
             for node in [node for node in self._body.iter_children()]:
                 if isinstance(node, PointerClear):
                     if node.previous is None:
@@ -5178,8 +5232,8 @@ class DoAbst(Node):
                 if isinstance(node, PointerAssignment):
                     continue
                 for var in node.assigned_vars():
-                    if var.name in recurrent_vars and (
-                        not self.do or var.name in conflict_vars
+                    if (var.name in self.recurrent_vars() and
+                       (not self.do or var.name in conflict_vars)
                     ):
                         if not var in pushed:
                             save = PushPop(var, node.get_id())
@@ -5240,6 +5294,9 @@ class DoAbst(Node):
         blocks.append(loop)
 
         if reverse:
+            if self.do:
+                common_vars.push_context(self.context)
+                common_vars.pop_context()
             for cvar in common_vars:
                 if cvar.name.endswith(AD_SUFFIX):
                     continue
@@ -5255,6 +5312,34 @@ class DoAbst(Node):
             self.label_id += 1
         return f"label_{self.get_id()}_{self.label_id}{AD_SUFFIX}"
 
+    def recurrent_vars(self) -> List[str]:
+        required_vars = self._body.required_vars(no_accumulate=True)
+        assigned_vars = self._body.assigned_vars()
+        common_var_names = sorted(
+            set(required_vars.names()) & set(assigned_vars.names())
+        )
+
+        var_names: List[str] = []
+        if self.index is not None:
+            do_index = self.index.name
+            for name in common_var_names:
+                flag = False
+                for index in required_vars[name]:
+                    if index is None or not do_index in index.list():
+                        flag = True
+                        break
+                if not flag:
+                    for index in assigned_vars[name]:
+                        if index is None or not do_index in index.list():
+                            flag = True
+                            break
+                if flag:
+                    var_names.append(name)
+        else:
+            var_names = common_var_names
+
+        return var_names
+
 
 @dataclass
 class DoLoop(DoAbst):
@@ -5263,11 +5348,14 @@ class DoLoop(DoAbst):
     index: OpVar
     range: OpRange
     label: Optional[str] = field(default=None)
+    context: Tuple[OpVar, List[OpVar], OpRange] = field(
+        init=False, default_factory=tuple
+    )
     do: ClassVar[bool] = True
 
     def __post_init__(self):
         super().__post_init__()
-        self.build_do_index_list([])
+        self.build_context()
         if not isinstance(self.range, OpRange):
             raise ValueError(f"range must be OpRange: f{type(self.range)}")
 
@@ -5289,10 +5377,33 @@ class DoLoop(DoAbst):
     def iter_assign_vars(self, without_savevar: bool = False) -> Iterator[OpVar]:
         yield self.index
 
-    def build_do_index_list(self, index_list: List[str]):
+    def build_do_index_list(self, index_list: List[str]) -> None:
         self.do_index_list = [self.index.name]
         self.do_index_list.extend(index_list)
         self._body.build_do_index_list(self.do_index_list)
+
+    def build_context(self) -> None:
+        index = self.index
+        range = self.range
+        idx_vars: List[OpVar] = []
+        for child in self._body.iter_children():
+            if isinstance(child, Assignment):
+                lhs = child.lhs
+                if lhs in idx_vars or not lhs.var_type.is_integer_type:
+                    continue
+                rhs = child.rhs
+                rhs_vars = rhs.collect_vars()
+                if index in rhs_vars:
+                    found = True
+                else:
+                    found = False
+                    for var in idx_vars:
+                        if var in rhs_vars:
+                            found = True
+                            break
+                if found:
+                    idx_vars.append(lhs)
+        self.context = (index, idx_vars, range)
 
     def _build_index_map(self) -> dict:
         # build index map: variable name -> position of the loop index in the array index
@@ -5372,29 +5483,6 @@ class DoLoop(DoAbst):
             if _walk(child):
                 return True
         return False
-
-    def recurrent_vars(self) -> List[str]:
-        required_vars = self._body.required_vars()
-        assigned_vars = self._body.assigned_vars()
-        common_var_names = sorted(
-            set(required_vars.names()) & set(assigned_vars.names())
-        )
-        do_index_list = set(self.do_index_list)
-        var_names = []
-        for name in common_var_names:
-            flag = False
-            for index in required_vars[name]:
-                if not (index is not None and do_index_list <= set(index.list())):
-                    flag = True
-                    break
-            if not flag:
-                for index in assigned_vars[name]:
-                    if not (index is not None and do_index_list <= set(index.list())):
-                        flag = True
-                        break
-            if flag:
-                var_names.append(name)
-        return var_names
 
     def conflict_vars(self) -> List[str]:
         required_vars = self._body.required_vars()
@@ -5487,14 +5575,16 @@ class DoLoop(DoAbst):
         without_savevar: bool = False,
     ) -> VarList:
         if vars is None:
-            vars = VarList()
+            vars_for_body = VarList()
         else:
-            vars = vars.copy()
-            vars.update_index_downward(self._build_index_map(), self.index)
-        vars = self._body.required_vars(vars, no_accumulate, without_savevar)
+            vars_for_body = vars.copy()
+        vars_for_body.push_context(self.context)
+
+        vars = self._body.required_vars(vars_for_body, no_accumulate, without_savevar)
 
         if self.index in vars:
             vars.remove(self.index)
+
         index_map = self._build_index_map()
         if (
             self.range[2] is None
@@ -5508,25 +5598,28 @@ class DoLoop(DoAbst):
             step = 1 if self.range[2] is None else self.range[2]
             plusOne = self.index + step
             minusOne = self.index - step
-            for name in vars.names():
-                if name in index_map:
-                    do_index, _ = index_map[name]
-                else:
-                    continue
-                index_new = []
-                for index in vars.vars[name]:
-                    if index is not None and index[do_index] is not None:
-                        if index[do_index] == plusOne:
-                            index = index.copy()
-                            index[do_index] = self.range[1] + step
-                        elif index[do_index] == minusOne:
-                            index = index.copy()
-                            index[do_index] = self.range[0] - step
-                    index_new.append(index)
-                vars.vars[name] = index_new
-        vars.update_index_upward(index_map, range=self.range)
+        for name in vars.names():
+            if name in index_map:
+                do_index, _ = index_map[name]
+            else:
+                continue
+            index_new = []
+            for index in vars[name]:
+                if index is not None and index[do_index] is not None:
+                    if index[do_index] == plusOne:
+                        index = index.copy()
+                        index[do_index] = self.range[1] + step
+                    elif index[do_index] == minusOne:
+                        index = index.copy()
+                        index[do_index] = self.range[0] - step
+                index_new.append(index)
+            vars[name].set_indices(index_new)
+
+        vars.pop_context()
+
         for var in self.range.collect_vars():
             vars.push(var)
+
         return vars
 
     def assigned_vars(
@@ -5535,17 +5628,28 @@ class DoLoop(DoAbst):
         without_savevar: bool = False,
         check_init_advars: bool = False,
     ) -> VarList:
+        vars_for_body = vars.copy() if vars is not None else VarList()
+        vars_for_body.push_context(self.context)
+
         vars = self._body.assigned_vars(
-            vars, without_savevar=without_savevar, check_init_advars=check_init_advars
+            vars_for_body,
+            without_savevar=without_savevar,
+            check_init_advars=check_init_advars,
         )
-        vars.update_index_upward(self._build_index_map(), range=self.range)
-        if not check_init_advars:
+
+        vars.pop_context()
+        if self.do and not check_init_advars:
             vars.push(self.index)
         return vars
 
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
+        if vars is None:
+            vars = VarList()
+        else:
+            vars = vars.copy()
+        vars.push_context(self.context)
         vars = self._body.unrefered_advars(vars)
-        vars.update_index_upward(self._build_index_map(), range=self.range)
+        vars.pop_context()
         return vars
 
     def prune_for(
@@ -5555,24 +5659,33 @@ class DoLoop(DoAbst):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Optional[Node]:
-        targets = targets.copy()
-        flag = True
+        #print("prune loop", self.index, self.range, self.get_id())
+        targets_for_body = targets.copy()
+        targets_for_body.push_context(self.context)
+
         if base_targets is None:
             base_targets = targets.copy()
+        base_targets.push_context(self.context)
+
+        do_index = self.index.name
+        flag = True
         while flag:
             flag = False
-            new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
-            for var in new_body.required_vars(targets):
+            new_body = self._body.prune_for(
+                targets_for_body, mod_vars, decl_map, base_targets
+            )
+            for var in new_body.required_vars(targets_for_body):
                 if var.name == self.index.name:
                     continue
-                if var.index is not None and set(self.do_index_list) <= set(
-                    var.index_list()
-                ):
+                if var.index is not None and do_index in var.index_list():
                     continue
-                if var not in targets:
-                    targets.push(var)
+                if var not in targets_for_body:
+                    targets_for_body.push(var)
                     flag = True
-        new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
+
+        new_body = self._body.prune_for(
+            targets_for_body, mod_vars, decl_map, base_targets
+        )
 
         if new_body.is_effectively_empty():
             return None
@@ -5583,15 +5696,20 @@ class DoLoop(DoAbst):
             assigned_vars = VarList()
         else:
             assigned_vars = assigned_vars.copy()
-        assigned_vars.update_index_downward(
-            self._build_index_map(), do_index_var=self.index
-        )
-        # assigned_vars.merge(self._body.assigned_vars(check_init_advars = True))
-        for var in self._body.assigned_vars(check_init_advars=True):
-            if not set(self.do_index_list) <= set(var.index_list()):
-                assigned_vars.push(var)
+        assigned_vars.push_context(self.context)
+
+        vars = self._body.assigned_vars(check_init_advars=True)
+        do_index = self.index.name
+        for varname in vars.names():
+            for idx in vars[varname]:
+                if idx is None or do_index not in [str(v) for v in idx.collect_vars()]:
+                    for var in vars.get_vars(varname):
+                        assigned_vars.push(var)
+                    continue
+
         assigned_vars = self._body.check_initial(assigned_vars)
-        assigned_vars.update_index_upward(self._build_index_map(), range=self.range)
+        assigned_vars.pop_context()
+
         return assigned_vars
 
 
@@ -5602,6 +5720,7 @@ class DoWhile(DoAbst):
     cond: Operator
     label: Optional[str] = field(default=None)
     do: ClassVar[bool] = False
+    index: ClassVar[None] = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -5619,11 +5738,6 @@ class DoWhile(DoAbst):
     def build_do_index_list(self, index_list: List[str]) -> None:
         self._body.build_do_index_list(index_list)
 
-    def recurrent_vars(self) -> List[str]:
-        required_vars = self._body.required_vars()
-        assigned_vars = self._body.assigned_vars()
-        return sorted(set(required_vars.names()) & set(assigned_vars.names()))
-
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         label = f"{self.label}: " if self.label else ""
@@ -5639,13 +5753,16 @@ class DoWhile(DoAbst):
         no_accumulate: bool = False,
         without_savevar: bool = False,
     ) -> VarList:
+        vars_for_body = vars.copy() if vars is not None else VarList()
+
         if vars is None:
             vars = VarList()
         else:
             vars = vars.copy()
         for var in self.cond.collect_vars():
             vars.push(var)
-        vars = self._body.required_vars(vars, no_accumulate, without_savevar)
+        vars = self._body.required_vars(vars_for_body, no_accumulate, without_savevar)
+
         for var in self.cond.collect_vars():
             vars.push(var)
         return vars
@@ -5661,6 +5778,11 @@ class DoWhile(DoAbst):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Node:
+        if targets:
+            targets = targets.copy()
+        else:
+            targets = VarList()
+
         if base_targets is None:
             base_targets = targets.copy()
         new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
@@ -5669,6 +5791,7 @@ class DoWhile(DoAbst):
         for var in self.cond.collect_vars():
             targets.push(var)
         new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
+
         if new_body.is_effectively_empty():
             return Block([])
         return DoWhile(new_body, self.cond, self.label)
@@ -5678,6 +5801,8 @@ class DoWhile(DoAbst):
             assigned_vars = VarList()
         else:
             assigned_vars = assigned_vars.copy()
+
+        assigned_vars = assigned_vars.copy()
         assigned_vars.merge(self._body.assigned_vars(check_init_advars=True))
         assigned_vars = self._body.check_initial(assigned_vars)
         return assigned_vars
@@ -5770,37 +5895,27 @@ class BlockConstruct(Node):
         return names
 
     @staticmethod
-    def _save_remove(vars: Optional[VarList], names: List[str]):
+    def _save_remove(vars: Optional[VarList], names: List[str]) -> Dict[str, IndexList]:
         if vars is None:
-            return {}, {}, {}
+            return {}
         saved = {}
-        saved_dims = {}
-        saved_ex = {}
         for name in names:
-            if name in vars.vars:
-                saved[name] = vars.vars.pop(name)
-                saved_dims[name] = vars.dims.pop(name)
-                if name in vars.exclude:
-                    saved_ex[name] = vars.exclude.pop(name)
-        return saved, saved_dims, saved_ex
+            if vars.has_name(name):
+                saved[name] = vars[name].copy()
+                vars.remove_name(name)
+        return saved
 
     @staticmethod
     def _remove_names(vars: Optional[VarList], names: List[str]):
         if vars is None:
             return
         for name in names:
-            if name in vars.vars:
-                vars.vars.pop(name)
-                vars.dims.pop(name, None)
-                vars.exclude.pop(name, None)
+            vars.remove_name(name)
 
     @staticmethod
-    def _restore(vars: VarList, saved, saved_dims, saved_ex):
-        for name in saved:
-            vars.vars[name] = saved[name]
-            vars.dims[name] = saved_dims[name]
-            if name in saved_ex:
-                vars.exclude[name] = saved_ex[name]
+    def _restore(vars: VarList, saved: Dict[str, IndexList]):
+        for name, idx_list in saved.items():
+            vars[name] = idx_list
 
     def required_vars(
         self,
@@ -5809,11 +5924,11 @@ class BlockConstruct(Node):
         without_savevar: bool = False,
     ) -> VarList:
         local_names = self._local_names()
-        saved, saved_dims, saved_ex = self._save_remove(vars, local_names)
+        saved = self._save_remove(vars, local_names)
         vars = self.body.required_vars(vars, no_accumulate, without_savevar)
         vars = self.decls.required_vars(vars, no_accumulate, without_savevar)
         self._remove_names(vars, local_names)
-        self._restore(vars, saved, saved_dims, saved_ex)
+        self._restore(vars, saved)
         return vars
 
     def assigned_vars(
@@ -5823,7 +5938,7 @@ class BlockConstruct(Node):
         check_init_advars: bool = False,
     ) -> VarList:
         local_names = self._local_names()
-        saved, saved_dims, saved_ex = self._save_remove(vars, local_names)
+        saved = self._save_remove(vars, local_names)
         vars = self.body.assigned_vars(
             vars, without_savevar=without_savevar, check_init_advars=check_init_advars
         )
@@ -5831,16 +5946,16 @@ class BlockConstruct(Node):
             vars, without_savevar=without_savevar, check_init_advars=check_init_advars
         )
         self._remove_names(vars, local_names)
-        self._restore(vars, saved, saved_dims, saved_ex)
+        self._restore(vars, saved)
         return vars
 
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
         local_names = self._local_names()
-        saved, saved_dims, saved_ex = self._save_remove(vars, local_names)
+        saved = self._save_remove(vars, local_names)
         vars = self.decls.unrefered_advars(vars)
         vars = self.body.unrefered_advars(vars)
         self._remove_names(vars, local_names)
-        self._restore(vars, saved, saved_dims, saved_ex)
+        self._restore(vars, saved)
         return vars
 
     def prune_for(
@@ -5865,11 +5980,11 @@ class BlockConstruct(Node):
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         local_names = self._local_names()
-        saved, saved_dims, saved_ex = self._save_remove(assigned_vars, local_names)
+        saved = self._save_remove(assigned_vars, local_names)
         vars = self.decls.check_initial(assigned_vars)
         vars = self.body.check_initial(vars)
         self._remove_names(vars, local_names)
-        self._restore(vars, saved, saved_dims, saved_ex)
+        self._restore(vars, saved)
         return vars
 
     # ------------------------------------------------------------------
@@ -5894,21 +6009,15 @@ class BlockConstruct(Node):
             if v.name not in local_names:
                 yield var
 
-    def has_reference_to(self, var: OpVar) -> bool:
-        v = var
-        while v.ref_var:
-            v = v.ref_var
-        if v.name in self._local_names():
+    def has_reference_to(self, varname: str) -> bool:
+        if varname in self._local_names():
             return False
-        return self.decls.has_reference_to(var) or self.body.has_reference_to(var)
+        return self.decls.has_reference_to(varname) or self.body.has_reference_to(varname)
 
-    def has_assignment_to(self, var: OpVar) -> bool:
-        v = var
-        while v.ref_var:
-            v = v.ref_var
-        if v.name in self._local_names():
+    def has_assignment_to(self, varname: str) -> bool:
+        if varname in self._local_names():
             return False
-        return self.decls.has_assignment_to(var) or self.body.has_assignment_to(var)
+        return self.decls.has_assignment_to(varname) or self.body.has_assignment_to(varname)
 
 
 @dataclass

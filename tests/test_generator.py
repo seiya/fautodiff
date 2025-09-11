@@ -616,7 +616,7 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            src_path = Path(tmp) / "save_alloc.f90"
+            src_path = Path(tmp) / "tmp.f90"
             src_path.write_text(src)
             generated = generator.generate_ad(str(src_path), warn=False)
             lines = generated.splitlines()
@@ -669,6 +669,53 @@ class TestGenerator(unittest.TestCase):
         self.assertIn("MPI_Recv_init", generics)
         for routine in generics["MPI_Recv_init"]:
             self.assertIn(routine, routines)
+
+    def test_init_non_ad_target_mirror_vars(self):
+        """Initialize non-AD-target "_ad" mirrors.
+
+        Example: integer MPI request arrays are not AD targets. When
+        wrappers require ``array_of_requests_ad``, the generator should insert
+        ``array_of_requests_ad = <rhs>`` immediately before the original
+        initialization ``array_of_requests = <rhs>``.
+        """
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module m
+              use mpi
+            contains
+              subroutine foo(count, x, y)
+                integer, intent(in) :: count
+                real, intent(in) :: x
+                real, intent(out) :: y
+                integer :: array_of_requests(count)
+                integer :: ierr, i
+                do i = 1, count
+                  array_of_requests(i) = MPI_REQUEST_NULL
+                end do
+                y = x
+                call MPI_Startall(count, array_of_requests, ierr)
+                call MPI_Waitall(count, array_of_requests, MPI_STATUSES_IGNORE, ierr)
+              end subroutine foo
+            end module m
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            p = Path(tmp) / "m.f90"
+            p.write_text(src)
+            generated = generator.generate_ad(
+                str(p), warn=False, mode="reverse", search_dirs=["fortran_modules"]
+            )
+
+        # Declaration for the mirror must exist and be integer with same shape
+        self.assertIn("integer :: array_of_requests_ad(count)", generated)
+
+        # The initialization for the mirror must appear in the generated code
+        self.assertIn("array_of_requests_ad(i) = MPI_REQUEST_NULL", generated)
 
     def test_mpi_send_multidim(self):
         code_tree.Node.reset()

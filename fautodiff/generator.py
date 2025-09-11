@@ -363,8 +363,10 @@ def _parse_allocate(
         top = True
     else:
         top = False
+
     for child in list(node.iter_children()):
         _parse_allocate(child, mod_vars, map, local)
+
     if isinstance(node, Allocate):
         for var in node.vars:
             if var.is_constant:
@@ -378,7 +380,7 @@ def _parse_allocate(
                 root = root.ref_var
             if root.declared_in == "routine":
                 local.add(name)
-    if isinstance(node, Deallocate):
+    elif isinstance(node, Deallocate):
         for var in node.vars:
             name = var.name_ext()
             if name in map and map[name]:
@@ -389,7 +391,7 @@ def _parse_allocate(
             if root.declared_in == "routine":
                 local.add(name)
     # Insert deallocations before early returns for arrays that remain allocated
-    if isinstance(node, ReturnStmt):
+    elif isinstance(node, ReturnStmt):
         mod_var_names = [v.name_ext() for v in mod_vars]
         for name in map:
             if map[name]:
@@ -404,6 +406,12 @@ def _parse_allocate(
                         node.get_id(),
                         Allocate._add_if(Deallocate([var]), var, name in mod_var_names),
                     )
+    else:
+        for var in node.collect_vars():
+            name = var.name_ext()
+            if name in map and map[name]:
+                var.dims = tuple(map[name][-1].list())
+
     if top:
         mod_var_names = [v.name_ext() for v in mod_vars]
         for name in map:
@@ -1233,6 +1241,7 @@ def _generate_ad_subroutine(
             targets = VarList(
                 grad_args + out_args + mod_ad_vars + mod_vars + save_ad_vars + save_vars
             )
+        # print(render_program(ad_code))
 
         # Remove statements unrelated to derivative targets
         ad_code = ad_code.prune_for(targets, mod_vars + save_vars, base_targets=targets)
@@ -1243,6 +1252,7 @@ def _generate_ad_subroutine(
             ad_code = ad_code.prune_for(
                 targets, mod_vars + save_vars, base_targets=targets
             )
+            # print(render_program(ad_code))
 
     for node in ad_code:
         if not node.is_effectively_empty():
@@ -1260,15 +1270,42 @@ def _generate_ad_subroutine(
         if return_flags:
             for flag in return_flags:
                 fw_block.insert_begin(Assignment(flag, OpTrue()))
-        fw_block.build_parent()
 
+    # For non-AD-target mirror variables (e.g. integer request arrays),
+    # insert an initialization for the "_ad" variable mirroring the
+    # original assignment site. We do this by locating the first
+    # assignment to the original variable in the primal content and
+    # inserting the mirrored assignment immediately before it.
+    target_block = fw_block if reverse else ad_block
+    target_block.build_parent()
+    for var in ad_block.required_vars():
+        if not var.name.endswith(AD_SUFFIX):
+            continue
+        org_name = var.name.removesuffix(AD_SUFFIX)
+        decl = routine_org.get_var(org_name)
+        if decl is not None and not decl.ad_target:
+
+            def _insert_mirror_init(node: Node) -> bool:
+                # Depth-first search for first matching assignment
+                for ch in node.iter_children():
+                    if isinstance(ch, Assignment) and ch.lhs.name == org_name:
+                        assign = Assignment(ch.lhs.add_suffix(AD_SUFFIX), ch.rhs)
+                        # Insert before in the parent block
+                        ch.parent.insert_before(ch.get_id(), assign)
+                        return True
+                    if _insert_mirror_init(ch):
+                        return True
+                return False
+
+            _insert_mirror_init(target_block)
+
+    if reverse:
         _add_fwd_rev_calls(fw_block, routine_map, generic_map)
 
         fw_block = fw_block.prune_for(
             targets, mod_vars + save_vars, base_targets=targets
         )
-        if reverse:
-            _strip_sequential_omp(fw_block, warnings, reverse=True)
+        _strip_sequential_omp(fw_block, warnings, reverse=True)
 
         assigned = routine_org.content.assigned_vars(without_savevar=True)
         required = ad_block.required_vars(without_savevar=True)
@@ -1323,9 +1360,8 @@ def _generate_ad_subroutine(
                 flag = False
                 while (
                     isinstance(item1, SaveAssignment)
-                    and not item1.pushpop
                     and isinstance(item2, SaveAssignment)
-                    and not item2.pushpop
+                    and item1.pushpop == item2.pushpop
                     and item1.var.name == item2.var.name
                     and item1.id == item2.id
                     and item1.load != item2.load
@@ -1353,7 +1389,7 @@ def _generate_ad_subroutine(
                 if i < len(fw_nodes) - 1:
                     flag = False
                     for node in fw_nodes[i + 1 :]:
-                        if node.has_assignment_to(var):
+                        if node.has_assignment_to(var.name_ext()):
                             flag = True
                             break
                     if flag:
@@ -1367,8 +1403,9 @@ def _generate_ad_subroutine(
                         fw_block.remove_child(node_fw)
                         ad_block.remove_child(node_ad)
                         break
-                    if node_ad.has_assignment_to(var):
+                    if node_ad.has_assignment_to(var.name_ext()):
                         break
+        # print(render_program(ad_block))
 
         if not fw_block.is_effectively_empty():
             # Simple prune: drop redundant allocates left in the forward block
@@ -2041,18 +2078,8 @@ def _generate_ad_subroutine(
         if decl is not None:
             if decl.parameter or getattr(decl, "constant", False):
                 continue
-            if not reverse and var.name.endswith(AD_SUFFIX) and not decl.ad_target():
-                found = False
-                org_name = var.name.removesuffix(AD_SUFFIX)
-                for node in subroutine.ad_content.iter_children():
-                    if isinstance(node, Assignment) and node.lhs.name == org_name:
-                        assign = Assignment(node.lhs.add_suffix(AD_SUFFIX), node.rhs)
-                        subroutine.ad_content.insert_before(node.get_id(), assign)
-                        found = True
-                        break
-                if found:
-                    continue
         required_vnames.append(str(var))
+
     if len(required_vnames) > 0:
         _warn(
             warnings,

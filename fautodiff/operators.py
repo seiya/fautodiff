@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from typing import Any, ClassVar, Iterable, Iterator, List, Optional, Tuple, Union
 
+from .var_dict import VarDict
+
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")  # pattern for valid variable names
 
 # Suffix used for adjoint variables.  This is set by ``generator`` when a
@@ -197,12 +199,12 @@ class AryIndex:
         """Provide list-style indexing access to dimensions."""
         return self.dims[index] if self.dims is not None else None
 
-    def __setitem__(self, index: int, var: Operator) -> None:
+    def __setitem__(self, index: int, var: Optional[Operator]) -> None:
         """Set a dimension value, expanding the list as necessary."""
         if self.dims is None:
             self.dims = []
         if index >= len(self.dims):
-            self.dims.extend([None] * (index - len(self.dims) + 1))
+            self.dims.extend([None] * (index - len(self.dims) + 1)) # type: ignore
         self.dims[index] = var
 
     def __iter__(self) -> Iterator[Optional["Operator"]]:
@@ -249,10 +251,17 @@ class AryIndex:
         return False
 
     @classmethod
-    def get_diff_dim(cls, index1, index2) -> int:
+    def get_diff_dim(cls, index1: AryIndex|None, index2: AryIndex|None) -> int:
         """Identify the first dimension where two indices differ."""
-        if len(index1.dims) != len(index2.dims):
+
+        if (index1 is None and index2 is None):
+            return -1
+        if ((index1 is not None and index2 is not None) and
+            len(index1) != len(index2)
+        ):
             raise ValueError("Different number of dimensions")
+        if index1 is None:
+            index1 = [None] * len(index2)
 
         # ``diff_dim`` stores the first dimension where a difference is
         # encountered.  If we find differences in more than one dimension the
@@ -260,7 +269,7 @@ class AryIndex:
         # to be merged.
         diff_dim = -1
         for i, dim1 in enumerate(index1):
-            dim2 = index2[i]
+            dim2 = index2[i] if index2 is not None else None
             if dim1 == dim2:
                 continue
             if AryIndex.dim_is_entire(dim1) and AryIndex.dim_is_entire(dim2):
@@ -272,7 +281,98 @@ class AryIndex:
         return diff_dim
 
     @staticmethod
-    def _check_cover(index1, index2) -> bool:
+    def _get_int(op) -> Optional[int]:
+        """Return integer value of ``op`` if it represents a literal."""
+        if isinstance(op, OpInt):
+            return op.val
+        if isinstance(op, OpNeg) and isinstance(op.args[0], OpInt):
+            return -op.args[0].val
+        return None
+
+    @staticmethod
+    def check_overlap(index1: "AryIndex", index2: "AryIndex", context: Optional[VarDict] = None) -> bool:
+        """Return true if ``index1`` overlaps ``index2``."""
+        if len(index1.dims) != len(index2.dims):
+            raise ValueError(f"Different number of dimensions: {index1} {index2}")
+        if index1 == index2:
+            return True
+        for i, dim1 in enumerate(index1):
+            dim2 = index2.dims[i]
+            if context is not None:
+                for var, range in context.items():
+                    if dim1 is not None:
+                        dim1 = dim1.replace_with(var, range)
+                    if dim2 is not None:
+                        dim2 = dim2.replace_with(var, range)
+            if dim1 == dim2:
+                continue
+            if AryIndex.dim_is_entire(dim1):
+                continue
+            if dim2 is None:
+                continue
+            if isinstance(dim1, OpRange):
+                if dim2 not in dim1:
+                    return False
+            if isinstance(dim2, OpRange):
+                if dim1 not in dim2:
+                    return False
+            if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
+                diff = AryIndex._get_int(dim1 - dim2)
+                if diff is not None and diff != 0:
+                    return False
+        return True
+
+    def check_outside(self, other: "AryIndex") -> bool:
+        """Return true if other is partially outside of this index."""
+        if len(self.dims) != len(other.dims):
+            raise ValueError(f"Different number of dimensions: {self} {other}")
+        if self == other:
+            return False
+        for i, dim1 in enumerate(self):
+            dim2 = other.dims[i]
+            if isinstance(dim1, OpRange) and dim1[0] == dim1[1]:
+                dim1 = dim1[0]
+            if isinstance(dim2, OpRange) and dim2[0] == dim2[1]:
+                dim1 = dim2[0]
+            if dim1 == dim2:
+                continue
+            if AryIndex.dim_is_entire(dim1):
+                continue
+            if dim2 is None:
+                continue
+            if not isinstance(dim1, OpRange):
+                if isinstance(dim2, OpRange) or AryIndex._get_int(dim1-dim2) != 0:
+                    return True
+                continue
+
+            i0_op, i1_op, _ = dim1.ascending()
+
+            if not isinstance(dim2, OpRange):
+                if dim1.strict_in(dim2):
+                    continue
+                if i0_op == dim2 or i1_op == dim2:
+                    continue
+                diff = AryIndex._get_int(i0_op - dim2)
+                if diff is not None and diff > 0:
+                    return True
+                diff = AryIndex._get_int(dim2 - i1_op)
+                if diff is not None and diff > 0:
+                    return True
+                continue
+
+            j0_op, j1_op, _ = dim2.ascending()
+
+            if i0_op == j0_op and i1_op == j1_op:
+                continue
+            d0 = AryIndex._get_int(j0_op - i0_op) if i0_op is not None else 999
+            d1 = AryIndex._get_int(i1_op - j1_op) if i1_op is not None else 999
+            if (d0 is not None and d0 < 0) or (d1 is not None and d1 < 0):
+                return True
+            continue
+        return False
+
+    @staticmethod
+    def _check_cover(index1: "AryIndex", index2: "AryIndex") -> bool:
         """Return true if ``index1`` fully covers ``index2``."""
         if len(index1.dims) != len(index2.dims):
             raise ValueError(f"Different number of dimensions: {index1} {index2}")
@@ -284,74 +384,38 @@ class AryIndex:
                 continue
             if AryIndex.dim_is_entire(dim1):
                 continue
-            if isinstance(dim1, OpRange) and (
-                isinstance(dim1[0], OpVar) or isinstance(dim1[1], OpVar)
-            ):
-                # This is not sure but assumue that dim1 covers entire region.
-                continue
             if dim2 is None:
                 return False
-            if isinstance(dim1, OpVar) and isinstance(dim2, OpVar):
-                # This is not sure but different variables can be identical.
-                continue
             if not isinstance(dim1, OpRange):
                 return False
-            if not (isinstance(dim2, OpInt) or isinstance(dim2, OpRange)):
-                continue
-            i0 = dim1[0]
-            i1 = dim1[1]
-            if i0 is None and i1 is None:
-                continue
-            if not (
-                (i0 is None or isinstance(i0, OpInt))
-                and (i1 is None or isinstance(i1, OpInt))
-            ):
-                continue
-            if not (
-                dim1[2] is None
-                or (isinstance(dim1[2], OpInt) and abs(dim1[2].val) == 1)
-            ):
-                continue
-            if dim1[2] is not None and dim1[2].val < 0:
-                i0, i1 = i1, i0
-            if isinstance(dim2, OpInt):
-                j = dim2.val
-                if i0 is None and i1.val >= j:
+
+            if not isinstance(dim2, OpRange):
+                if dim1.strict_in(dim2):
                     continue
-                if i1 is None and i0.val <= j:
-                    continue
-                i0 = i0.val
-                i1 = i1.val
-                if j < i0 or j > i1:
+                return False
+
+            i0_op, i1_op, stride1 = dim1.ascending()
+            if stride1 is not None:
+                stride1_val = AryIndex._get_int(stride1)
+                if stride1_val is None or abs(stride1_val) != 1:
                     return False
-                continue  # i0 <= j and j <= i1
-            if isinstance(dim2, OpRange):
-                j0 = dim2[0]
-                j1 = dim2[1]
-                if j0 is None and j1 is None:
+
+            j0_op, j1_op, stride2 = dim2
+            if stride2 is not None:
+                stride2_val = AryIndex._get_int(stride2)
+                if stride2_val is None or abs(stride2_val) != 1:
                     return False
-                if not (
-                    (j0 is None or isinstance(j0, OpInt))
-                    and (j1 is None or isinstance(j1, OpInt))
-                ):
-                    return False
-                if not (
-                    dim2[2] is None
-                    or (isinstance(dim2[2], OpInt) and abs(dim2[2].val) == 1)
-                ):
-                    return False
-                if dim2[2] is not None and dim2[2].val < 0:
-                    j0, j1 = j1, j0
-                if (j0 is None and i0 is not None) or (
-                    isinstance(i0, OpInt) and j0.val < i0.val
-                ):
-                    return False
-                if (j1 is None and i1 is not None) or (
-                    isinstance(i1, OpInt) and i1.val < j1.val
-                ):
-                    return False
+
+            if i0_op == j0_op and i1_op == j1_op:
                 continue
-            return False
+            if (j0_op is None and i0_op is not None) or (j1_op is None and i1_op is not None):
+                return False
+            d0 = AryIndex._get_int(j0_op - i0_op) if i0_op is not None else 999
+            d1 = AryIndex._get_int(i1_op - j1_op) if i1_op is not None else 999
+            if (d0 is not None and d0 >= 0) and (d1 is not None and d1 >= 0):
+                continue
+            else:
+                return False
         return True
 
     def __le__(self, other) -> bool:
@@ -372,6 +436,24 @@ class AryIndex:
             )
         return AryIndex._check_cover(self, other)
 
+    def ascending(self) -> "AryIndex":
+        new_aryindex: List[Operator|None] = []
+        replaced = False
+        for dim in self.dims:
+            if dim is None:
+                new_aryindex.append(None)
+            elif isinstance(dim, OpRange):
+                dim_new = dim.ascending()
+                new_aryindex.append(dim_new)
+                if dim_new is not dim:
+                    replaced = True
+            else:
+                new_aryindex.append(dim)
+        if replaced:
+            return AryIndex(new_aryindex)
+        else:
+            return self
+
     def collect_vars(self) -> List[OpVar]:
         """Collect all variables used within the index expressions."""
         if self.dims is None:
@@ -387,9 +469,17 @@ class AryIndex:
 
     def is_partial_access(self) -> bool:
         """Check if the index specifies a partial array access."""
-        return self.dims is not None and any(
-            [(dim is not None and not isinstance(dim, OpRange)) for dim in self.dims]
-        )
+        if self.dims is None:
+            return False
+        for dim in self.dims:
+            if dim is None:
+                continue
+            if isinstance(dim, OpRange):
+                if dim[0] is not None or dim[1] is not None:
+                    return True
+                continue
+            return True
+        return False
 
     def is_depended_on(self, var: OpVar) -> bool:
         """Return True if ``var`` appears in any dimension expression."""
@@ -426,7 +516,11 @@ class Operator:
             raise ValueError(f"args must be a list: {type(self.args)}")
         if self.var_type is None and self.args:
             for arg in self.args:
+                if isinstance(arg, OpRange):
+                    raise ValueError("arg mut not be OpRange")
                 if isinstance(arg, Operator):
+                    if arg.var_type is None:
+                        raise ValueError(f"var_type must not be None: {type(arg)}")
                     self.var_type = arg.var_type.copy()
                     break
         if self.var_type is None:
@@ -448,6 +542,56 @@ class Operator:
                 arg.deep_clone() if isinstance(arg, Operator) else arg
                 for arg in self.args
             ]
+        return clone
+
+    def simplify(self) -> "Operator":
+        """Return a simplified operator by recursively simplifying arguments
+        and invoking the class' ``eval`` to fold constants and normalize.
+
+        This performs a light-weight pass and relies on each operator's
+        algebra implemented in ``__add__``, ``__sub__``, etc., and ``eval``.
+        """
+        # Leaf or no-arg operators are already simplest
+        if self.args is None or len(self.args) == 0:
+            return self
+
+        # Simplify children first
+        new_args = []
+        changed = False
+        for a in self.args:
+            if isinstance(a, Operator):
+                sa = a.simplify()
+                new_args.append(sa)
+                if sa is not a:
+                    changed = True
+            else:
+                new_args.append(a)
+
+        # Try to re-evaluate with simplified args to trigger folding
+        try:
+            return type(self).eval(new_args)
+        except Exception:
+            return self.copy_with_args(new_args) if changed else self
+
+    @classmethod
+    def eval(cls, args: List[Optional[Operator]]) -> "Operator":
+        return cls(args)
+
+    def copy_with_args(self, args: List[Optional[Operator]]) -> "Operator":
+        for i, arg in enumerate(args):
+            if isinstance(arg, OpRange):
+                arg_new = list(args)
+                dims = []
+                for j in range(3):
+                    if arg[j] is None:
+                        dims.append(None)
+                    else:
+                        arg_new[i] = arg.args[j]
+                        dims.append(type(self).eval(arg_new))
+                return OpRange(dims)
+
+        clone = copy.copy(self)
+        clone.args = args
         return clone
 
     def collect_vars(
@@ -484,20 +628,31 @@ class Operator:
 
     def replace_with(self, src: Operator, dest: Operator) -> Operator:
         """Replace occurrences of ``src`` with ``dest`` in the tree."""
-        if self is src:
+        if self == src:
             return dest
         if self.args is None:
             return self
         args_new: List[Any] = []
+        flag = False # True if replaced
         for arg in self.args:
             if arg is src:
                 args_new.append(dest)
+                flag = True
             elif isinstance(arg, Operator):
-                args_new.append(arg.replace_with(src, dest))
+                arg_new = arg.replace_with(src, dest)
+                args_new.append(arg_new)
+                if arg_new is not arg:
+                    flag = True
             else:
                 args_new.append(arg)
-        self.args = args_new
-        return self
+        if not flag:
+            return self
+        # Build a new operator from updated args (preserving OpRange lifting)
+        new_op = self.copy_with_args(args_new)
+        # And simplify the result once to fold constants and normalize
+        if isinstance(new_op, Operator):
+            return new_op.simplify()
+        return new_op
 
     def derivative(
         self,
@@ -943,9 +1098,6 @@ class OpLeaf(Operator):
     def find_userfunc(self) -> List[OpFuncUser]:
         return []
 
-    def replace_with(self, src: Operator, dest: Operator) -> Operator:
-        return self
-
 
 @dataclass
 class OpNum(OpLeaf):
@@ -1206,13 +1358,14 @@ class OpVar(OpLeaf):
         if self.ad_target is None and self.var_type is not None:
             typename = self.var_type.typename.lower()
             if typename.startswith(("type", "class")):
-                raise ValueError("ad_target must be set for type or class variable")
-            is_deriv_type = (
-                typename.startswith("real")
-                or typename.startswith("double")
-                or typename.startswith("complex")
-            )
-            self.ad_target = is_deriv_type and not self.is_constant
+                self.ad_type = self.var_type.is_real_type()
+            else:
+                is_deriv_type = (
+                    typename.startswith("real")
+                    or typename.startswith("double")
+                    or typename.startswith("complex")
+                )
+                self.ad_target = is_deriv_type and not self.is_constant
         elif self.ad_target is None:
             self.ad_target = False
 
@@ -1301,6 +1454,24 @@ class OpVar(OpLeaf):
         if index:
             return AryIndex(index)
         return None
+
+    def concat_dims(self) -> Optional[List[str]]:
+        """Return concatenated dims along the ref_var chain.
+
+        - For derived-type components (a%b%c), this concatenates the dims of
+          the reference variables followed by the dims of the leaf var.
+        - Mirrors concat_index semantics but for declaration dims (sizes), not
+          runtime slice indices.
+        """
+        dims: List[str] = []
+        if self.ref_var is not None:
+            ref_dims = self.ref_var.concat_dims()
+            if ref_dims:
+                dims.extend(ref_dims)
+        self_dims = self.get_dims()
+        if self_dims:
+            dims.extend(self_dims)
+        return dims if dims else None
 
     @property
     def is_real_type(self) -> bool:
@@ -1530,6 +1701,10 @@ class OpNeg(OpUnary):
     OP: ClassVar[str] = "-"
     PRIORITY: ClassVar[int] = 4
 
+    @classmethod
+    def eval(cls, args: List[Operator]) -> Operator:
+        return - args[0]
+
     def derivative(
         self,
         var: OpVar,
@@ -1576,6 +1751,10 @@ class OpAdd(OpBinary):
     OP: ClassVar[str] = "+"
     PRIORITY: ClassVar[int] = 5
 
+    @classmethod
+    def eval(cls, args: List[Operator]) -> Operator:
+        return args[0] + args[1]
+
     def derivative(
         self,
         var: OpVar,
@@ -1593,6 +1772,10 @@ class OpSub(OpBinary):
     OP: ClassVar[str] = "-"
     PRIORITY: ClassVar[int] = 5
 
+    @classmethod
+    def eval(self, args: List[Operator]) -> Operator:
+        return args[0] - args[1]
+
     def derivative(
         self,
         var: OpVar,
@@ -1609,6 +1792,10 @@ class OpSub(OpBinary):
 class OpMul(OpBinary):
     OP: ClassVar[str] = "*"
     PRIORITY: ClassVar[int] = 4
+
+    @classmethod
+    def eval(cls, args: List[Operator]) -> Operator:
+        return args[0] * args[1]
 
     def derivative(
         self,
@@ -1628,6 +1815,10 @@ class OpMul(OpBinary):
 class OpDiv(OpBinary):
     OP: ClassVar[str] = "/"
     PRIORITY: ClassVar[int] = 4
+
+    @classmethod
+    def eval(cls, args: List[Operator]) -> Operator:
+        return args[0] / args[1]
 
     def derivative(
         self,
@@ -1666,6 +1857,10 @@ class OpPow(OpBinary):
             return a0
         else:
             return f"{a0}**{a1}"
+
+    @classmethod
+    def eval(cls, args: List[Operator]) -> Operator:
+        return args[0] ** args[1]
 
     def derivative(
         self,
@@ -2061,6 +2256,40 @@ class OpRange(Operator):
         for i, val in enumerate(self.args):
             if isinstance(val, int):
                 self.args[i] = OpInt(val)
+            if isinstance(val, OpRange):
+                raise ValueError("Dimension of OpRange must not be OpRange")
+
+    def replace_with(self, src: Operator, dest: Operator) -> "OpRange":
+        dims = []
+        updated = False
+        if isinstance(dest, OpRange):
+            range_found = False
+            for dim in self.args:
+                if dim is not None and src in dim.collect_vars():
+                    range_found = True
+                    break
+                dims.append(dim)
+            if range_found:
+                i0, i1, i2 = self
+                j0, j1, j2 = dest
+                if i2 is not None and isinstance(i2, OpNeg):
+                    if j2 is not None and not isinstance(j2, OpNeg):
+                        j0, j1 = j1, j0
+                else:
+                    if j2 is not None and isinstance(j2, OpNeg):
+                        j0, j1 = j1, j0
+                i0 = i0.replace_with(src, j0)
+                i1 = i1.replace_with(src, j1)
+                return OpRange([i0, i1, i2])
+        else:
+            for dim in self.args:
+                dims.append(dim.replace_with(src, dest))
+                if dims[-1] is not dim:
+                    updated = True
+        if updated:
+            return OpRange(dims)
+        else:
+            return self
 
     def collect_vars(
         self,
@@ -2078,7 +2307,7 @@ class OpRange(Operator):
                             vars.append(v)
         return vars
 
-    def reverse(self) -> OpRange:
+    def reverse(self) -> "OpRange":
         if len(self.args) == 0:
             args = []
         if len(self.args) == 1:
@@ -2093,6 +2322,27 @@ class OpRange(Operator):
             else:
                 args = [self.args[1], self.args[0], -self.args[2]]
         return OpRange(args)
+
+    def ascending(self) -> "OpRange":
+        if len(self.args) < 3:
+            return self
+        start, end, inc = self.args
+        if inc is None:
+            return self
+        if isinstance(inc, OpInt):
+            return self
+        if isinstance(inc, OpNeg) and isinstance(inc.args[0], OpInt):
+            return self.reverse()
+        diff = AryIndex._get_int(end - start) if end is not None and start is not None else None
+        if diff is not None:
+            if diff < 0:
+                return self.reverse()
+            else:
+                return self
+        # cannot judge, so gessing
+        if isinstance(inc, OpNeg):
+            return self.reverse()
+        return self
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -2111,6 +2361,8 @@ class OpRange(Operator):
         return ":".join(["" if arg is None else str(arg) for arg in args])
 
     def __getitem__(self, index: int) -> Operator:
+        if index >= 3:
+            raise IndexError("index out of range")
         if len(self.args) <= index:
             return None
         return self.args[index]
@@ -2121,18 +2373,56 @@ class OpRange(Operator):
         return str(self) == str(other)
 
     def __contains__(self, other) -> bool:
-        i0 = self.args[0] if len(self.args) > 0 else None
-        i1 = self.args[1] if len(self.args) > 1 else None
-        if len(self.args) > 2 and isinstance(self.args[2], OpNeg):
-            i0, i1 = i1, i0
         if other is None:
             return True
-        v = i0 - other
-        if isinstance(v, OpInt) and v.val > 0:
+        i0 = self[0]
+        i1 = self[1]
+        if isinstance(self[2], OpNeg):
+            i0, i1 = i1, i0
+        if isinstance(other, OpRange):
+            j0 = other[0]
+            j1 = other[1]
+            if isinstance(other[2], OpNeg):
+                j0, j1 = j1, j0
+            if i0 is not None and j1 is not None:
+                d = AryIndex._get_int(i0 - j1)
+                if d is not None and d > 0:
+                    return False
+            if i1 is not None and j0 is not None:
+                d = AryIndex._get_int(j0 - i1)
+                if d is not None and d > 0:
+                    return False
+            return True
+        if i0 is not None:
+            v = i0 - other
+            if isinstance(v, OpInt) and v.val > 0:
+                return False
+        if i1 is not None:
+            v = other - i1
+            if isinstance(v, OpInt) and v.val > 0:
+                return False
+        return True
+
+    def strict_in(self, other) -> bool:
+        if other is None:
             return False
-        v = i1 - other
-        if isinstance(v, OpNeg) and isinstance(v.args[0], OpInt):
-            return False
+        if isinstance(other, OpRange):
+            raise NotImplementedError
+        i0, i1, i2 = self
+        if i0 == other:
+            return True
+        if (i1 == other and
+            (i2 is None or AryIndex._get_int(i2) == 1)):
+            return True
+        i0, i1, _ = self.ascending()
+        if i1 is not None:
+            v = i1 - other
+            if not (isinstance(v, OpInt) and v.val >= 0):
+                return False
+        if i0 is not None:
+            v = other - i0
+            if not (isinstance(v, OpInt) and v.val >= 0):
+                return False
         return True
 
 
