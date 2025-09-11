@@ -1678,7 +1678,11 @@ def _generate_ad_subroutine(
                                 # Slice clears (e.g., var_ad(i:j, k:l) = 0) are
                                 # required in reverse mode between overwrites and
                                 # must not be removed.
-                                if v is not None and v.index is None and v.name in names:
+                                if (
+                                    v is not None
+                                    and v.index is None
+                                    and v.name in names
+                                ):
                                     to_remove.append(c)
                         for n in to_remove:
                             node.remove_child(n)
@@ -2091,9 +2095,9 @@ def _generate_ad_subroutine(
     uses_pushpop = _contains_pushpop(subroutine) if reverse else False
 
     if sub_fwd_rev is not None:
-        routine_info[
-            "fwd_rev_subroutine"
-        ] = sub_fwd_rev  # save to output this subroutine later
+        routine_info["fwd_rev_subroutine"] = (
+            sub_fwd_rev  # save to output this subroutine later
+        )
 
     called_mods = _collect_called_ad_modules(
         [subroutine.content, subroutine.ad_init, subroutine.ad_content],

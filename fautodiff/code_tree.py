@@ -43,7 +43,6 @@ from .operators import (
     OpVar,
     VarType,
 )
-
 from .var_list import IndexList, VarList
 
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
@@ -1504,7 +1503,10 @@ class Block(Node):
                         # Consume/reset the dirtiness for this save id
                         dirty_by_id[key] = False
                         if name in active_saves:
-                            var_dirty[name] = any(dirty_by_id.get((name, sid), False) for sid in active_saves[name])
+                            var_dirty[name] = any(
+                                dirty_by_id.get((name, sid), False)
+                                for sid in active_saves[name]
+                            )
                         else:
                             var_dirty[name] = False
                         filtered.append(child)
@@ -2987,8 +2989,9 @@ class Routine(Node):
                                     # check if any access in (i+1, j)
                                     accessed = False
                                     for mid in children[i + 1 : j]:
-                                        if (mid.has_reference_to(vn) or
-                                            mid.has_assignment_to(vn)):
+                                        if mid.has_reference_to(
+                                            vn
+                                        ) or mid.has_assignment_to(vn):
                                             accessed = True
                                             break
                                     if not accessed:
@@ -5232,8 +5235,8 @@ class DoAbst(Node):
                 if isinstance(node, PointerAssignment):
                     continue
                 for var in node.assigned_vars():
-                    if (var.name in self.recurrent_vars() and
-                       (not self.do or var.name in conflict_vars)
+                    if var.name in self.recurrent_vars() and (
+                        not self.do or var.name in conflict_vars
                     ):
                         if not var in pushed:
                             save = PushPop(var, node.get_id())
@@ -5659,7 +5662,7 @@ class DoLoop(DoAbst):
         decl_map: Optional[Dict[str, "Declaration"]] = None,
         base_targets: Optional[VarList] = None,
     ) -> Optional[Node]:
-        #print("prune loop", self.index, self.range, self.get_id())
+        # print("prune loop", self.index, self.range, self.get_id())
         targets_for_body = targets.copy()
         targets_for_body.push_context(self.context)
 
@@ -6012,12 +6015,16 @@ class BlockConstruct(Node):
     def has_reference_to(self, varname: str) -> bool:
         if varname in self._local_names():
             return False
-        return self.decls.has_reference_to(varname) or self.body.has_reference_to(varname)
+        return self.decls.has_reference_to(varname) or self.body.has_reference_to(
+            varname
+        )
 
     def has_assignment_to(self, varname: str) -> bool:
         if varname in self._local_names():
             return False
-        return self.decls.has_assignment_to(varname) or self.body.has_assignment_to(varname)
+        return self.decls.has_assignment_to(varname) or self.body.has_assignment_to(
+            varname
+        )
 
 
 @dataclass

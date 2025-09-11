@@ -266,7 +266,7 @@ class TestNodeMethods(unittest.TestCase):
 
     def test_prune_with_recurent_variable_in_loop(self):
         code = textwrap.dedent(
-        """\
+            """\
         do while (a < 10)
           count = count + 1
           a = a + 1
@@ -274,10 +274,12 @@ class TestNodeMethods(unittest.TestCase):
         """
         )
         loop = DoWhile(
-            Block([
-                Assignment(OpVar("count"), OpVar("count") + OpInt(1)),
-                Assignment(OpVar("a"), OpVar("a") + OpInt(1))
-                ]),
+            Block(
+                [
+                    Assignment(OpVar("count"), OpVar("count") + OpInt(1)),
+                    Assignment(OpVar("a"), OpVar("a") + OpInt(1)),
+                ]
+            ),
             cond=OpVar("a") < OpInt(10),
         )
         pruned = loop.prune_for(VarList([OpVar("count")]))
@@ -285,7 +287,7 @@ class TestNodeMethods(unittest.TestCase):
 
     def test_prune_assignment_to_same_var(self):
         code = textwrap.dedent(
-        """\
+            """\
         do i = n, 2, - 1
           x(i) = x_save_1_ad(i)
           x_ad(i) = x_ad(i) * x(i)
@@ -299,14 +301,16 @@ class TestNodeMethods(unittest.TestCase):
         sa1 = SaveAssignment(x, id=1)
         sa2 = SaveAssignment(x, id=2)
         loop = DoLoop(
-            Block([
-                sa1.to_load(),
-                sa2,
-                Assignment(x, x * x),
-                sa2.to_load(),
-                Assignment(x_ad, x_ad * x),
-                sa1.to_load()
-                ]),
+            Block(
+                [
+                    sa1.to_load(),
+                    sa2,
+                    Assignment(x, x * x),
+                    sa2.to_load(),
+                    Assignment(x_ad, x_ad * x),
+                    sa1.to_load(),
+                ]
+            ),
             index=i,
             range=OpRange([n, OpInt(2), -OpInt(1)]),
         )
@@ -715,9 +719,7 @@ class TestNodeMethods(unittest.TestCase):
             index=i,
             range=OpRange([OpInt(1), n]),
         )
-        outer = DoLoop(
-            Block([inner]), index=j, range=OpRange([OpInt(1), m])
-        )
+        outer = DoLoop(Block([inner]), index=j, range=OpRange([OpInt(1), m]))
         outer.check_initial()
         self.assertEqual(render_program(outer), code)
 
@@ -796,25 +798,29 @@ class TestNodeMethods(unittest.TestCase):
         )
         i = OpVar("i")
         k = OpVar("k")
-        var_ad = OpVar("var_ad", index=[k,i])
+        var_ad = OpVar("var_ad", index=[k, i])
         work_ad = OpVar("work_ad", index=[k])
         work_ad1 = OpVar("work_ad", index=[1])
         work_ad2 = OpVar("work_ad", index=[2])
         z_ad = OpVar("z_ad")
         loop = DoLoop(
-            Block([
-                Assignment(work_ad2, z_ad * OpReal("2.0"), accumulate=True),
-                Assignment(work_ad1, z_ad * OpReal("1.0"), accumulate=True),
-                DoLoop(
-                    Block([
-                        Assignment(work_ad, z_ad, accumulate=True),
-                        Assignment(var_ad, work_ad, accumulate=True),
-                        ClearAssignment(work_ad)
-                    ]),
-                    index=k,
-                    range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
-                )
-            ]),
+            Block(
+                [
+                    Assignment(work_ad2, z_ad * OpReal("2.0"), accumulate=True),
+                    Assignment(work_ad1, z_ad * OpReal("1.0"), accumulate=True),
+                    DoLoop(
+                        Block(
+                            [
+                                Assignment(work_ad, z_ad, accumulate=True),
+                                Assignment(var_ad, work_ad, accumulate=True),
+                                ClearAssignment(work_ad),
+                            ]
+                        ),
+                        index=k,
+                        range=OpRange([OpInt(2), OpInt(1), OpInt(-1)]),
+                    ),
+                ]
+            ),
             index=i,
             range=OpRange([OpVar("n"), OpInt(1), OpInt(-1)]),
         )
@@ -838,28 +844,30 @@ class TestNodeMethods(unittest.TestCase):
         )
         i = OpVar("i")
         k = OpVar("k")
-        var_ad = OpVar("var_ad", index=[k,i])
+        var_ad = OpVar("var_ad", index=[k, i])
         work_ad = OpVar("work_ad", index=[k])
         z_ad = OpVar("z_ad")
         loop = DoLoop(
-            Block([
-                DoLoop(
-                    Block([
-                        Assignment(work_ad, z_ad * k, accumulate=True)
-                    ]),
-                    index=k,
-                    range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
-                ),
-                DoLoop(
-                    Block([
-                        Assignment(work_ad, z_ad, accumulate=True),
-                        Assignment(var_ad, work_ad, accumulate=True),
-                        ClearAssignment(work_ad)
-                    ]),
-                    index=k,
-                    range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
-                )
-            ]),
+            Block(
+                [
+                    DoLoop(
+                        Block([Assignment(work_ad, z_ad * k, accumulate=True)]),
+                        index=k,
+                        range=OpRange([OpInt(2), OpInt(1), OpInt(-1)]),
+                    ),
+                    DoLoop(
+                        Block(
+                            [
+                                Assignment(work_ad, z_ad, accumulate=True),
+                                Assignment(var_ad, work_ad, accumulate=True),
+                                ClearAssignment(work_ad),
+                            ]
+                        ),
+                        index=k,
+                        range=OpRange([OpInt(2), OpInt(1), OpInt(-1)]),
+                    ),
+                ]
+            ),
             index=i,
             range=OpRange([OpVar("n"), OpInt(1), OpInt(-1)]),
         )
@@ -880,24 +888,24 @@ class TestNodeMethods(unittest.TestCase):
         )
         i = OpVar("i")
         k = OpVar("k")
-        var_ad = OpVar("var_ad", index=[k,i])
+        var_ad = OpVar("var_ad", index=[k, i])
         work_ad = OpVar("work_ad", index=[k])
         work_ad1 = OpVar("work_ad", index=[1])
         work_ad2 = OpVar("work_ad", index=[2])
         work_ada = OpVar("work_ad", index=[None])
         z_ad = OpVar("z_ad")
         loop = DoLoop(
-            Block([
-                DoLoop(
-                    Block([
-                        Assignment(work_ad, z_ad * k, accumulate=True)
-                    ]),
-                    index=k,
-                    range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
-                ),
-                Assignment(var_ad, OpFunc("sum", [work_ada]), accumulate=True),
-                ClearAssignment(work_ada)
-            ]),
+            Block(
+                [
+                    DoLoop(
+                        Block([Assignment(work_ad, z_ad * k, accumulate=True)]),
+                        index=k,
+                        range=OpRange([OpInt(2), OpInt(1), OpInt(-1)]),
+                    ),
+                    Assignment(var_ad, OpFunc("sum", [work_ada]), accumulate=True),
+                    ClearAssignment(work_ada),
+                ]
+            ),
             index=i,
             range=OpRange([OpVar("n"), OpInt(1), OpInt(-1)]),
         )
@@ -926,27 +934,39 @@ class TestNodeMethods(unittest.TestCase):
         work_ad1 = OpVar("work_ad", index=[1, i])
         work_ad2 = OpVar("work_ad", index=[2, i])
         work_ada = OpVar("work_ad", index=[None, i])
-        var_ad = OpVar("var_ad", index=[i,j])
+        var_ad = OpVar("var_ad", index=[i, j])
         z_ad = OpVar("z_ad")
         loop = DoLoop(
-            Block([
-                DoLoop(
-                    Block([
-                        Assignment(work_ad2, z_ad * OpReal("2.0"), accumulate=True),
-                        Assignment(work_ad1, z_ad * OpReal("1.0"), accumulate=True),
-                    ]),
-                    index=i,
-                    range=OpRange([n, OpInt(1), OpInt(-1)])
-                ),
-                DoLoop(
-                    Block([
-                        Assignment(var_ad, OpFunc("sum", [work_ada]), accumulate=True),
-                        ClearAssignment(work_ada)
-                    ]),
-                    index=i,
-                    range=OpRange([n, OpInt(1), OpInt(-1)])
-                )
-            ]),
+            Block(
+                [
+                    DoLoop(
+                        Block(
+                            [
+                                Assignment(
+                                    work_ad2, z_ad * OpReal("2.0"), accumulate=True
+                                ),
+                                Assignment(
+                                    work_ad1, z_ad * OpReal("1.0"), accumulate=True
+                                ),
+                            ]
+                        ),
+                        index=i,
+                        range=OpRange([n, OpInt(1), OpInt(-1)]),
+                    ),
+                    DoLoop(
+                        Block(
+                            [
+                                Assignment(
+                                    var_ad, OpFunc("sum", [work_ada]), accumulate=True
+                                ),
+                                ClearAssignment(work_ada),
+                            ]
+                        ),
+                        index=i,
+                        range=OpRange([n, OpInt(1), OpInt(-1)]),
+                    ),
+                ]
+            ),
             index=j,
             range=OpRange([m, OpInt(1), OpInt(-1)]),
         )
@@ -978,32 +998,40 @@ class TestNodeMethods(unittest.TestCase):
         work_ad1 = OpVar("work_ad", index=[1, i])
         work_ad2 = OpVar("work_ad", index=[2, i])
         work_ada = OpVar("work_ad", index=[None, i])
-        var_ad = OpVar("var_ad", index=[i,j])
+        var_ad = OpVar("var_ad", index=[i, j])
         z_ad = OpVar("z_ad")
         loop = DoLoop(
-            Block([
-                DoLoop(
-                    Block([
-                        DoLoop(
-                            Block([
-                                Assignment(work_ad, z_ad * k, accumulate=True)
-                            ]),
-                            index=k,
-                            range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
-                        )
-                    ]),
-                    index=i,
-                    range=OpRange([n, OpInt(1), OpInt(-1)])
-                ),
-                DoLoop(
-                    Block([
-                        Assignment(var_ad, OpFunc("sum", [work_ada]), accumulate=True),
-                        ClearAssignment(work_ada)
-                    ]),
-                    index=i,
-                    range=OpRange([n, OpInt(1), OpInt(-1)])
-                )
-            ]),
+            Block(
+                [
+                    DoLoop(
+                        Block(
+                            [
+                                DoLoop(
+                                    Block(
+                                        [Assignment(work_ad, z_ad * k, accumulate=True)]
+                                    ),
+                                    index=k,
+                                    range=OpRange([OpInt(2), OpInt(1), OpInt(-1)]),
+                                )
+                            ]
+                        ),
+                        index=i,
+                        range=OpRange([n, OpInt(1), OpInt(-1)]),
+                    ),
+                    DoLoop(
+                        Block(
+                            [
+                                Assignment(
+                                    var_ad, OpFunc("sum", [work_ada]), accumulate=True
+                                ),
+                                ClearAssignment(work_ada),
+                            ]
+                        ),
+                        index=i,
+                        range=OpRange([n, OpInt(1), OpInt(-1)]),
+                    ),
+                ]
+            ),
             index=j,
             range=OpRange([m, OpInt(1), OpInt(-1)]),
         )
@@ -1034,43 +1062,54 @@ class TestNodeMethods(unittest.TestCase):
         n = OpVar("n")
         m = OpVar("m")
         work_ad = OpVar("work_ad", index=[k, i])
-        var_ad = OpVar("var_ad", index=[i,j])
+        var_ad = OpVar("var_ad", index=[i, j])
         z_ad = OpVar("z_ad")
         loop = DoLoop(
-            Block([
-                DoLoop(
-                    Block([
-                        DoLoop(
-                            Block([
-                                Assignment(work_ad, z_ad * k, accumulate=True)
-                            ]),
-                            index=k,
-                            range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
-                        )
-                    ]),
-                    index=i,
-                    range=OpRange([n, OpInt(1), OpInt(-1)])
-                ),
-                DoLoop(
-                    Block([
-                        DoLoop(
-                            Block([
-                                Assignment(var_ad, work_ad, accumulate=True),
-                                ClearAssignment(work_ad)
-                            ]),
-                            index=k,
-                            range=OpRange([OpInt(2), OpInt(1), OpInt(-1)])
-                        )
-                    ]),
-                    index=i,
-                    range=OpRange([n, OpInt(1), OpInt(-1)])
-                )
-            ]),
+            Block(
+                [
+                    DoLoop(
+                        Block(
+                            [
+                                DoLoop(
+                                    Block(
+                                        [Assignment(work_ad, z_ad * k, accumulate=True)]
+                                    ),
+                                    index=k,
+                                    range=OpRange([OpInt(2), OpInt(1), OpInt(-1)]),
+                                )
+                            ]
+                        ),
+                        index=i,
+                        range=OpRange([n, OpInt(1), OpInt(-1)]),
+                    ),
+                    DoLoop(
+                        Block(
+                            [
+                                DoLoop(
+                                    Block(
+                                        [
+                                            Assignment(
+                                                var_ad, work_ad, accumulate=True
+                                            ),
+                                            ClearAssignment(work_ad),
+                                        ]
+                                    ),
+                                    index=k,
+                                    range=OpRange([OpInt(2), OpInt(1), OpInt(-1)]),
+                                )
+                            ]
+                        ),
+                        index=i,
+                        range=OpRange([n, OpInt(1), OpInt(-1)]),
+                    ),
+                ]
+            ),
             index=j,
             range=OpRange([m, OpInt(1), OpInt(-1)]),
         )
         loop.check_initial()
         self.assertEqual(render_program(loop), code)
+
 
 class TestPushPop(unittest.TestCase):
     def test_push(self):

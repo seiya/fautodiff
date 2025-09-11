@@ -867,6 +867,7 @@ class TestGenerator(unittest.TestCase):
 
         # Accumulation into field_ad slice inside the conditional (ignore whitespace)
         import re as _re
+
         pat = r"field_ad\(istart:iend\s*,\s*jend\s*-\s*ihalo\s*\+\s*1\s*:\s*jend\)\s*=\s*send_ad\(\s*:\s*,\s*:\s*\)\s*\+\s*field_ad\(istart:iend\s*,\s*jend\s*-\s*ihalo\s*\+\s*1\s*:\s*jend\)"
         self.assertIsNotNone(_re.search(pat, generated))
 
@@ -906,7 +907,11 @@ class TestGenerator(unittest.TestCase):
             p = Path(tmp) / "mini.f90"
             p.write_text(src)
             generated = generator.generate_ad(
-                str(p), warn=False, search_dirs=[tmp], write_fadmod=False, mode="reverse"
+                str(p),
+                warn=False,
+                search_dirs=[tmp],
+                write_fadmod=False,
+                mode="reverse",
             )
 
         self.assertIn("subroutine s_rev_ad", generated)
@@ -914,7 +919,9 @@ class TestGenerator(unittest.TestCase):
         # In reverse, we clear after the last two overwrites when traversing
         # statements backward; the earliest overwrite need not clear again.
         self.assertGreaterEqual(
-            len(clears), 2, f"Expected >=2 htmp_ad slice clears, found {len(clears)}.\n\n{generated}"
+            len(clears),
+            2,
+            f"Expected >=2 htmp_ad slice clears, found {len(clears)}.\n\n{generated}",
         )
 
 

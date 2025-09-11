@@ -4,7 +4,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff.operators import AryIndex, OpInt, OpNeg, OpRange, OpVar, VarType, Operator
+from fautodiff.operators import (
+    AryIndex,
+    Operator,
+    OpInt,
+    OpNeg,
+    OpRange,
+    OpVar,
+    VarType,
+)
 from fautodiff.var_list import IndexList
 
 
@@ -17,6 +25,7 @@ def v(name, *idx_dims) -> OpVar:
             elif isinstance(d, int):
                 dims.append(OpInt(d))
             elif isinstance(d, tuple):
+
                 def to_op(item):
                     if isinstance(item, Operator):
                         return item
@@ -76,15 +85,15 @@ class TestIndexList(unittest.TestCase):
     def test_push_in_range(self):
         il = IndexList()
         i = OpVar("i")
-        il.push(AryIndex([OpRange([i-1,i+1])]))
+        il.push(AryIndex([OpRange([i - 1, i + 1])]))
         il.push(AryIndex([i]))
         self.assertEqual(str(il), "(i - 1:i + 1)")
 
     def test_push_merge(self):
         il = IndexList()
         i = OpVar("i")
-        il.push(AryIndex([OpRange([i-2,i-1])]))
-        il.push(AryIndex([OpRange([i+1,i+2])]))
+        il.push(AryIndex([OpRange([i - 2, i - 1])]))
+        il.push(AryIndex([OpRange([i + 1, i + 2])]))
         il.push(AryIndex([i]))
         self.assertEqual(str(il), "(i - 2:i + 2)")
 
@@ -249,9 +258,13 @@ class TestIndexList(unittest.TestCase):
         il.push(AryIndex([OpRange([OpInt(1), OpInt(5)]), OpInt(1)]))
         il.push(AryIndex([OpRange([OpInt(6), OpInt(10)]), OpInt(1)]))
         # contains combined in first dim, fixed 1 in second dim
-        self.assertTrue(il.contains(AryIndex([OpRange([OpInt(1), OpInt(10)]), OpInt(1)])))
+        self.assertTrue(
+            il.contains(AryIndex([OpRange([OpInt(1), OpInt(10)]), OpInt(1)]))
+        )
         # different second dim should not be contained
-        self.assertFalse(il.contains(AryIndex([OpRange([OpInt(1), OpInt(10)]), OpInt(2)])))
+        self.assertFalse(
+            il.contains(AryIndex([OpRange([OpInt(1), OpInt(10)]), OpInt(2)]))
+        )
 
     def test_contains_with_context_scalar_substitution(self):
         # Stored numeric range; query contains symbolic i. Context should decide membership.
@@ -300,7 +313,9 @@ class TestIndexList(unittest.TestCase):
         self.assertTrue(il.contains(AryIndex([OpInt(5)]), context=ctx))
         self.assertFalse(il.contains(AryIndex([OpInt(0)]), context=ctx))
         # Range fully inside should also be contained
-        self.assertTrue(il.contains(AryIndex([OpRange([OpInt(3), OpInt(4)])]), context=ctx))
+        self.assertTrue(
+            il.contains(AryIndex([OpRange([OpInt(3), OpInt(4)])]), context=ctx)
+        )
 
     def test_exclude_check_uses_context(self):
         # Entire coverage with an exclude that depends on a symbol; context should exclude concretized index
@@ -520,7 +535,9 @@ class TestIndexList(unittest.TestCase):
         # Outside in second dim
         self.assertFalse(il.contains(AryIndex([OpInt(1), m + OpInt(1)])))
 
-    def test_shape_2d_full_then_remove_pair_then_exit_keeps_partial_exclude_then_clears(self):
+    def test_shape_2d_full_then_remove_pair_then_exit_keeps_partial_exclude_then_clears(
+        self,
+    ):
         # shape = (1:n, 1:m), push None (full), remove (i,j)
         # After exit_context i=1:n, exclude should contain (1:n,j)
         # After exit_context j=1:m, everything clears
@@ -552,7 +569,12 @@ class TestIndexList(unittest.TestCase):
     def test_shape_push_none_then_remove_endpoint_static_2d(self):
         # shape=(1:2, 1:n), push None -> coverage = 1:2, remove (2,:) -> indices=(1,:), exclude=[]
         il = IndexList()
-        il.set_shape((OpRange([OpInt(1), OpInt(2)]), OpRange([OpInt(1), OpVar("n")]),))
+        il.set_shape(
+            (
+                OpRange([OpInt(1), OpInt(2)]),
+                OpRange([OpInt(1), OpVar("n")]),
+            )
+        )
         il.push(None)
         il.remove(AryIndex([OpInt(2), None]))
         self.assertEqual(len(il.indices), 1)
@@ -562,7 +584,12 @@ class TestIndexList(unittest.TestCase):
     def test_shape_push_full1d_then_remove_endpoint_static_2d(self):
         # shape=(1:2, 1:n), push (:,i), remove (2,i) -> indices=(1,i), exclude=[]
         il = IndexList()
-        il.set_shape((OpRange([OpInt(1), OpInt(2)]), OpRange([OpInt(1), OpVar("n")]),))
+        il.set_shape(
+            (
+                OpRange([OpInt(1), OpInt(2)]),
+                OpRange([OpInt(1), OpVar("n")]),
+            )
+        )
         il.push(AryIndex([None, OpVar("i")]))
         il.remove(AryIndex([OpInt(2), OpVar("i")]))
         self.assertEqual(len(il.indices), 1)
@@ -596,7 +623,7 @@ class TestIndexList(unittest.TestCase):
         il.push(None)
         il.remove(AryIndex([OpInt(2)]))
         self.assertEqual(len(il.indices), 1)
-        self.assertEqual(il.indices[0],None)
+        self.assertEqual(il.indices[0], None)
         self.assertEqual(len(il.exclude), 1)
         self.assertEqual(str(il.exclude[0]), "2")
 
