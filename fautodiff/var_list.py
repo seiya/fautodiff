@@ -1017,15 +1017,22 @@ class IndexList:
                 cand.append(None)
                 continue
             # Build upper bound operator from dim token
-            op_hi: Operator
-            try:
-                # numeric literal string
-                ival = int(str(d))
-                op_hi = OpInt(ival)
-            except Exception:
-                # symbolic variable name
-                op_hi = OpVar(str(d))
-            cand.append(OpRange([OpInt(1), op_hi]))
+            if ":" in d:
+                list = [p.strip() for p in d.split(':')]
+            else:
+                list = [1, d]
+            ops: List[Operator|None] = []
+            for s in list:
+                if s == "":
+                    ops.append(None)
+                    continue
+                try:
+                    # numeric literal string
+                    ops.append(OpInt(int(s)))
+                except Exception:
+                    # symbolic variable name
+                    ops.append(OpVar(s))
+            cand.append(OpRange(ops))
         # If all dims are unknown/":" placeholders, do not set shape
         if all(x is None for x in cand):
             return None
