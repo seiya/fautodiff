@@ -204,7 +204,7 @@ class AryIndex:
         if self.dims is None:
             self.dims = []
         if index >= len(self.dims):
-            self.dims.extend([None] * (index - len(self.dims) + 1)) # type: ignore
+            self.dims.extend([None] * (index - len(self.dims) + 1))  # type: ignore
         self.dims[index] = var
 
     def __iter__(self) -> Iterator[Optional["Operator"]]:
@@ -251,14 +251,12 @@ class AryIndex:
         return False
 
     @classmethod
-    def get_diff_dim(cls, index1: AryIndex|None, index2: AryIndex|None) -> int:
+    def get_diff_dim(cls, index1: AryIndex | None, index2: AryIndex | None) -> int:
         """Identify the first dimension where two indices differ."""
 
-        if (index1 is None and index2 is None):
+        if index1 is None and index2 is None:
             return -1
-        if ((index1 is not None and index2 is not None) and
-            len(index1) != len(index2)
-        ):
+        if (index1 is not None and index2 is not None) and len(index1) != len(index2):
             raise ValueError("Different number of dimensions")
         if index1 is None:
             index1 = [None] * len(index2)
@@ -290,7 +288,9 @@ class AryIndex:
         return None
 
     @staticmethod
-    def check_overlap(index1: "AryIndex", index2: "AryIndex", context: Optional[VarDict] = None) -> bool:
+    def check_overlap(
+        index1: "AryIndex", index2: "AryIndex", context: Optional[VarDict] = None
+    ) -> bool:
         """Return true if ``index1`` overlaps ``index2``."""
         if len(index1.dims) != len(index2.dims):
             raise ValueError(f"Different number of dimensions: {index1} {index2}")
@@ -341,7 +341,7 @@ class AryIndex:
             if dim2 is None:
                 continue
             if not isinstance(dim1, OpRange):
-                if isinstance(dim2, OpRange) or AryIndex._get_int(dim1-dim2) != 0:
+                if isinstance(dim2, OpRange) or AryIndex._get_int(dim1 - dim2) != 0:
                     return True
                 continue
 
@@ -408,7 +408,9 @@ class AryIndex:
 
             if i0_op == j0_op and i1_op == j1_op:
                 continue
-            if (j0_op is None and i0_op is not None) or (j1_op is None and i1_op is not None):
+            if (j0_op is None and i0_op is not None) or (
+                j1_op is None and i1_op is not None
+            ):
                 return False
             d0 = AryIndex._get_int(j0_op - i0_op) if i0_op is not None else 999
             d1 = AryIndex._get_int(i1_op - j1_op) if i1_op is not None else 999
@@ -437,7 +439,7 @@ class AryIndex:
         return AryIndex._check_cover(self, other)
 
     def ascending(self) -> "AryIndex":
-        new_aryindex: List[Operator|None] = []
+        new_aryindex: List[Operator | None] = []
         replaced = False
         for dim in self.dims:
             if dim is None:
@@ -633,7 +635,7 @@ class Operator:
         if self.args is None:
             return self
         args_new: List[Any] = []
-        flag = False # True if replaced
+        flag = False  # True if replaced
         for arg in self.args:
             if arg is src:
                 args_new.append(dest)
@@ -1703,7 +1705,7 @@ class OpNeg(OpUnary):
 
     @classmethod
     def eval(cls, args: List[Operator]) -> Operator:
-        return - args[0]
+        return -args[0]
 
     def derivative(
         self,
@@ -2333,7 +2335,11 @@ class OpRange(Operator):
             return self
         if isinstance(inc, OpNeg) and isinstance(inc.args[0], OpInt):
             return self.reverse()
-        diff = AryIndex._get_int(end - start) if end is not None and start is not None else None
+        diff = (
+            AryIndex._get_int(end - start)
+            if end is not None and start is not None
+            else None
+        )
         if diff is not None:
             if diff < 0:
                 return self.reverse()
@@ -2411,8 +2417,7 @@ class OpRange(Operator):
         i0, i1, i2 = self
         if i0 == other:
             return True
-        if (i1 == other and
-            (i2 is None or AryIndex._get_int(i2) == 1)):
+        if i1 == other and (i2 is None or AryIndex._get_int(i2) == 1):
             return True
         i0, i1, _ = self.ascending()
         if i1 is not None:

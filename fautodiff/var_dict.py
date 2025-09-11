@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Generic, Iterable, Iterator, List, Tuple, TypeVar, Optional
+from typing import Dict, Generic, Iterable, Iterator, List, Optional, Tuple, TypeVar
 
 KT = TypeVar("KT")
 VT = TypeVar("VT")
@@ -36,7 +36,7 @@ class VarDict(Generic[KT, VT]):
         index = self._keys.index(key)
         return self._values[index]
 
-    def get(self, key: KT, default = None) -> Optional[VT]:
+    def get(self, key: KT, default=None) -> Optional[VT]:
         if key in self._keys:
             return self[key]
         return default
@@ -77,4 +77,3 @@ class VarDict(Generic[KT, VT]):
         obj._keys = self._keys.copy()
         obj._values = self._values.copy()
         return obj
-

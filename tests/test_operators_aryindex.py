@@ -37,7 +37,7 @@ class TestAryIndexOps(unittest.TestCase):
         self.assertTrue(AryIndex([OpRange([2, 3]), None]) <= ref)
         self.assertFalse(AryIndex([OpRange([1, 3]), None]) <= ref)
         self.assertFalse(AryIndex([OpRange([3, 5]), None]) <= ref)
-        #self.assertTrue(AryIndex([OpVar("j"), i]) <= ref)
+        # self.assertTrue(AryIndex([OpVar("j"), i]) <= ref)
 
     def test_collect_vars_and_flags(self):
         i = OpVar("i")

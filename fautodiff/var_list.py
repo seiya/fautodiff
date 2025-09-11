@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterator, List, Tuple, Optional, Union, Iterable
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
-
-from .operators import AryIndex, OpInt, OpNeg, OpRange, OpVar, Operator
+from .operators import AryIndex, Operator, OpInt, OpNeg, OpRange, OpVar
 from .var_dict import VarDict
 
 
@@ -93,17 +92,17 @@ class IndexList:
             return None
         return AryIndex(list(self.shape))
 
-    def _apply_shape_index(self, index: AryIndex|None) -> AryIndex | None:
+    def _apply_shape_index(self, index: AryIndex | None) -> AryIndex | None:
         if self.shape is None or index is None:
             return index
 
         index = index.ascending()
 
-        new_index: List[Operator|None] = []
+        new_index: List[Operator | None] = []
         replaced = False
         for j, dim in enumerate(index):
-            if ((dim is not None and dim == self.shape[j]) or
-                (isinstance(dim, OpRange) and dim[0] is None and dim[1] is None)
+            if (dim is not None and dim == self.shape[j]) or (
+                isinstance(dim, OpRange) and dim[0] is None and dim[1] is None
             ):
                 new_index.append(None)
                 replaced = True
@@ -118,7 +117,11 @@ class IndexList:
                     replaced = True
                     d1 = shape[1]
                 if replaced:
-                    dim = OpRange([d0, d1, d2]) if d0 is not None and d0 is not OpInt(1) else OpRange([d0, d1])
+                    dim = (
+                        OpRange([d0, d1, d2])
+                        if d0 is not None and d0 is not OpInt(1)
+                        else OpRange([d0, d1])
+                    )
             new_index.append(dim)
         if replaced:
             if all(dim is None for dim in new_index):
@@ -255,7 +258,14 @@ class IndexList:
         return AryIndex(dims_new)
 
     # --- Context handling ---
-    def _replace_index(self, index: AryIndex, base_var: OpVar, range: OpRange, vars: List[OpVar], exclude: bool = False) -> Optional[AryIndex]:
+    def _replace_index(
+        self,
+        index: AryIndex,
+        base_var: OpVar,
+        range: OpRange,
+        vars: List[OpVar],
+        exclude: bool = False,
+    ) -> Optional[AryIndex]:
         """Return transformed index for context exit.
 
         - Replace occurrences of base_var in dims by the given range.
@@ -281,7 +291,9 @@ class IndexList:
                         break
         return index if index_new is None else index_new
 
-    def remove(self, var_index: Optional[AryIndex], not_reorganize: bool = False) -> None:
+    def remove(
+        self, var_index: Optional[AryIndex], not_reorganize: bool = False
+    ) -> None:
         """Remove ``var_index`` coverage from this IndexList.
 
         This method performs full-featured removal, splitting ranges and updating
@@ -292,7 +304,9 @@ class IndexList:
             return
 
         if not (var_index is None or isinstance(var_index, AryIndex)):
-            raise ValueError(f"var_index must be None or AryIndex, not {type(var_index)}")
+            raise ValueError(
+                f"var_index must be None or AryIndex, not {type(var_index)}"
+            )
 
         # Normalization
         var_index = self._apply_shape_index(var_index)
@@ -303,16 +317,20 @@ class IndexList:
         if self.shape is not None and var_index is not None:
             shape_idx = self._shape_as_index()
             if shape_idx is not None and shape_idx.check_outside(var_index):
-                raise ValueError(f"remove index outside shape: {self.shape} {var_index}")
+                raise ValueError(
+                    f"remove index outside shape: {self.shape} {var_index}"
+                )
 
         # Removing entire variable clears indices in non-full-coverage cases
-        if IndexList._is_entire_index(var_index) or self._is_full_shape_index(var_index):
+        if IndexList._is_entire_index(var_index) or self._is_full_shape_index(
+            var_index
+        ):
             self.indices = []
             return
         # Now var_index is not None
 
         added = False
-        index_list: List[AryIndex|None] = []
+        index_list: List[AryIndex | None] = []
         for index in self.indices:
             if index == var_index:
                 # removed exactly
@@ -418,15 +436,31 @@ class IndexList:
                         added = True
                     continue
                 if dim1.strict_in(dim2):
-                    index_list.append(work) # work will be modified
+                    index_list.append(work)  # work will be modified
                     if dim2 == dim1[0]:
-                        work[i] = dim1[1] if dim1[1] == dim1[0] + 1 else OpRange([dim1[0] + 1, dim1[1]])
+                        work[i] = (
+                            dim1[1]
+                            if dim1[1] == dim1[0] + 1
+                            else OpRange([dim1[0] + 1, dim1[1]])
+                        )
                     elif dim2 == dim1[1]:
-                        work[i] = dim1[0] if dim1[0] == dim1[1] - 1 else OpRange([dim1[0], dim1[1] - 1])
+                        work[i] = (
+                            dim1[0]
+                            if dim1[0] == dim1[1] - 1
+                            else OpRange([dim1[0], dim1[1] - 1])
+                        )
                     else:
-                        work[i] = dim1[0] if dim1[0] == dim2 - 1 else OpRange([dim1[0], dim2 - 1])
+                        work[i] = (
+                            dim1[0]
+                            if dim1[0] == dim2 - 1
+                            else OpRange([dim1[0], dim2 - 1])
+                        )
                         index_new = work.copy()
-                        index_new[i] = dim1[1] if dim1[1] == dim2 + 1 else OpRange([dim2 + 1, dim1[1]])
+                        index_new[i] = (
+                            dim1[1]
+                            if dim1[1] == dim2 + 1
+                            else OpRange([dim2 + 1, dim1[1]])
+                        )
                         index_list.append(index_new)
                     continue
                 d0 = AryIndex._get_int(dim1[0] - dim2)
@@ -509,7 +543,9 @@ class IndexList:
                 if residual.indices == [ex_new]:
                     try:
                         ex_dim = ex_new[0]
-                        if isinstance(ex_dim, OpRange) and (ex_dim[2] is None or AryIndex._get_int(ex_dim[2]) == 1):
+                        if isinstance(ex_dim, OpRange) and (
+                            ex_dim[2] is None or AryIndex._get_int(ex_dim[2]) == 1
+                        ):
                             i0 = ex_dim[0]
                             i1 = ex_dim[1]
                             if isinstance(i0, OpInt):
@@ -522,7 +558,9 @@ class IndexList:
                                         hit_start = True
                                         break
                                 if hit_start:
-                                    residual.indices = [AryIndex([OpRange([OpInt(i0.val + 1), i1])])]
+                                    residual.indices = [
+                                        AryIndex([OpRange([OpInt(i0.val + 1), i1])])
+                                    ]
                     except Exception:
                         pass
                 for r in residual.indices:
@@ -551,12 +589,16 @@ class IndexList:
             if idx is None:
                 indices.append(None)
             else:
-                indices.append(IndexList._apply_context_index(idx, indices_ctx, for_exclude=False))
+                indices.append(
+                    IndexList._apply_context_index(idx, indices_ctx, for_exclude=False)
+                )
         self.indices = indices
         self.reorganize()
 
     # --- High-level helpers used by VarList ---
-    def make_opvar(self, full_name: str, index: Optional[Union[AryIndex, List[Operator]]]) -> OpVar:
+    def make_opvar(
+        self, full_name: str, index: Optional[Union[AryIndex, List[Operator]]]
+    ) -> OpVar:
         """Construct an OpVar for this name with given index using stored dims.
         Supports nested derived-type components split by '%'.
         """
@@ -616,7 +658,8 @@ class IndexList:
         if self.shape is not None and q is not None and not self._overlaps_shape(q):
             return False
         excludes_ctx: List[Optional[AryIndex]] = [
-            IndexList._apply_context_index(ex, context, for_exclude=True) for ex in self.exclude
+            IndexList._apply_context_index(ex, context, for_exclude=True)
+            for ex in self.exclude
         ]
 
         # Compute remaining segments of q after subtracting the excludes exactly once
@@ -781,7 +824,9 @@ class IndexList:
                 new_list.append(index)
         self.indices = new_list
 
-    def update_index_downward(self, do_index: int, ndim: int, do_index_var: OpVar) -> None:
+    def update_index_downward(
+        self, do_index: int, ndim: int, do_index_var: OpVar
+    ) -> None:
         new_list: List[Optional[AryIndex]] = []
         for index in self.indices:
             if index is None:
@@ -804,7 +849,9 @@ class IndexList:
         """
         var_index = self._apply_shape_index(var_index)
         # Entire array coverage: when shape known, use shape value explicitly
-        if IndexList._is_entire_index(var_index) or self._is_full_shape_index(var_index):
+        if IndexList._is_entire_index(var_index) or self._is_full_shape_index(
+            var_index
+        ):
             self.indices = [None]
             self.clear_exclude()
             return
@@ -834,7 +881,9 @@ class IndexList:
                 # If unchanged due to symbolic bounds, try trimming exact endpoint hits
                 if residual.indices == [ex]:
                     # Only handle 1D simple cases here
-                    if isinstance(ex[0], OpRange) and not isinstance(var_index[0], OpRange):
+                    if isinstance(ex[0], OpRange) and not isinstance(
+                        var_index[0], OpRange
+                    ):
                         r = ex[0]
                         v = var_index[0]
                         # If v equals lower bound: (i0:i1) - i0 -> (i0+1:i1)
@@ -1000,7 +1049,9 @@ class IndexList:
         return var
 
     # --- Shape extraction/validation from OpVar ---
-    def _shape_candidate_from_var(self, var: OpVar) -> Optional[List[Optional[OpRange]]]:
+    def _shape_candidate_from_var(
+        self, var: OpVar
+    ) -> Optional[List[Optional[OpRange]]]:
         """Try to build a shape candidate from ``var``'s declared dims, not its slice.
 
         - Uses ``var.get_dims()`` which may return symbolic size variables per dimension.
@@ -1018,10 +1069,10 @@ class IndexList:
                 continue
             # Build upper bound operator from dim token
             if ":" in d:
-                list = [p.strip() for p in d.split(':')]
+                list = [p.strip() for p in d.split(":")]
             else:
                 list = [1, d]
-            ops: List[Operator|None] = []
+            ops: List[Operator | None] = []
             for s in list:
                 if s == "":
                     ops.append(None)
@@ -1237,7 +1288,11 @@ class VarList:
     _store: Dict[str, IndexList] = field(default_factory=dict)
     _context: List[Tuple[OpVar, List[OpVar], OpRange]] = field(default_factory=list)
 
-    def __init__(self, vars: Optional[List[OpVar]] = None, context: Optional[List[Tuple[OpVar, List[OpVar], OpRange]]] = None):
+    def __init__(
+        self,
+        vars: Optional[List[OpVar]] = None,
+        context: Optional[List[Tuple[OpVar, List[OpVar], OpRange]]] = None,
+    ):
         """Initialise the container.
 
         Parameters
@@ -1269,7 +1324,7 @@ class VarList:
 
     def copy_context(self) -> VarList:
         """Return a new variable list with the context copied from self"""
-        return VarList(context = self._context)
+        return VarList(context=self._context)
 
     def clone(self, src: str, dst: str) -> None:
         if src not in self._store:
@@ -1422,9 +1477,11 @@ class VarList:
 
         # Merge context
         for i, cont in enumerate(other._context):
-            if (len(self._context) <= i
+            if (
+                len(self._context) <= i
                 or self._context[i][0] != cont[0]
-                or self._context[i][2] != cont[2]):
+                or self._context[i][2] != cont[2]
+            ):
                 print(self._context)
                 print(other._context)
                 raise RuntimeError("context is not consistent")
@@ -1444,7 +1501,11 @@ class VarList:
         # Update dims info
         if name not in self._store:
             self._store[name] = IndexList()
-        self._store[name].update_dims_compat(var.ndims_ext()) if self._store[name].dims else self._store[name].set_dims(var.ndims_ext())
+        (
+            self._store[name].update_dims_compat(var.ndims_ext())
+            if self._store[name].dims
+            else self._store[name].set_dims(var.ndims_ext())
+        )
         # Delegate push to IndexList
         il = self._store[name]
         il.push_var(var, not_reorganize=not_reorganize)
@@ -1469,7 +1530,11 @@ class VarList:
         name = var.name_ext()
         if name not in self._store:
             self._store[name] = IndexList()
-        self._store[name].update_dims_compat(var.ndims_ext()) if self._store[name].dims else self._store[name].set_dims(var.ndims_ext())
+        (
+            self._store[name].update_dims_compat(var.ndims_ext())
+            if self._store[name].dims
+            else self._store[name].set_dims(var.ndims_ext())
+        )
         var_index = var.concat_index()
         if var_index is None:
             raise ValueError("index must not be None for exclude")

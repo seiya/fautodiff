@@ -4,8 +4,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff.operators import AryIndex, OpInt, OpNeg, OpRange, OpVar, VarType, Operator
-from fautodiff.var_list import VarList, IndexList
+from fautodiff.operators import (
+    AryIndex,
+    Operator,
+    OpInt,
+    OpNeg,
+    OpRange,
+    OpVar,
+    VarType,
+)
+from fautodiff.var_list import IndexList, VarList
 
 
 def v(name, *idx_dims) -> OpVar:
@@ -26,6 +34,7 @@ def v(name, *idx_dims) -> OpVar:
             elif isinstance(d, int):
                 dims.append(OpInt(d))
             elif isinstance(d, tuple):
+
                 def to_op(item):
                     if isinstance(item, Operator):
                         return item
@@ -384,9 +393,11 @@ class TestVarList(unittest.TestCase):
         va = v("a", (1, 10))
         va.ref_var = v("s")
         vl.push(va)
-        v1 = v("a", 5); v1.ref_var = v("s")
+        v1 = v("a", 5)
+        v1.ref_var = v("s")
         self.assertIn(v1, vl)
-        v2 = v("b", 5); v2.ref_var = v("s")
+        v2 = v("b", 5)
+        v2.ref_var = v("s")
         self.assertNotIn(v2, vl)
 
     def test_range_with_variables_containment(self):
@@ -418,9 +429,11 @@ class TestVarList(unittest.TestCase):
         vl = VarList()
         vl.push(v("A", (1, 10)))
         vl.push(v("B", None))
-        va = v("a"); va.ref_var = v("s", 5)
+        va = v("a")
+        va.ref_var = v("s", 5)
         vl.push(va)
-        vb = v("b", 5); vb.ref_var = v("p")
+        vb = v("b", 5)
+        vb.ref_var = v("p")
         vl.push(vb)
         vl["B"].dims = [2]  # B is 2D
         s = str(vl)
