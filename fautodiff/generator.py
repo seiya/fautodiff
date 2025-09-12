@@ -1969,10 +1969,11 @@ def _generate_ad_subroutine(
             dims_new = []
             for i, dim in enumerate(dims):
                 if isinstance(dim, OpRange):
+                    refv = var.reference.change_index(None)
                     if dim[0] is None:
-                       dim.args[0] = OpFunc("lbound", [var.reference, OpInt(i+1)])
+                       dim.args[0] = OpFunc("lbound", [refv, OpInt(i+1)])
                     if dim[1] is None:
-                        dim.args[1] = OpFunc("ubound", [var.reference, OpInt(i+1)])
+                        dim.args[1] = OpFunc("ubound", [refv, OpInt(i+1)])
                 dims_new.append(dim)
             dims = tuple(dims_new)
 
