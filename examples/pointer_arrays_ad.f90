@@ -106,7 +106,6 @@ contains
       res_ad = res_ad + p_ad(i) ! res = res + p(i)
       res = res + p(i)
     end do
-    p => null()
     if (associated(mod_p_ad)) then
       deallocate(mod_p_ad)
     end if
@@ -130,7 +129,6 @@ contains
       p_ad(i) = res_ad ! res = res + p(i)
     end do
     res_ad = 0.0 ! res = 0.0
-    p_ad => null() ! p => mod_p(2:n)
     do i = n, 1, - 1
       x_ad = mod_p_ad(i) + x_ad ! mod_p(i) = x + i
     end do
@@ -307,7 +305,6 @@ contains
       end do
     end do
     res_ad = 0.0 ! res = 0.0
-    work1_ad => null() ! work1 => x
 
     return
   end subroutine pointer_swap_rev_ad

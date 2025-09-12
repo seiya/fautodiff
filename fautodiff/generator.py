@@ -1725,11 +1725,7 @@ def _generate_ad_subroutine(
                         to_remove = []
                         for ch in list(node.iter_children()):
                             _drop_empty_branches(ch)
-                            from .code_tree import IfBlock as _If
-                            from .code_tree import SelectBlock as _Se
-                            from .code_tree import WhereBlock as _Wh
-
-                            if isinstance(ch, _If):
+                            if isinstance(ch, IfBlock):
                                 ch.cond_blocks = [
                                     (cond, body)
                                     for cond, body in ch.cond_blocks
@@ -1737,7 +1733,7 @@ def _generate_ad_subroutine(
                                 ]
                                 if len(ch.cond_blocks) == 0:
                                     to_remove.append(ch)
-                            elif isinstance(ch, _Wh):
+                            elif isinstance(ch, WhereBlock):
                                 ch.cond_blocks = [
                                     (cond, body)
                                     for cond, body in ch.cond_blocks
@@ -1745,7 +1741,7 @@ def _generate_ad_subroutine(
                                 ]
                                 if len(ch.cond_blocks) == 0:
                                     to_remove.append(ch)
-                            elif isinstance(ch, _Se):
+                            elif isinstance(ch, SelectBlock):
                                 ch.cond_blocks = [
                                     (conds, body)
                                     for conds, body in ch.cond_blocks
@@ -2125,11 +2121,11 @@ def _generate_ad_subroutine(
 
         def is_used(vname: str) -> bool:
             # A variable counts as "used" only if it appears in a statement
-            # other than housekeeping nodes (Allocate/Deallocate/ClearAssignment)
+            # other than housekeeping nodes (Allocate/Deallocate/ClearAssignment/PointerAssign/Clear)
             # within any of the blocks (content, ad_init, ad_content).
             def has_meaningful_access(node: Node, varname: str) -> bool:
                 # Skip housekeeping nodes for usage detection
-                if isinstance(node, (Allocate, Deallocate, ClearAssignment)):
+                if isinstance(node, (Allocate, Deallocate, ClearAssignment, PointerAssignment, PointerClear)):
                     return False
                 if node.has_access_to(varname):
                     return True
@@ -2155,7 +2151,7 @@ def _generate_ad_subroutine(
                 return False
             return True
 
-        # Collect droppable local temp names from (de)allocate sites
+        # Collect droppable local temp names from (de)allocate and pointer assoc sites
         cand_names: set[str] = set()
         def _collect_candidates(block: Block) -> None:
             for ch in list(block.iter_children()):
@@ -2166,6 +2162,15 @@ def _generate_ad_subroutine(
                 elif isinstance(ch, Deallocate):
                     for v in ch.vars:
                         if _can_drop_var(v):
+                            cand_names.add(v.name_ext())
+                else:
+                    if isinstance(ch, PointerAssignment):
+                        v = ch.lhs
+                        if getattr(v, "pointer", False) and _can_drop_var(v):
+                            cand_names.add(v.name_ext())
+                    elif isinstance(ch, PointerClear):
+                        v = ch.var
+                        if getattr(v, "pointer", False) and _can_drop_var(v):
                             cand_names.add(v.name_ext())
                 # Recurse into structured blocks
                 if isinstance(ch, IfBlock):
@@ -2188,6 +2193,11 @@ def _generate_ad_subroutine(
                 _collect_candidates(blk)
 
         unused_names = {name for name in cand_names if not is_used(name)}
+        # Names of derivative targets for deciding pointer clear retention
+        try:
+            target_names = set(targets.names())
+        except Exception:
+            target_names = set()
 
         def prune_block(block: Block) -> None:
             to_remove: list[Node] = []
@@ -2202,6 +2212,24 @@ def _generate_ad_subroutine(
                     if not ch.vars:
                         to_remove.append(ch)
                         continue
+                else:
+                    if isinstance(ch, PointerAssignment) and ch.lhs.name_ext() in unused_names:
+                        to_remove.append(ch)
+                        continue
+                    if isinstance(ch, PointerClear):
+                        vname = ch.var.name_ext()
+                        if vname in unused_names:
+                            to_remove.append(ch)
+                            continue
+                        # Also drop pointer clears for local non-target pointers
+                        v = ch.var
+                        if (
+                            getattr(v, "pointer", False)
+                            and getattr(v, "declared_in", None) == "routine"
+                            and vname not in target_names
+                        ):
+                            to_remove.append(ch)
+                            continue
                 # Recurse into structured blocks
                 if isinstance(ch, IfBlock):
                     for _, b in ch.cond_blocks:
@@ -2283,8 +2311,6 @@ def _generate_ad_subroutine(
             to_remove = []
             for ch in list(node.iter_children()):
                 _drop_empty_branches_global(ch)
-                from .code_tree import IfBlock, SelectBlock, WhereBlock
-
                 if isinstance(ch, IfBlock):
                     ch.cond_blocks = [
                         (cond, body)
