@@ -44,4 +44,49 @@ contains
     return
   end subroutine conditional_return_rev_ad
 
+  subroutine alloc_return_fwd_ad(n, x, x_ad, y, y_ad, f)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x(n)
+    real, intent(in)  :: x_ad(n)
+    real, intent(out) :: y(n)
+    real, intent(out) :: y_ad(n)
+    logical, intent(in)  :: f
+    real, allocatable :: xtmp(:)
+    real, allocatable :: xtmp_ad(:)
+
+    allocate(xtmp_ad(n))
+    allocate(xtmp(n))
+    if (f) then
+      y_ad = x_ad * 2.0 * x
+      y = x ** 2
+      return
+    end if
+
+    return
+  end subroutine alloc_return_fwd_ad
+
+  subroutine alloc_return_rev_ad(n, x, x_ad, y_ad, f)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x(n)
+    real, intent(inout) :: x_ad(n)
+    real, intent(inout) :: y_ad(n)
+    logical, intent(in) :: f
+    logical :: return_flag_15_ad
+
+    return_flag_15_ad = .true.
+    if (f) then
+      return_flag_15_ad = .false.
+    end if
+
+    if (f) then
+      return_flag_15_ad = .true. ! return
+      if (return_flag_15_ad) then
+        x_ad = y_ad * 2.0 * x ! y = x ** 2
+        y_ad = 0.0 ! y = x**2
+      end if
+    end if
+
+    return
+  end subroutine alloc_return_rev_ad
+
 end module return_example_ad

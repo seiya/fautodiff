@@ -1118,6 +1118,8 @@ class Block(Node):
             cond = reduce(lambda x, y: x & y, flags)
             block = []
             for node in self.iter_children():
+                if isinstance(node, ReturnStmt):
+                    continue
                 ret_flags = node.collect_return()
                 ce_flags = node.collect_exitcycle()
                 if ret_flags or ce_flags:

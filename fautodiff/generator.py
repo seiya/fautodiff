@@ -400,7 +400,7 @@ def _parse_allocate(
     # Insert deallocations before early returns for arrays that remain allocated
     elif isinstance(node, ReturnStmt):
         mod_var_names = [v.name_ext() for v in mod_vars]
-        for name in map:
+        for name in list(map.keys()):
             if map[name]:
                 if name not in mod_var_names or name in local:
                     var = OpVar(
@@ -413,6 +413,7 @@ def _parse_allocate(
                         node.get_id(),
                         Allocate._add_if(Deallocate([var]), var, name in mod_var_names),
                     )
+                    del map[name]
     else:
         for var in node.collect_vars():
             name = var.name_ext()
@@ -435,6 +436,11 @@ def _parse_allocate(
                 var.dims_raw = tuple(dims_raw_new)
 
     if top:
+        if not isinstance(node, Block):
+            raise RuntimeError(f"Top node must be Block: {type(node)}")
+        if len(node) > 1 and isinstance(node[-1], ReturnStmt):
+          node.remove_child(node[-1])
+
         mod_var_names = [v.name_ext() for v in mod_vars]
         for name in map:
             if map[name]:
@@ -451,6 +457,7 @@ def _parse_allocate(
                     node.append(
                         Allocate._add_if(Deallocate([var]), var, name in mod_var_names)
                     )
+
 
 
 def _parse_pointer(
@@ -1112,9 +1119,6 @@ def _generate_ad_subroutine(
     if routine_info.get("skip"):
         return None, False, set()
 
-    if len(routine_org.content) > 0 and isinstance(routine_org.content[-1], ReturnStmt):
-        routine_org.content.remove_child(routine_org.content[-1])
-
     subroutine = routine_info["subroutine"].deep_clone()
     grad_args = [v.deep_clone() for v in routine_info["grad_args"]]
     in_grad_args = [v.deep_clone() for v in routine_info["in_grad_args"]]
@@ -1199,6 +1203,7 @@ def _generate_ad_subroutine(
 
     _collect_ptr_pairs(routine_org.content)
     Assignment.pointer_alias_pairs = ptr_pairs
+
     nodes = routine_org.content.generate_ad(
         saved_vars,
         reverse=reverse,
@@ -2264,6 +2269,7 @@ def generate_ad(
                     const_var_names.append(v.name_ext())
                 else:
                     mod_vars.append(v)
+
 
         # Preprocess routines for allocate/pointer/mpi once
         for routine in mod_org.routines:
