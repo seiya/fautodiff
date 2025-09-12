@@ -499,9 +499,7 @@ contains
     end if
     if (n <= 0) then
       return_flag_156_ad = .true. ! return
-      if (return_flag_156_ad) then
-        res_ad = 0.0 ! res = 0.0
-      end if
+      res_ad = 0.0 ! res = 0.0
     end if
     if (return_flag_156_ad) then
       if (allocated(arr_ad)) then

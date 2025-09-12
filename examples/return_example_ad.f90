@@ -51,12 +51,10 @@ contains
     real, intent(out) :: y(n)
     real, intent(out) :: y_ad(n)
     logical, intent(in)  :: f
-    real, allocatable :: xtmp(:)
-    real, allocatable :: xtmp_ad(:)
 
     if (f) then
-      y_ad = x_ad * 2.0 * x
-      y = x ** 2
+      y_ad = x_ad * 2.0 * x ! y = x ** 2
+      y = x**2
       return
     end if
 
@@ -68,20 +66,18 @@ contains
     real, intent(in)  :: x(n)
     real, intent(inout) :: x_ad(n)
     real, intent(inout) :: y_ad(n)
-    logical, intent(in) :: f
-    logical :: return_flag_15_ad
+    logical, intent(in)  :: f
+    logical :: return_flag_28_ad
 
-    return_flag_15_ad = .true.
+    return_flag_28_ad = .true.
     if (f) then
-      return_flag_15_ad = .false.
+      return_flag_28_ad = .false.
     end if
 
     if (f) then
-      return_flag_15_ad = .true. ! return
-      if (return_flag_15_ad) then
-        x_ad = y_ad * 2.0 * x ! y = x ** 2
-        y_ad = 0.0 ! y = x**2
-      end if
+      return_flag_28_ad = .true. ! return
+      x_ad = y_ad * 2.0 * x + x_ad ! y = x ** 2
+      y_ad = 0.0 ! y = x ** 2
     end if
 
     return

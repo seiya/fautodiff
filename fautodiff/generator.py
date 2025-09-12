@@ -1801,8 +1801,6 @@ def _generate_ad_subroutine(
 
             _prune_ad_redundant_allocates(ad_block, fw_block)
 
-            # Clean up any empty branches introduced after dropping allocates
-            _drop_empty_branches(ad_block)
 
             # Ensure the subroutine references the pruned reverse block
             subroutine.ad_content = ad_block
@@ -2113,6 +2111,120 @@ def _generate_ad_subroutine(
         if getattr(v, "allocatable", False) or getattr(v, "pointer", False):
             mod_allocatable_vars.append(v)
     subroutine.remove_redundant_allocates(mod_allocatable_vars)
+
+    # Additional prune: drop allocate/deallocate for variables that are never
+    # accessed anywhere in the generated routine (content, ad_init, ad_content).
+    # This captures cases like temporary arrays that are allocated but unused
+    # (e.g., xtmp, xtmp_ad in examples/return_example).
+    def _drop_allocs_of_unused(sub: Subroutine) -> None:
+        blocks = [sub.content]
+        if sub.ad_init is not None:
+            blocks.append(sub.ad_init)
+        if sub.ad_content is not None:
+            blocks.append(sub.ad_content)
+
+        def is_used(vname: str) -> bool:
+            # A variable counts as "used" only if it appears in a statement
+            # other than housekeeping nodes (Allocate/Deallocate/ClearAssignment)
+            # within any of the blocks (content, ad_init, ad_content).
+            def has_meaningful_access(node: Node, varname: str) -> bool:
+                # Skip housekeeping nodes for usage detection
+                if isinstance(node, (Allocate, Deallocate, ClearAssignment)):
+                    return False
+                if node.has_access_to(varname):
+                    return True
+                for ch in node.iter_children():
+                    if has_meaningful_access(ch, varname):
+                        return True
+                return False
+
+            for blk in blocks:
+                if blk is None:
+                    continue
+                for stmt in blk:
+                    if has_meaningful_access(stmt, vname):
+                        return True
+            return False
+
+        def _can_drop_var(v: OpVar) -> bool:
+            # Only drop if declared locally in this subroutine (not module/use)
+            if getattr(v, "declared_in", None) != "routine":
+                return False
+            # Restrict to allocatable/pointer temps typical for locals
+            if not (getattr(v, "allocatable", False) or getattr(v, "pointer", False)):
+                return False
+            return True
+
+        # Collect droppable local temp names from (de)allocate sites
+        cand_names: set[str] = set()
+        def _collect_candidates(block: Block) -> None:
+            for ch in list(block.iter_children()):
+                if isinstance(ch, Allocate):
+                    for v in ch.vars:
+                        if _can_drop_var(v):
+                            cand_names.add(v.name_ext())
+                elif isinstance(ch, Deallocate):
+                    for v in ch.vars:
+                        if _can_drop_var(v):
+                            cand_names.add(v.name_ext())
+                # Recurse into structured blocks
+                if isinstance(ch, IfBlock):
+                    for _, b in ch.cond_blocks:
+                        _collect_candidates(b)
+                elif isinstance(ch, SelectBlock):
+                    for _, b in ch.cond_blocks:
+                        _collect_candidates(b)
+                elif isinstance(ch, WhereBlock):
+                    for _, b in ch.cond_blocks:
+                        _collect_candidates(b)
+                elif isinstance(ch, DoAbst):
+                    _collect_candidates(ch._body)
+                elif isinstance(ch, OmpDirective) and ch.body is not None:
+                    body = ch.body if isinstance(ch.body, Block) else Block(list(ch.body))
+                    _collect_candidates(body)
+
+        for blk in blocks:
+            if blk is not None:
+                _collect_candidates(blk)
+
+        unused_names = {name for name in cand_names if not is_used(name)}
+
+        def prune_block(block: Block) -> None:
+            to_remove: list[Node] = []
+            for ch in list(block.iter_children()):
+                if isinstance(ch, Allocate):
+                    ch.vars = [v for v in ch.vars if v.name_ext() not in unused_names]
+                    if not ch.vars:
+                        to_remove.append(ch)
+                        continue
+                elif isinstance(ch, Deallocate):
+                    ch.vars = [v for v in ch.vars if v.name_ext() not in unused_names]
+                    if not ch.vars:
+                        to_remove.append(ch)
+                        continue
+                # Recurse into structured blocks
+                if isinstance(ch, IfBlock):
+                    for _, b in ch.cond_blocks:
+                        prune_block(b)
+                elif isinstance(ch, SelectBlock):
+                    for _, b in ch.cond_blocks:
+                        prune_block(b)
+                elif isinstance(ch, WhereBlock):
+                    for _, b in ch.cond_blocks:
+                        prune_block(b)
+                elif isinstance(ch, DoAbst):
+                    prune_block(ch._body)
+                elif isinstance(ch, OmpDirective) and ch.body is not None:
+                    body = ch.body if isinstance(ch.body, Block) else Block(list(ch.body))
+                    prune_block(body)
+            for n in to_remove:
+                block.remove_child(n)
+
+        for blk in blocks:
+            if blk is not None:
+                prune_block(blk)
+
+    _drop_allocs_of_unused(subroutine)
 
     # update routine_map with pruned argument information
     arg_info = routine_map.get(routine_org.name)
