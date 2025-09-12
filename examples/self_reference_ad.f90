@@ -94,8 +94,6 @@ contains
       u_ad(k) = 0.0 ! u(k) = p(i+k-n)
       p_ad(i + k - n) = tmp_save_31_ad + p_ad(i + k - n) ! u(k) = p(i+k-n)
     end do
-    q_ad => null() ! q => v
-    p_ad => null() ! p => u
 
     return
   end subroutine self_ref_slice_ptr_rev_ad

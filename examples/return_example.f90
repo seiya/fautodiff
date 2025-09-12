@@ -1,5 +1,6 @@
 module return_example
 contains
+
   subroutine conditional_return(x, y)
     real, intent(in) :: x
     real, intent(out) :: y
@@ -10,4 +11,21 @@ contains
     y = x * x
     return
   end subroutine conditional_return
+
+  subroutine alloc_return(n, x, y, f)
+  integer, intent(in) :: n
+  real, intent(in) :: x(n)
+  real, intent(out) :: y(n)
+  logical, intent(in) :: f
+  real, allocatable :: xtmp(:)
+
+  allocate(xtmp(n))
+  if (f) then
+    y = x ** 2
+    return
+  end if
+
+  return
+end subroutine alloc_return
+
 end module return_example
