@@ -37,9 +37,14 @@ class TestOpVar(unittest.TestCase):
         self.assertFalse(var.is_array())
 
     def test_array(self):
-        var = OpVar("a", var_type=VarType("real"), dims=("n",))
+        var = OpVar(
+            "a",
+            var_type=VarType("real"),
+            dims=(OpVar("n"),),
+            dims_raw=("n",),
+        )
         self.assertTrue(var.is_array())
-        self.assertEqual(var.dims, ("n",))
+        self.assertEqual(str(var.dims[0]), "n")
 
     def test_invalid_name(self):
         with self.assertRaises(ValueError):
@@ -1219,7 +1224,7 @@ class TestLoopAnalysis(unittest.TestCase):
 class TestRemoveRedundantAllocates(unittest.TestCase):
     def _decl_alloc_real(self, name: str) -> Declaration:
         return Declaration(
-            name=name, var_type=VarType("real"), allocatable=True, dims=(":",)
+            name=name, var_type=VarType("real"), allocatable=True, dims=(None,)
         )
 
     def test_remove_alloc_dealloc_without_access(self):

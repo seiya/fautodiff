@@ -2646,6 +2646,7 @@ class Routine(Node):
             name,
             var_type=decl.var_type.copy(),
             dims=decl.dims,
+            dims_raw=decl.dims_raw,
             intent=intent,
             ad_target=None,
             is_constant=decl.parameter or getattr(decl, "constant", False),
@@ -3068,7 +3069,8 @@ class Declaration(Node):
 
     name: str
     var_type: VarType
-    dims: Optional[Union[Tuple[str], str]] = None
+    dims: Optional[Tuple[Optional[Operator],...]] = None
+    dims_raw: Optional[Tuple[str,...]] = None
     intent: Optional[str] = None
     parameter: bool = False
     constant: bool = False
@@ -3089,7 +3091,8 @@ class Declaration(Node):
         self,
         name: str,
         var_type: VarType,
-        dims: Optional[Union[Tuple[str], str]] = None,
+        dims: Optional[Tuple[Optional[Operator],...]] = None,
+        dims_raw: Optional[Tuple[str,...]] = None,
         intent: Optional[str] = None,
         parameter: bool = False,
         constant: bool = False,
@@ -3109,6 +3112,9 @@ class Declaration(Node):
         self.name = name
         self.var_type = var_type
         self.dims = dims
+        if dims_raw is None and dims is not None:
+            dims_raw = tuple(":" if dim is None else str(dim) for dim in dims)
+        self.dims_raw = dims_raw
         self.intent = intent
         self.parameter = parameter
         self.constant = constant
@@ -3130,13 +3136,16 @@ class Declaration(Node):
         super().__post_init__()
         if not isinstance(self.var_type, VarType):
             raise ValueError(f"var_type must be VarType: {type(self.var_type)}")
-        if self.dims is not None and (
-            not (isinstance(self.dims, tuple) or self.dims == "*")
-            or any(not isinstance(dim, str) for dim in self.dims)
-        ):
-            raise ValueError(
-                f"dims must be tuple of str or '*': {type(self.dims)} {self.dims}"
-            )
+        if self.dims is not None and not isinstance(self.dims, tuple):
+            raise ValueError(f"dims must be tuple: {type(self.dims)}")
+        if (isinstance(self.dims, tuple) and
+            any(dim is not None and not isinstance(dim, Operator) for dim in self.dims)):
+            raise ValueError(f"dims must be tuple of None or Operator: {self.dims}")
+        if self.dims_raw is not None and not isinstance(self.dims_raw, tuple):
+            raise ValueError(f"dims_raw must be tuple: {type(self.dims_raw)}")
+        if (isinstance(self.dims_raw, tuple) and
+            any(not isinstance(dim, str) for dim in self.dims_raw)):
+            raise ValueError(f"dims_raw must be tuple of str: {self.dims_raw}")
         if self.intent is not None and not isinstance(self.intent, str):
             raise ValueError(f"intent must be str: {type(self.intent)}")
 
@@ -3144,7 +3153,12 @@ class Declaration(Node):
         return Declaration(
             name=self.name,
             var_type=self.var_type.copy(),
-            dims=self.dims,
+            dims=(
+                tuple(d.deep_clone() if d is not None else None for d in self.dims)
+                if self.dims
+                else None
+            ),
+            dims_raw=tuple(self.dims_raw) if self.dims_raw else None,
             intent=self.intent,
             parameter=self.parameter,
             constant=self.constant,
@@ -3163,11 +3177,17 @@ class Declaration(Node):
         )
 
     def deep_clone(self) -> "Declaration":
-        dims = tuple(self.dims) if self.dims else None
+        dims = (
+            tuple(d.deep_clone() if d is not None else None for d in self.dims)
+            if self.dims
+            else None
+        )
+        dims_raw = tuple(self.dims_raw) if self.dims_raw else None
         clone = Declaration(
             name=self.name,
             var_type=self.var_type.copy(),
             dims=dims,
+            dims_raw=dims_raw,
             intent=self.intent,
             parameter=self.parameter,
             constant=self.constant,
@@ -3201,6 +3221,8 @@ class Declaration(Node):
                 value=self.value,
                 volatile=self.volatile,
                 asynchronous=self.asynchronous,
+                dims=(tuple(self.dims) if self.dims is not None else None),
+                dims_raw=(tuple(self.dims_raw) if self.dims_raw is not None else None),
                 declared_in=self.declared_in,
             )
         else:
@@ -3226,7 +3248,8 @@ class Declaration(Node):
             value=self.value,
             volatile=self.volatile,
             asynchronous=self.asynchronous,
-            dims=self.dims,
+            dims=(tuple(self.dims) if self.dims is not None else None),
+            dims_raw=(tuple(self.dims_raw) if self.dims_raw is not None else None),
             ad_target=self.ad_target(),
             intent=self.intent,
             declared_in=self.declared_in,
@@ -3268,8 +3291,8 @@ class Declaration(Node):
         if self.asynchronous:
             line += ", asynchronous"
         line += f"{pat} :: {self.name}"
-        if self.dims is not None:
-            dims = ",".join(self.dims)
+        if self.dims_raw is not None:
+            dims = ",".join(self.dims_raw)
             line += f"({dims})"
         if self.init_val is not None:
             line += f" = {self.init_val}"
@@ -3363,6 +3386,7 @@ class Declaration(Node):
                 kind=self.var_type.kind,
             ),
             dims=self.dims,
+            dims_raw=self.dims_raw,
             init_val=init_val,
             allocatable=self.allocatable,
             pointer=self.pointer,
@@ -4203,7 +4227,7 @@ class Deallocate(Node):
     """A ``deallocate`` statement."""
 
     vars: List[OpVar] = field(default_factory=list)
-    index: Optional[List[str]] = field(default=None)
+    index: Optional[AryIndex] = field(default=None)
     ad_code: bool = field(default=False)
 
     def __post_init__(self):

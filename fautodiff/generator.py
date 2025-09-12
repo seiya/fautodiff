@@ -53,6 +53,7 @@ from .code_tree import (
 from .operators import (
     AryIndex,
     Kind,
+    Operator,
     OpComplex,
     OpFunc,
     OpInt,
@@ -237,13 +238,19 @@ def _module_var_fwd_rev(
                     idx.append(
                         OpVar(f"n{len(index)+n}_ad", var_type=VarType("integer"))
                     )
-                    if dim == ":":
+                    if dim is None:
                         vv = var_ref.change_index(None)
                         i0 = OpFunc("lbound", args=[vv, OpInt(n + 1)])
                         i1 = OpFunc("ubound", args=[vv, OpInt(n + 1)])
-                    else:
+                    elif isinstance(dim, OpRange):
+                        vv = var_ref.change_index(None)
+                        i0 = OpFunc("lbound", args=[vv, OpInt(n + 1)]) if d[0] is None else d[0]
+                        i1 = OpFunc("ubound", args=[vv, OpInt(n + 1)]) if d[1] is None else d[1]
+                    elif isinstance(dim, Operator):
                         i0 = OpInt(1)
-                        i1 = OpVar(dim)
+                        i1 = dim
+                    else:
+                        raise RuntimeError(f"Unexpected value type: {type(dim)}")
                     range.append(OpRange([i0, i1]))
             if var_ref.index is not None:
                 for n, i in enumerate(var_ref.index):
@@ -348,7 +355,7 @@ def _module_var_fwd_rev(
 def _parse_allocate(
     node: Node,
     mod_vars: List[OpVar],
-    map: Optional[Dict[str, List[AryIndex]]] = None,
+    map: Optional[Dict[str, List[AryIndex | None]]] = None,
     local: Optional[Set[str]] = None,
 ) -> None:
     """Record indices of allocated arrays for later deallocation.
@@ -358,7 +365,7 @@ def _parse_allocate(
     generating the adjoint code.
     """
     if map is None:
-        map = {}
+        map: Dict[str, List[AryIndex | None]] = {}
         local = set()
         top = True
     else:
@@ -410,7 +417,22 @@ def _parse_allocate(
         for var in node.collect_vars():
             name = var.name_ext()
             if name in map and map[name]:
-                var.dims = tuple(map[name][-1].list())
+                index = map[name][-1]
+                ndims = len(index)
+                dims_new: List[Operator | None] = []
+                dims_raw_new: List[str | None] = list(var.dims_raw) if var.dims_raw is not None else []
+                for n in range(ndims):
+                    if var.dims is not None and var.dims[n] is not None:
+                        dims_new.append(var.dims[n])
+                    else:
+                        idx = index[n] if index is not None else None
+                        if isinstance(idx, OpRange):
+                            dims_new.append(idx[1] if idx[0] == OpInt(1) else (OpRange([idx[0], idx[1]]) if idx[0] is not None and idx[1] is not None else idx))
+                        else:
+                            dims_new.append(idx)
+                        dims_raw_new.append(str(dims_new[-1]))
+                var.dims = tuple(dims_new)
+                var.dims_raw = tuple(dims_raw_new)
 
     if top:
         mod_var_names = [v.name_ext() for v in mod_vars]
@@ -789,14 +811,13 @@ def _prepare_fwd_ad_header(
     for arg in routine_org.arg_vars():
         name = arg.name
         typ = arg.var_type.typename
-        dims = arg.dims
         intent = arg.intent or "inout"
         var_type = arg.var_type
         kind = var_type.kind
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
-        arg_info["dims"].append(dims)
+        arg_info["dims"].append(arg.dims_raw)
         arg_info["kind"].append(kind.val if kind is not None else None)
 
         # Always pass original argument to the forward AD routine
@@ -807,7 +828,7 @@ def _prepare_fwd_ad_header(
             var = OpVar(
                 ad_name,
                 var_type=var_type,
-                dims=dims,
+                dims=arg.dims,
                 intent=arg.intent,
                 ad_target=True,
                 is_constant=arg.is_constant,
@@ -919,14 +940,13 @@ def _prepare_rev_ad_header(
     for arg in routine_org.arg_vars():
         name = arg.name
         typ = arg.var_type.typename
-        dims = arg.dims
         intent = arg.intent or "inout"
         var_type = arg.var_type
         kind = var_type.kind
         arg_info["args"].append(name)
         arg_info["intents"].append(intent)
         arg_info["type"].append(typ)
-        arg_info["dims"].append(dims)
+        arg_info["dims"].append(arg.dims_raw)
         arg_info["kind"].append(kind.val if kind is not None else None)
         if intent == "out":
             if arg.ad_target and not arg.is_constant:
@@ -934,7 +954,7 @@ def _prepare_rev_ad_header(
                 var = OpVar(
                     ad_name,
                     var_type=var_type,
-                    dims=dims,
+                    dims=arg.dims,
                     intent="inout",
                     ad_target=True,
                     is_constant=arg.is_constant,
@@ -958,7 +978,7 @@ def _prepare_rev_ad_header(
                 var = OpVar(
                     ad_name,
                     var_type=var_type,
-                    dims=dims,
+                    dims=arg.dims,
                     intent="inout",
                     ad_target=True,
                     is_constant=arg.is_constant,
@@ -1217,6 +1237,7 @@ def _generate_ad_subroutine(
                             name=name,
                             var_type=base_decl.var_type.copy(),
                             dims=base_decl.dims,
+                            dims_raw=base_decl.dims_raw,
                             parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
                             allocatable=base_decl.allocatable,
@@ -1799,6 +1820,7 @@ def _generate_ad_subroutine(
                             name=name,
                             var_type=base_decl.var_type.copy(),
                             dims=base_decl.dims,
+                            dims_raw=base_decl.dims_raw,
                             parameter=base_decl.parameter,
                             init_val=base_decl.init_val,
                             allocatable=base_decl.allocatable,
@@ -1861,10 +1883,9 @@ def _generate_ad_subroutine(
             parent = parent.parent
         return parent
 
-    def _get_size(node: Node, name: str, dims: List[str]):
+    def _get_size(node: Node, name: str, dims: List[Operator]):
         """Populate ``dims`` with loop bounds for array ``name``."""
 
-        var_list = VarList()
         for child in node.iter_children():
             _get_size(child, name, dims)
         if isinstance(node, DoLoop):
@@ -1873,14 +1894,11 @@ def _generate_ad_subroutine(
                 if var.name == name:
                     for i, idx in enumerate(var.concat_index()):
                         if idx == do_index:
-                            i0 = node.range[0]
-                            i1 = node.range[1]
+                            i0, i1, _ = node.range.ascending()
                             if i0 == OpInt(1):
-                                dim = str(i1)
-                            elif i1 == OpInt(1):
-                                dim = str(i0)
+                                dim = i1
                             else:
-                                dim = f"{i0}:{i1}"
+                                dim = OpRange([i0, i1])
                             dims[i] = dim
                             return
         return
@@ -1923,26 +1941,25 @@ def _generate_ad_subroutine(
                 allocatable and base_decl.declared_in != "routine"
             ):  # module or use variable
                 allocatable = False
-                vname = str(var.change_index(None))
                 if var.index:
-                    dims = []
+                    dims_list: List[Operator] = []
                     for n, idx in enumerate(var.index):
                         if isinstance(idx, OpRange):
                             if idx[0] == OpInt(1) and idx[1] is not None:
-                                dims.append(str(idx[1]))
+                                dims_list.append(idx[1])
                                 continue
                             elif idx[0] is not None and idx[1] is not None:
-                                dims[n].append(f"{idx[0]}:{idx[1]}")
+                                dims_list[n].append(OpRange([idx[0], idx[1]]))
                                 continue
-                        dims.append(f"size({vname}, {n})")
+                        dims_list.append(OpFunc("size", [var.change_index(None), OpInt(n)]))
                 else:
-                    dims = [f"size({vname}, {n})" for n in range(len(base_decl.dims))]
-                _get_size(subroutine, var.name, dims)
-                dims = tuple(dims)
+                    dims_list = [OpFunc("size", [var.change_index(None), OpInt(n)]) for n in range(len(base_decl.dims))]
+                _get_size(subroutine, var.name, dims_list)
+                dims = tuple(dims_list)
             else:
-                dims = base_decl.dims
+                dims = tuple(base_decl.dims) if base_decl.dims else None
         else:
-            dims = var.dims
+            dims = tuple(var.dims) if var.dims else None
 
         if (
             dims is not None
@@ -1951,10 +1968,11 @@ def _generate_ad_subroutine(
         ):
             dims_new = []
             for i, dim in enumerate(dims):
-                if dim.endswith(":"):
-                    dim = f"{dim}ubound({var.reference.name},{i+1})"
-                if dim.startswith(":"):
-                    dim = f"lbound({var.reference.name},{i+1}){dim}"
+                if isinstance(dim, OpRange):
+                    if dim[0] is None:
+                       dim.args[0] = OpFunc("lbound", [var.reference, OpInt(i+1)])
+                    if dim[1] is None:
+                        dim.args[1] = OpFunc("ubound", [var.reference, OpInt(i+1)])
                 dims_new.append(dim)
             dims = tuple(dims_new)
 
@@ -1967,18 +1985,6 @@ def _generate_ad_subroutine(
                 dims = None
             else:
                 dims = tuple(dims_new)
-
-        if base_decl:
-            typename = base_decl.var_type.typename
-        elif var.var_type is not None and var.var_type.typename is not None:
-            typename = var.var_type.typename
-        elif var.ad_target:
-            typename = "real"
-        else:
-            print([var])
-            print([var.reference])
-            print([base_decl])
-            raise RuntimeError(f"typename cannot be identified {var}")
 
         if base_decl:
             var_type = base_decl.var_type.copy()
@@ -2029,11 +2035,12 @@ def _generate_ad_subroutine(
         if not isinstance(decl, Declaration):
             continue
         if decl.name in used and decl.dims:
-            dims = decl.dims if isinstance(decl.dims, tuple) else (decl.dims,)
-            for dim in dims:
-                for name in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", dim):
-                    if name in subroutine.args:
-                        used.add(name)
+            for dim in decl.dims:
+                if dim is None:
+                    continue
+                for var in dim.collect_vars():
+                    if var.name in subroutine.args:
+                        used.add(var.name)
     for name in list(subroutine.args):
         if name not in used:
             decl = subroutine.decls.find_by_name(name)

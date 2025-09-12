@@ -500,7 +500,7 @@ class Operator:
     """Abstract fortran oprations."""
 
     args: Optional[List[Optional[Operator]]] = None
-    var_type: VarType = None
+    var_type: VarType = field(default=None, repr=False)
     macro_name: Optional[str] = None
     PRIORITY: ClassVar[int] = -999
 
@@ -1291,7 +1291,8 @@ class OpComplex(OpNum):
 class OpVar(OpLeaf):
     name: str = field(default="")
     index: Optional[AryIndex] = None
-    dims: Optional[Tuple[str]] = field(repr=False, default=None)
+    dims: Optional[Tuple[Optional[Operator]]] = field(repr=False, default=None)
+    dims_raw: Optional[Tuple[str]] = field(repr=False, default=None)
     intent: Optional[str] = field(default=None, repr=False)
     ad_target: Optional[bool] = field(default=None, repr=False)
     is_constant: Optional[bool] = field(default=None, repr=False)
@@ -1313,7 +1314,8 @@ class OpVar(OpLeaf):
         name: str,
         index: Optional[AryIndex] = None,
         var_type: Optional[VarType] = None,
-        dims: Optional[Tuple[str]] = None,
+        dims: Optional[Tuple[Optional[Operator]]] = None,
+        dims_raw: Optional[Tuple[str]] = None,
         reference: Optional[OpVar] = None,
         intent: Optional[str] = None,
         ad_target: Optional[bool] = None,
@@ -1342,7 +1344,14 @@ class OpVar(OpLeaf):
         self.index = index
         if self.var_type is not None:
             self.kind = self.var_type.kind
+        if isinstance(dims, tuple):
+            for dim in dims:
+                if not (dim is None or isinstance(dim, Operator)):
+                    raise ValueError(f"dims must be None or tuple of Operator: {type(dim)}")
+        elif dims is not None:
+            raise ValueError(f"dims must be None or tuple of Operator: {type(dims)}")
         self.dims = dims
+        self.dims_raw = dims_raw
         self.reference = reference
         self.intent = intent
         self.ad_target = ad_target
@@ -1394,16 +1403,16 @@ class OpVar(OpLeaf):
             return self.ref_var.is_same_var(other.ref_var)
         return True
 
-    def get_dims(self) -> Optional[List[str]]:
+    def get_dims(self) -> Optional[List[Optional[Operator]]]:
         if self.index is None and self.dims is None:
             return None
         if self.dims is None:
             ndims = len(self.index)
             if self.reduced_dims:
                 ndims -= len(self.reduced_dims)
-            return [":"] * ndims
+            return [None] * ndims
         if self.reduced_dims is None:
-            return self.dims
+            return list(self.dims)
         return [dim for i, dim in enumerate(self.dims) if i not in self.reduced_dims]
 
     def ndims_ext(self) -> List[int]:
@@ -1457,7 +1466,7 @@ class OpVar(OpLeaf):
             return AryIndex(index)
         return None
 
-    def concat_dims(self) -> Optional[List[str]]:
+    def concat_dims(self) -> Optional[List[Optional[Operator]]]:
         """Return concatenated dims along the ref_var chain.
 
         - For derived-type components (a%b%c), this concatenates the dims of
@@ -1465,7 +1474,7 @@ class OpVar(OpLeaf):
         - Mirrors concat_index semantics but for declaration dims (sizes), not
           runtime slice indices.
         """
-        dims: List[str] = []
+        dims: List[Optional[Operator]] = []
         if self.ref_var is not None:
             ref_dims = self.ref_var.concat_dims()
             if ref_dims:
@@ -1510,6 +1519,7 @@ class OpVar(OpLeaf):
             index=index,
             var_type=self.var_type.copy() if self.var_type else None,
             dims=self.dims,
+            dims_raw=self.dims_raw,
             reference=self.reference,
             intent=self.intent,
             ad_target=self.ad_target,
@@ -1542,6 +1552,7 @@ class OpVar(OpLeaf):
             index=index,
             var_type=self.var_type.copy() if self.var_type else None,
             dims=self.dims,
+            dims_raw=self.dims_raw,
             reference=self.reference,
             intent=self.intent,
             ad_target=self.ad_target,
@@ -1590,6 +1601,7 @@ class OpVar(OpLeaf):
             index=index,
             var_type=self.var_type.copy() if self.var_type else None,
             dims=self.dims,
+            dims_raw=self.dims_raw,
             reference=self.reference,
             intent=self.intent,
             ad_target=self.ad_target,
@@ -1610,6 +1622,12 @@ class OpVar(OpLeaf):
         clone = copy.copy(self)
         if self.index is not None:
             clone.index = self.index.deep_clone()
+        if self.dims is not None:
+            clone.dims = tuple(
+                d.deep_clone() if d is not None else None for d in self.dims
+            )
+        if self.dims_raw is not None:
+            clone.dims_raw = tuple(self.dims_raw)
         return clone
 
     def collect_vars(
@@ -2258,8 +2276,11 @@ class OpRange(Operator):
         for i, val in enumerate(self.args):
             if isinstance(val, int):
                 self.args[i] = OpInt(val)
+                continue
             if isinstance(val, OpRange):
                 raise ValueError("Dimension of OpRange must not be OpRange")
+            if not (isinstance(val, Operator) or val is None):
+                raise ValueError(f"Dimension must be Operator: {val} {type(val)}")
 
     def replace_with(self, src: Operator, dest: Operator) -> "OpRange":
         dims = []
@@ -2365,6 +2386,9 @@ class OpRange(Operator):
             else:
                 args = self.args
         return ":".join(["" if arg is None else str(arg) for arg in args])
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
     def __getitem__(self, index: int) -> Operator:
         if index >= 3:

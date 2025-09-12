@@ -626,7 +626,7 @@ class IndexList:
             name = full_name
         # Normalise dims for this level
         if len(dims) > 0 and dims[-1] > 0:
-            dims_t = tuple([":"] * dims[-1])
+            dims_t = tuple([None] * dims[-1])
         else:
             dims_t = tuple()
         return OpVar(name=name, index=index, dims=dims_t, ref_var=var_ref)
@@ -1064,26 +1064,18 @@ class IndexList:
             return None
         cand: List[Optional[OpRange]] = []
         for d in dims:
-            if d == ":" or d is None:
+            if d is None:
                 cand.append(None)
                 continue
-            # Build upper bound operator from dim token
-            if ":" in d:
-                list = [p.strip() for p in d.split(":")]
+            if isinstance(d, OpRange):
+                if d[0] is None and d[1] is None:
+                    cand.append(None)
+                else:
+                    lb = d[0] if d[0] is not None else OpInt(1)
+                    ub = d[1]
+                    cand.append(OpRange([lb, ub]))
             else:
-                list = [1, d]
-            ops: List[Operator | None] = []
-            for s in list:
-                if s == "":
-                    ops.append(None)
-                    continue
-                try:
-                    # numeric literal string
-                    ops.append(OpInt(int(s)))
-                except Exception:
-                    # symbolic variable name
-                    ops.append(OpVar(s))
-            cand.append(OpRange(ops))
+                cand.append(OpRange([OpInt(1), d]))
         # If all dims are unknown/":" placeholders, do not set shape
         if all(x is None for x in cand):
             return None
@@ -1114,9 +1106,18 @@ class IndexList:
             raise ValueError(
                 f"inconsistent shape length: expected {len(self.shape)}, got {len(cand)}"
             )
-        for expect, got in zip(self.shape, cand):
-            if expect != got:
-                raise ValueError(f"shape mismatch: expected {self.shape}, got {cand}")
+        shape_new = None
+        for n, s1 in enumerate(self.shape):
+            s2 = cand[n]
+            if s1 != s2:
+                if s1 is None:
+                    if shape_new is None:
+                        shape_new = list(self.shape)
+                    shape_new[n] = s2
+                else:
+                    raise ValueError(f"shape mismatch: expected {self.shape}, got {cand}")
+        if shape_new is not None:
+            self.shape = tuple(shape_new)
 
     def push_var(self, var: OpVar, not_reorganize: bool = False) -> None:
         """Push a var (OpVar) into this IndexList using merge logic.
