@@ -253,10 +253,12 @@ class TestParser(unittest.TestCase):
         routine = module.routines[0]
         decl = routine.decls.find_by_name("x")
         self.assertIsNotNone(decl)
-        self.assertEqual(decl.dims, (":",))
+        self.assertEqual(decl.dims_raw, (":",))
+        self.assertEqual(decl.dims, (None,))
         decl = routine.decls.find_by_name("y")
         self.assertIsNotNone(decl)
-        self.assertEqual(decl.dims, ("n",))
+        self.assertEqual(decl.dims_raw, ("n",))
+        self.assertEqual(str(decl.dims[0]), "n")
 
     def test_parse_assumed_size(self):
         src = textwrap.dedent(
@@ -275,10 +277,13 @@ class TestParser(unittest.TestCase):
         routine = module.routines[0]
         decl = routine.decls.find_by_name("a")
         self.assertIsNotNone(decl)
-        self.assertEqual(decl.dims, ("*",))
+        self.assertEqual(decl.dims_raw, ("*",))
+        self.assertEqual(decl.dims, (None,))
         decl = routine.decls.find_by_name("b")
         self.assertIsNotNone(decl)
-        self.assertEqual(decl.dims, ("n", "*"))
+        self.assertEqual(decl.dims_raw, ("n", "*",))
+        self.assertEqual(str(decl.dims[0]), "n")
+        self.assertIsNone(decl.dims[1])
 
     def test_parse_public(self):
         src = textwrap.dedent(

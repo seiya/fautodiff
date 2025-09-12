@@ -53,7 +53,8 @@ def v(name, *idx_dims) -> OpVar:
     var_type = VarType("real")
     var = OpVar(name, index=index, var_type=var_type)
     if index:
-        var.dims = (":",) * len(index)
+        var.dims = tuple([None] * len(index))
+        var.dims_raw = tuple([":"] * len(index))
     return var
 
 

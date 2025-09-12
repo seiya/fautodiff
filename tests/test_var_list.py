@@ -70,7 +70,8 @@ def v(name, *idx_dims) -> OpVar:
 
     # Set dims for multi-dim arrays
     if index:
-        var.dims = (":",) * len(index)
+        var.dims = tuple([None] * len(index))
+        var.dims_raw = tuple([":"] * len(index))
 
     return var
 
@@ -493,15 +494,34 @@ def make_dt_var(chain, index_dims=None):
     """
     ref = None
     for name, dims in chain:
+        dims_op = None
+        dims_raw = None
         if dims is not None:
-            dims = tuple(dims)
-        ref = OpVar(name, var_type=VarType("real"), dims=dims, ref_var=ref)
+            dims_raw = tuple(str(d) for d in dims)
+            dims_op = []
+            for d in dims:
+                if isinstance(d, str):
+                    if d in (":", "*"):
+                        dims_op.append(None)
+                    else:
+                        dims_op.append(OpVar(d))
+                else:
+                    dims_op.append(d)
+            dims_op = tuple(dims_op)
+        ref = OpVar(
+            name,
+            var_type=VarType("real"),
+            dims=dims_op,
+            dims_raw=dims_raw,
+            ref_var=ref,
+        )
     if index_dims is not None:
         ref = OpVar(
             ref.name,
             index=AryIndex(index_dims),
             var_type=ref.var_type,
             dims=ref.dims,
+            dims_raw=ref.dims_raw,
             ref_var=ref.ref_var,
         )
     return ref

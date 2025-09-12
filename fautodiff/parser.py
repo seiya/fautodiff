@@ -4,6 +4,8 @@ This module centralizes all direct interaction with :mod:`fparser` so that the
 rest of the package does not rely on the underlying parser implementation.
 """
 
+from __future__ import annotations
+
 import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -54,7 +56,6 @@ def _eval_kind(expr: str) -> Optional[int]:
     if m2.group(3) and m2.group(3).lower().startswith("d"):
         return 8
     return 4
-
 
 from packaging.version import Version, parse
 
@@ -716,6 +717,7 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                 name=name,
                 var_type=decl.var_type.copy(),
                 dims=decl.dims,
+                dims_raw=decl.dims_raw,
                 ad_target=decl.ad_target(),
                 is_constant=decl.parameter or getattr(decl, "constant", False),
                 allocatable=getattr(decl, "allocatable", False),
@@ -729,6 +731,7 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                 name=name,
                 var_type=decl.var_type.copy(),
                 dims=decl.dims,
+                dims_raw=decl.dims_raw,
                 ad_target=decl.ad_target(),
                 is_constant=decl.parameter or getattr(decl, "constant", False),
                 allocatable=getattr(decl, "allocatable", False),
@@ -783,6 +786,7 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                 index=index,
                 var_type=decl.var_type.copy(),
                 dims=decl.dims,
+                dims_raw=decl.dims_raw,
                 ad_target=decl.ad_target(),
                 is_constant=decl.parameter or getattr(decl, "constant", False),
                 allocatable=getattr(decl, "allocatable", False),
@@ -992,6 +996,19 @@ def parse_src(
     _mark_module_macros(modules)
     return modules
 
+def _parse_dim_token(spec, decl_map, type_map) -> Optional[Operator]:
+    if isinstance(spec, (Fortran2003.Explicit_Shape_Spec, Fortran2003.Assumed_Shape_Spec)):
+        range = [_stmt2op(item, decl_map, type_map) if item is not None else None for item in spec.items]
+        if range[0] is None and range[1] is None:
+            return None
+        if range[0] == OpInt(1) or range[0] is None:
+            return range[1]
+        return OpRange(range)
+    if isinstance(spec, Fortran2003.Deferred_Shape_Spec):
+        return None
+
+    print(spec.__dict__)
+    raise NotImplementedError(f"spec type is {type(spec)}")
 
 def _parse_decl_stmt(
     stmt,
@@ -1047,6 +1064,7 @@ def _parse_decl_stmt(
 
     intent = None
     dim_attr = None
+    dim_attr_raw = None
     parameter = False
     access = None
     allocatable = False
@@ -1103,7 +1121,8 @@ def _parse_decl_stmt(
                 allocatable = True
                 continue
             if isinstance(attr, Fortran2003.Dimension_Attr_Spec):
-                dim_attr = tuple(v.string for v in attr.items[1].items)
+                dim_attr_raw = [v.string for v in attr.items[1].items]
+                dim_attr = [_parse_dim_token(s, decl_map, type_map) for s in attr.items[1].items]
                 continue
             if isinstance(attr, Fortran2003.Access_Spec):
                 attr_name = attr.string.lower()
@@ -1131,6 +1150,7 @@ def _parse_decl_stmt(
     decls = []
     for entity in stmt.items[2].items:
         dims = None
+        dims_raw = None
         init_val = None
         if isinstance(entity, (Fortran2003.Entity_Decl, Fortran2003.Component_Decl)):
             name = entity.items[0].string
@@ -1143,15 +1163,21 @@ def _parse_decl_stmt(
                     Fortran2003.Deferred_Shape_Spec_List,
                 ),
             ):
-                dims = tuple(v.string for v in dim_spec.items)
+                dims_raw = [v.string for v in dim_spec.items]
+                dims = [_parse_dim_token(s, decl_map, type_map) for s in dim_spec.items]
             elif isinstance(dim_spec, Fortran2003.Assumed_Size_Spec):
+                dims_raw = []
                 dims = []
                 if dim_spec.items[0] is not None:
-                    dims.extend(v.string for v in dim_spec.items[0].items)
-                dims.append("*")
-                dims = tuple(dims)
+                    for v in dim_spec.items[0].items:
+                        s = v.string
+                        dims_raw.append(s)
+                        dims.append(_parse_dim_token(v, decl_map, type_map))
+                dims_raw.append("*")
+                dims.append(None)
             elif dim_spec is None:
                 dims = dim_attr
+                dims_raw = dim_attr_raw
             else:
                 raise RuntimeError(
                     f"Unsupported dimension spec: {type(dim_spec)} {dim_spec}"
@@ -1165,6 +1191,11 @@ def _parse_decl_stmt(
         if constant_vars and name in constant_vars:
             constant = True
 
+        if dims:
+            dims = tuple(dims)
+        if dims_raw:
+            dims_raw = tuple(dims_raw)
+
         decls.append(
             Declaration(
                 name=name,
@@ -1174,6 +1205,7 @@ def _parse_decl_stmt(
                     char_len=char_len,
                 ),
                 dims=dims,
+                dims_raw=dims_raw,
                 intent=intent,
                 parameter=parameter,
                 constant=constant,

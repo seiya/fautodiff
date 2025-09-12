@@ -18,7 +18,7 @@ from typing import Dict, List, Set
 
 from fautodiff import parser
 from fautodiff.code_tree import Declaration, Interface
-from fautodiff.operators import VarType
+from fautodiff.operators import VarType, OpVar, OpRange
 
 _MODE_RE = re.compile(r"mpi_(.*?)(_fwd_rev_ad|_fwd_ad|_rev_ad)(?:_(.*))?$", re.I)
 
@@ -65,9 +65,9 @@ def _collect_routines(
                 intents.append(decls.get(arg).intent if decls.get(arg) else None)
                 if arg_lower in assumed_rank:
                     dim = None
-                elif decls.get(arg) and decls.get(arg).dims:
+                elif decls.get(arg) and decls.get(arg).dims_raw:
                     dim = []
-                    for d in decls.get(arg).dims:
+                    for d in decls.get(arg).dims_raw:
                         if d == "*":
                             count = _find_count_arg(arg, mpi_args)
                             dim.append(count if count else d)
@@ -288,7 +288,23 @@ common = {"typename": "integer", "parameter": True}
 decl_map = {}
 for name, v in variables.items():
     v.update(common)
-    dims = tuple(v.get("dims")) if "dims" in v else None
+    dims_val = v.get("dims")
+    if dims_val is not None:
+        dims_list = []
+        for dim in dims_val:
+            if dim is None:
+                dims_list.append(None)
+            elif ":" in dim:
+                ds = dim.split(":")
+                if ds[0] == "" and ds[1] == "":
+                    dims_list.append(None)
+                elif ds[0] == "":
+                    dims_list.append(OpVar(ds[1]))
+                else:
+                    dims_list.append(OpRange([OpVar(ds[0]), OpVar(ds[1])]))
+        dims = tuple(dims_list)
+    else:
+        dims = None
     decl_map[name] = Declaration(
         name=name, var_type=VarType("integer"), dims=dims, parameter=True
     )

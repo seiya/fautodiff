@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Tuple, Optional, Union
 
 from .code_tree import Declaration, Module
-from .operators import Kind, OpInt, OpVar, VarType
+from .operators import Kind, Operator, OpInt, OpVar, OpRange, VarType
 
 
 class FadmodBase(ABC):
@@ -75,6 +75,37 @@ class FadmodV1(FadmodBase):
 
     version = 1
 
+    @staticmethod
+    def _parse_dims(dims_val: List[str | None] | None) -> Tuple[Operator | None, ...] | None:
+        def _conv(expr: str) -> Operator | None:
+            if expr == "":
+                return None
+
+            try:
+                val = int(expr)
+                return OpInt(val)
+            except Exception:
+                return OpVar(expr)
+
+        if dims_val is None:
+            return None
+
+        dims_list = []
+        for dim in dims_val:
+            if dim is None or dim == "":
+                dims_list.append(None)
+            elif ":" in dim:
+                rng = [_conv(d) for d in dim.split(":")]
+                if rng[0] is None and rng[1] is None:
+                    dims_list.append(None)
+                elif rng[0] == OpInt(1):
+                    dims_list.append(rng[1])
+                else:
+                    dims_list.append(rng)
+            else:
+                dims_list.append(_conv(dim))
+        return tuple(dims_list)
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "FadmodV1":
         routines = data.get("routines", {})
@@ -102,13 +133,18 @@ class FadmodV1(FadmodBase):
             if kind_val is not None and not isinstance(kind_val, int):
                 raise RuntimeError(f"variable '{name}' field 'kind' must be int")
             dims_val = info.get("dims")
-            if dims_val is not None:
+            if dims_val is None:
+                dims_raw = None
+                dims = None
+            else:
                 if not isinstance(dims_val, list) or any(
                     not isinstance(d, str) for d in dims_val
                 ):
                     raise RuntimeError(
                         f"variable '{name}' field 'dims' must be list of strings"
                     )
+                dims_raw = tuple(dims_val)
+                dims = cls._parse_dims(dims_val)
             for key in ["parameter", "constant", "allocatable", "pointer", "optional"]:
                 if key in info and not isinstance(info[key], bool):
                     raise RuntimeError(
@@ -129,7 +165,8 @@ class FadmodV1(FadmodBase):
                 OpVar(
                     name=name,
                     var_type=vt,
-                    dims=tuple(dims_val) if dims_val is not None else None,
+                    dims=dims,
+                    dims_raw=dims_raw,
                     is_constant=info.get("constant", False),
                     allocatable=info.get("allocatable", False),
                     pointer=info.get("pointer", False),
@@ -150,11 +187,25 @@ class FadmodV1(FadmodBase):
             elif info.get("kind") is not None:
                 val = info["kind"]
                 kind = Kind(OpInt(val), val=val)
+            dims_val = info.get("dims")
+            if dims_val is None:
+                dims_raw = None
+                dims = None
+            else:
+                if not isinstance(dims_val, list) or any(
+                    not isinstance(d, str) for d in dims_val
+                ):
+                    raise RuntimeError(
+                        f"variable '{name}' field 'dims' must be list of strings"
+                    )
+                dims_raw = tuple(dims_val)
+                dims = self._parse_dims(dims_val)
             vt = VarType(info["typename"], kind=kind)
             decls[name] = Declaration(
                 name,
                 var_type=vt,
-                dims=tuple(info["dims"]) if info.get("dims") is not None else None,
+                dims_raw=dims_raw,
+                dims=dims,
                 intent=None,
                 parameter=info.get("parameter", False),
                 constant=info.get("constant", False),
@@ -204,8 +255,11 @@ class FadmodV1(FadmodBase):
                     info: Dict[str, Any] = {"typename": d.var_type.typename}
                     if d.var_type.kind is not None:
                         info["kind"] = d.var_type.kind.val
-                    if d.dims is not None:
-                        info["dims"] = list(d.dims)
+                    # dims: use dims_raw when available, otherwise stringify dims
+                    if d.dims_raw is not None:
+                        info["dims"] = list(d.dims_raw)
+                    elif d.dims is not None:
+                        info["dims"] = [str(dim) for dim in d.dims]
                     if d.parameter:
                         info["parameter"] = True
                     if d.constant:
