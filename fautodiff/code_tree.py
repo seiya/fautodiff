@@ -3679,6 +3679,7 @@ class Assignment(Node):
             vars.push(var)
         if (not no_accumulate) and self.accumulate:
             vars.push(lhs)
+
         return vars
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:

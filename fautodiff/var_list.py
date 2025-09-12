@@ -1114,8 +1114,16 @@ class IndexList:
                     if shape_new is None:
                         shape_new = list(self.shape)
                     shape_new[n] = s2
-                else:
-                    raise ValueError(f"shape mismatch: expected {self.shape}, got {cand}")
+                    continue
+                if isinstance(s1, OpRange) and isinstance(s2, OpRange) and s1[0] == s2[0]:
+                    if s1[1] is None:
+                        if shape_new is None:
+                            shape_new = list(self.shape)
+                        shape_new[n] = s2
+                        continue
+                    if s2[1] is None:
+                        continue
+                raise ValueError(f"shape mismatch: expected {self.shape}, got {cand}")
         if shape_new is not None:
             self.shape = tuple(shape_new)
 
