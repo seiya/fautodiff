@@ -1761,6 +1761,52 @@ def _generate_ad_subroutine(
 
                 _drop_empty_branches(ad_block)
 
+            # Symmetric prune: drop redundant allocates in the reverse block
+            # when the forward block already allocates the same AD variables.
+            # First apply the simple pattern-based prune, then remove any
+            # direct Allocate nodes inside larger blocks.
+            ad_block = _prune_fw_allocates_simple(ad_block, fw_block)
+
+            def _prune_ad_redundant_allocates(block: Block, other: Block) -> None:
+                # Walk and remove Allocate nodes for AD vars already allocated
+                # in the forward block. Recurse into nested blocks conservatively.
+                to_remove: list[Node] = []
+                for ch in list(block.iter_children()):
+                    if isinstance(ch, Allocate):
+                        vnames = [v.name_ext() for v in ch.vars if v.name.endswith(AD_SUFFIX)]
+                        drop = False
+                        for vname in vnames:
+                            if _allocates_var(other, vname):
+                                drop = True
+                                break
+                        if drop:
+                            to_remove.append(ch)
+                            continue
+                    if isinstance(ch, IfBlock):
+                        for _, b in ch.cond_blocks:
+                            _prune_ad_redundant_allocates(b, other)
+                    elif isinstance(ch, SelectBlock):
+                        for _, b in ch.cond_blocks:
+                            _prune_ad_redundant_allocates(b, other)
+                    elif isinstance(ch, WhereBlock):
+                        for _, b in ch.cond_blocks:
+                            _prune_ad_redundant_allocates(b, other)
+                    elif isinstance(ch, DoAbst):
+                        _prune_ad_redundant_allocates(ch._body, other)
+                    elif isinstance(ch, OmpDirective) and ch.body is not None:
+                        body = ch.body if isinstance(ch.body, Block) else Block(list(ch.body))
+                        _prune_ad_redundant_allocates(body, other)
+                for n in to_remove:
+                    block.remove_child(n)
+
+            _prune_ad_redundant_allocates(ad_block, fw_block)
+
+            # Clean up any empty branches introduced after dropping allocates
+            _drop_empty_branches(ad_block)
+
+            # Ensure the subroutine references the pruned reverse block
+            subroutine.ad_content = ad_block
+
             if not fw_block.is_effectively_empty():
                 subroutine.content.extend(fw_block)
 

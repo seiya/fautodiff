@@ -54,8 +54,6 @@ contains
     real, allocatable :: xtmp(:)
     real, allocatable :: xtmp_ad(:)
 
-    allocate(xtmp_ad(n))
-    allocate(xtmp(n))
     if (f) then
       y_ad = x_ad * 2.0 * x
       y = x ** 2
