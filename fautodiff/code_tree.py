@@ -3891,15 +3891,13 @@ class SaveAssignment(Node):
             return IfBlock([(cond, Block([alloc]))])
         return None
 
-    def dealloc_node(self) -> Node | None:
+    def dealloc_node(self) -> Deallocate | None:
         if (self.load and
             self.rhs.allocatable and
             not self.pushpop
         ):
             rhs0 = self.rhs.change_index(None)
-            dealloc = Deallocate([rhs0])
-            cond = OpNot([OpFunc("allocated", args=[rhs0])])
-            return IfBlock([(cond, Block([dealloc]))])
+            return Deallocate([rhs0])
         return None
 
     def is_effectively_empty(self) -> bool:
