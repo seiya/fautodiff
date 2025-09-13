@@ -193,7 +193,7 @@ class TestFortranADCode(unittest.TestCase):
     def test_mpi_example(self):
         self._run_test(
             "mpi_example",
-            ["sum_reduce", "isend_irecv"],
+            ["sum_reduce", "isend_irecv", "isend_irecv_alloc"],
             use_mpi=True,
         )
 
