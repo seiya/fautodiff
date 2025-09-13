@@ -373,10 +373,16 @@ contains
     call MPI_Comm_rank(comm, rank, ierr2)
     call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
-    if (rank == root) tmp(:) = rb_ad(1:count)
-    call MPI_Bcast(tmp, count, datatype, root, comm, ierr)
-    sb_ad(1:count) = sb_ad(1:count) + tmp(1:count)
-    if (rank == root) rb_ad(1:count) = 0.0
+    select case (op)
+    case (MPI_SUM)
+      if (rank == root) tmp(:) = rb_ad(1:count)
+      call MPI_Bcast(tmp, count, datatype, root, comm, ierr)
+      sb_ad(1:count) = sb_ad(1:count) + tmp(1:count)
+      if (rank == root) rb_ad(1:count) = 0.0
+    case default
+      print *, "Error: Unsupported MPI_Op in mpi_reduce_rev_ad (only MPI_SUM supported)"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_reduce_rev_ad_r4
 
   subroutine mpi_reduce_fwd_ad_r8(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, root, comm, ierr)
@@ -419,10 +425,16 @@ contains
     call MPI_Comm_rank(comm, rank, ierr2)
     call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
     call c_f_pointer(c_loc(recvbuf_ad), rb_ad, [count])
-    if (rank == root) tmp(:) = rb_ad(1:count)
-    call MPI_Bcast(tmp, count, datatype, root, comm, ierr)
-    sb_ad(1:count) = sb_ad(1:count) + tmp(1:count)
-    if (rank == root) rb_ad(1:count) = 0.0_8
+    select case (op)
+    case (MPI_SUM)
+      if (rank == root) tmp(:) = rb_ad(1:count)
+      call MPI_Bcast(tmp, count, datatype, root, comm, ierr)
+      sb_ad(1:count) = sb_ad(1:count) + tmp(1:count)
+      if (rank == root) rb_ad(1:count) = 0.0_8
+    case default
+      print *, "Error: Unsupported MPI_Op in mpi_reduce_rev_ad (only MPI_SUM supported)"
+      call MPI_abort(comm, -1, ierr2)
+    end select
   end subroutine mpi_reduce_rev_ad_r8
 
   subroutine mpi_allreduce_fwd_ad_r4(sendbuf, sendbuf_ad, recvbuf, recvbuf_ad, count, datatype, op, comm, ierr)
@@ -461,7 +473,7 @@ contains
 
     real, pointer :: sb(:), sb_ad(:), rb_ad(:)
     real :: rb(count), res(count)
-    integer :: n
+    integer :: n, ierr2
     integer :: mask(count), contrib(count)
 
     call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
@@ -474,7 +486,7 @@ contains
       call c_f_pointer(c_loc(sendbuf), sb, [count])
       call MPI_Allreduce(sendbuf, res, count, datatype, op, comm, ierr)
       do n = 1, count
-        if (sb(n) == rb(n)) then
+        if (sb(n) == res(n)) then
           mask(n) = 1
         else
           mask(n) = 0
@@ -490,7 +502,7 @@ contains
       end do
     case default
       print *, "Error: Unsupported operation for reverse mode Allreduce."
-      call MPI_Abort(comm, -1, ierr)
+      call MPI_Abort(comm, -1, ierr2)
     end select
     rb_ad(1:count) = 0.0
   end subroutine mpi_allreduce_rev_ad_r4
@@ -531,7 +543,7 @@ contains
 
     real(8), pointer :: sb(:), sb_ad(:), rb_ad(:)
     real(8) :: rb(count), res(count)
-    integer :: n
+    integer :: n, ierr2
     integer :: mask(count), contrib(count)
 
     call c_f_pointer(c_loc(sendbuf_ad), sb_ad, [count])
@@ -553,14 +565,14 @@ contains
       call MPI_Allreduce(mask, contrib, count, MPI_INTEGER, MPI_SUM, comm, ierr)
       do n = 1, count
         if (mask(n) == 1) then
-          sb_ad(n) = rb_ad(n) / contrib(n)
+          sb_ad(n) = rb(n) / contrib(n)
         else
           sb_ad(n) = 0.0_8
         end if
       end do
     case default
       print *, "Error: Unsupported operation for reverse mode Allreduce."
-      call MPI_Abort(comm, -1, ierr)
+      call MPI_Abort(comm, -1, ierr2)
     end select
     rb_ad(1:count) = 0.0_8
   end subroutine mpi_allreduce_rev_ad_r8
@@ -606,7 +618,7 @@ contains
 
     real, pointer :: sb(:), sb_ad(:), rb_ad(:)
     real :: rb(count), res(count)
-    integer :: n
+    integer :: n, ierr2
     integer :: mask(count), contrib(count)
 
     if (sendbuf_ad /= MPI_IN_PLACE) then
@@ -633,14 +645,14 @@ contains
       call MPI_Allreduce(mask, contrib, count, MPI_INTEGER, MPI_SUM, comm, ierr)
       do n = 1, count
         if (mask(n) == 1) then
-          sb_ad(n) = rb_ad(n) / contrib(n)
+          sb_ad(n) = rb(n) / contrib(n)
         else
           sb_ad(n) = 0.0
         end if
       end do
     case default
       print *, "Error: Unsupported operation for reverse mode Allreduce."
-      call MPI_Abort(comm, -1, ierr)
+      call MPI_Abort(comm, -1, ierr2)
     end select
   end subroutine mpi_allreduce_rev_ad_r4_inplace
 
@@ -685,7 +697,7 @@ contains
 
     real(8), pointer :: sb(:), sb_ad(:), rb_ad(:)
     real(8) :: rb(count), res(count)
-    integer :: n
+    integer :: n, ierr2
     integer :: mask(count), contrib(count)
 
     if (sendbuf_ad /= MPI_IN_PLACE) then
@@ -701,9 +713,9 @@ contains
       sb_ad(1:count) = rb(1:count)
     case (MPI_MAX, MPI_MIN)
       call c_f_pointer(c_loc(recvbuf), sb, [count])
-      call MPI_Allreduce(sb, rb, count, datatype, op, comm, ierr)
+      call MPI_Allreduce(sb, res, count, datatype, op, comm, ierr)
       do n = 1, count
-        if (sb(n) == rb(n)) then
+        if (sb(n) == res(n)) then
           mask(n) = 1
         else
           mask(n) = 0
@@ -712,14 +724,14 @@ contains
       call MPI_Allreduce(mask, contrib, count, MPI_INTEGER, MPI_SUM, comm, ierr)
       do n = 1, count
         if (mask(n) == 1) then
-          sb_ad(n) = rb_ad(n) / contrib(n)
+          sb_ad(n) = rb(n) / contrib(n)
         else
           sb_ad(n) = 0.0_8
         end if
       end do
     case default
       print *, "Error: Unsupported operation for reverse mode Allreduce."
-      call MPI_Abort(comm, -1, ierr)
+      call MPI_Abort(comm, -1, ierr2)
     end select
   end subroutine mpi_allreduce_rev_ad_r8_inplace
 
