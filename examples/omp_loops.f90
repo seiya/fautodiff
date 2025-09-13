@@ -42,4 +42,19 @@ contains
 
     return
   end subroutine stencil_loop
+
+    subroutine omp_ws_alloc(x, y)
+    real, allocatable, intent(inout) :: x(:)
+    real, intent(out) :: y(size(x))
+
+    !$omp parallel
+    !$omp workshare
+    x = x**2
+    y = x
+    !$omp end workshare
+    !$omp end parallel
+
+    return
+  end subroutine omp_ws_alloc
+
 end module omp_loops

@@ -99,4 +99,50 @@ contains
     return
   end subroutine stencil_loop_rev_ad
 
+  subroutine omp_ws_alloc_fwd_ad(x, x_ad, y, y_ad)
+    real, intent(inout), allocatable :: x(:)
+    real, intent(inout), allocatable :: x_ad(:)
+    real, intent(out) :: y(size(x))
+    real, intent(out) :: y_ad(size(x))
+
+    !$omp parallel
+    !$omp workshare
+    x_ad = x_ad * 2.0 * x ! x = x**2
+    x = x**2
+    y_ad = x_ad ! y = x
+    y = x
+    !$omp end workshare
+    !$omp end parallel
+
+    return
+  end subroutine omp_ws_alloc_fwd_ad
+
+  subroutine omp_ws_alloc_rev_ad(x, x_ad, y_ad)
+    real, intent(inout), allocatable :: x(:)
+    real, intent(inout), allocatable :: x_ad(:)
+    real, intent(inout) :: y_ad(size(x))
+    real, allocatable :: x_save_54_ad(:)
+
+    allocate(x_save_54_ad, mold=x)
+    !$omp parallel
+    !$omp workshare
+    x_save_54_ad(:) = x(:)
+    !$omp end workshare
+    !$omp end parallel
+
+    !$omp parallel
+    !$omp workshare
+    x_ad = y_ad + x_ad ! y = x
+    y_ad = 0.0 ! y = x
+    x(:) = x_save_54_ad(:)
+    x_ad = x_ad * 2.0 * x ! x = x**2
+    !$omp end workshare
+    !$omp end parallel
+    if (allocated(x_save_54_ad)) then
+      deallocate(x_save_54_ad)
+    end if
+
+    return
+  end subroutine omp_ws_alloc_rev_ad
+
 end module omp_loops_ad

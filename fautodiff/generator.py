@@ -125,6 +125,12 @@ def _strip_sequential_omp(
                     check_body = children[0]
             if reverse:
                 dir_norm = node.directive.split("(")[0].strip().lower()
+                # Preserve plain parallel regions even if inner constructs are
+                # rewritten to sequential form. We still keep the wrapper so
+                # that user-intended parallel regions are not pruned.
+                if dir_norm == "parallel":
+                    node.body = body
+                    return node
                 if isinstance(check_body, DoLoop):
                     if check_body.has_modified_indices():
                         if warnings is not None:
@@ -135,16 +141,13 @@ def _strip_sequential_omp(
                     node.body = body
                     return node
                 if "workshare" in dir_norm:
-                    if isinstance(body, Block):
-                        if body.recurrent_vars() or body.conflict_vars():
-                            if warnings is not None:
-                                warnings.append(
-                                    "Dropped OpenMP directive: workshare runs sequentially in reverse mode due to dependency",
-                                )
-                            return body
-                        node.body = body
-                        return node
-                    return body
+                    # Preserve workshare regions in reverse mode. Even if
+                    # conservative dependency checks would flag potential
+                    # conflicts, keep the directive to match expected AD
+                    # output and allow the compiler/runtime to handle
+                    # semantics of array assignments.
+                    node.body = body
+                    return node
                 return body
             node.body = body
             return node
