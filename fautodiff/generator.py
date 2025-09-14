@@ -2489,6 +2489,7 @@ def generate_ad(
                 group_subs: Dict[str, Dict[str, Routine]] = {}
                 for name_r in group:
                     routine = routine_lookup[name_r]
+                    routine.build_parent()
                     _set_call_intents(routine.content, routine_map, generic_routines)
                     if mode in ("forward", "both"):
                         sub, _, mods_called = _generate_ad_subroutine(

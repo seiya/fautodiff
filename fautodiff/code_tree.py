@@ -2396,11 +2396,15 @@ class CallStatement(Node):
             loads = []
             blocks = []
             for var in self.assigned_vars():
-                if not var.name.endswith(AD_SUFFIX):
+                varname = var.name
+                if not varname.endswith(AD_SUFFIX):
                     if self.org_node is not None:
                         node = self.org_node
                     else:
                         node = self
+                    var_org = node.get_routine().get_var(varname)
+                    if var_org is not None:
+                        var = var_org
                     load = node._save_vars(var, saved_vars)
                     loads.append(load)
                     blocks.insert(0, load)
@@ -4900,7 +4904,11 @@ class BranchBlock(Node):
             assigned = block.assigned_vars()
             required = block.required_vars()
             for var in assigned & required:
-                if not var.name.endswith(AD_SUFFIX):
+                varname = var.name
+                if not varname.endswith(AD_SUFFIX):
+                    var_org = self.get_routine().get_var(varname)
+                    if var_org is not None:
+                        var = var_org
                     load = self._save_vars(var, saved_vars)
                     loads.append(load)
                     blocks.insert(0, load)
