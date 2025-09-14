@@ -1300,6 +1300,8 @@ def _generate_ad_subroutine(
             for flag in return_flags:
                 fw_block.insert_begin(Assignment(flag, OpTrue()))
 
+        # print(render_program(fw_block))
+
     # For non-AD-target mirror variables (e.g. integer request arrays),
     # insert an initialization for the "_ad" variable mirroring the
     # original assignment site. We do this by locating the first

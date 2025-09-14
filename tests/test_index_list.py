@@ -616,6 +616,32 @@ class TestIndexList(unittest.TestCase):
         self.assertEqual(str(il.indices[0]), "2:n")
         self.assertEqual(il.exclude, [])
 
+    def test_shape_push_none_remove_symbolic_then_exit_context_keeps_ends(self):
+        # shape=(1:n), push None, remove i, exit_context i=2:n-1
+        # -> indices should be [1, n], exclude should be empty
+        il = IndexList()
+        n = OpVar("n")
+        i = OpVar("i")
+        il.set_shape((OpRange([OpInt(1), n]),))
+        il.push(None)
+        il.remove(AryIndex([i]))
+        il.exit_context((i, [], OpRange([OpInt(2), n - OpInt(1)])))
+        self.assertEqual(len(il.indices), 2)
+        self.assertEqual(set(str(idx) for idx in il.indices), {"1", "n"})
+        self.assertEqual(il.exclude, [])
+
+    def test_shape_push_ends_then_remove_middle_contains_none(self):
+        # shape=(1:n), (1) and (n), exclude (2:n-1) -> contains(None) should be True
+        il = IndexList()
+        n = OpVar("n")
+        i = OpVar("i")
+        il.set_shape((OpRange([OpInt(1), n]),))
+        il.push(AryIndex([OpInt(1)]))
+        il.push(AryIndex([n]))
+        il.exclude = [AryIndex([OpRange([OpInt(2), n-1])])]
+        # Coverage remains (1) (n); contains([None]) should be True
+        self.assertTrue(il.contains(AryIndex([None])))
+
     def test_shape_push_none_then_remove_middle_symbolic_exclude(self):
         # shape=(1:n), push None, remove 2 -> indices = 1:n, exclude = (2)
         il = IndexList()
