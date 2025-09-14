@@ -359,10 +359,18 @@ class IndexList:
 
             if index is None:
                 work = AryIndex([None] * len(self.shape))
+                # For full coverage, use the concrete shape on the differing dim
+                if self.shape is not None:
+                    work[i] = self.shape[i]
             else:
                 work = index.copy()
-            if self.shape is not None:
-                work[i] = self.shape[i]
+                # Only expand to shape when the stored index covers the entire
+                # dimension (None or full slice). Do NOT expand scalars or
+                # proper subranges, otherwise we might create spurious coverage.
+                if self.shape is not None:
+                    dim_orig = index[i]
+                    if AryIndex.dim_is_entire(dim_orig):
+                        work[i] = self.shape[i]
 
             dim1 = work[i]
             dim2 = var_index[i]
@@ -424,12 +432,16 @@ class IndexList:
                     index_list.append(work)
                 continue
 
-            # both are scalar
+            # both are scalar: if different, no overlap -> keep index; add exclude
+            # only when the removal index is symbolic (cannot prove no-overlap globally).
             if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
                 index_list.append(index)
-                if not added:
-                    self.add_exclude(var_index, not_reorganize=True)
-                    added = True
+                # Add exclude for symbolic removals (e.g., OpVar), but avoid
+                # adding for concrete scalars (e.g., removing 2 while only 1 is stored).
+                if not isinstance(dim2, OpInt):
+                    if not added:
+                        self.add_exclude(var_index, not_reorganize=True)
+                        added = True
                 continue
 
             # dim1 is range and dim2 is scalar

@@ -2393,19 +2393,34 @@ class CallStatement(Node):
 
         if reverse:
             ad_nodes = init_nodes + [ad_call] + ad_nodes
+            if self.org_node is not None:
+                node = self.org_node
+            else:
+                node = self
+            routine = node.get_routine()
             loads = []
             blocks = []
             for var in self.assigned_vars():
                 varname = var.name
                 if not varname.endswith(AD_SUFFIX):
-                    if self.org_node is not None:
-                        node = self.org_node
-                    else:
-                        node = self
-                    var_org = node.get_routine().get_var(varname)
-                    if var_org is not None:
-                        var = var_org
+                    if routine is not None:
+                        var_org = routine.get_var(varname)
+                        if var_org is not None:
+                            var = var_org
                     load = node._save_vars(var, saved_vars)
+                    loads.append(load)
+                    blocks.insert(0, load)
+            args = arg_info.get("args_fwd_rev_ad")
+            if args is not None:
+                args = CallStatement.rename_args(
+                    ordered, arg_info["args"], args, args_new, False
+                )
+                for arg in args:
+                    if (not isinstance(arg, OpVar) or
+                        not arg.name.endswith(AD_SUFFIX) or
+                        arg.ad_target):
+                        continue
+                    load = node._save_vars(arg, saved_vars)
                     loads.append(load)
                     blocks.insert(0, load)
             blocks.extend(ad_nodes)
