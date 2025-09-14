@@ -3071,8 +3071,8 @@ class Declaration(Node):
 
     name: str
     var_type: VarType
-    dims: Optional[Tuple[Optional[Operator],...]] = None
-    dims_raw: Optional[Tuple[str,...]] = None
+    dims: Optional[Tuple[Optional[Operator], ...]] = None
+    dims_raw: Optional[Tuple[str, ...]] = None
     intent: Optional[str] = None
     parameter: bool = False
     constant: bool = False
@@ -3093,8 +3093,8 @@ class Declaration(Node):
         self,
         name: str,
         var_type: VarType,
-        dims: Optional[Tuple[Optional[Operator],...]] = None,
-        dims_raw: Optional[Tuple[str,...]] = None,
+        dims: Optional[Tuple[Optional[Operator], ...]] = None,
+        dims_raw: Optional[Tuple[str, ...]] = None,
         intent: Optional[str] = None,
         parameter: bool = False,
         constant: bool = False,
@@ -3808,6 +3808,7 @@ class SaveAssignment(Node):
     lhs: OpVar = field(init=False, repr=False)
     rhs: OpVar = field(init=False, repr=False)
     pushpop: ClassVar[bool] = False
+    skip_alloc: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -3865,22 +3866,39 @@ class SaveAssignment(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         lines: List[str] = []
-        if self.lhs.allocatable and not self.pushpop and not self.load:
+        if not self.skip_alloc:
+            alloc = self.alloc_node()
+            if alloc is not None:
+                lines.extend(alloc.render(indent))
+        lines.append(f"{space}{self.lhs} = {self.rhs}\n")
+        if not self.skip_alloc:
+            dealloc = self.dealloc_node()
+            if dealloc is not None:
+                lines.extend(dealloc.render(indent))
+        return lines
+
+    def alloc_node(self) -> Node | None:
+        if (self.lhs.allocatable and
+            not self.pushpop and
+            not self.load
+        ):
             lhs0 = self.lhs.change_index(None)
             rhs0 = self.rhs.change_index(None)
+            alloc = Allocate([lhs0], mold=rhs0)
             if self.var.declared_in == "routine":
-                lines.append(f"{space}allocate({lhs0}, mold={rhs0})\n")
-            else:
-                lines.append(f"{space}if (.not. allocated({lhs0})) then\n")
-                lines.append(f"{space}  allocate({lhs0}, mold={rhs0})\n")
-                lines.append(f"{space}end if\n")
-        lines.append(f"{space}{self.lhs} = {self.rhs}\n")
-        if self.load and self.rhs.allocatable and not self.pushpop:
+                return alloc
+            cond = OpNot([OpFunc("allocated", args=[lhs0])])
+            return IfBlock([(cond, Block([alloc]))])
+        return None
+
+    def dealloc_node(self) -> Deallocate | None:
+        if (self.load and
+            self.rhs.allocatable and
+            not self.pushpop
+        ):
             rhs0 = self.rhs.change_index(None)
-            lines.append(f"{space}if (allocated({rhs0})) then\n")
-            lines.append(f"{space}  deallocate({rhs0})\n")
-            lines.append(f"{space}end if\n")
-        return lines
+            return Deallocate([rhs0])
+        return None
 
     def is_effectively_empty(self) -> bool:
         return False
@@ -6061,6 +6079,7 @@ class OmpDirective(Node):
     directive: str
     clauses: List[Union[str, Dict[str, List[Any]]]] = field(default_factory=list)
     body: Optional[Node] = None
+    skip_alloc: bool = False
 
     def __post_init__(self):
         super().__post_init__()
@@ -6102,13 +6121,21 @@ class OmpDirective(Node):
             yield self.body
 
     def copy(self) -> "OmpDirective":
-        return OmpDirective(self.directive, copy.deepcopy(self.clauses), self.body)
+        return OmpDirective(self.directive,
+                            copy.deepcopy(self.clauses),
+                            self.body,
+                            self.skip_alloc
+                            )
 
     def deep_clone(self) -> "OmpDirective":
-        body = self.body.deep_clone() if self.body is not None else None
-        return OmpDirective(self.directive, copy.deepcopy(self.clauses), body)
+        return OmpDirective(self.directive,
+                            copy.deepcopy(self.clauses),
+                            self.body.deep_clone() if self.body is not None else None,
+                            self.skip_alloc
+                            )
 
-    def insert_before(self, id: int, node: "Node"):
+
+    def insert_before(self, id: int, node: Node):
         if self.body is None:
             raise NotImplementedError("OmpDirective has no body")
         if isinstance(self.body, Block):
@@ -6120,7 +6147,7 @@ class OmpDirective(Node):
             return
         self.body.insert_before(id, node)
 
-    def insert_begin(self, node: "Node"):
+    def insert_begin(self, node: Node):
         if self.body is None:
             self.body = Block([node])
             self.body.set_parent(self)
@@ -6133,6 +6160,66 @@ class OmpDirective(Node):
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
+        lines: List[str] = []
+
+        # find SaveAssignment
+        allocates: Optional[List[Node]] = None
+        deallocates: Optional[List[Node]] = None
+        if not self.skip_alloc:
+            def _find_saveassigns(node: Node,
+                                    allocates: Optional[List[Node]],
+                                    deallocates: Optional[List[Node]]
+            ) -> Tuple[Optional[List[Node]], Optional[List[Node]]]:
+                if isinstance(node, SaveAssignment):
+                    alloc = node.alloc_node()
+                    if alloc is not None:
+                        if allocates is None:
+                            allocates = []
+                        allocates.append(alloc)
+                    dealloc = node.dealloc_node()
+                    if dealloc is not None:
+                        if deallocates is None:
+                            deallocates = []
+                        deallocates.append(dealloc)
+                    node.skip_alloc = True
+                    return (allocates, deallocates)
+                for child in node.iter_children():
+                    allocates, deallocates = _find_saveassigns(child, allocates, deallocates)
+                return (allocates, deallocates)
+            if "workshare" in self.directive:
+                if self.body is not None:
+                    allocates, deallocates = _find_saveassigns(self.body, None, None)
+            if self.directive == "parallel":
+                def _find_workshare(node: Node,
+                                    allocates: Optional[List[Node]],
+                                    deallocates: Optional[List[Node]]
+                ) -> Tuple[Optional[List[Node]], Optional[List[Node]]]:
+                    if isinstance(node, OmpDirective) and node.directive == "workshare":
+                        al, de = _find_saveassigns(node, None, None)
+                        if al is not None:
+                            if allocates is None:
+                                allocates = al
+                            else:
+                                for alloc in al:
+                                    allocates.append(alloc)
+                        if de is not None:
+                            if deallocates is None:
+                                deallocates = de
+                            else:
+                                for dealloc in de:
+                                    deallocates.append(dealloc)
+                        node.skip_alloc = True
+                        return (allocates, deallocates)
+                    for child in node.iter_children():
+                        allocates, deallocates = _find_workshare(child, allocates, deallocates)
+                    return (allocates, deallocates)
+                if self.body is not None:
+                    allocates, deallocates = _find_workshare(self.body, None, None)
+
+        if allocates is not None:
+            for alloc in allocates:
+                lines.extend(alloc.render(indent))
+
         parts: List[str] = []
         for c in self.clauses:
             if isinstance(c, str):
@@ -6146,10 +6233,14 @@ class OmpDirective(Node):
             else:
                 parts.append(f"{key}({', '.join(values)})")
         clause = f" {' '.join(parts)}" if parts else ""
-        lines = [f"{space}!$omp {self.directive}{clause}\n"]
+        lines.append(f"{space}!$omp {self.directive}{clause}\n")
         if self.body is not None:
             lines.extend(self.body.render(indent))
             lines.append(f"{space}!$omp end {self.directive}\n")
+        if deallocates is not None:
+            for dealloc in deallocates:
+                lines.extend(dealloc.render(indent))
+
         return lines
 
     def build_do_index_list(self, index_list: List[str]) -> None:
@@ -6185,6 +6276,7 @@ class OmpDirective(Node):
         )
         if not nodes:
             return []
+
         body = Block(nodes)
         new_clauses: List[Union[str, Dict[str, List[Any]]]] = []
         for clause in self.clauses:
