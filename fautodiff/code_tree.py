@@ -5756,7 +5756,7 @@ class DoLoop(DoAbst):
         do_index = self.index.name
         for varname in vars.names():
             for idx in vars[varname]:
-                if idx is None or do_index not in [str(v) for v in idx.collect_vars()]:
+                if idx is None or do_index not in [str(v) for v in idx]:
                     for var in vars.get_vars(varname):
                         assigned_vars.push(var)
                     continue
