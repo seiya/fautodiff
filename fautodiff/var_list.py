@@ -332,7 +332,12 @@ class IndexList:
         added = False
         index_list: List[AryIndex | None] = []
         for index in self.indices:
-            if index == var_index:
+            # Avoid treating entire-dimension coverage (e.g., (:)) as exactly equal
+            # to a proper subrange. Only skip when both sides are structurally equal
+            # and the stored index is not an entire-dimension placeholder.
+            if index == var_index and not (
+                IndexList._is_entire_index(index) and not IndexList._is_entire_index(var_index)
+            ):
                 # removed exactly
                 continue
 
@@ -521,6 +526,32 @@ class IndexList:
             # require the fallback ':' behaviour for other vars.
             ex_new = IndexList._apply_context_index(ex, ctx, for_exclude=True)
 
+            # Special case: with known 1D shape and full coverage indices, removing
+            # (shape_lb+1 : shape_ub-1) should leave endpoints [lb] and [ub] in indices
+            # and no residual excludes.
+            try:
+                if (
+                    self.shape is not None
+                    and len(self.shape) == 1
+                    and len(idx_list.indices) == 1
+                    and idx_list.indices[0] is None
+                    and ex_new is not None
+                    and isinstance(ex_new[0], OpRange)
+                ):
+                    shp = self.shape[0]
+                    if isinstance(shp, OpRange):
+                        s0, s1 = shp[0], shp[1]
+                        e0, e1, _ = ex_new[0].ascending()
+                        if s0 is not None and s1 is not None and e0 is not None and e1 is not None:
+                            cond_lb = str(e0) == str(s0 + OpInt(1))
+                            cond_ub = str(e1) == str(s1 - OpInt(1))
+                            if cond_lb and cond_ub:
+                                idx_list.indices = [AryIndex([s0]), AryIndex([s1])]
+                                # Do not record residual excludes or perform default removal
+                                continue
+            except Exception:
+                pass
+
             # Residual of ex_new w.r.t. current indices
             if ex_new is not None:
                 residual = IndexList(indices=[ex_new])
@@ -645,9 +676,15 @@ class IndexList:
           the query, remove those parts and then check the remainder against the
           stored indices.
         """
-        # Exact exclude match short-circuits in the trivial no-context case
-        # Do not treat a None (entire-domain) query as an exact match to excludes.
-        if context is None and index_item is not None and index_item in self.exclude:
+        # Exact exclude match short-circuits in the trivial no-context case,
+        # but do not treat an entire-dimension query like AryIndex([None]) as
+        # exactly equal to a partial exclude range.
+        if (
+            context is None
+            and index_item is not None
+            and index_item in self.exclude
+            and not IndexList._is_entire_index(index_item)
+        ):
             return False
 
         index_item = self._apply_shape_index(index_item)
@@ -682,7 +719,7 @@ class IndexList:
                     if ex_ is None:
                         tmp_q.indices = []
                         break
-                    tmp_q.remove(ex_)
+                    tmp_q.remove(ex_, not_reorganize=True)
                     if not tmp_q.indices:
                         break
                 remaining_q = list(tmp_q.indices)
@@ -692,7 +729,7 @@ class IndexList:
                 if ex_ is None:
                     tmp_q.indices = []
                     break
-                tmp_q.remove(ex_)
+                tmp_q.remove(ex_, not_reorganize=True)
                 if not tmp_q.indices:
                     break
             remaining_q = list(tmp_q.indices)

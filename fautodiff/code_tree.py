@@ -3960,8 +3960,14 @@ class SaveAssignment(Node):
                 if idx is None or not idx <= index:
                     flag = False
                     break
-                if index_target is None or idx >= index_target:
+                if index_target is None:
                     index_target = idx
+                else:
+                    if idx >= index_target:
+                        index_target = idx
+                    elif not idx <= index_target:
+                        flag = False
+                        break
             if flag:
                 self.var.index = index_target
                 self.tmpvar.index = index_target
@@ -5750,7 +5756,7 @@ class DoLoop(DoAbst):
         do_index = self.index.name
         for varname in vars.names():
             for idx in vars[varname]:
-                if idx is None or do_index not in [str(v) for v in idx.collect_vars()]:
+                if idx is None or do_index not in [str(v) for v in idx]:
                     for var in vars.get_vars(varname):
                         assigned_vars.push(var)
                     continue

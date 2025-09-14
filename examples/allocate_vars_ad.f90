@@ -414,6 +414,7 @@ contains
     if (.not. allocated(mod_arr_diff_ad)) then
       allocate(mod_arr_diff_ad, mold=mod_arr_diff)
     end if
+    mod_arr_diff_ad = 0.0
     do i = n, 1, - 1
       mod_arr_diff_ad(i) = x_ad * mod_arr(i) ! x = x + mod_arr(i) * mod_arr_diff(i)
     end do

@@ -691,6 +691,39 @@ class TestNodeMethods(unittest.TestCase):
         loop.check_initial()
         self.assertEqual(render_program(loop), code)
 
+    def test_check_initial_loop_neighbor_accumulate_true(self):
+        # Ensure accumulate remains True for neighbor-updates after check_initial
+        code = textwrap.dedent(
+            """\
+        do i = n - 2, 2, - 1
+          u_ad(i) = du_ad(i) * (u(i - 1) * u(i + 1)) + u_ad(i)
+          u_ad(i - 1) = du_ad(i) * u(i) + u_ad(i - 1)
+          u_ad(i + 1) = du_ad(i) * u(i) + u_ad(i + 1)
+        end do
+        """
+        )
+        i = OpVar("i")
+        n = OpVar("n")
+        u_i = OpVar("u", index=[i])
+        u_im1 = OpVar("u", index=[i - OpInt(1)])
+        u_ip1 = OpVar("u", index=[i + OpInt(1)])
+        u_ad_i = OpVar("u_ad", index=[i])
+        u_ad_im1 = OpVar("u_ad", index=[i - OpInt(1)])
+        u_ad_ip1 = OpVar("u_ad", index=[i + OpInt(1)])
+        du_ad_i = OpVar("du_ad", index=[i])
+        a1 = Assignment(u_ad_i, du_ad_i * (u_im1 + u_ip1), accumulate=True)
+        a2 = Assignment(u_ad_im1, du_ad_i * u_i, accumulate=True)
+        a3 = Assignment(u_ad_ip1, du_ad_i * u_i, accumulate=True)
+        loop = DoLoop(
+            Block([a1, a2, a3]),
+            index=i,
+            range=OpRange([n - OpInt(1), OpInt(2), -OpInt(1)]),
+        )
+        loop.check_initial()
+        self.assertTrue(a1.accumulate)
+        self.assertTrue(a2.accumulate)
+        self.assertTrue(a3.accumulate)
+
     def test_check_initial_nested_loops_scalar_and_array_clears(self):
         code = textwrap.dedent(
             """\
