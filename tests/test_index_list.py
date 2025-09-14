@@ -654,6 +654,16 @@ class TestIndexList(unittest.TestCase):
         self.assertEqual(len(il.exclude), 1)
         self.assertEqual(str(il.exclude[0]), "2")
 
+    def test_shape_push_first_then_remove_other_keeps_indices_only(self):
+        # shape=(1:4), push (1), remove (2) -> indices=(1), exclude=[]
+        il = IndexList()
+        il.set_shape((OpRange([OpInt(1), OpInt(4)]),))
+        il.push(AryIndex([OpInt(1)]))
+        il.remove(AryIndex([OpInt(2)]))
+        self.assertEqual(len(il.indices), 1)
+        self.assertEqual(str(il.indices[0]), "1")
+        self.assertEqual(il.exclude, [])
+
 
 if __name__ == "__main__":
     unittest.main()

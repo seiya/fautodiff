@@ -48,11 +48,11 @@ contains
     real, intent(out) :: y
     real, intent(out) :: y_ad
     integer, intent(in)  :: comm
-    integer :: reqs_ad(4)
+    integer :: reqs_ad(2)
     integer :: rank
     integer :: ierr
     integer :: size
-    integer :: reqs(4)
+    integer :: reqs(2)
     integer :: pn
     integer :: pp
 
@@ -65,15 +65,20 @@ contains
     pp = rank + 1
     if (pn >= 0) then
       call MPI_Irecv_fwd_ad(x(1), x_ad(1), 1, MPI_REAL, pn, tag, comm, reqs(1), reqs_ad(1), ierr) ! call MPI_Irecv(x(1), 1, MPI_REAL, pn, tag, comm, reqs(1), ierr)
-      call MPI_Isend_fwd_ad(x(2), x_ad(2), 1, MPI_REAL, pn, tag + 1, comm, reqs(2), reqs_ad(2), ierr) ! call MPI_Isend(x(2), 1, MPI_REAL, pn, tag+1, comm, reqs(2), ierr)
     end if
     if (pp < size) then
-      call MPI_Irecv_fwd_ad(x(3), x_ad(3), 1, MPI_REAL, pp, tag + 1, comm, reqs(3), reqs_ad(3), ierr) ! call MPI_Irecv(x(3), 1, MPI_REAL, pp, tag+1, comm, reqs(3), ierr)
-      call MPI_Isend_fwd_ad(x(2), x_ad(2), 1, MPI_REAL, pp, tag, comm, reqs(4), reqs_ad(4), ierr) ! call MPI_Isend(x(2), 1, MPI_REAL, pp, tag, comm, reqs(4), ierr)
+      call MPI_Isend_fwd_ad(x(2), x_ad(2), 1, MPI_REAL, pp, tag, comm, reqs(2), reqs_ad(2), ierr) ! call MPI_Isend(x(2), 1, MPI_REAL, pp, tag, comm, reqs(2), ierr)
     end if
     y_ad = x_ad(2) ! y = x(2)
     y = x(2)
-    call MPI_Waitall_fwd_ad(4, reqs, reqs_ad, MPI_STATUSES_IGNORE, MPI_STATUSES_IGNORE, ierr) ! call MPI_Waitall(4, reqs, MPI_STATUSES_IGNORE, ierr)
+    call MPI_Waitall_fwd_ad(2, reqs, reqs_ad, MPI_STATUSES_IGNORE, MPI_STATUSES_IGNORE, ierr) ! call MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE, ierr)
+    if (pp < size) then
+      call MPI_Irecv_fwd_ad(x(3), x_ad(3), 1, MPI_REAL, pp, tag + 1, comm, reqs(1), reqs_ad(1), ierr) ! call MPI_Irecv(x(3), 1, MPI_REAL, pp, tag+1, comm, reqs(1), ierr)
+    end if
+    if (pn >= 0) then
+      call MPI_Isend_fwd_ad(x(2), x_ad(2), 1, MPI_REAL, pn, tag + 1, comm, reqs(2), reqs_ad(2), ierr) ! call MPI_Isend(x(2), 1, MPI_REAL, pn, tag+1, comm, reqs(2), ierr)
+    end if
+    call MPI_Waitall_fwd_ad(2, reqs, reqs_ad, MPI_STATUSES_IGNORE, MPI_STATUSES_IGNORE, ierr) ! call MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE, ierr)
     if (pn >= 0) then
       y_ad = x_ad(1) + y_ad ! y = x(1) + y
       y = x(1) + y
@@ -91,12 +96,14 @@ contains
     real, intent(inout) :: x_ad(3)
     real, intent(inout) :: y_ad
     integer, intent(in)  :: comm
-    integer :: reqs_ad(4)
+    integer :: reqs_ad(2)
     integer :: rank
     integer :: ierr
     integer :: size
     integer :: pn
     integer :: pp
+    integer :: reqs_ad_save_136_ad
+    integer :: reqs_ad_save_139_ad
 
     call MPI_Comm_rank(comm, rank, ierr)
     call MPI_Comm_size(comm, size, ierr)
@@ -105,11 +112,15 @@ contains
     pp = rank + 1
     if (pn >= 0) then
       call MPI_Irecv_fwd_rev_ad(x_ad(1), 1, MPI_REAL, pn, tag, comm, reqs_ad(1), ierr)
-      call MPI_Isend_fwd_rev_ad(x_ad(2), 1, MPI_REAL, pn, tag + 1, comm, reqs_ad(2), ierr)
     end if
     if (pp < size) then
-      call MPI_Irecv_fwd_rev_ad(x_ad(3), 1, MPI_REAL, pp, tag + 1, comm, reqs_ad(3), ierr)
-      call MPI_Isend_fwd_rev_ad(x_ad(2), 1, MPI_REAL, pp, tag, comm, reqs_ad(4), ierr)
+      call MPI_Isend_fwd_rev_ad(x_ad(2), 1, MPI_REAL, pp, tag, comm, reqs_ad(2), ierr)
+      reqs_ad_save_136_ad = reqs_ad(1)
+      call MPI_Irecv_fwd_rev_ad(x_ad(3), 1, MPI_REAL, pp, tag + 1, comm, reqs_ad(1), ierr)
+    end if
+    if (pn >= 0) then
+      reqs_ad_save_139_ad = reqs_ad(2)
+      call MPI_Isend_fwd_rev_ad(x_ad(2), 1, MPI_REAL, pn, tag + 1, comm, reqs_ad(2), ierr)
     end if
 
     if (pp < size) then
@@ -118,15 +129,22 @@ contains
     if (pn >= 0) then
       x_ad(1) = y_ad + x_ad(1) ! y = x(1) + y
     end if
-    call MPI_Waitall_rev_ad(4, reqs_ad, ierr) ! call MPI_Waitall(4, reqs, MPI_STATUSES_IGNORE, ierr)
+    call MPI_Waitall_rev_ad(2, reqs_ad, ierr) ! call MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE, ierr)
+    if (pn >= 0) then
+      call MPI_Isend_rev_ad(x_ad(2), 1, MPI_REAL, pn, tag + 1, comm, reqs_ad(2), ierr) ! call MPI_Isend(x(2), 1, MPI_REAL, pn, tag+1, comm, reqs(2), ierr)
+      reqs_ad(2) = reqs_ad_save_139_ad
+    end if
+    if (pp < size) then
+      call MPI_Irecv_rev_ad(x_ad(3), 1, MPI_REAL, pp, tag + 1, comm, reqs_ad(1), ierr) ! call MPI_Irecv(x(3), 1, MPI_REAL, pp, tag+1, comm, reqs(1), ierr)
+      reqs_ad(1) = reqs_ad_save_136_ad
+    end if
+    call MPI_Waitall_rev_ad(2, reqs_ad, ierr) ! call MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE, ierr)
     x_ad(2) = y_ad + x_ad(2) ! y = x(2)
     y_ad = 0.0 ! y = x(2)
     if (pp < size) then
-      call MPI_Isend_rev_ad(x_ad(2), 1, MPI_REAL, pp, tag, comm, reqs_ad(4), ierr) ! call MPI_Isend(x(2), 1, MPI_REAL, pp, tag, comm, reqs(4), ierr)
-      call MPI_Irecv_rev_ad(x_ad(3), 1, MPI_REAL, pp, tag + 1, comm, reqs_ad(3), ierr) ! call MPI_Irecv(x(3), 1, MPI_REAL, pp, tag+1, comm, reqs(3), ierr)
+      call MPI_Isend_rev_ad(x_ad(2), 1, MPI_REAL, pp, tag, comm, reqs_ad(2), ierr) ! call MPI_Isend(x(2), 1, MPI_REAL, pp, tag, comm, reqs(2), ierr)
     end if
     if (pn >= 0) then
-      call MPI_Isend_rev_ad(x_ad(2), 1, MPI_REAL, pn, tag + 1, comm, reqs_ad(2), ierr) ! call MPI_Isend(x(2), 1, MPI_REAL, pn, tag+1, comm, reqs(2), ierr)
       call MPI_Irecv_rev_ad(x_ad(1), 1, MPI_REAL, pn, tag, comm, reqs_ad(1), ierr) ! call MPI_Irecv(x(1), 1, MPI_REAL, pn, tag, comm, reqs(1), ierr)
     end if
 

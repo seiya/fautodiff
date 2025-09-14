@@ -23,7 +23,7 @@ contains
     real, intent(out) :: y
     integer, intent(in) :: comm
     integer, parameter :: tag = 0
-    integer :: reqs(4)
+    integer :: reqs(2)
     integer :: ierr, rank, size
     integer :: pn, pp
 
@@ -35,16 +35,24 @@ contains
     x(:) = x(:) + rank
     pn = rank - 1
     pp = rank + 1
+
     if (pn >= 0) then
       call MPI_Irecv(x(1), 1, MPI_REAL, pn, tag, comm, reqs(1), ierr)
-      call MPI_Isend(x(2), 1, MPI_REAL, pn, tag+1, comm, reqs(2), ierr)
     end if
     if (pp < size) then
-      call MPI_Irecv(x(3), 1, MPI_REAL, pp, tag+1, comm, reqs(3), ierr)
-      call MPI_Isend(x(2), 1, MPI_REAL, pp, tag, comm, reqs(4), ierr)
+      call MPI_Isend(x(2), 1, MPI_REAL, pp, tag, comm, reqs(2), ierr)
     end if
     y = x(2)
-    call MPI_Waitall(4, reqs, MPI_STATUSES_IGNORE, ierr)
+    call MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE, ierr)
+
+    if (pp < size) then
+      call MPI_Irecv(x(3), 1, MPI_REAL, pp, tag+1, comm, reqs(1), ierr)
+    end if
+    if (pn >= 0) then
+      call MPI_Isend(x(2), 1, MPI_REAL, pn, tag+1, comm, reqs(2), ierr)
+    end if
+    call MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE, ierr)
+
     if (pn >= 0) then
       y = x(1) + y
     end if
