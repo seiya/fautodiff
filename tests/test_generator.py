@@ -82,7 +82,6 @@ class TestGenerator(unittest.TestCase):
     def test_dependency_groups(self):
         code_tree.Node.reset()
         import textwrap
-        from tempfile import TemporaryDirectory
 
         import fautodiff.parser as parser
 
@@ -109,10 +108,7 @@ class TestGenerator(unittest.TestCase):
             """
         )
 
-        with TemporaryDirectory() as tmp:
-            src_path = Path(tmp) / "cyc.f90"
-            src_path.write_text(src)
-            modules = parser.parse_file(str(src_path))
+        modules = parser.parse_src(src)
         groups, _ = generator._dependency_groups(modules[0].routines)
         group_sets = [set(g) for g in groups]
         self.assertIn({"a", "b"}, group_sets)
@@ -124,23 +120,22 @@ class TestGenerator(unittest.TestCase):
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as tmp:
-            src = Path(tmp) / "const.f90"
-            src.write_text(
-                textwrap.dedent(
-                    """
-                    module test
-                    contains
-                    !$FAD CONSTANT_VARS: a
-                      subroutine foo(a, b)
-                        real, intent(in) :: a
-                        real, intent(inout) :: b
-                        b = a + b
-                      end subroutine foo
-                    end module test
-                    """
-                )
+            src = textwrap.dedent(
+                """
+                module test
+                contains
+                !$FAD CONSTANT_VARS: a
+                  subroutine foo(a, b)
+                    real, intent(in) :: a
+                    real, intent(inout) :: b
+                    b = a + b
+                  end subroutine foo
+                end module test
+                """
             )
-            generated = gen(src, warn=False)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "const.f90"), warn=False, fadmod_dir=tmp
+            )
             self.assertNotIn("a_ad", generated)
 
     def test_module_variable_diff_by_default(self):
@@ -149,22 +144,21 @@ class TestGenerator(unittest.TestCase):
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as tmp:
-            src = Path(tmp) / "modvar.f90"
-            src.write_text(
-                textwrap.dedent(
-                    """
-                    module test
-                      real :: c
-                    contains
-                      subroutine foo(x)
-                        real, intent(inout) :: x
-                        c = c + x
-                      end subroutine foo
-                    end module test
-                    """
-                )
+            src = textwrap.dedent(
+                """
+                module test
+                  real :: c
+                contains
+                  subroutine foo(x)
+                    real, intent(inout) :: x
+                    c = c + x
+                  end subroutine foo
+                end module test
+                """
             )
-            generated = gen(src, warn=False)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "modvar.f90"), warn=False, fadmod_dir=tmp
+            )
             self.assertIn("c_ad", generated)
 
     def test_constant_module_var_directive(self):
@@ -173,23 +167,22 @@ class TestGenerator(unittest.TestCase):
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as tmp:
-            src = Path(tmp) / "modvar.f90"
-            src.write_text(
-                textwrap.dedent(
-                    """
-                    module test
-                      real :: c
-                      !$FAD CONSTANT_VARS: c
-                    contains
-                      subroutine foo(x)
-                        real, intent(inout) :: x
-                        c = c + x
-                      end subroutine foo
-                    end module test
-                    """
-                )
+            src = textwrap.dedent(
+                """
+                module test
+                  real :: c
+                  !$FAD CONSTANT_VARS: c
+                contains
+                  subroutine foo(x)
+                    real, intent(inout) :: x
+                    c = c + x
+                  end subroutine foo
+                end module test
+                """
             )
-            generated = gen(src, warn=False)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "modvar.f90"), warn=False, fadmod_dir=tmp
+            )
             self.assertNotIn("c_ad", generated)
 
     def test_module_vars_example_fadmod(self):
@@ -225,23 +218,22 @@ class TestGenerator(unittest.TestCase):
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as tmp:
-            src = Path(tmp) / "modvar.f90"
-            src.write_text(
-                textwrap.dedent(
-                    """
-                    module test
-                      real :: c
-                      !$FAD CONSTANT_VARS: c
-                    contains
-                      subroutine foo(x)
-                        real, intent(inout) :: x
-                        c = c + x
-                      end subroutine foo
-                    end module test
-                    """
-                )
+            src = textwrap.dedent(
+                """
+                module test
+                  real :: c
+                  !$FAD CONSTANT_VARS: c
+                contains
+                  subroutine foo(x)
+                    real, intent(inout) :: x
+                    c = c + x
+                  end subroutine foo
+                end module test
+                """
             )
-            generated = gen(src, warn=False)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "modvar.f90"), warn=False, fadmod_dir=tmp
+            )
             self.assertNotIn("c_ad", generated)
 
     def test_local_var_shadows_module_var(self):
@@ -250,28 +242,27 @@ class TestGenerator(unittest.TestCase):
         from tempfile import TemporaryDirectory
 
         with TemporaryDirectory() as tmp:
-            src = Path(tmp) / "shadow.f90"
-            src.write_text(
-                textwrap.dedent(
-                    """
-                    module m
-                      implicit none
-                      real, allocatable :: a(:)
-                    contains
-                      subroutine foo(n, x)
-                        integer, intent(in) :: n
-                        real, intent(inout) :: x
-                        real, allocatable :: a(:)
-                        allocate(a(n))
-                        a = x
-                        x = sum(a)
-                        deallocate(a)
-                      end subroutine foo
-                    end module m
-                    """
-                )
+            src = textwrap.dedent(
+                """
+                module m
+                  implicit none
+                  real, allocatable :: a(:)
+                contains
+                  subroutine foo(n, x)
+                    integer, intent(in) :: n
+                    real, intent(inout) :: x
+                    real, allocatable :: a(:)
+                    allocate(a(n))
+                    a = x
+                    x = sum(a)
+                    deallocate(a)
+                  end subroutine foo
+                end module m
+                """
             )
-            generated = gen(src, warn=False)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "shadow.f90"), warn=False, fadmod_dir=tmp
+            )
             self.assertIn("allocate(a(n))", generated)
             self.assertIn("deallocate(a)", generated)
             self.assertIn("allocate(a_ad(n))", generated)
@@ -299,9 +290,13 @@ class TestGenerator(unittest.TestCase):
             """
         )
         with TemporaryDirectory() as tmp:
-            p = Path(tmp) / "m.f90"
-            p.write_text(src)
-            generated = gen(p, warn=False, mode="forward")
+            generated = generator.generate_ad(
+                src,
+                str(Path(tmp) / "m.f90"),
+                warn=False,
+                mode="forward",
+                fadmod_dir=tmp,
+            )
         self.assertIn("allocate(a_ad(n))", generated)
         self.assertIn("deallocate(a_ad)", generated)
 
@@ -343,9 +338,9 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            src_path = Path(tmp) / "test.f90"
-            src_path.write_text(src)
-            generated = gen(src_path, warn=False, fadmod_dir=tmp)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "test.f90"), warn=False, fadmod_dir=tmp
+            )
             fm = fadmod.FadmodBase.load(Path(tmp) / "test.fadmod")
             routines = fm.routines
 
@@ -384,9 +379,9 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            src_path = Path(tmp) / "test.f90"
-            src_path.write_text(src)
-            generated = gen(src_path, warn=False, fadmod_dir=tmp)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "test.f90"), warn=False, fadmod_dir=tmp
+            )
             fm = fadmod.FadmodBase.load(Path(tmp) / "test.fadmod")
             routines = fm.routines
 
@@ -427,9 +422,9 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            src_path = Path(tmp) / "t.f90"
-            src_path.write_text(src)
-            generated = gen(src_path, warn=False, fadmod_dir=tmp)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "t.f90"), warn=False, fadmod_dir=tmp
+            )
 
         self.assertIn("subroutine fin_fwd_ad", generated)
         self.assertIn("subroutine fin_rev_ad", generated)
@@ -455,9 +450,9 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            src_path = Path(tmp) / "opt.f90"
-            src_path.write_text(src)
-            generated = gen(src_path, warn=False)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "opt.f90"), warn=False, fadmod_dir=tmp
+            )
             self.assertIn("real, intent(in), optional  :: y", generated)
 
     def test_preserve_new_attributes(self):
@@ -488,9 +483,9 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            src_path = Path(tmp) / "attrs.f90"
-            src_path.write_text(src)
-            generated = gen(src_path, warn=False)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "attrs.f90"), warn=False, fadmod_dir=tmp
+            )
             self.assertIn("real, save :: a", generated)
             self.assertIn("integer, value :: b", generated)
             self.assertIn("real, volatile :: c", generated)
@@ -569,9 +564,9 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            src_path = Path(tmp) / "save.f90"
-            src_path.write_text(src)
-            generated = gen(src_path, warn=False)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "save.f90"), warn=False, fadmod_dir=tmp
+            )
             self.assertIn("real, save :: s", generated)
             self.assertIn("real, save :: s_ad", generated)
             self.assertIn("x_ad = s_ad", generated)
@@ -609,9 +604,9 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            src_path = Path(tmp) / "tmp.f90"
-            src_path.write_text(src)
-            generated = gen(src_path, warn=False)
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "tmp.f90"), warn=False, fadmod_dir=tmp
+            )
             lines = generated.splitlines()
             save_decl = next(l for l in lines if "htmp_save" in l)
             self.assertRegex(save_decl, r"allocatable :: .*\(:\)")
@@ -698,10 +693,13 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            p = Path(tmp) / "m.f90"
-            p.write_text(src)
-            generated = gen(
-                p, warn=False, mode="reverse", search_dirs=["fortran_modules"]
+            generated = generator.generate_ad(
+                src,
+                str(Path(tmp) / "m.f90"),
+                warn=False,
+                mode="reverse",
+                search_dirs=["fortran_modules"],
+                fadmod_dir=tmp,
             )
 
         # Declaration for the mirror must exist and be integer with same shape
@@ -730,9 +728,13 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            src_path = Path(tmp) / "m.f90"
-            src_path.write_text(src)
-            generated = gen(src_path, warn=False, search_dirs=["fortran_modules"])
+            generated = generator.generate_ad(
+                src,
+                str(Path(tmp) / "m.f90"),
+                warn=False,
+                search_dirs=["fortran_modules"],
+                fadmod_dir=tmp,
+            )
         self.assertIn("MPI_Send_rev_ad", generated)
 
     def test_reverse_dealloc_guard_deduplicated(self):
@@ -759,9 +761,13 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            p = Path(tmp) / "m.f90"
-            p.write_text(src)
-            generated = gen(p, warn=False, mode="reverse")
+            generated = generator.generate_ad(
+                src,
+                str(Path(tmp) / "m.f90"),
+                warn=False,
+                mode="reverse",
+                fadmod_dir=tmp,
+            )
             # No nested duplicate guard of the same condition inside the block
             self.assertIsNone(
                 re.search(
@@ -807,9 +813,13 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            p = Path(tmp) / "m.f90"
-            p.write_text(src)
-            generated = gen(p, warn=False, mode="reverse")
+            generated = generator.generate_ad(
+                src,
+                str(Path(tmp) / "m.f90"),
+                warn=False,
+                mode="reverse",
+                fadmod_dir=tmp,
+            )
         lines = generated.splitlines()
         # Find indices of key lines
         import re as _re
@@ -890,14 +900,14 @@ class TestGenerator(unittest.TestCase):
         )
 
         with TemporaryDirectory() as tmp:
-            p = Path(tmp) / "mini.f90"
-            p.write_text(src)
-            generated = gen(
-                p,
+            generated = generator.generate_ad(
+                src,
+                str(Path(tmp) / "mini.f90"),
                 warn=False,
                 search_dirs=[tmp],
                 write_fadmod=False,
                 mode="reverse",
+                fadmod_dir=tmp,
             )
 
         self.assertIn("subroutine s_rev_ad", generated)

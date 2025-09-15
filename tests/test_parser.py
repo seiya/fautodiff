@@ -550,10 +550,8 @@ class TestParser(unittest.TestCase):
             moda = Path(tmp) / "moda.f90"
             moda.write_text(moda_src)
             generator.generate_ad(moda_src, str(moda), warn=False, fadmod_dir=tmp)
-            modb = Path(tmp) / "modb.f90"
-            modb.write_text(modb_src)
 
-            modules = parser.parse_file(str(modb), search_dirs=[tmp])
+            modules = parser.parse_src(modb_src, search_dirs=[tmp], src_name="modb.f90")
             routine = modules[0].routines[0]
 
         self.assertTrue(routine.is_declared("K"))
