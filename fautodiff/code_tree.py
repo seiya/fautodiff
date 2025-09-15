@@ -1020,6 +1020,12 @@ class Block(Node):
                 raise ValueError("Block in Block is not allowed")
             self._set_parent(child)
 
+    def __str__(self) -> str:
+        lines: List[str] = ["[Block]"]
+        for child in self._children:
+            lines.extend("  " + line for line in str(child).splitlines())
+        return "\n".join(lines)
+
     def copy(self) -> "Block":
         return Block(self._children)
 
@@ -1561,6 +1567,9 @@ class Statement(Node):
         lines = [f"{space}{self.body}\n"]
         return lines
 
+    def __str__(self) -> str:
+        return f"[Statement] {self.body}"
+
     def is_effectively_empty(self) -> bool:
         return False
 
@@ -1612,6 +1621,9 @@ class PreprocessorLine(Node):
     """A single preprocessor directive line."""
 
     text: str
+
+    def __str__(self) -> str:
+        return f"[PreprocessorLine] {self.text}"
 
     def copy(self) -> "PreprocessorLine":
         return PreprocessorLine(self.text)
@@ -1708,6 +1720,13 @@ class PreprocessorIfBlock(Node):
             lines.extend(block.render(indent))
         lines.append("#endif\n")
         return lines
+
+    def __str__(self) -> str:
+        lines: List[str] = ["[PreprocessorIfBlock]"]
+        for cond, block in self.cond_blocks:
+            lines.append(f"  cond: {cond}")
+            lines.extend("  " + line for line in str(block).splitlines())
+        return "\n".join(lines)
 
     def is_effectively_empty(self) -> bool:
         return all(block.is_effectively_empty() for _, block in self.cond_blocks)
@@ -1930,6 +1949,10 @@ class ExitStmt(ExitCycle):
 
     name: ClassVar[str] = "exit"
 
+    def __str__(self) -> str:
+        label = f", label: {self.label}" if self.label else ""
+        return f"[ExitStmt]{label}"
+
 
 @dataclass
 class CycleStmt(ExitCycle):
@@ -1937,12 +1960,19 @@ class CycleStmt(ExitCycle):
 
     name: ClassVar[str] = "cycle"
 
+    def __str__(self) -> str:
+        label = f", label: {self.label}" if self.label else ""
+        return f"[CycleStmt]{label}"
+
 
 @dataclass
 class ReturnStmt(Node):
     """Representation of a ``return`` statement."""
 
     name: ClassVar[str] = "return"
+
+    def __str__(self) -> str:
+        return "[ReturnStmt]"
 
     def copy(self) -> "ReturnStmt":
         return ReturnStmt()
@@ -2043,6 +2073,11 @@ class Use(Node):
 
     name: str
     only: Optional[List[str]] = field(default=None)
+
+    def __str__(self) -> str:
+        if self.only is not None:
+            return f"[Use] name: {self.name}, only: {', '.join(self.only)}"
+        return f"[Use] name: {self.name}"
 
     def copy(self) -> "Use":
         return Use(self.name, self.only)
@@ -2507,6 +2542,11 @@ class CallStatement(Node):
             assigned_vars.push(self.result)
         return assigned_vars
 
+    def __str__(self) -> str:
+        args_str = ", ".join(str(a) for a in self.args)
+        res_str = f", result: {self.result}" if self.result is not None else ""
+        return f"[CallStatement] {self.name}({args_str}){res_str}"
+
 
 @dataclass
 class Module(Node):
@@ -2528,6 +2568,22 @@ class Module(Node):
 
     def __post_init__(self):
         super().__post_init__()
+
+    def __str__(self) -> str:
+        lines: List[str] = [f"[{self.__class__.__name__}] name: {self.name}"]
+        if self.uses is not None:
+            lines.append("  uses:")
+            lines.extend("  " + line for line in str(self.uses).splitlines())
+        if self.decls is not None:
+            lines.append("  decls:")
+            lines.extend("  " + line for line in str(self.decls).splitlines())
+        if self.body is not None:
+            lines.append("  body:")
+            lines.extend("  " + line for line in str(self.body).splitlines())
+        lines.append("  routines:")
+        for routine in self.routines:
+            lines.extend("  " + line for line in str(routine).splitlines())
+        return "\n".join(lines)
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -2608,6 +2664,25 @@ class Routine(Node):
         super().__post_init__()
         self.decls.set_parent(self)
         self.content.set_parent(self)
+
+    def __str__(self) -> str:
+        header = f"[{self.kind.title()}] name: {self.name}"
+        if self.args:
+            header += f", args: {', '.join(self.args)}"
+        if self.result is not None:
+            header += f", result: {self.result}"
+        lines: List[str] = [header]
+        lines.append("  decls:")
+        lines.extend("  " + line for line in str(self.decls).splitlines())
+        lines.append("  content:")
+        lines.extend("  " + line for line in str(self.content).splitlines())
+        if self.ad_init is not None:
+            lines.append("  ad_init:")
+            lines.extend("  " + line for line in str(self.ad_init).splitlines())
+        if self.ad_content is not None:
+            lines.append("  ad_content:")
+            lines.extend("  " + line for line in str(self.ad_content).splitlines())
+        return "\n".join(lines)
 
     def _all_blocks(self):
         blocks = [self.decls, self.content]
@@ -3336,6 +3411,34 @@ class Declaration(Node):
         line += "\n"
         return [line]
 
+    def __str__(self) -> str:
+        attrs: List[str] = []
+        if self.intent is not None:
+            attrs.append(f"intent({self.intent})")
+        if self.optional:
+            attrs.append("optional")
+        if self.pointer:
+            attrs.append("pointer")
+        if self.allocatable:
+            attrs.append("allocatable")
+        if self.target:
+            attrs.append("target")
+        if self.parameter:
+            attrs.append("parameter")
+        dims = None
+        if self.dims_raw is not None:
+            dims = f"dims=({', '.join(self.dims_raw)})"
+        elif self.dims is not None:
+            dims = f"dims={self.dims}"
+        parts = [f"[Declaration] {self.var_type} :: {self.name}"]
+        if dims:
+            parts.append(dims)
+        if attrs:
+            parts.append(", ".join(attrs))
+        if self.init_val is not None:
+            parts.append(f"init={self.init_val}")
+        return ", ".join(parts)
+
     def ad_target(self) -> bool:
         if self.constant or self.parameter:
             return False
@@ -3466,6 +3569,11 @@ class Interface(Node):
         if self.module_procs is not None and not isinstance(self.module_procs, list):
             raise ValueError(f"module_procs must be list: {type(self.module_procs)}")
 
+    def __str__(self) -> str:
+        if self.module_procs:
+            return f"[Interface] {self.name}, module_procs: {', '.join(self.module_procs)}"
+        return f"[Interface] {self.name}"
+
 
 @dataclass
 class TypeDef(Node):
@@ -3523,6 +3631,21 @@ class TypeDef(Node):
             lines.extend(decl.render(indent + 1))
         lines.append(f"{space}end type {self.name}\n")
         return lines
+
+    def __str__(self) -> str:
+        lines: List[str] = [f"[TypeDef] name: {self.name}"]
+        if self.abstract:
+            lines.append("  attributes: abstract")
+        if self.bind is not None:
+            lines.append(f"  bind: {self.bind}")
+        if self.sequence:
+            lines.append("  sequence: true")
+        lines.append("  components:")
+        for decl in self.components:
+            lines.extend("  " + line for line in str(decl).splitlines())
+        if self.procs:
+            lines.append(f"  procs: {self.procs}")
+        return "\n".join(lines)
 
     def collect_vars(
         self, without_refvar: bool = False, without_index: bool = False
@@ -3590,6 +3713,9 @@ class Assignment(Node):
             raise ValueError(f"rhs must be Operator: {type(self.rhs)}")
         self._rhs_vars = list(self.rhs.collect_vars(without_refvar=True))
         self._ufuncs = self.rhs.find_userfunc()
+
+    def __str__(self) -> str:
+        return f"[Assignment] {self.lhs} = {self.rhs}, accumulate={self.accumulate}"
 
     def copy(self) -> "Assignment":
         return Assignment(self.lhs, self.rhs, self.accumulate, self.info, self.ad_info)
@@ -3747,6 +3873,9 @@ class ClearAssignment(Node):
         if not isinstance(self.lhs, OpVar):
             raise ValueError(f"lhs must be OpVar: {type(self.lhs)}")
 
+    def __str__(self) -> str:
+        return f"[ClearAssignment] {self.lhs} = 0"
+
     def copy(self) -> "ClearAssignment":
         return ClearAssignment(self.lhs, self.info, self.ad_info)
 
@@ -3881,6 +4010,9 @@ class SaveAssignment(Node):
         else:
             self.lhs = self.tmpvar
             self.rhs = self.var
+
+    def __str__(self) -> str:
+        return f"[SaveAssignment] {self.lhs} = {self.rhs}"
 
     def copy(self) -> "SaveAssignment":
         return SaveAssignment(self.var, self.id, self.tmpvar, self.load)
@@ -4146,6 +4278,9 @@ class Allocate(Node):
             if not isinstance(v, OpVar):
                 raise ValueError(f"vars must be OpVar: {type(v)}")
 
+    def __str__(self) -> str:
+        return f"[Allocate] {', '.join(str(v) for v in self.vars)}"
+
     def copy(self) -> "Allocate":
         return Allocate(self.vars, mold=self.mold)
 
@@ -4298,6 +4433,9 @@ class Deallocate(Node):
             if not isinstance(v, OpVar):
                 raise ValueError(f"vars must be OpVar: {type(v)}")
 
+    def __str__(self) -> str:
+        return f"[Deallocate] {', '.join(str(v) for v in self.vars)}"
+
     def copy(self) -> "Deallocate":
         return Deallocate(self.vars, self.ad_code)
 
@@ -4446,6 +4584,9 @@ class PointerAssignment(Node):
             raise ValueError(f"rhs must be OpVar: {type(self.rhs)}")
         self._rhs_vars = list(self.rhs.collect_vars(without_refvar=True))
 
+    def __str__(self) -> str:
+        return f"[PointerAssignment] {self.lhs} => {self.rhs}"
+
     def copy(self) -> "PointerAssignment":
         return PointerAssignment(self.lhs, self.rhs, self.info, self.ad_info)
 
@@ -4571,6 +4712,9 @@ class PointerClear(Node):
 
     def __post_init__(self):
         super().__post_init__()
+
+    def __str__(self) -> str:
+        return f"[PointerClear] {self.var} => null()"
 
     def copy(self) -> "PointerClear":
         return PointerClear(self.var, self.previous, self.info, self.ad_info)
@@ -5087,6 +5231,13 @@ class BranchBlock(Node):
 class IfBlock(BranchBlock):
     """An ``if`` block with optional ``else if`` branches and ``else``."""
 
+    def __str__(self) -> str:
+        lines: List[str] = ["[If]"]
+        for cond, block in self.cond_blocks:
+            lines.append(f"  cond: {'' if cond is None else str(cond)}")
+            lines.extend("  " + line for line in str(block).splitlines())
+        return "\n".join(lines)
+
     def copy(self) -> "IfBlock":
         return IfBlock(self.cond_blocks)
 
@@ -5127,6 +5278,13 @@ class SelectBlock(BranchBlock):
 
     expr: Operator = field(default=None)
     select_type: bool = False
+
+    def __str__(self) -> str:
+        lines: List[str] = ["[SelectBlock] expr: {self.expr}"]
+        for cond, block in self.cond_blocks:
+            lines.append(f"  cond: {str(cond)}")
+            lines.extend("  " + line for line in str(block).splitlines())
+        return "\n".join(lines)
 
     def copy(self) -> "SelectBlock":
         return SelectBlock(self.cond_blocks, self.expr, self.select_type)
@@ -5199,6 +5357,13 @@ class WhereBlock(BranchBlock):
             lines.extend(block.render(indent + 1))
         lines.append(f"{space}end where\n")
         return lines
+
+    def __str__(self) -> str:
+        lines: List[str] = ["[WhereBlock]"]
+        for cond, block in self.cond_blocks:
+            lines.append(f"  cond: {'' if cond is None else str(cond)}")
+            lines.extend("  " + line for line in str(block).splitlines())
+        return "\n".join(lines)
 
 
 @dataclass
@@ -5451,6 +5616,11 @@ class DoLoop(DoAbst):
         self.build_context()
         if not isinstance(self.range, OpRange):
             raise ValueError(f"range must be OpRange: f{type(self.range)}")
+
+    def __str__(self) -> str:
+        lines: List[str] = ["[Do] index: {self.index}, range: {self.range}, label: {self.label}"]
+        lines.extend("  " + line for line in str(self._body).splitlines())
+        return "\n".join(lines)
 
     def copy(self) -> "DoLoop":
         return DoLoop(self._body, self.index, self.range, self.label)
@@ -5819,6 +5989,11 @@ class DoWhile(DoAbst):
         super().__post_init__()
         self.do_index_list = ["__never_match__"]
 
+    def __str__(self) -> str:
+        lines: List[str] = ["[DoWhile] cond: {self.cond}, label: {self.label}"]
+        lines.extend("  " + line for line in str(self._body).splitlines())
+        return "\n".join(lines)
+
     def copy(self) -> "DoWhile":
         return DoWhile(self._body, self.cond, self.label)
 
@@ -5912,6 +6087,14 @@ class BlockConstruct(Node):
         super().__post_init__()
         self.decls.set_parent(self)
         self.body.set_parent(self)
+
+    def __str__(self) -> str:
+        lines: List[str] = ["[BlockConstruct]"]
+        lines.append("  decls:")
+        lines.extend("  " + line for line in str(self.decls).splitlines())
+        lines.append("  body:")
+        lines.extend("  " + line for line in str(self.body).splitlines())
+        return "\n".join(lines)
 
     def copy(self) -> "BlockConstruct":
         return BlockConstruct(self.decls, self.body)
@@ -6133,6 +6316,15 @@ class OmpDirective(Node):
         ]
         if self.body is not None:
             self.body.set_parent(self)
+
+    def __str__(self):
+        lines: List[str] = [f"[OmpDirective] directive: {self.directive}"]
+        for c in self.clauses:
+            lines.append(f"  clause: {c}")
+        if self.body is not None:
+            lines.append("  body:")
+            lines.extend("  " + line for line in str(self.body).splitlines())
+        return "\n".join(lines)
 
     @staticmethod
     def _parse_clause(clause: str) -> Union[str, Dict[str, List[Any]]]:
@@ -6410,6 +6602,15 @@ class ForallBlock(Node):
     def __post_init__(self):
         super().__post_init__()
         self._body.set_parent(self)
+
+    def __str__(self) -> str:
+        lines: List[str] = ["[ForallBlock]"]
+        lines.append(f"  index_specs: {', '.join(str(spec) for spec in self.index_specs)}")
+        if self.mask is not None:
+            lines.append(f"  mask: {self.mask}")
+        lines.append(f"  body:")
+        lines.extend("  " + line for line in str(self._body).splitlines())
+        return "\n".join(lines)
 
     def copy(self) -> "ForallBlock":
         return ForallBlock(self._body, self.index_specs, self.mask)

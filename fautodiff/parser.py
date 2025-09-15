@@ -2434,6 +2434,25 @@ def _parse_routine(
                 body, i = _parse_omp_region(
                     body_list, i, decl_map, type_map, omp.directive
                 )
+                # Split mis-grouped workshare bodies that accidentally include
+                # an IfBlock due to region scanning quirks.
+                if dir_norm == "workshare" and isinstance(body, Block):
+                    inner = list(body.iter_children())
+                    if any(isinstance(n, IfBlock) for n in inner):
+                        seg: List = []
+                        for n in inner:
+                            if isinstance(n, IfBlock):
+                                if seg:
+                                    omp_seg = OmpDirective(omp.directive, omp.clauses, Block(seg))
+                                    blk.append(omp_seg)
+                                    seg = []
+                                blk.append(n)
+                            else:
+                                seg.append(n)
+                        if seg:
+                            omp_seg = OmpDirective(omp.directive, omp.clauses, Block(seg))
+                            blk.append(omp_seg)
+                        continue
                 omp.body = body
                 omp.body.set_parent(omp)
                 blk.append(omp)
@@ -2490,6 +2509,28 @@ def _parse_routine(
                     body, i = _parse_omp_region(
                         body_list, i + 1, decl_map, type_map, directive
                     )
+                    # Guard: a workshare region must not span across an IfBlock.
+                    # Some fparser ASTs attach the trailing '!$omp end workshare'
+                    # after an intervening If-construct, yielding a body that
+                    # mixes statements and an IfBlock. Split such cases so the
+                    # workshare covers only contiguous non-If statements, then
+                    # emit the IfBlock as a sibling, mirroring original code.
+                    dir_norm2 = directive.split("(")[0].strip().lower()
+                    if dir_norm2 == "workshare" and isinstance(body, Block):
+                        inner = list(body.iter_children())
+                        if any(isinstance(n, IfBlock) for n in inner):
+                            seg: List = []
+                            for n in inner:
+                                if isinstance(n, IfBlock):
+                                    if seg:
+                                        blk.append(OmpDirective(directive, clauses, Block(seg)))
+                                        seg = []
+                                    blk.append(n)
+                                else:
+                                    seg.append(n)
+                            if seg:
+                                blk.append(OmpDirective(directive, clauses, Block(seg)))
+                            continue
                     blk.append(OmpDirective(directive, clauses, body))
                     continue
                 i += 1

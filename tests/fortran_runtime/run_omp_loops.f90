@@ -7,6 +7,7 @@ program run_omp_loops
   integer, parameter :: I_all = 0
   integer, parameter :: I_sum_loop = 1
   integer, parameter :: I_stencil_loop = 2
+  integer, parameter :: I_omp_ws_if = 3
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -24,6 +25,8 @@ program run_omp_loops
               i_test = I_sum_loop
            case ("stencil_loop")
               i_test = I_stencil_loop
+           case ("omp_ws_if")
+              i_test = I_omp_ws_if
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -38,6 +41,9 @@ program run_omp_loops
   end if
   if (i_test == I_stencil_loop .or. i_test == I_all) then
      call test_stencil_loop
+  end if
+  if (i_test == I_omp_ws_if .or. i_test == I_all) then
+     call test_omp_ws_if
   end if
 
   stop
@@ -106,5 +112,62 @@ contains
 
     return
   end subroutine test_stencil_loop
+
+  subroutine test_omp_ws_if
+    integer, parameter :: n = 3
+    real, parameter :: tol_ws = 5.0e-4
+    real :: x(n), y(n)
+    real :: x_ad(n), y_ad(n)
+    real :: y_eps(n), fd_y(n), eps
+    real :: inner1, inner2
+    logical :: f
+
+    eps = 1.0e-3
+    x = (/1.0, 2.0, 3.0/)
+
+    ! Case 1: f = .false. => y = x
+    f = .false.
+    call omp_ws_if(x, y, f)
+    call omp_ws_if(x + eps, y_eps, f)
+    fd_y(:) = (y_eps(:) - y(:)) / eps
+    x_ad(:) = 1.0
+    call omp_ws_if_fwd_ad(x, x_ad, y, y_ad, f)
+    if (any(abs((y_ad(:) - fd_y(:)) / max(1.0e-12, fd_y(:))) > tol_ws)) then
+       print *, 'test_omp_ws_if_fwd (f=false) failed'
+       error stop 1
+    end if
+
+    inner1 = sum(y_ad(:)**2)
+    x_ad(:) = 0.0
+    call omp_ws_if_rev_ad(x, x_ad, y_ad, f)
+    inner2 = sum(x_ad(:))
+    if (abs((inner2 - inner1) / max(1.0e-12, inner1)) > tol_ws) then
+      print *, 'test_omp_ws_if_rev (f=false) failed', inner1, inner2
+      error stop 1
+    end if
+
+    ! Case 2: f = .true. => y = x + x**2
+    f = .true.
+    call omp_ws_if(x, y, f)
+    call omp_ws_if(x + eps, y_eps, f)
+    fd_y(:) = (y_eps(:) - y(:)) / eps
+    x_ad(:) = 1.0
+    call omp_ws_if_fwd_ad(x, x_ad, y, y_ad, f)
+    if (any(abs((y_ad(:) - fd_y(:)) / max(1.0e-12, fd_y(:))) > tol_ws)) then
+       print *, 'test_omp_ws_if_fwd (f=true) failed'
+       error stop 1
+    end if
+
+    inner1 = sum(y_ad(:)**2)
+    x_ad(:) = 0.0
+    call omp_ws_if_rev_ad(x, x_ad, y_ad, f)
+    inner2 = sum(x_ad(:))
+    if (abs((inner2 - inner1) / max(1.0e-12, inner1)) > tol_ws) then
+      print *, 'test_omp_ws_if_rev (f=true) failed', inner1, inner2
+      error stop 1
+    end if
+
+    return
+  end subroutine test_omp_ws_if
 
 end program run_omp_loops

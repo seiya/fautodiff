@@ -2485,6 +2485,7 @@ def generate_ad(
             _parse_allocate(content, mod_vars)
             _parse_pointer(content, mod_vars)
             _parse_mpi_calls(content)
+            # print(content)
 
         routine_lookup = {r.name: r for r in mod_org.routines}
         orig_order = [r.name for r in mod_org.routines]

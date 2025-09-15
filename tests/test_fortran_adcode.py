@@ -201,7 +201,7 @@ class TestFortranADCode(unittest.TestCase):
         self._run_test("where_forall", ["where_example", "forall_example"])
 
     def test_omp_loops(self):
-        self._run_test("omp_loops", ["sum_loop", "stencil_loop"])
+        self._run_test("omp_loops", ["sum_loop", "stencil_loop", "omp_ws_if"])
 
     def test_return_example(self):
         self._run_test("return_example", ["conditional_return"])
