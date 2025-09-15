@@ -81,6 +81,8 @@ module mpi_ad
   public :: mpi_cart_coords_rev_ad
   public :: mpi_cart_shift_fwd_ad
   public :: mpi_cart_shift_rev_ad
+  public :: mpi_comm_free_fwd_ad
+  public :: mpi_comm_free_rev_ad
   public :: mpi_dims_create_fwd_ad
   public :: mpi_dims_create_rev_ad
   public :: mpi_error_class_fwd_ad
@@ -2126,7 +2128,6 @@ contains
     integer, intent(inout) :: group
     integer, intent(out), optional :: ierr
 
-    call MPI_Group_free(group, ierr)
   end subroutine mpi_group_free_rev_ad
 
   subroutine mpi_cart_create_fwd_ad(comm_old, ndims, dims, periods, reorder, comm_cart, ierr)
@@ -2219,6 +2220,19 @@ contains
     call MPI_Cart_shift(comm, direction, disp, source, dest, ierr)
   end subroutine mpi_cart_shift_rev_ad
 
+  subroutine mpi_comm_free_fwd_ad(comm, ierr)
+    integer, intent(inout) :: comm
+    integer, intent(out), optional :: ierr
+
+    call MPI_Comm_free(comm, ierr)
+  end subroutine mpi_comm_free_fwd_ad
+
+  subroutine mpi_comm_free_rev_ad(comm, ierr)
+    integer, intent(inout) :: group
+    integer, intent(out), optional :: ierr
+
+  end subroutine mpi_comm_free_rev_ad
+
   subroutine mpi_dims_create_fwd_ad(nnodes, ndims, dims, ierr)
     integer, intent(in) :: nnodes, ndims
     integer, intent(inout) :: dims(ndims)
@@ -2294,7 +2308,6 @@ contains
     integer, intent(inout) :: errhandler
     integer, intent(out), optional :: ierr
 
-    call MPI_Errhandler_free(errhandler, ierr)
   end subroutine mpi_errhandler_free_rev_ad
 
   subroutine update_advar(req_map)

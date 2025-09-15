@@ -611,6 +611,8 @@ def _parse_special_advars(node: Node,
         if not node.ad_target():
             return special_advars
         arg_info: Dict[str, List[str]] = Node.get_arg_info(node, routine_map, generic_routines)
+        if arg_info is None:
+            raise RuntimeError(f"{node.name} is not found in arg_info")
         for key, reverse in [("fwd", False), ("rev", True), ("fwd_rev", True)]:
             args_key = f"args_{key}_ad"
             if args_key in arg_info:
@@ -2506,6 +2508,8 @@ def generate_ad(
                         }
                 group_subs: Dict[str, Dict[str, Routine]] = {}
                 for name_r in group:
+                    if routine_info_fwd[name_r].get("skip") and routine_info_rev[name_r].get("skip"):
+                        continue
                     routine = routine_lookup[name_r]
                     routine.build_parent()
                     content = routine.content
