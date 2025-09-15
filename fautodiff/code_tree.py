@@ -2240,7 +2240,7 @@ class CallStatement(Node):
 
     def change_args(self,
                     args_key: str,
-                    arg_info: Dict[str, List[str]],
+                    arg_info: Dict[str, List],
                     reverse: bool,
                     saved_vars: Optional[List[OpVar]] = None
         ) -> Tuple[List[OpVar], List[Tuple[OpVar, Operator]]]:
@@ -2286,12 +2286,14 @@ class CallStatement(Node):
                 tmp_vars.append((tmp, arg))
                 args_new.append(tmp)
                 saved_vars.append(tmp)
+                kind_val = arg_info["kind"][i]
+                kind = Kind(OpInt(kind_val), val=kind_val)
                 saved_vars.append(
                     OpVar(
                         f"{tmp.name}{AD_SUFFIX}",
                         var_type=VarType(
                             "real",
-                            kind=arg_info["kind"][i],
+                            kind=kind,
                         ),
                         dims=arg_info["dims"][i],
                     )
@@ -2303,6 +2305,11 @@ class CallStatement(Node):
             ordered, arg_info["args"], arg_info[args_key], args_new, reverse
         )
         return (ad_args, tmp_vars)
+
+    def ad_target(self) -> bool:
+        if self.name in NONDIFF_STD_ROUTINES:
+            return False
+        return True
 
     def generate_ad(
         self,
@@ -2317,7 +2324,7 @@ class CallStatement(Node):
         type_map: Optional[dict] = None,
         warnings: Optional[list[str]] = None,
     ) -> List[Node]:
-        if self.name in NONDIFF_STD_ROUTINES:
+        if not self.ad_target():
             return [self]
         if routine_map is None:
             raise RuntimeError("routine_map is necessary for CallStatement")
