@@ -5081,7 +5081,7 @@
         "ierr"
       ],
       "intents_rev_ad": [
-        null,
+        "inout",
         "out"
       ]
     },

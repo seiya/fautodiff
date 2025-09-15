@@ -2228,7 +2228,7 @@ contains
   end subroutine mpi_comm_free_fwd_ad
 
   subroutine mpi_comm_free_rev_ad(comm, ierr)
-    integer, intent(inout) :: group
+    integer, intent(inout) :: comm
     integer, intent(out), optional :: ierr
 
   end subroutine mpi_comm_free_rev_ad
