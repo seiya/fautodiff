@@ -30,12 +30,12 @@ contains
     call MPI_Comm_rank(comm, rank, ierr)
     call MPI_Comm_size(comm, size, ierr)
 
-    reqs(:) = MPI_REQUEST_NULL
 
     x(:) = x(:) + rank
     pn = rank - 1
     pp = rank + 1
 
+    reqs(:) = MPI_REQUEST_NULL
     if (pn >= 0) then
       call MPI_Irecv(x(1), 1, MPI_REAL, pn, tag, comm, reqs(1), ierr)
     end if
@@ -45,6 +45,7 @@ contains
     y = x(2)
     call MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE, ierr)
 
+    reqs(:) = MPI_REQUEST_NULL
     if (pp < size) then
       call MPI_Irecv(x(3), 1, MPI_REAL, pp, tag+1, comm, reqs(1), ierr)
     end if

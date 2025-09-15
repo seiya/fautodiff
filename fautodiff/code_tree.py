@@ -2238,6 +2238,72 @@ class CallStatement(Node):
             vars_target.append(var)
         return vars_target
 
+    def change_args(self,
+                    args_key: str,
+                    arg_info: Dict[str, List[str]],
+                    reverse: bool,
+                    saved_vars: Optional[List[OpVar]] = None
+        ) -> Tuple[List[OpVar], List[Tuple[OpVar, Operator]]]:
+        tmp_vars: List[Tuple[OpVar, Operator]] = []
+        call_args = list(self.args)
+        arg_keys = list(self.arg_keys)
+        param_names = list(arg_info["args"])
+        if self.result is not None:
+            param_names_no_res = param_names[:-1]
+        else:
+            param_names_no_res = param_names
+
+        # for keyword arguments, we need to order them
+        ordered: List[Optional[Operator]] = [None] * len(param_names_no_res)
+        used: List[bool] = [False] * len(param_names_no_res)
+        pos = 0
+        for arg, key in zip(call_args, arg_keys):
+            if key is None:
+                while pos < len(param_names_no_res) and used[pos]:
+                    pos += 1
+                if pos < len(param_names_no_res):
+                    ordered[pos] = arg
+                    used[pos] = True
+                    pos += 1
+            else:
+                if key in param_names_no_res:
+                    idx = param_names_no_res.index(key)
+                    ordered[idx] = arg
+                    used[idx] = True
+        if self.result is not None:
+            ordered.append(self.result)
+
+        # if arguments are operators or functions, we need to save them
+        if saved_vars is None:
+            saved_vars = []
+        args_new = []
+        for i, arg in enumerate(ordered):
+            if not isinstance(arg, OpLeaf) and arg_info["type"][i] == "real":
+                name = self._save_var_name(
+                    f"{self.name}_arg{i}", self.get_id(), no_suffix=True
+                )
+                tmp = OpVar(name, var_type=VarType("real"))
+                tmp_vars.append((tmp, arg))
+                args_new.append(tmp)
+                saved_vars.append(tmp)
+                saved_vars.append(
+                    OpVar(
+                        f"{tmp.name}{AD_SUFFIX}",
+                        var_type=VarType(
+                            "real",
+                            kind=arg_info["kind"][i],
+                        ),
+                        dims=arg_info["dims"][i],
+                    )
+                )
+            else:
+                args_new.append(arg)
+
+        ad_args = CallStatement.rename_args(
+            ordered, arg_info["args"], arg_info[args_key], args_new, reverse
+        )
+        return (ad_args, tmp_vars)
+
     def generate_ad(
         self,
         saved_vars: List[OpVar],
@@ -2268,61 +2334,7 @@ class CallStatement(Node):
             else:
                 return [self]
 
-        tmp_vars = []
-        call_args = list(self.args)
-        arg_keys = list(self.arg_keys)
-        param_names = list(arg_info["args"])
-        if self.result is not None:
-            param_names_no_res = param_names[:-1]
-        else:
-            param_names_no_res = param_names
-
-        # for keyword arguments, we need to order them
-        ordered = [None] * len(param_names_no_res)
-        used = [False] * len(param_names_no_res)
-        pos = 0
-        for arg, key in zip(call_args, arg_keys):
-            if key is None:
-                while pos < len(param_names_no_res) and used[pos]:
-                    pos += 1
-                if pos < len(param_names_no_res):
-                    ordered[pos] = arg
-                    used[pos] = True
-                    pos += 1
-            else:
-                if key in param_names_no_res:
-                    idx = param_names_no_res.index(key)
-                    ordered[idx] = arg
-                    used[idx] = True
-        if self.result is not None:
-            ordered.append(self.result)
-
-        # if arguments are operators or functions, we need to save them
-        args_new = []
-        for i, arg in enumerate(ordered):
-            if not isinstance(arg, OpLeaf) and arg_info["type"][i] == "real":
-                name = self._save_var_name(
-                    f"{self.name}_arg{i}", self.get_id(), no_suffix=True
-                )
-                tmp = OpVar(name, var_type=VarType("real"))
-                tmp_vars.append((tmp, arg))
-                args_new.append(tmp)
-                saved_vars.append(tmp)
-                saved_vars.append(
-                    OpVar(
-                        f"{tmp.name}{AD_SUFFIX}",
-                        var_type=VarType(
-                            "real",
-                            kind=arg_info["kind"][i],
-                        ),
-                        dims=arg_info["dims"][i],
-                    )
-                )
-            else:
-                args_new.append(arg)
-
         # get arguments for ad call based on fadmod information
-        ad_args = []
         if reverse:
             name_key = "name_rev_ad"
             args_key = "args_rev_ad"
@@ -2331,9 +2343,8 @@ class CallStatement(Node):
             name_key = "name_fwd_ad"
             args_key = "args_fwd_ad"
             intents_key = "intents_fwd_ad"
-        ad_args = CallStatement.rename_args(
-            ordered, arg_info["args"], arg_info[args_key], args_new, reverse
-        )
+        ad_args, tmp_vars = self.change_args(args_key, arg_info, reverse, saved_vars)
+
         if self.associated_vars is None:
             associated_vars = None
         else:
@@ -2410,19 +2421,17 @@ class CallStatement(Node):
                     load = node._save_vars(var, saved_vars)
                     loads.append(load)
                     blocks.insert(0, load)
-            args = arg_info.get("args_fwd_rev_ad")
-            if args is not None:
-                args = CallStatement.rename_args(
-                    ordered, arg_info["args"], args, args_new, False
-                )
-                for arg in args:
-                    if (not isinstance(arg, OpVar) or
-                        not arg.name.endswith(AD_SUFFIX) or
-                        arg.ad_target):
-                        continue
-                    load = node._save_vars(arg, saved_vars)
-                    loads.append(load)
-                    blocks.insert(0, load)
+            if "args_fwd_rev_ad" in arg_info:
+                args = self.change_args("args_fwd_rev_ad", arg_info, False, saved_vars)
+                if args is not None:
+                    for arg in args:
+                        if (not isinstance(arg, OpVar) or
+                            not arg.name.endswith(AD_SUFFIX) or
+                            arg.ad_target):
+                            continue
+                        load = node._save_vars(arg, saved_vars)
+                        loads.append(load)
+                        blocks.insert(0, load)
             blocks.extend(ad_nodes)
             blocks.extend(loads)
         else:

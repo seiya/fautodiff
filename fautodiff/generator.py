@@ -598,6 +598,47 @@ def _parse_mpi_calls(
                             node.associated_vars = vars
 
 
+def _parse_special_advars(node: Node,
+                          routine_map: Dict[str],
+                          generic_routines: Dict[str],
+                          special_advars: Optional[List[str]] = None
+    ) -> List[str]:
+    """Collect variables that are not derivative variables but used for AD code.
+    """
+    if special_advars is None:
+        special_advars = []
+    if isinstance(node, CallStatement):
+        name = node.name
+        arg_info: Dict[str, List[str]] = Node.get_arg_info(node, routine_map, generic_routines)
+        for key, reverse in [("fwd", False), ("rev", True), ("fwd_rev", True)]:
+            args_key = f"args_{key}_ad"
+            if args_key in arg_info:
+                ad_args, _ = node.change_args(args_key, arg_info, reverse)
+                for var in ad_args:
+                    if (isinstance(var, OpVar) and
+                        var.name.endswith(AD_SUFFIX) and
+                        not var.ad_target and
+                        var.name not in special_advars
+                    ):
+                        special_advars.append(var.name)
+    for child in node.iter_children():
+        special_advars = _parse_special_advars(child, routine_map, generic_routines, special_advars)
+    return special_advars
+
+
+def _assign_special_advars(node: Node, special_advars: List[str]) -> None:
+    if isinstance(node, Assignment):
+        for varname in special_advars:
+            name_org = varname.removesuffix(AD_SUFFIX)
+            if node.lhs.name == name_org:
+                lhs = node.lhs.deep_clone()
+                lhs.name = varname
+                assign = Assignment(lhs, node.rhs)
+                node.parent.insert_before(node.get_id(), assign)
+    for child in list(node.iter_children()):
+        _assign_special_advars(child, special_advars)
+
+
 def _mark_mpi_rev_calls_donot_prune(node: Node) -> None:
     """Mark reverse-mode MPI calls as non-prunable.
 
@@ -1302,35 +1343,8 @@ def _generate_ad_subroutine(
 
         # print(render_program(fw_block))
 
-    # For non-AD-target mirror variables (e.g. integer request arrays),
-    # insert an initialization for the "_ad" variable mirroring the
-    # original assignment site. We do this by locating the first
-    # assignment to the original variable in the primal content and
-    # inserting the mirrored assignment immediately before it.
-    target_block = fw_block if reverse else ad_block
-    target_block.build_parent()
-    for var in ad_block.required_vars():
-        if not var.name.endswith(AD_SUFFIX):
-            continue
-        org_name = var.name.removesuffix(AD_SUFFIX)
-        decl = routine_org.get_var(org_name)
-        if decl is not None and not decl.ad_target:
-
-            def _insert_mirror_init(node: Node) -> bool:
-                # Depth-first search for first matching assignment
-                for ch in node.iter_children():
-                    if isinstance(ch, Assignment) and ch.lhs.name == org_name:
-                        assign = Assignment(ch.lhs.add_suffix(AD_SUFFIX), ch.rhs)
-                        # Insert before in the parent block
-                        ch.parent.insert_before(ch.get_id(), assign)
-                        return True
-                    if _insert_mirror_init(ch):
-                        return True
-                return False
-
-            _insert_mirror_init(target_block)
-
     if reverse:
+        fw_block.build_parent()
         _add_fwd_rev_calls(fw_block, routine_map, generic_map)
 
         fw_block = fw_block.prune_for(
@@ -2462,9 +2476,10 @@ def generate_ad(
 
         # Preprocess routines for allocate/pointer/mpi once
         for routine in mod_org.routines:
-            _parse_allocate(routine.content, mod_vars)
-            _parse_pointer(routine.content, mod_vars)
-            _parse_mpi_calls(routine.content)
+            content: Block = routine.content
+            _parse_allocate(content, mod_vars)
+            _parse_pointer(content, mod_vars)
+            _parse_mpi_calls(content)
 
         routine_lookup = {r.name: r for r in mod_org.routines}
         orig_order = [r.name for r in mod_org.routines]
@@ -2490,7 +2505,10 @@ def generate_ad(
                 for name_r in group:
                     routine = routine_lookup[name_r]
                     routine.build_parent()
-                    _set_call_intents(routine.content, routine_map, generic_routines)
+                    content = routine.content
+                    _set_call_intents(content, routine_map, generic_routines)
+                    special_advars = _parse_special_advars(content, routine_map, generic_routines)
+                    _assign_special_advars(content, special_advars)
                     if mode in ("forward", "both"):
                         sub, _, mods_called = _generate_ad_subroutine(
                             mod_org,
