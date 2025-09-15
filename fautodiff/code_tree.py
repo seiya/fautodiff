@@ -2287,7 +2287,7 @@ class CallStatement(Node):
                 args_new.append(tmp)
                 saved_vars.append(tmp)
                 kind_val = arg_info["kind"][i]
-                kind = Kind(OpInt(kind_val), val=kind_val)
+                kind = Kind(OpInt(kind_val), val=kind_val) if kind_val else None
                 saved_vars.append(
                     OpVar(
                         f"{tmp.name}{AD_SUFFIX}",
