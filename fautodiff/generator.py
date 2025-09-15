@@ -2508,6 +2508,8 @@ def generate_ad(
                         }
                 group_subs: Dict[str, Dict[str, Routine]] = {}
                 for name_r in group:
+                    if routine_info_fwd[name_r].get("skip") and routine_info_rev[name_r].get("skip"):
+                        continue
                     routine = routine_lookup[name_r]
                     routine.build_parent()
                     content = routine.content
