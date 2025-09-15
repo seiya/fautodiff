@@ -53,8 +53,8 @@ from .code_tree import (
 from .operators import (
     AryIndex,
     Kind,
-    Operator,
     OpComplex,
+    Operator,
     OpFunc,
     OpInt,
     OpNot,
@@ -247,8 +247,16 @@ def _module_var_fwd_rev(
                         i1 = OpFunc("ubound", args=[vv, OpInt(n + 1)])
                     elif isinstance(dim, OpRange):
                         vv = var_ref.change_index(None)
-                        i0 = OpFunc("lbound", args=[vv, OpInt(n + 1)]) if d[0] is None else d[0]
-                        i1 = OpFunc("ubound", args=[vv, OpInt(n + 1)]) if d[1] is None else d[1]
+                        i0 = (
+                            OpFunc("lbound", args=[vv, OpInt(n + 1)])
+                            if d[0] is None
+                            else d[0]
+                        )
+                        i1 = (
+                            OpFunc("ubound", args=[vv, OpInt(n + 1)])
+                            if d[1] is None
+                            else d[1]
+                        )
                     elif isinstance(dim, Operator):
                         i0 = OpInt(1)
                         i1 = dim
@@ -424,14 +432,24 @@ def _parse_allocate(
                 index = map[name][-1]
                 ndims = len(index)
                 dims_new: List[Operator | None] = []
-                dims_raw_new: List[str | None] = list(var.dims_raw) if var.dims_raw is not None else []
+                dims_raw_new: List[str | None] = (
+                    list(var.dims_raw) if var.dims_raw is not None else []
+                )
                 for n in range(ndims):
                     if var.dims is not None and var.dims[n] is not None:
                         dims_new.append(var.dims[n])
                     else:
                         idx = index[n] if index is not None else None
                         if isinstance(idx, OpRange):
-                            dims_new.append(idx[1] if idx[0] == OpInt(1) else (OpRange([idx[0], idx[1]]) if idx[0] is not None and idx[1] is not None else idx))
+                            dims_new.append(
+                                idx[1]
+                                if idx[0] == OpInt(1)
+                                else (
+                                    OpRange([idx[0], idx[1]])
+                                    if idx[0] is not None and idx[1] is not None
+                                    else idx
+                                )
+                            )
                         else:
                             dims_new.append(idx)
                         dims_raw_new.append(str(dims_new[-1]))
@@ -442,7 +460,7 @@ def _parse_allocate(
         if not isinstance(node, Block):
             raise RuntimeError(f"Top node must be Block: {type(node)}")
         if len(node) > 1 and isinstance(node[-1], ReturnStmt):
-          node.remove_child(node[-1])
+            node.remove_child(node[-1])
 
         mod_var_names = [v.name_ext() for v in mod_vars]
         for name in map:
@@ -460,7 +478,6 @@ def _parse_allocate(
                     node.append(
                         Allocate._add_if(Deallocate([var]), var, name in mod_var_names)
                     )
-
 
 
 def _parse_pointer(
@@ -598,19 +615,21 @@ def _parse_mpi_calls(
                             node.associated_vars = vars
 
 
-def _parse_special_advars(node: Node,
-                          routine_map: Dict[str, Any],
-                          generic_routines: Dict[str, Any],
-                          special_advars: Optional[List[str]] = None
-    ) -> List[str]:
-    """Collect variables that are not derivative variables but used for AD code.
-    """
+def _parse_special_advars(
+    node: Node,
+    routine_map: Dict[str, Any],
+    generic_routines: Dict[str, Any],
+    special_advars: Optional[List[str]] = None,
+) -> List[str]:
+    """Collect variables that are not derivative variables but used for AD code."""
     if special_advars is None:
         special_advars = []
     if isinstance(node, CallStatement):
         if not node.ad_target():
             return special_advars
-        arg_info: Dict[str, List[str]] = Node.get_arg_info(node, routine_map, generic_routines)
+        arg_info: Dict[str, List[str]] = Node.get_arg_info(
+            node, routine_map, generic_routines
+        )
         if arg_info is None:
             raise RuntimeError(f"{node.name} is not found in arg_info")
         for key, reverse in [("fwd", False), ("rev", True), ("fwd_rev", True)]:
@@ -618,14 +637,17 @@ def _parse_special_advars(node: Node,
             if args_key in arg_info:
                 ad_args, _ = node.change_args(args_key, arg_info, reverse)
                 for var in ad_args:
-                    if (isinstance(var, OpVar) and
-                        var.name.endswith(AD_SUFFIX) and
-                        not var.ad_target and
-                        var.name not in special_advars
+                    if (
+                        isinstance(var, OpVar)
+                        and var.name.endswith(AD_SUFFIX)
+                        and not var.ad_target
+                        and var.name not in special_advars
                     ):
                         special_advars.append(var.name)
     for child in node.iter_children():
-        special_advars = _parse_special_advars(child, routine_map, generic_routines, special_advars)
+        special_advars = _parse_special_advars(
+            child, routine_map, generic_routines, special_advars
+        )
     return special_advars
 
 
@@ -1793,7 +1815,9 @@ def _generate_ad_subroutine(
                 to_remove: list[Node] = []
                 for ch in list(block.iter_children()):
                     if isinstance(ch, Allocate):
-                        vnames = [v.name_ext() for v in ch.vars if v.name.endswith(AD_SUFFIX)]
+                        vnames = [
+                            v.name_ext() for v in ch.vars if v.name.endswith(AD_SUFFIX)
+                        ]
                         drop = False
                         for vname in vnames:
                             if _allocates_var(other, vname):
@@ -1814,13 +1838,16 @@ def _generate_ad_subroutine(
                     elif isinstance(ch, DoAbst):
                         _prune_ad_redundant_allocates(ch._body, other)
                     elif isinstance(ch, OmpDirective) and ch.body is not None:
-                        body = ch.body if isinstance(ch.body, Block) else Block(list(ch.body))
+                        body = (
+                            ch.body
+                            if isinstance(ch.body, Block)
+                            else Block(list(ch.body))
+                        )
                         _prune_ad_redundant_allocates(body, other)
                 for n in to_remove:
                     block.remove_child(n)
 
             _prune_ad_redundant_allocates(ad_block, fw_block)
-
 
             # Ensure the subroutine references the pruned reverse block
             subroutine.ad_content = ad_block
@@ -2020,9 +2047,14 @@ def _generate_ad_subroutine(
                             elif idx[0] is not None and idx[1] is not None:
                                 dims_list[n].append(OpRange([idx[0], idx[1]]))
                                 continue
-                        dims_list.append(OpFunc("size", [var.change_index(None), OpInt(n)]))
+                        dims_list.append(
+                            OpFunc("size", [var.change_index(None), OpInt(n)])
+                        )
                 else:
-                    dims_list = [OpFunc("size", [var.change_index(None), OpInt(n)]) for n in range(len(base_decl.dims))]
+                    dims_list = [
+                        OpFunc("size", [var.change_index(None), OpInt(n)])
+                        for n in range(len(base_decl.dims))
+                    ]
                 _get_size(subroutine, var.name, dims_list)
                 dims = tuple(dims_list)
             else:
@@ -2040,9 +2072,9 @@ def _generate_ad_subroutine(
                 if isinstance(dim, OpRange):
                     refv = var.reference.change_index(None)
                     if dim[0] is None:
-                       dim.args[0] = OpFunc("lbound", [refv, OpInt(i+1)])
+                        dim.args[0] = OpFunc("lbound", [refv, OpInt(i + 1)])
                     if dim[1] is None:
-                        dim.args[1] = OpFunc("ubound", [refv, OpInt(i+1)])
+                        dim.args[1] = OpFunc("ubound", [refv, OpInt(i + 1)])
                 dims_new.append(dim)
             dims = tuple(dims_new)
 
@@ -2149,7 +2181,16 @@ def _generate_ad_subroutine(
             # within any of the blocks (content, ad_init, ad_content).
             def has_meaningful_access(node: Node, varname: str) -> bool:
                 # Skip housekeeping nodes for usage detection
-                if isinstance(node, (Allocate, Deallocate, ClearAssignment, PointerAssignment, PointerClear)):
+                if isinstance(
+                    node,
+                    (
+                        Allocate,
+                        Deallocate,
+                        ClearAssignment,
+                        PointerAssignment,
+                        PointerClear,
+                    ),
+                ):
                     return False
                 if node.has_access_to(varname):
                     return True
@@ -2177,6 +2218,7 @@ def _generate_ad_subroutine(
 
         # Collect droppable local temp names from (de)allocate and pointer assoc sites
         cand_names: set[str] = set()
+
         def _collect_candidates(block: Block) -> None:
             for ch in list(block.iter_children()):
                 if isinstance(ch, Allocate):
@@ -2209,7 +2251,9 @@ def _generate_ad_subroutine(
                 elif isinstance(ch, DoAbst):
                     _collect_candidates(ch._body)
                 elif isinstance(ch, OmpDirective) and ch.body is not None:
-                    body = ch.body if isinstance(ch.body, Block) else Block(list(ch.body))
+                    body = (
+                        ch.body if isinstance(ch.body, Block) else Block(list(ch.body))
+                    )
                     _collect_candidates(body)
 
         for blk in blocks:
@@ -2237,7 +2281,10 @@ def _generate_ad_subroutine(
                         to_remove.append(ch)
                         continue
                 else:
-                    if isinstance(ch, PointerAssignment) and ch.lhs.name_ext() in unused_names:
+                    if (
+                        isinstance(ch, PointerAssignment)
+                        and ch.lhs.name_ext() in unused_names
+                    ):
                         to_remove.append(ch)
                         continue
                     if isinstance(ch, PointerClear):
@@ -2267,7 +2314,9 @@ def _generate_ad_subroutine(
                 elif isinstance(ch, DoAbst):
                     prune_block(ch._body)
                 elif isinstance(ch, OmpDirective) and ch.body is not None:
-                    body = ch.body if isinstance(ch.body, Block) else Block(list(ch.body))
+                    body = (
+                        ch.body if isinstance(ch.body, Block) else Block(list(ch.body))
+                    )
                     prune_block(body)
             for n in to_remove:
                 block.remove_child(n)
@@ -2373,7 +2422,8 @@ def _generate_ad_subroutine(
 
 
 def generate_ad(
-    in_file: Union[str, Path],
+    src: str,
+    src_name: str,
     out_file: Optional[Union[str, Path]] = None,
     warn: bool = True,
     search_dirs: Optional[List[Union[str, Path]]] = None,
@@ -2381,12 +2431,14 @@ def generate_ad(
     fadmod_dir: Optional[Union[str, Path]] = None,
     mode: str = "both",
 ) -> Optional[str]:
-    """Generate an AD version of ``in_file``.
+    """Generate an AD version of ``src``.
 
-    If ``out_file`` is ``None`` the generated code is returned as a string.
-    When ``out_file`` is provided the code is also written to that path.
-    ``fadmod_dir`` selects where ``<module>.fadmod`` files are written (defaults
-    to the current working directory).
+    ``src`` is the Fortran source code, and ``src_name`` is the name of the
+    original source (typically a file path) used for diagnostics. If
+    ``out_file`` is ``None`` the generated code is returned as a string.  When
+    ``out_file`` is provided the code is also written to that path. ``fadmod_dir``
+    selects where ``<module>.fadmod`` files are written (defaults to the current
+    working directory).
     """
     modules = []
     warnings = []
@@ -2397,7 +2449,7 @@ def generate_ad(
     if cwd not in search_dirs:
         search_dirs.append(cwd)
 
-    modules_org = parser.parse_file(in_file, search_dirs=search_dirs)
+    modules_org = parser.parse_src(src, search_dirs=search_dirs, src_name=src_name)
     warnings.extend(parser.macro_warnings)
     if fadmod_dir is None:
         fadmod_dir = Path.cwd()
@@ -2478,7 +2530,6 @@ def generate_ad(
                 else:
                     mod_vars.append(v)
 
-
         # Preprocess routines for allocate/pointer/mpi once
         for routine in mod_org.routines:
             content: Block = routine.content
@@ -2509,15 +2560,21 @@ def generate_ad(
                         }
                 group_subs: Dict[str, Dict[str, Routine]] = {}
                 for name_r in group:
-                    if ((name_r not in routine_info_fwd or routine_info_fwd[name_r].get("skip")) and
-                        (name_r not in routine_info_rev or routine_info_rev[name_r].get("skip"))
+                    if (
+                        name_r not in routine_info_fwd
+                        or routine_info_fwd[name_r].get("skip")
+                    ) and (
+                        name_r not in routine_info_rev
+                        or routine_info_rev[name_r].get("skip")
                     ):
                         continue
                     routine = routine_lookup[name_r]
                     routine.build_parent()
                     content = routine.content
                     _set_call_intents(content, routine_map, generic_routines)
-                    special_advars = _parse_special_advars(content, routine_map, generic_routines)
+                    special_advars = _parse_special_advars(
+                        content, routine_map, generic_routines
+                    )
                     _assign_special_advars(content, special_advars)
                     if mode in ("forward", "both"):
                         sub, _, mods_called = _generate_ad_subroutine(

@@ -43,7 +43,7 @@ class TestComplexNumbers(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "test.f90"
             path.write_text(src)
-            generated = generator.generate_ad(str(path), warn=False)
+            generated = generator.generate_ad(src, str(path), warn=False)
         self.assertIn("complex :: x_ad", generated)
         self.assertIn("z_ad = x_ad * y + y_ad * x", generated)
 

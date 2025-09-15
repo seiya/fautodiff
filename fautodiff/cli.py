@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from pathlib import Path
 
 from . import generator
 
@@ -52,7 +53,9 @@ def main():
         search_dirs.append(".")
 
     try:
+        src_text = Path(args.input).read_text()
         code = generator.generate_ad(
+            src_text,
             args.input,
             args.output,
             warn=not args.no_warn,

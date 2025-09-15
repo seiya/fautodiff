@@ -57,6 +57,7 @@ def _eval_kind(expr: str) -> Optional[int]:
         return 8
     return 4
 
+
 from packaging.version import Version, parse
 
 from . import fadmod
@@ -960,17 +961,13 @@ def parse_file(
 ) -> List[Module]:
     """Parse ``path`` and return a list of :class:`Module` nodes."""
     src = Path(path).read_text()
-    src = _inject_cpp_lines(src)
-    _extract_macros(src)
-    src = _expand_macros(src)
-    reader = FortranStringReader(
-        src, ignore_comments=False, include_omp_conditional_lines=True
+    return parse_src(
+        src,
+        search_dirs=search_dirs,
+        decl_map=decl_map,
+        type_map=type_map,
+        src_name=str(path),
     )
-    modules = _parse_from_reader(
-        reader, path, search_dirs=search_dirs, decl_map=decl_map, type_map=type_map
-    )
-    _mark_module_macros(modules)
-    return modules
 
 
 def parse_src(
@@ -996,9 +993,15 @@ def parse_src(
     _mark_module_macros(modules)
     return modules
 
+
 def _parse_dim_token(spec, decl_map, type_map) -> Optional[Operator]:
-    if isinstance(spec, (Fortran2003.Explicit_Shape_Spec, Fortran2003.Assumed_Shape_Spec)):
-        range = [_stmt2op(item, decl_map, type_map) if item is not None else None for item in spec.items]
+    if isinstance(
+        spec, (Fortran2003.Explicit_Shape_Spec, Fortran2003.Assumed_Shape_Spec)
+    ):
+        range = [
+            _stmt2op(item, decl_map, type_map) if item is not None else None
+            for item in spec.items
+        ]
         if range[0] is None and range[1] is None:
             return None
         if range[0] == OpInt(1) or range[0] is None:
@@ -1009,6 +1012,7 @@ def _parse_dim_token(spec, decl_map, type_map) -> Optional[Operator]:
 
     print(spec.__dict__)
     raise NotImplementedError(f"spec type is {type(spec)}")
+
 
 def _parse_decl_stmt(
     stmt,
@@ -1122,7 +1126,9 @@ def _parse_decl_stmt(
                 continue
             if isinstance(attr, Fortran2003.Dimension_Attr_Spec):
                 dim_attr_raw = [v.string for v in attr.items[1].items]
-                dim_attr = [_parse_dim_token(s, decl_map, type_map) for s in attr.items[1].items]
+                dim_attr = [
+                    _parse_dim_token(s, decl_map, type_map) for s in attr.items[1].items
+                ]
                 continue
             if isinstance(attr, Fortran2003.Access_Spec):
                 attr_name = attr.string.lower()

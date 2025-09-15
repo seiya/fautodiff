@@ -88,11 +88,20 @@ class TestCLIUnit(unittest.TestCase):
         called = {}
 
         def fake_generate_ad(
-            input, output, *, warn, search_dirs, write_fadmod, fadmod_dir, mode
+            src,
+            src_name,
+            output,
+            *,
+            warn,
+            search_dirs,
+            write_fadmod,
+            fadmod_dir,
+            mode,
         ):
             called.update(
                 dict(
-                    input=input,
+                    src=src,
+                    src_name=src_name,
                     output=output,
                     warn=warn,
                     search_dirs=search_dirs,
@@ -103,7 +112,9 @@ class TestCLIUnit(unittest.TestCase):
             )
             return "module dummy_ad\nend module dummy_ad\n"
 
-        with patch("fautodiff.cli.generator.generate_ad", side_effect=fake_generate_ad):
+        with patch(
+            "pathlib.Path.read_text", return_value="program dummy\nend program dummy\n"
+        ), patch("fautodiff.cli.generator.generate_ad", side_effect=fake_generate_ad):
             argv = [
                 "fautodiff",
                 "dummy.f90",

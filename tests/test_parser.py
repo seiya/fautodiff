@@ -281,7 +281,13 @@ class TestParser(unittest.TestCase):
         self.assertEqual(decl.dims, (None,))
         decl = routine.decls.find_by_name("b")
         self.assertIsNotNone(decl)
-        self.assertEqual(decl.dims_raw, ("n", "*",))
+        self.assertEqual(
+            decl.dims_raw,
+            (
+                "n",
+                "*",
+            ),
+        )
         self.assertEqual(str(decl.dims[0]), "n")
         self.assertIsNone(decl.dims[1])
 
@@ -543,7 +549,7 @@ class TestParser(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             moda = Path(tmp) / "moda.f90"
             moda.write_text(moda_src)
-            generator.generate_ad(str(moda), warn=False, fadmod_dir=tmp)
+            generator.generate_ad(moda_src, str(moda), warn=False, fadmod_dir=tmp)
             modb = Path(tmp) / "modb.f90"
             modb.write_text(modb_src)
 
