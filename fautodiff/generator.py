@@ -599,8 +599,8 @@ def _parse_mpi_calls(
 
 
 def _parse_special_advars(node: Node,
-                          routine_map: Dict[str],
-                          generic_routines: Dict[str],
+                          routine_map: Dict[str, Any],
+                          generic_routines: Dict[str, Any],
                           special_advars: Optional[List[str]] = None
     ) -> List[str]:
     """Collect variables that are not derivative variables but used for AD code.
@@ -608,7 +608,8 @@ def _parse_special_advars(node: Node,
     if special_advars is None:
         special_advars = []
     if isinstance(node, CallStatement):
-        name = node.name
+        if not node.ad_target():
+            return special_advars
         arg_info: Dict[str, List[str]] = Node.get_arg_info(node, routine_map, generic_routines)
         for key, reverse in [("fwd", False), ("rev", True), ("fwd_rev", True)]:
             args_key = f"args_{key}_ad"
@@ -1341,15 +1342,17 @@ def _generate_ad_subroutine(
             for flag in return_flags:
                 fw_block.insert_begin(Assignment(flag, OpTrue()))
 
-        # print(render_program(fw_block))
-
-    if reverse:
         fw_block.build_parent()
         _add_fwd_rev_calls(fw_block, routine_map, generic_map)
+
+        # print(render_program(fw_block))
 
         fw_block = fw_block.prune_for(
             targets, mod_vars + save_vars, base_targets=targets
         )
+
+        # print(render_program(fw_block))
+
         _strip_sequential_omp(fw_block, warnings, reverse=True)
 
         assigned = routine_org.content.assigned_vars(without_savevar=True)
