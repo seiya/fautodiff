@@ -4,7 +4,6 @@ import textwrap
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
-from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -29,9 +28,7 @@ contains
   end subroutine sub
 end module test
 """
-        modules = parser.parse_src(src)
-        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
-            generated = generator.generate_ad("macro.f90", warn=False)
+        generated = generator.generate_ad(src, "macro.f90", warn=False)
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]
         sub_start = stripped.index("subroutine sub_fwd_ad(x, x_ad, y, y_ad)")
@@ -72,9 +69,7 @@ contains
 end module conditional_macro
             """
         )
-        modules = parser.parse_src(src)
-        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
-            generated = generator.generate_ad("macro.f90", warn=False)
+        generated = generator.generate_ad(src, "macro.f90", warn=False)
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]
 
@@ -119,9 +114,7 @@ contains
 end module macro_multistmt
             """
         )
-        modules = parser.parse_src(src)
-        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
-            generated = generator.generate_ad("macro.f90", warn=False)
+        generated = generator.generate_ad(src, "macro.f90", warn=False)
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]
 
@@ -157,9 +150,7 @@ contains
 end module macro_sample
             """
         )
-        modules = parser.parse_src(src)
-        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
-            generated = generator.generate_ad("macro.f90", warn=False)
+        generated = generator.generate_ad(src, "macro.f90", warn=False)
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]
 
@@ -201,9 +192,7 @@ contains
 end module macro_args
             """
         )
-        modules = parser.parse_src(src)
-        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
-            generated = generator.generate_ad("macro.f90", warn=False)
+        generated = generator.generate_ad(src, "macro.f90", warn=False)
         lines = generated.splitlines()
         stripped = [l.strip() for l in lines]
 
@@ -239,11 +228,9 @@ class TestMacroWarnings(unittest.TestCase):
             end program foo
             """
         )
-        modules = parser.parse_src(src)
-        with patch("fautodiff.generator.parser.parse_file", return_value=modules):
-            buf = io.StringIO()
-            with redirect_stderr(buf):
-                generated = generator.generate_ad("macro.f90")
+        buf = io.StringIO()
+        with redirect_stderr(buf):
+            generated = generator.generate_ad(src, "macro.f90")
         msgs = buf.getvalue().splitlines()
         self.assertTrue(any("CONCAT" in m for m in msgs))
         self.assertTrue(any("VARIADIC" in m for m in msgs))

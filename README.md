@@ -97,9 +97,11 @@ The structure of these files is documented in [doc/fadmod.md](doc/fadmod.md).
 
 Generate code programmatically from Python:
 ```python
+from pathlib import Path
 from fautodiff.generator import generate_ad
 
-ad_code = generate_ad("examples/simple_math.f90")
+src_path = Path("examples/simple_math.f90")
+ad_code = generate_ad(src_path.read_text(), str(src_path))
 print(ad_code)
 ```
 

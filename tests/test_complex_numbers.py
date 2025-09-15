@@ -1,5 +1,4 @@
 import sys
-import tempfile
 import textwrap
 import unittest
 from pathlib import Path
@@ -40,10 +39,7 @@ class TestComplexNumbers(unittest.TestCase):
             end module test
             """
         )
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "test.f90"
-            path.write_text(src)
-            generated = generator.generate_ad(str(path), warn=False)
+        generated = generator.generate_ad(src, "test.f90", warn=False)
         self.assertIn("complex :: x_ad", generated)
         self.assertIn("z_ad = x_ad * y + y_ad * x", generated)
 
