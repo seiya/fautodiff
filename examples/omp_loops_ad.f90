@@ -145,4 +145,48 @@ contains
     return
   end subroutine omp_ws_alloc_rev_ad
 
+  subroutine omp_ws_if_fwd_ad(x, x_ad, y, y_ad, f)
+    real, intent(in)  :: x(:)
+    real, intent(in)  :: x_ad(:)
+    real, intent(out) :: y(:)
+    real, intent(out) :: y_ad(:)
+    logical, intent(in)  :: f
+
+    !$omp parallel
+    !$omp workshare
+    y_ad(:) = x_ad(:) ! y(:) = x(:)
+    y(:) = x(:)
+    !$omp end workshare
+    if (f) then
+      !$omp workshare
+      y_ad(:) = y_ad(:) + x_ad(:) * 2.0 * x(:) ! y(:) = y(:) + x(:)**2
+      y(:) = y(:) + x(:)**2
+      !$omp end workshare
+    end if
+    !$omp end parallel
+
+    return
+  end subroutine omp_ws_if_fwd_ad
+
+  subroutine omp_ws_if_rev_ad(x, x_ad, y_ad, f)
+    real, intent(in)  :: x(:)
+    real, intent(inout) :: x_ad(:)
+    real, intent(inout) :: y_ad(:)
+    logical, intent(in)  :: f
+
+    !$omp parallel
+    if (f) then
+      !$omp workshare
+      x_ad(:) = y_ad(:) * 2.0 * x(:) + x_ad(:) ! y(:) = y(:) + x(:)**2
+      !$omp end workshare
+    end if
+    !$omp workshare
+    x_ad(:) = y_ad(:) + x_ad(:) ! y(:) = x(:)
+    y_ad(:) = 0.0 ! y(:) = x(:)
+    !$omp end workshare
+    !$omp end parallel
+
+    return
+  end subroutine omp_ws_if_rev_ad
+
 end module omp_loops_ad
