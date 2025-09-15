@@ -5044,6 +5044,47 @@
         "out"
       ]
     },
+    "MPI_Comm_free": {
+      "module": "mpi",
+      "args": [
+        "comm",
+        "ierr"
+      ],
+      "intents": [
+        "inout",
+        "out"
+      ],
+      "dims": [
+        null,
+        null
+      ],
+      "type": [
+        "integer",
+        "integer"
+      ],
+      "kind": [
+        null,
+        null
+      ],
+      "name_fwd_ad": "MPI_Comm_free_fwd_ad",
+      "args_fwd_ad": [
+        "comm",
+        "ierr"
+      ],
+      "intents_fwd_ad": [
+        "inout",
+        "out"
+      ],
+      "name_rev_ad": "MPI_Comm_free_rev_ad",
+      "args_rev_ad": [
+        "comm",
+        "ierr"
+      ],
+      "intents_rev_ad": [
+        null,
+        "out"
+      ]
+    },
     "MPI_Dims_create": {
       "module": "mpi",
       "args": [
