@@ -82,6 +82,11 @@ Suppress warnings about unsupported derivatives with ``--no-warn``:
 bin/fautodiff --no-warn examples/simple_math.f90
 ```
 
+Ignore any ``!$FAD`` directives in the source:
+```bash
+bin/fautodiff --ignore-fad examples/directives.f90
+```
+
 Each module's routine signatures are also written to a `<module>.fadmod` file when AD code is generated.
 These JSON files can be loaded when differentiating another file that uses the module.
 Add search directories with ``-I`` (repeat as needed), choose the output directory with ``-M DIR`` (defaults to the current directory), and disable writing with ``--no-fadmod``:

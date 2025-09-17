@@ -311,6 +311,23 @@ class TestGenerator(unittest.TestCase):
         self.assertIn("skip_me", routines)
         self.assertTrue(routines["skip_me"].get("skip"))
 
+    def test_ignore_fad_directives(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as tmp:
+            generated = gen(
+                "examples/directives.f90",
+                warn=False,
+                fadmod_dir=tmp,
+                ignore_fad=True,
+            )
+
+        self.assertIn("skip_me_rev_ad", generated)
+        self.assertIn(
+            "subroutine add_const_fwd_ad(x, x_ad, y, y_ad, z, z_ad)", generated
+        )
+
     def test_skip_call_skips_derivatives(self):
         code_tree.Node.reset()
         import textwrap
