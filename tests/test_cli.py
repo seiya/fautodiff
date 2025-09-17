@@ -97,6 +97,7 @@ class TestCLIUnit(unittest.TestCase):
             write_fadmod,
             fadmod_dir,
             mode,
+            ignore_fad,
         ):
             called.update(
                 dict(
@@ -108,6 +109,7 @@ class TestCLIUnit(unittest.TestCase):
                     write_fadmod=write_fadmod,
                     fadmod_dir=fadmod_dir,
                     mode=mode,
+                    ignore_fad=ignore_fad,
                 )
             )
             return "module dummy_ad\nend module dummy_ad\n"
@@ -130,12 +132,17 @@ class TestCLIUnit(unittest.TestCase):
             buf = io.StringIO()
             with patch.object(sys, "argv", argv), redirect_stdout(buf):
                 cli.main()
+            argv.append("--ignore-fad")
+            buf = io.StringIO()
+            with patch.object(sys, "argv", argv), redirect_stdout(buf):
+                cli.main()
         # '.' should be appended to search_dirs
         self.assertEqual(called["search_dirs"], ["foo", "bar", "."])
         self.assertFalse(called["warn"])  # --no-warn
         self.assertFalse(called["write_fadmod"])  # --no-fadmod
         self.assertIsNone(called["fadmod_dir"])  # default
         self.assertEqual(called["mode"], "both")
+        self.assertTrue(called["ignore_fad"])  # --ignore-fad
 
 
 if __name__ == "__main__":

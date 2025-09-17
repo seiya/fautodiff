@@ -2430,6 +2430,7 @@ def generate_ad(
     write_fadmod: bool = True,
     fadmod_dir: Optional[Union[str, Path]] = None,
     mode: str = "both",
+    ignore_fad: bool = False,
 ) -> Optional[str]:
     """Generate an AD version of ``src``.
 
@@ -2448,6 +2449,12 @@ def generate_ad(
     cwd = "."
     if cwd not in search_dirs:
         search_dirs.append(cwd)
+
+    if ignore_fad:
+        src = "\n".join(
+            "" if line.lstrip().startswith("!$FAD") else line
+            for line in src.splitlines()
+        )
 
     modules_org = parser.parse_src(src, search_dirs=search_dirs, src_name=src_name)
     warnings.extend(parser.macro_warnings)

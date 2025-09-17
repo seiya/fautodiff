@@ -46,6 +46,11 @@ def main():
         default="both",
         help="AD mode to generate",
     )
+    parser_arg.add_argument(
+        "--ignore-fad",
+        action="store_true",
+        help="ignore !$FAD directives in source files",
+    )
     args = parser_arg.parse_args()
 
     search_dirs = args.search_dirs if args.search_dirs else []
@@ -63,6 +68,7 @@ def main():
             write_fadmod=not args.no_fadmod,
             fadmod_dir=args.fadmod_dir,
             mode=args.mode,
+            ignore_fad=args.ignore_fad,
         )
     except Exception as exc:
         raise
