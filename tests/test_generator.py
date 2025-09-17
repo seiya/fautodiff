@@ -636,6 +636,86 @@ class TestGenerator(unittest.TestCase):
             self.assertNotIn("if (.not. allocated(htmp))", generated)
             self.assertNotRegex(generated, r"allocate\(htmp, mold=htmp_save_\d+_ad\)")
 
+    def test_no_save_for_uninitialized_local(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+              subroutine foo(x, y)
+                real, intent(in) :: x
+                real, intent(out) :: y
+                real :: w
+                w = x
+                y = w * 2.0
+              end subroutine foo
+            end module test
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "tmp.f90"), warn=False, fadmod_dir=tmp
+            )
+            self.assertNotRegex(generated, r"w_save_\d+_ad")
+
+    def test_no_save_for_intent_out_argument(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+              subroutine foo(x, y)
+                real, intent(in) :: x
+                real, intent(out) :: y
+                y = y + x
+              end subroutine foo
+            end module test
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "tmp.f90"), warn=False, fadmod_dir=tmp
+            )
+            self.assertNotRegex(generated, r"y_save_\d+_ad")
+
+    def test_save_kept_for_inout_argument(self):
+        code_tree.Node.reset()
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+              subroutine foo(n, x)
+                integer, intent(in) :: n
+                real, intent(inout) :: x(n)
+                integer :: i
+                x(1) = x(1) * x(2) * 0.5
+                do i = 2, n - 1
+                  x(i) = x(i) * (x(i + 1) - x(i - 1)) * 0.5
+                end do
+                x(n) = - x(n) * x(n - 1) * 0.5
+              end subroutine foo
+            end module test
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            generated = generator.generate_ad(
+                src, str(Path(tmp) / "tmp.f90"), warn=False, fadmod_dir=tmp
+            )
+            self.assertRegex(generated, r"x_save_\d+_ad = x\(1\)")
+            self.assertRegex(generated, r"x\(1\) = x_save_\d+_ad")
+
     def test_persistent_mpi_wrappers(self):
         code_tree.Node.reset()
         import textwrap

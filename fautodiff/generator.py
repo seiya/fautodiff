@@ -1458,6 +1458,31 @@ def _generate_ad_subroutine(
         for i, node_fw in enumerate(fw_nodes):
             if isinstance(node_fw, SaveAssignment) and not node_fw.pushpop:
                 var = node_fw.var
+                base_decl = routine_org.find_decl(var.remove_suffix(AD_SUFFIX))
+                if base_decl is not None:
+                    intent = base_decl.intent
+                    is_routine_local = (
+                        base_decl.declared_in == "routine" and intent is None
+                    )
+                    is_allocatable_local = (
+                        base_decl.allocatable and intent is None
+                    )
+                    is_out_argument = intent == "out"
+                    if is_routine_local or is_allocatable_local or is_out_argument:
+                        if not any(
+                            node.has_assignment_to(var.name_ext())
+                            for node in fw_nodes[:i]
+                        ):
+                            for node_ad in ad_block.iter_children():
+                                if (
+                                    isinstance(node_ad, SaveAssignment)
+                                    and node_ad.load
+                                    and node_fw.id == node_ad.id
+                                ):
+                                    ad_block.remove_child(node_ad)
+                                    break
+                            fw_block.remove_child(node_fw)
+                            continue
                 if i < len(fw_nodes) - 1:
                     flag = False
                     for node in fw_nodes[i + 1 :]:
