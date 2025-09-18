@@ -1555,6 +1555,9 @@ class VarList:
         if not isinstance(var, OpVar):
             raise ValueError(f"Must be OpVar: {type(var)}")
 
+        if var.name == var.macro_name:
+            return
+
         name = var.name_ext()
         # Update dims info
         if name not in self._store:
@@ -1573,6 +1576,9 @@ class VarList:
 
         if not isinstance(var, OpVar):
             raise ValueError("Must be OpVar")
+
+        if var.name == var.macro_name:
+            return
 
         name = var.name_ext()
         if name not in self._store:

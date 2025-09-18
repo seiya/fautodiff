@@ -565,24 +565,6 @@ def _assignment_with_cpp(
     return PreprocessorIfBlock(cond_blocks, macro_tables)
 
 
-def _apply_macro_name(node: Node, name: str) -> None:
-    """Recursively tag all Operators within ``node`` with ``name``."""
-
-    def _mark(obj: Any) -> None:
-        if isinstance(obj, Operator):
-            obj.macro_name = name
-            for v in vars(obj).values():
-                _mark(v)
-        elif isinstance(obj, Node):
-            for v in vars(obj).values():
-                _mark(v)
-        elif isinstance(obj, list):
-            for item in obj:
-                _mark(item)
-
-    _mark(node)
-
-
 def _stmt_name(stmt):
     """Return the name from a program unit statement.
 
