@@ -4360,7 +4360,18 @@ class Allocate(Node):
         else:
             vars = vars.copy()
         for var in self.vars:
-            vars.remove(var)
+            index = var.index
+            if index is None:
+                if self.mold is None:
+                    raise RuntimeError("Index is missing")
+                index = self.mold.dims
+            index_new: List[OpRange] = []
+            for idx in index:
+                if  isinstance(idx, OpRange):
+                    index_new.append(idx)
+                else:
+                    index_new.append(OpRange([OpInt(1), idx]))
+            vars.remove(var.change_index(AryIndex(index_new)))
             index = var.concat_index()
             if index:
                 for idx in index.collect_vars():
