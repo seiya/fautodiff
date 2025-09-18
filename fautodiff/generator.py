@@ -2373,7 +2373,10 @@ def _generate_ad_subroutine(
     mod_all_var_names.extend(const_var_names)
     required_vnames = []
     for var in subroutine.required_vars():
-        if var.name in mod_all_var_names or var.is_constant:
+        if (var.name_ext() in mod_all_var_names or
+            var.is_constant or
+            var.name.endswith("pushpop_ad")
+        ):
             continue
         decl = subroutine.decls.find_by_name(var.name) if subroutine.decls else None
         if decl is not None:
