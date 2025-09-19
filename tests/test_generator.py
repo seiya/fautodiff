@@ -504,9 +504,9 @@ class TestGenerator(unittest.TestCase):
                 src, str(Path(tmp) / "attrs.f90"), warn=False, fadmod_dir=tmp
             )
             self.assertIn("real, save :: a", generated)
-            self.assertIn("integer, value :: b", generated)
-            self.assertIn("real, volatile :: c", generated)
-            self.assertIn("real, asynchronous :: d", generated)
+            self.assertIn("integer, intent(inout), value :: b", generated)
+            self.assertIn("real, intent(inout), volatile :: c", generated)
+            self.assertIn("real, intent(inout), asynchronous :: d", generated)
             self.assertIn("type, abstract, bind(C) :: t_ad", generated)
             self.assertIn("type :: seq_ad_t", generated)
             self.assertIn("sequence", generated)

@@ -2664,6 +2664,18 @@ class Routine(Node):
         super().__post_init__()
         self.decls.set_parent(self)
         self.content.set_parent(self)
+        self._ensure_argument_intents()
+
+    def _ensure_argument_intents(self) -> None:
+        """Assume intent(inout) for arguments without explicit intent."""
+        if not self.args:
+            return
+        for arg in self.args:
+            decl = self.decl_map.get(arg) if self.decl_map is not None else None
+            if decl is None:
+                decl = self.decls.find_by_name(arg)
+            if decl is not None and decl.intent is None:
+                decl.intent = "inout"
 
     def __str__(self) -> str:
         header = f"[{self.kind.title()}] name: {self.name}"
@@ -2754,6 +2766,8 @@ class Routine(Node):
         intent = decl.intent
         if self.result == name:
             intent = "out"
+        elif intent is None and name in self.args:
+            intent = "inout"
         return OpVar(
             name,
             var_type=decl.var_type.copy(),

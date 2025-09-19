@@ -11,9 +11,9 @@ module macro_multistmt_ad
 contains
 
   subroutine foo_fwd_ad(x, y, y_ad)
-    real :: x
-    real :: y
-    real :: y_ad
+    real, intent(inout) :: x
+    real, intent(inout) :: y
+    real, intent(inout) :: y_ad
 
 #ifdef INC
     x = x + 1
