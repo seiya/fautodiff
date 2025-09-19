@@ -219,55 +219,37 @@ def gen_get_function(tname):
     return TEMPLATE_GET_SCALAR.format(tname=tname, ftype=ftype)
 
 
-def gen_wrapper_push(tname):
+def gen_wrapper_push_subroutine(tname, rank):
     ftype = tmap[tname]
+    dims = "(" + ", ".join([":" for _ in range(rank)]) + ")" if rank else ""
+    if rank == 0:
+        data_decl = f"    {ftype}, intent(in) :: data"
+    else:
+        data_decl = f"    {ftype}, intent(in), target :: data{dims}"
     lines = [
-        f"  subroutine fautodiff_stack_push_{tname}(data)",
-        f"    {ftype}, intent(in), target :: data(..)",
-        f"    select rank(data)",
+        f"  subroutine fautodiff_stack_push_{tname}_{rank}d(data)",
+        data_decl,
+        f"    call push_{tname}_{rank}d(fautodiff_stack_{tname}, data)",
+        f"  end subroutine fautodiff_stack_push_{tname}_{rank}d",
+        "",
     ]
-    for r in ranks:
-        lines.append(f"    rank({r})")
-        # The rank of DATA is only known inside each SELECT RANK branch, so
-        # dispatch directly to the corresponding specific procedure and pass
-        # the stack instance explicitly. Using type-bound generics here would
-        # require compile-time rank knowledge.
-        lines.append(f"      call push_{tname}_{r}d(fautodiff_stack_{tname}, data)")
-    lines.extend(
-        [
-            "    rank default",
-            "      print *, 'Rank larger than 3 is not supported'",
-            "      error stop 1",
-            "    end select",
-            f"  end subroutine fautodiff_stack_push_{tname}",
-            "",
-        ]
-    )
     return "\n".join(lines)
 
 
-def gen_wrapper_pop(tname):
+def gen_wrapper_pop_subroutine(tname, rank):
     ftype = tmap[tname]
+    dims = "(" + ", ".join([":" for _ in range(rank)]) + ")" if rank else ""
+    if rank == 0:
+        data_decl = f"    {ftype}, intent(out) :: data"
+    else:
+        data_decl = f"    {ftype}, intent(out), target :: data{dims}"
     lines = [
-        f"  subroutine fautodiff_stack_pop_{tname}(data)",
-        f"    {ftype}, intent(out), target :: data(..)",
-        f"    select rank(data)",
+        f"  subroutine fautodiff_stack_pop_{tname}_{rank}d(data)",
+        data_decl,
+        f"    call pop_{tname}_{rank}d(fautodiff_stack_{tname}, data)",
+        f"  end subroutine fautodiff_stack_pop_{tname}_{rank}d",
+        "",
     ]
-    for r in ranks:
-        lines.append(f"    rank({r})")
-        # See GEN_WRAPPER_PUSH for an explanation of the explicit procedure
-        # calls with the stack instance passed as the first argument.
-        lines.append(f"      call pop_{tname}_{r}d(fautodiff_stack_{tname}, data)")
-    lines.extend(
-        [
-            "    rank default",
-            "      print *, 'Rank larger than 3 is not supported'",
-            "      error stop 1",
-            "    end select",
-            f"  end subroutine fautodiff_stack_pop_{tname}",
-            "",
-        ]
-    )
     return "\n".join(lines)
 
 
@@ -362,16 +344,15 @@ def gen_module():
         lines.append(f"  type(fautodiff_stack_{t}_t), save :: fautodiff_stack_{t}")
     lines.append(f"  type(fautodiff_stack_p_t), save :: fautodiff_stack_p")
     lines.append("")
-    push_mods = []
-    pop_mods = []
-    for t in ("r4", "r8"):
-        push_mods.append(f"fautodiff_stack_push_{t}")
-        pop_mods.append(f"fautodiff_stack_pop_{t}")
     lines.append("  interface fautodiff_stack_push_r")
-    lines.append("    module procedure " + ", ".join(push_mods))
+    for t in ("r4", "r8"):
+        proc_names = ", ".join([f"fautodiff_stack_push_{t}_{r}d" for r in ranks])
+        lines.append("    module procedure " + proc_names)
     lines.append("  end interface")
     lines.append("  interface fautodiff_stack_pop_r")
-    lines.append("    module procedure " + ", ".join(pop_mods))
+    for t in ("r4", "r8"):
+        proc_names = ", ".join([f"fautodiff_stack_pop_{t}_{r}d" for r in ranks])
+        lines.append("    module procedure " + proc_names)
     lines.append("  end interface")
     lines.append("")
     lines.append("contains")
@@ -386,8 +367,9 @@ def gen_module():
                 lines.append(gen_push_ptr_subroutine(t, r))
                 lines.append(gen_pop_ptr_subroutine(t, r))
     for t in ("r4", "r8"):
-        lines.append(gen_wrapper_push(t))
-        lines.append(gen_wrapper_pop(t))
+        for r in ranks:
+            lines.append(gen_wrapper_push_subroutine(t, r))
+            lines.append(gen_wrapper_pop_subroutine(t, r))
     lines.append("end module fautodiff_stack")
     return "\n".join(lines)
 
