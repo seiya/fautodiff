@@ -25,14 +25,14 @@ contains
     real, intent(in)  :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
-    logical :: return_flag_11_ad
+    logical :: return_flag_10_ad
 
-    return_flag_11_ad = .true.
+    return_flag_10_ad = .true.
     if (x < 0.0) then
-      return_flag_11_ad = .false.
+      return_flag_10_ad = .false.
     end if
 
-    if (return_flag_11_ad) then
+    if (return_flag_10_ad) then
       x_ad = y_ad * (x + x) + x_ad ! y = x * x
       y_ad = 0.0 ! y = x * x
     end if
@@ -67,15 +67,15 @@ contains
     real, intent(inout) :: x_ad(n)
     real, intent(inout) :: y_ad(n)
     logical, intent(in)  :: f
-    logical :: return_flag_28_ad
+    logical :: return_flag_27_ad
 
-    return_flag_28_ad = .true.
+    return_flag_27_ad = .true.
     if (f) then
-      return_flag_28_ad = .false.
+      return_flag_27_ad = .false.
     end if
 
     if (f) then
-      return_flag_28_ad = .true. ! return
+      return_flag_27_ad = .true. ! return
       x_ad = y_ad * 2.0 * x + x_ad ! y = x ** 2
       y_ad = 0.0 ! y = x ** 2
     end if

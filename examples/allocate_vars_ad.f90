@@ -288,22 +288,22 @@ contains
     real, allocatable :: htmp_ad(:)
     real, allocatable :: htmp(:)
     integer :: i
-    real, allocatable :: htmp_save_93_ad(:)
+    real, allocatable :: htmp_save_92_ad(:)
 
     allocate(htmp_ad(n))
     allocate(htmp(n))
     htmp = x
-    allocate(htmp_save_93_ad, mold=htmp)
-    htmp_save_93_ad(:) = htmp(:)
+    allocate(htmp_save_92_ad, mold=htmp)
+    htmp_save_92_ad(:) = htmp(:)
     htmp = x**2
 
     do i = n, 1, - 1
       htmp_ad(i) = z_ad * y ! z = z + htmp(i) * y
       y_ad = z_ad * htmp(i) + y_ad ! z = z + htmp(i) * y
     end do
-    htmp(:) = htmp_save_93_ad(:)
-    if (allocated(htmp_save_93_ad)) then
-      deallocate(htmp_save_93_ad)
+    htmp(:) = htmp_save_92_ad(:)
+    if (allocated(htmp_save_92_ad)) then
+      deallocate(htmp_save_92_ad)
     end if
     x_ad = htmp_ad * 2.0 * x + x_ad ! htmp = x**2
     do i = n, 1, - 1
@@ -472,23 +472,23 @@ contains
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, allocatable :: arr_ad(:)
-    logical :: return_flag_156_ad
+    logical :: return_flag_155_ad
     integer :: i
     real, allocatable :: arr(:)
 
-    return_flag_156_ad = .true.
+    return_flag_155_ad = .true.
     allocate(arr_ad(n))
     allocate(arr(n))
     if (n <= 0) then
-      return_flag_156_ad = .false.
+      return_flag_155_ad = .false.
     end if
-    if (return_flag_156_ad) then
+    if (return_flag_155_ad) then
       do i = 1, n
         arr(i) = i * x
       end do
     end if
 
-    if (return_flag_156_ad) then
+    if (return_flag_155_ad) then
       do i = n, 1, - 1
         arr_ad(i) = res_ad * x ! res = res + arr(i) * x
         x_ad = res_ad * arr(i) + x_ad ! res = res + arr(i) * x
@@ -499,10 +499,10 @@ contains
       end do
     end if
     if (n <= 0) then
-      return_flag_156_ad = .true. ! return
+      return_flag_155_ad = .true. ! return
       res_ad = 0.0 ! res = 0.0
     end if
-    if (return_flag_156_ad) then
+    if (return_flag_155_ad) then
       if (allocated(arr_ad)) then
         deallocate(arr_ad)
       end if

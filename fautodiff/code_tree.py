@@ -2556,7 +2556,7 @@ class Module(Node):
     uses: Optional[Block] = None
     body: Optional[Block] = None
     decls: Optional[Block] = None
-    routines: Block = field(default_factory=Block)
+    routines: List[Routine] = field(default_factory=list)
     directives: dict = field(default_factory=dict)
 
     def iter_children(self):

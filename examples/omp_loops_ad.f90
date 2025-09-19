@@ -121,12 +121,12 @@ contains
     real, intent(inout), allocatable :: x(:)
     real, intent(inout), allocatable :: x_ad(:)
     real, intent(inout) :: y_ad(size(x))
-    real, allocatable :: x_save_54_ad(:)
+    real, allocatable :: x_save_53_ad(:)
 
-    allocate(x_save_54_ad, mold=x)
+    allocate(x_save_53_ad, mold=x)
     !$omp parallel
     !$omp workshare
-    x_save_54_ad(:) = x(:)
+    x_save_53_ad(:) = x(:)
     !$omp end workshare
     !$omp end parallel
 
@@ -134,12 +134,12 @@ contains
     !$omp workshare
     x_ad = y_ad + x_ad ! y = x
     y_ad = 0.0 ! y = x
-    x(:) = x_save_54_ad(:)
+    x(:) = x_save_53_ad(:)
     x_ad = x_ad * 2.0 * x ! x = x**2
     !$omp end workshare
     !$omp end parallel
-    if (allocated(x_save_54_ad)) then
-      deallocate(x_save_54_ad)
+    if (allocated(x_save_53_ad)) then
+      deallocate(x_save_53_ad)
     end if
 
     return
