@@ -2556,7 +2556,7 @@ class Module(Node):
     uses: Optional[Block] = None
     body: Optional[Block] = None
     decls: Optional[Block] = None
-    routines: Block = field(default_factory=Block)
+    routines: List[Routine] = field(default_factory=list)
     directives: dict = field(default_factory=dict)
 
     def iter_children(self):
@@ -2655,15 +2655,31 @@ class Routine(Node):
     decls: Block = field(default_factory=Block)
     content: Block = field(default_factory=Block)
     directives: dict = field(default_factory=dict)
+    info: Optional[Dict[str, Any]] = field(default=None, repr=False)
     decl_map: Optional[dict] = None
     ad_init: Optional[Block] = None
     ad_content: Optional[Block] = None
+    assumed_intent_args: List[str] = field(default_factory=list, init=False, repr=False)
     kind: ClassVar[str] = "subroutine"
 
     def __post_init__(self):
         super().__post_init__()
         self.decls.set_parent(self)
         self.content.set_parent(self)
+        self._ensure_argument_intents()
+
+    def _ensure_argument_intents(self) -> None:
+        """Assume intent(inout) for arguments without explicit intent."""
+        if not self.args:
+            return
+        for arg in self.args:
+            decl = self.decl_map.get(arg) if self.decl_map is not None else None
+            if decl is None:
+                decl = self.decls.find_by_name(arg)
+            if decl is not None and decl.intent is None:
+                decl.intent = "inout"
+                if arg not in self.assumed_intent_args:
+                    self.assumed_intent_args.append(arg)
 
     def __str__(self) -> str:
         header = f"[{self.kind.title()}] name: {self.name}"
@@ -2754,6 +2770,12 @@ class Routine(Node):
         intent = decl.intent
         if self.result == name:
             intent = "out"
+        elif intent is None and name in self.args:
+            intent = "inout"
+            if decl is not None:
+                decl.intent = "inout"
+            if name not in self.assumed_intent_args:
+                self.assumed_intent_args.append(name)
         return OpVar(
             name,
             var_type=decl.var_type.copy(),
@@ -2823,6 +2845,8 @@ class Routine(Node):
         clone.directives = dict(self.directives)
         if self.decl_map is not None:
             clone.decl_map = dict(self.decl_map)
+        clone.info = dict(self.info) if self.info is not None else None
+        clone.assumed_intent_args = list(self.assumed_intent_args)
         return clone
 
     def prune_for(
@@ -4360,7 +4384,18 @@ class Allocate(Node):
         else:
             vars = vars.copy()
         for var in self.vars:
-            vars.remove(var)
+            index = var.index
+            if index is None:
+                if self.mold is None:
+                    raise RuntimeError("Index is missing")
+                index = self.mold.dims
+            index_new: List[OpRange] = []
+            for idx in index:
+                if  isinstance(idx, OpRange):
+                    index_new.append(idx)
+                else:
+                    index_new.append(OpRange([OpInt(1), idx]))
+            vars.remove(var.change_index(AryIndex(index_new)))
             index = var.concat_index()
             if index:
                 for idx in index.collect_vars():
@@ -6308,6 +6343,7 @@ class OmpDirective(Node):
     clauses: List[Union[str, Dict[str, List[Any]]]] = field(default_factory=list)
     body: Optional[Node] = None
     skip_alloc: bool = False
+    info: Optional[Dict[str, Any]] = field(default=None, repr=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -6358,18 +6394,22 @@ class OmpDirective(Node):
             yield self.body
 
     def copy(self) -> "OmpDirective":
-        return OmpDirective(self.directive,
-                            copy.deepcopy(self.clauses),
-                            self.body,
-                            self.skip_alloc
-                            )
+        return OmpDirective(
+            self.directive,
+            copy.deepcopy(self.clauses),
+            self.body,
+            self.skip_alloc,
+            info=dict(self.info) if self.info is not None else None,
+        )
 
     def deep_clone(self) -> "OmpDirective":
-        return OmpDirective(self.directive,
-                            copy.deepcopy(self.clauses),
-                            self.body.deep_clone() if self.body is not None else None,
-                            self.skip_alloc
-                            )
+        return OmpDirective(
+            self.directive,
+            copy.deepcopy(self.clauses),
+            self.body.deep_clone() if self.body is not None else None,
+            self.skip_alloc,
+            info=dict(self.info) if self.info is not None else None,
+        )
 
 
     def insert_before(self, id: int, node: Node):
@@ -6541,7 +6581,12 @@ class OmpDirective(Node):
                 new_clauses.append({key: [op, vars]})
                 continue
             new_clauses.append(clause)
-        node = OmpDirective(self.directive, new_clauses, body)
+        node = OmpDirective(
+            self.directive,
+            new_clauses,
+            body,
+            info=dict(self.info) if self.info is not None else None,
+        )
         return [node]
 
     def prune_for(
@@ -6583,7 +6628,12 @@ class OmpDirective(Node):
                     new_clauses.append({key: vars})
                 continue
             new_clauses.append(clause)
-        return OmpDirective(self.directive, new_clauses, body)
+        return OmpDirective(
+            self.directive,
+            new_clauses,
+            body,
+            info=dict(self.info) if self.info is not None else None,
+        )
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         if self.body is None:

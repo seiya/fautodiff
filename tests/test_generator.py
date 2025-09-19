@@ -1,5 +1,7 @@
 import sys
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -415,6 +417,26 @@ class TestGenerator(unittest.TestCase):
         expected = Path("examples/macro_multistmt_ad.F90").read_text()
         self.assertEqual(generated, expected)
 
+    def test_warning_for_assumed_intent(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        src = Path("examples/macro_multistmt.F90").read_text()
+        buf = StringIO()
+        with TemporaryDirectory() as tmp, redirect_stderr(buf):
+            generator.generate_ad(
+                src,
+                "examples/macro_multistmt.F90",
+                warn=True,
+                search_dirs=[".", "examples", "fortran_modules"],
+                fadmod_dir=tmp,
+            )
+        stderr = buf.getvalue()
+        expected_msg = (
+            "macro_multistmt.F90:8: foo - Assumed intent(inout) for arguments x, y because no INTENT attribute was specified"
+        )
+        self.assertIn(expected_msg, stderr)
+
     def test_deallocate_mod_grad_var_prevents_skip(self):
         code_tree.Node.reset()
         import textwrap
@@ -504,9 +526,9 @@ class TestGenerator(unittest.TestCase):
                 src, str(Path(tmp) / "attrs.f90"), warn=False, fadmod_dir=tmp
             )
             self.assertIn("real, save :: a", generated)
-            self.assertIn("integer, value :: b", generated)
-            self.assertIn("real, volatile :: c", generated)
-            self.assertIn("real, asynchronous :: d", generated)
+            self.assertIn("integer, intent(inout), value :: b", generated)
+            self.assertIn("real, intent(inout), volatile :: c", generated)
+            self.assertIn("real, intent(inout), asynchronous :: d", generated)
             self.assertIn("type, abstract, bind(C) :: t_ad", generated)
             self.assertIn("type :: seq_ad_t", generated)
             self.assertIn("sequence", generated)

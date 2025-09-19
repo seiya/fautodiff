@@ -81,11 +81,20 @@ def _warn(
     reason: str,
 ) -> None:
     """Append a formatted warning message to ``warnings`` list."""
-    if warnings is not None and info is not None:
-        filename = info.get("file", "<unknown>")
-        line = info.get("line", "?")
-        msg = f"{filename}:{line}: {code} - {reason}"
-        warnings.append(msg)
+    if warnings is None:
+        return
+    details: Dict[str, Any] = info if isinstance(info, dict) else {}
+    filename = details.get("file") or "<unknown>"
+    if filename not in (None, "<unknown>"):
+        try:
+            filename = Path(str(filename)).name
+        except Exception:
+            filename = str(filename)
+    line = details.get("line")
+    if line is None:
+        line = "?"
+    msg = f"{filename}:{line}: {code} - {reason}"
+    warnings.append(msg)
 
 
 def _contains_pushpop(node: Node) -> bool:
@@ -133,10 +142,12 @@ def _strip_sequential_omp(
                     return node
                 if isinstance(check_body, DoLoop):
                     if check_body.has_modified_indices():
-                        if warnings is not None:
-                            warnings.append(
-                                "Dropped OpenMP directive: loop runs sequentially in reverse mode due to index dependency",
-                            )
+                        _warn(
+                            warnings,
+                            node.info,
+                            node.directive,
+                            "Dropped OpenMP directive: loop runs sequentially in reverse mode due to index dependency",
+                        )
                         return check_body
                     node.body = body
                     return node
@@ -2373,7 +2384,10 @@ def _generate_ad_subroutine(
     mod_all_var_names.extend(const_var_names)
     required_vnames = []
     for var in subroutine.required_vars():
-        if var.name in mod_all_var_names or var.is_constant:
+        if (var.name_ext() in mod_all_var_names or
+            var.is_constant or
+            var.name.endswith("pushpop_ad")
+        ):
             continue
         decl = subroutine.decls.find_by_name(var.name) if subroutine.decls else None
         if decl is not None:
@@ -2382,9 +2396,10 @@ def _generate_ad_subroutine(
         required_vnames.append(str(var))
 
     if len(required_vnames) > 0:
+        info = routine_org.info
         _warn(
             warnings,
-            {},
+            info,
             f"{required_vnames} in {subroutine.name}",
             "Required variables are remained",
         )
@@ -2542,6 +2557,17 @@ def generate_ad(
                     routine_map[r.name].update(routine_info["arg_info"])
                 else:
                     routine_map[r.name] = routine_info["arg_info"]
+
+        for routine in mod_org.routines:
+            assumed_args = routine.assumed_intent_args
+            if assumed_args:
+                arg_names = ", ".join(assumed_args)
+                _warn(
+                    warnings,
+                    routine.info,
+                    routine.name,
+                    f"Assumed intent(inout) for arguments {arg_names} because no INTENT attribute was specified",
+                )
 
         used_mods = mod_org.find_use_modules()
         const_var_names: List[str] = []
