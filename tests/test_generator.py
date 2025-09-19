@@ -1,5 +1,7 @@
 import sys
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -414,6 +416,26 @@ class TestGenerator(unittest.TestCase):
         generated = gen("examples/macro_multistmt.F90", warn=False)
         expected = Path("examples/macro_multistmt_ad.F90").read_text()
         self.assertEqual(generated, expected)
+
+    def test_warning_for_assumed_intent(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        src = Path("examples/macro_multistmt.F90").read_text()
+        buf = StringIO()
+        with TemporaryDirectory() as tmp, redirect_stderr(buf):
+            generator.generate_ad(
+                src,
+                "examples/macro_multistmt.F90",
+                warn=True,
+                search_dirs=[".", "examples", "fortran_modules"],
+                fadmod_dir=tmp,
+            )
+        stderr = buf.getvalue()
+        expected_msg = (
+            "Assumed intent(inout) for arguments x, y in routine foo because no INTENT attribute was specified"
+        )
+        self.assertIn(expected_msg, stderr)
 
     def test_deallocate_mod_grad_var_prevents_skip(self):
         code_tree.Node.reset()

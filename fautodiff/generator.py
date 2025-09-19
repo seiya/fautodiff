@@ -2546,6 +2546,14 @@ def generate_ad(
                 else:
                     routine_map[r.name] = routine_info["arg_info"]
 
+        for routine in mod_org.routines:
+            assumed_args = routine.assumed_intent_args
+            if assumed_args:
+                arg_names = ", ".join(assumed_args)
+                warnings.append(
+                    f"Assumed intent(inout) for arguments {arg_names} in routine {routine.name} because no INTENT attribute was specified"
+                )
+
         used_mods = mod_org.find_use_modules()
         const_var_names: List[str] = []
         for name in used_mods:

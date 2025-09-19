@@ -2658,6 +2658,7 @@ class Routine(Node):
     decl_map: Optional[dict] = None
     ad_init: Optional[Block] = None
     ad_content: Optional[Block] = None
+    assumed_intent_args: List[str] = field(default_factory=list, init=False, repr=False)
     kind: ClassVar[str] = "subroutine"
 
     def __post_init__(self):
@@ -2676,6 +2677,8 @@ class Routine(Node):
                 decl = self.decls.find_by_name(arg)
             if decl is not None and decl.intent is None:
                 decl.intent = "inout"
+                if arg not in self.assumed_intent_args:
+                    self.assumed_intent_args.append(arg)
 
     def __str__(self) -> str:
         header = f"[{self.kind.title()}] name: {self.name}"
@@ -2768,6 +2771,10 @@ class Routine(Node):
             intent = "out"
         elif intent is None and name in self.args:
             intent = "inout"
+            if decl is not None:
+                decl.intent = "inout"
+            if name not in self.assumed_intent_args:
+                self.assumed_intent_args.append(name)
         return OpVar(
             name,
             var_type=decl.var_type.copy(),
@@ -2837,6 +2844,7 @@ class Routine(Node):
         clone.directives = dict(self.directives)
         if self.decl_map is not None:
             clone.decl_map = dict(self.decl_map)
+        clone.assumed_intent_args = list(self.assumed_intent_args)
         return clone
 
     def prune_for(
