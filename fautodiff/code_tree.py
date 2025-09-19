@@ -2655,6 +2655,7 @@ class Routine(Node):
     decls: Block = field(default_factory=Block)
     content: Block = field(default_factory=Block)
     directives: dict = field(default_factory=dict)
+    info: Optional[Dict[str, Any]] = field(default=None, repr=False)
     decl_map: Optional[dict] = None
     ad_init: Optional[Block] = None
     ad_content: Optional[Block] = None
@@ -2844,6 +2845,7 @@ class Routine(Node):
         clone.directives = dict(self.directives)
         if self.decl_map is not None:
             clone.decl_map = dict(self.decl_map)
+        clone.info = dict(self.info) if self.info is not None else None
         clone.assumed_intent_args = list(self.assumed_intent_args)
         return clone
 
@@ -6341,6 +6343,7 @@ class OmpDirective(Node):
     clauses: List[Union[str, Dict[str, List[Any]]]] = field(default_factory=list)
     body: Optional[Node] = None
     skip_alloc: bool = False
+    info: Optional[Dict[str, Any]] = field(default=None, repr=False)
 
     def __post_init__(self):
         super().__post_init__()
@@ -6391,18 +6394,22 @@ class OmpDirective(Node):
             yield self.body
 
     def copy(self) -> "OmpDirective":
-        return OmpDirective(self.directive,
-                            copy.deepcopy(self.clauses),
-                            self.body,
-                            self.skip_alloc
-                            )
+        return OmpDirective(
+            self.directive,
+            copy.deepcopy(self.clauses),
+            self.body,
+            self.skip_alloc,
+            info=dict(self.info) if self.info is not None else None,
+        )
 
     def deep_clone(self) -> "OmpDirective":
-        return OmpDirective(self.directive,
-                            copy.deepcopy(self.clauses),
-                            self.body.deep_clone() if self.body is not None else None,
-                            self.skip_alloc
-                            )
+        return OmpDirective(
+            self.directive,
+            copy.deepcopy(self.clauses),
+            self.body.deep_clone() if self.body is not None else None,
+            self.skip_alloc,
+            info=dict(self.info) if self.info is not None else None,
+        )
 
 
     def insert_before(self, id: int, node: Node):
@@ -6574,7 +6581,12 @@ class OmpDirective(Node):
                 new_clauses.append({key: [op, vars]})
                 continue
             new_clauses.append(clause)
-        node = OmpDirective(self.directive, new_clauses, body)
+        node = OmpDirective(
+            self.directive,
+            new_clauses,
+            body,
+            info=dict(self.info) if self.info is not None else None,
+        )
         return [node]
 
     def prune_for(
@@ -6616,7 +6628,12 @@ class OmpDirective(Node):
                     new_clauses.append({key: vars})
                 continue
             new_clauses.append(clause)
-        return OmpDirective(self.directive, new_clauses, body)
+        return OmpDirective(
+            self.directive,
+            new_clauses,
+            body,
+            info=dict(self.info) if self.info is not None else None,
+        )
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         if self.body is None:

@@ -433,7 +433,7 @@ class TestGenerator(unittest.TestCase):
             )
         stderr = buf.getvalue()
         expected_msg = (
-            "Assumed intent(inout) for arguments x, y in routine foo because no INTENT attribute was specified"
+            "macro_multistmt.F90:8: foo - Assumed intent(inout) for arguments x, y because no INTENT attribute was specified"
         )
         self.assertIn(expected_msg, stderr)
 

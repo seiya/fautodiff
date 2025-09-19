@@ -229,7 +229,7 @@ def set_macro_rename_hook(hook: Callable[[str], str]) -> None:
     macro_rename_hook = hook
 
 
-def _rename_macro_identifiers(part: str) -> str:
+def _rename_macro_identifiers(part: str, *, src_name: str, line_no: int) -> str:
     """Rename identifiers with ``_ad`` suffix in macro expansions."""
 
     renames: List[Tuple[str, str]] = []
@@ -239,8 +239,9 @@ def _rename_macro_identifiers(part: str) -> str:
         if token.endswith(AD_SUFFIX):
             new = macro_rename_hook(token)
             if new != token:
+                filename = Path(str(src_name)).name
                 macro_warnings.append(
-                    f"identifier '{token}' in macro expansion renamed to '{new}'"
+                    f"{filename}:{line_no}: identifier '{token}' in macro expansion renamed to '{new}'"
                 )
                 renames.append((token, new))
             return new
@@ -366,11 +367,11 @@ def _extract_macros(src: str) -> None:
             depth = max(depth - 1, 0)
 
 
-def _expand_macros(src: str) -> str:
+def _expand_macros(src: str, src_name: str) -> str:
     """Expand object-like macros in ``src`` and record their origins."""
 
     out_lines: List[str] = []
-    for line in src.splitlines():
+    for line_no, line in enumerate(src.splitlines(), 1):
         stripped = line.strip()
         if stripped.startswith(_CPP_PREFIX):
             out_lines.append(line)
@@ -384,19 +385,24 @@ def _expand_macros(src: str) -> str:
                     out_lines.append(f"{_CPP_PREFIX} {cond}")
                     parts = [p.strip() for p in expansion.split(";") if p.strip()]
                     for part in parts:
-                        out_lines.append(_rename_macro_identifiers(part))
+                        out_lines.append(
+                            _rename_macro_identifiers(part, src_name=src_name, line_no=line_no)
+                        )
                 out_lines.append(f"{_CPP_PREFIX} #endif")
                 continue
             if name in macro_table:
                 expansion = macro_table._expand(macro_table[name], [name])
                 parts = [p.strip() for p in expansion.split(";") if p.strip()]
                 for part in parts:
-                    out_lines.append(_rename_macro_identifiers(part))
+                    out_lines.append(
+                        _rename_macro_identifiers(part, src_name=src_name, line_no=line_no)
+                    )
                 continue
         out_lines.append(line)
     if src.endswith("\n"):
         return "\n".join(out_lines) + "\n"
     return "\n".join(out_lines)
+
 
 
 def _mark_module_macros(modules: List[Module]) -> None:
@@ -965,7 +971,7 @@ def parse_src(
     _SRC_LINES = src.splitlines()
     src = _inject_cpp_lines(src)
     _extract_macros(src)
-    src = _expand_macros(src)
+    src = _expand_macros(src, src_name)
     reader = FortranStringReader(
         src, ignore_comments=False, include_omp_conditional_lines=True
     )
@@ -1333,9 +1339,13 @@ def _parse_decls(
                         continue
                     if text.lower().startswith("!$omp"):
                         if omp_pending is not None:
+                            line_no = None
+                            if getattr(cnt, "item", None) is not None and getattr(cnt.item, "span", None):
+                                line_no = cnt.item.span[0]
+                            info_dir = {"file": src_name, "line": line_no, "code": text}
                             end, directive, clauses = _parse_omp_directive(text)
                             if not end:
-                                omp_pending.append(OmpDirective(directive, clauses))
+                                omp_pending.append(OmpDirective(directive, clauses, info=info_dir))
                         continue
                     if text != "":
                         decls.append(Statement(text))
@@ -2250,9 +2260,14 @@ def _parse_routine(
             ):
                 text = stmt.content[idx].items[0].strip()
                 if text.lower().startswith("!$omp"):
+                    line_no = None
+                    comment_item = stmt.content[idx]
+                    if getattr(comment_item, "item", None) is not None and getattr(comment_item.item, "span", None):
+                        line_no = comment_item.item.span[0]
+                    info_dir = {"file": src_name, "line": line_no, "code": text}
                     end, directive, clauses = _parse_omp_directive(text)
                     if not end:
-                        omp_info = (directive, clauses)
+                        omp_info = (directive, clauses, info_dir)
                 idx += 1
             idx += 1
             body = _block(stmt.content[idx:-1], decl_map, type_map)
@@ -2281,7 +2296,7 @@ def _parse_routine(
                     body, index, OpRange([start_val, end_val, step]), label=label
                 )
             if omp_info is not None:
-                return OmpDirective(omp_info[0], omp_info[1], loop)
+                return OmpDirective(omp_info[0], omp_info[1], loop, info=omp_info[2])
             return loop
         if isinstance(stmt, Fortran2003.Return_Stmt):
             return ReturnStmt()
@@ -2431,14 +2446,14 @@ def _parse_routine(
                         for n in inner:
                             if isinstance(n, IfBlock):
                                 if seg:
-                                    omp_seg = OmpDirective(omp.directive, omp.clauses, Block(seg))
+                                    omp_seg = OmpDirective(omp.directive, omp.clauses, Block(seg), info=omp.info)
                                     blk.append(omp_seg)
                                     seg = []
                                 blk.append(n)
                             else:
                                 seg.append(n)
                         if seg:
-                            omp_seg = OmpDirective(omp.directive, omp.clauses, Block(seg))
+                            omp_seg = OmpDirective(omp.directive, omp.clauses, Block(seg), info=omp.info)
                             blk.append(omp_seg)
                         continue
                 omp.body = body
@@ -2474,13 +2489,14 @@ def _parse_routine(
                     continue
                 text = st.items[0].strip()
                 if text.lower().startswith("!$omp"):
+                    info_dir = {"file": src_name, "line": line_no, "code": text}
                     end, directive, clauses = _parse_omp_directive(text)
                     if end:
                         i += 1
                         continue
                     dir_norm = directive.split("(")[0].strip().lower()
                     if dir_norm in _OMP_STANDALONE_DIRECTIVES:
-                        blk.append(OmpDirective(directive, clauses))
+                        blk.append(OmpDirective(directive, clauses, info=info_dir))
                         i += 1
                         continue
                     if dir_norm in _OMP_FOLLOWS_STMT_DIRECTIVES:
@@ -2489,10 +2505,10 @@ def _parse_routine(
                             st2 = body_list[i]
                             node = _parse_stmt(st2, decl_map, type_map)
                             consumed.update(getattr(node, "_consumed_lines", set()))
-                            blk.append(OmpDirective(directive, clauses, node))
+                            blk.append(OmpDirective(directive, clauses, node, info=info_dir))
                             i += 1
                         else:
-                            blk.append(OmpDirective(directive, clauses))
+                            blk.append(OmpDirective(directive, clauses, info=info_dir))
                         continue
                     body, i = _parse_omp_region(
                         body_list, i + 1, decl_map, type_map, directive
@@ -2511,15 +2527,15 @@ def _parse_routine(
                             for n in inner:
                                 if isinstance(n, IfBlock):
                                     if seg:
-                                        blk.append(OmpDirective(directive, clauses, Block(seg)))
+                                        blk.append(OmpDirective(directive, clauses, Block(seg), info=info_dir))
                                         seg = []
                                     blk.append(n)
                                 else:
                                     seg.append(n)
                             if seg:
-                                blk.append(OmpDirective(directive, clauses, Block(seg)))
+                                blk.append(OmpDirective(directive, clauses, Block(seg), info=info_dir))
                             continue
-                    blk.append(OmpDirective(directive, clauses, body))
+                    blk.append(OmpDirective(directive, clauses, body, info=info_dir))
                     continue
                 i += 1
                 continue
@@ -2551,6 +2567,13 @@ def _parse_routine(
                 routine = Function(name, args, result)
             else:
                 raise ValueError(type(content))
+            line_no = None
+            if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
+                line_no = stmt.item.span[0]
+            stmt_code = getattr(stmt, "string", None)
+            if stmt_code is None:
+                stmt_code = stmt.tofortran()
+            routine.info = {"file": src_name, "line": line_no, "code": stmt_code}
             routine.directives = directives
             routine.decl_map = decl_map
             continue
