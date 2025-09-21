@@ -40,7 +40,7 @@ class TestComplexNumbers(unittest.TestCase):
             """
         )
         generated = generator.generate_ad(src, "test.f90", warn=False)
-        self.assertIn("complex :: x_ad", generated)
+        self.assertIn("complex, intent(inout) :: x_ad", generated)
         self.assertIn("z_ad = x_ad * y + y_ad * x", generated)
 
 
