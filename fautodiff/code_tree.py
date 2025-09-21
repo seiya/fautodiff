@@ -2402,6 +2402,9 @@ class CallStatement(Node):
                 upper_txt = dim_txt
             lower_txt = lower_txt.strip()
             upper_txt = upper_txt.strip()
+            if upper_txt == "*" or lower_txt == "*":
+                new_dims.append(idx_val.deep_clone())
+                continue
             lower = (
                 self._parse_bound_expr(lower_txt, param_map)
                 if lower_txt
