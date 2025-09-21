@@ -16,7 +16,8 @@ contains
     real :: tmp
     integer :: ierr
 
-    call MPI_Allreduce_fwd_ad(x, x_ad, tmp, tmp_ad, 1, MPI_REAL, MPI_SUM, comm, ierr) ! call MPI_Allreduce(x, tmp, 1, MPI_REAL, MPI_SUM, comm, ierr)
+    call MPI_Allreduce_fwd_ad(x, x_ad, tmp, tmp_ad, 1, MPI_REAL, MPI_SUM, comm, ierr)
+    ! call MPI_Allreduce(x, tmp, 1, MPI_REAL, MPI_SUM, comm, ierr)
     x_ad = tmp_ad ! x = tmp
     x = tmp
 
@@ -34,7 +35,8 @@ contains
 
     tmp_ad = x_ad ! x = tmp
     x_ad = 0.0 ! x = tmp
-    call MPI_Allreduce_rev_ad(x, x_ad, tmp_ad, 1, MPI_REAL, MPI_SUM, comm, ierr) ! call MPI_Allreduce(x, tmp, 1, MPI_REAL, MPI_SUM, comm, ierr)
+    call MPI_Allreduce_rev_ad(x, x_ad, tmp_ad, 1, MPI_REAL, MPI_SUM, comm, ierr)
+    ! call MPI_Allreduce(x, tmp, 1, MPI_REAL, MPI_SUM, comm, ierr)
 
     return
   end subroutine foo_rev_ad

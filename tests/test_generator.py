@@ -983,7 +983,11 @@ class TestGenerator(unittest.TestCase):
         # Accumulation into field_ad slice inside the conditional (ignore whitespace)
         import re as _re
 
-        pat = r"field_ad\(istart:iend\s*,\s*jend\s*-\s*ihalo\s*\+\s*1\s*:\s*jend\)\s*=\s*send_ad\(\s*:\s*,\s*:\s*\)\s*\+\s*field_ad\(istart:iend\s*,\s*jend\s*-\s*ihalo\s*\+\s*1\s*:\s*jend\)"
+        pat = (
+            r"field_ad\(istart:iend\s*,\s*jend\s*-\s*ihalo\s*\+\s*1\s*:\s*jend\)"
+            r"\s*=\s*send_ad\(\s*:\s*,\s*:\s*\)\s*(?:&\s*\n\s*)?\+\s*field_ad"
+            r"\(istart:iend\s*,\s*jend\s*-\s*ihalo\s*\+\s*1\s*:\s*jend\)"
+        )
         self.assertIsNotNone(_re.search(pat, generated))
 
     def test_reverse_slice_clear_minimal(self):

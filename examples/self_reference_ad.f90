@@ -114,11 +114,15 @@ contains
     integer :: k1
     integer :: k2
 
-    u_ad(n:n + l1 - 1,m:m + l2 - 1) = v_ad(i:i + l1 - 1,j:j + l2 - 1) * u(i:i + l1 - 1,j:j + l2 - 1) + u_ad(i:i + l1 - 1,j:j + l2 - 1) * v(i:i + l1 - 1,j:j + l2 - 1) ! u(n:n+l1-1,m:m+l2-1) = v(i:i+l1-1,j:j+l2-1) * u(i:i+l1-1,j:j+l2-1)
+    u_ad(n:n + l1 - 1,m:m + l2 - 1) = v_ad(i:i + l1 - 1,j:j + l2 - 1) * u(i:i + l1 - 1,j:j + l2 - 1) &
+                                      + u_ad(i:i + l1 - 1,j:j + l2 - 1) * v(i:i + l1 - 1,j:j + l2 - 1)
+    ! u(n:n+l1-1,m:m+l2-1) = v(i:i+l1-1,j:j+l2-1) * u(i:i+l1-1,j:j+l2-1)
     u(n:n + l1 - 1,m:m + l2 - 1) = v(i:i + l1 - 1,j:j + l2 - 1) * u(i:i + l1 - 1,j:j + l2 - 1)
     do k2 = 1, l2
       do k1 = 1, l1
-        w_ad(n + k1 - 1,m + k2 - 1) = w_ad(i + k1 - 1,j + k2 - 1) * v(i + k1 - 1,j + k2 - 1) + v_ad(i + k1 - 1,j + k2 - 1) * w(i + k1 - 1,j + k2 - 1) ! w(n+k1-1,m+k2-1) = w(i+k1-1,j+k2-1) * v(i+k1-1,j+k2-1)
+        w_ad(n + k1 - 1,m + k2 - 1) = w_ad(i + k1 - 1,j + k2 - 1) * v(i + k1 - 1,j + k2 - 1) &
+                                      + v_ad(i + k1 - 1,j + k2 - 1) * w(i + k1 - 1,j + k2 - 1)
+        ! w(n+k1-1,m+k2-1) = w(i+k1-1,j+k2-1) * v(i+k1-1,j+k2-1)
         w(n + k1 - 1,m + k2 - 1) = w(i + k1 - 1,j + k2 - 1) * v(i + k1 - 1,j + k2 - 1)
       end do
     end do
@@ -150,16 +154,22 @@ contains
       do k1 = l1, 1, - 1
         tmp_save_54_ad = w_ad(n + k1 - 1,m + k2 - 1) ! w(n+k1-1,m+k2-1) = w(i+k1-1,j+k2-1) * v(i+k1-1,j+k2-1)
         w_ad(n + k1 - 1,m + k2 - 1) = 0.0 ! w(n+k1-1,m+k2-1) = w(i+k1-1,j+k2-1) * v(i+k1-1,j+k2-1)
-        w_ad(i + k1 - 1,j + k2 - 1) = tmp_save_54_ad * v(i + k1 - 1,j + k2 - 1) + w_ad(i + k1 - 1,j + k2 - 1) ! w(n+k1-1,m+k2-1) = w(i+k1-1,j+k2-1) * v(i+k1-1,j+k2-1)
-        v_ad(i + k1 - 1,j + k2 - 1) = tmp_save_54_ad * w(i + k1 - 1,j + k2 - 1) + v_ad(i + k1 - 1,j + k2 - 1) ! w(n+k1-1,m+k2-1) = w(i+k1-1,j+k2-1) * v(i+k1-1,j+k2-1)
+        w_ad(i + k1 - 1,j + k2 - 1) = tmp_save_54_ad * v(i + k1 - 1,j + k2 - 1) + w_ad(i + k1 - 1,j + k2 - 1)
+        ! w(n+k1-1,m+k2-1) = w(i+k1-1,j+k2-1) * v(i+k1-1,j+k2-1)
+        v_ad(i + k1 - 1,j + k2 - 1) = tmp_save_54_ad * w(i + k1 - 1,j + k2 - 1) + v_ad(i + k1 - 1,j + k2 - 1)
+        ! w(n+k1-1,m+k2-1) = w(i+k1-1,j+k2-1) * v(i+k1-1,j+k2-1)
       end do
     end do
     do n2_51_ad = m, m + l2 - 1
       do n1_51_ad = n, n + l1 - 1
         tmp_save_51_ad = u_ad(n1_51_ad,n2_51_ad) ! u(n:n+l1-1,m:m+l2-1) = v(i:i+l1-1,j:j+l2-1) * u(i:i+l1-1,j:j+l2-1)
         u_ad(n1_51_ad,n2_51_ad) = 0.0 ! u(n:n+l1-1,m:m+l2-1) = v(i:i+l1-1,j:j+l2-1) * u(i:i+l1-1,j:j+l2-1)
-        v_ad(i + n1_51_ad - n,j + n2_51_ad - m) = tmp_save_51_ad * u(i + n1_51_ad - n,j + n2_51_ad - m) + v_ad(i + n1_51_ad - n,j + n2_51_ad - m) ! u(n:n+l1-1,m:m+l2-1) = v(i:i+l1-1,j:j+l2-1) * u(i:i+l1-1,j:j+l2-1)
-        u_ad(i + n1_51_ad - n,j + n2_51_ad - m) = tmp_save_51_ad * v(i + n1_51_ad - n,j + n2_51_ad - m) + u_ad(i + n1_51_ad - n,j + n2_51_ad - m) ! u(n:n+l1-1,m:m+l2-1) = v(i:i+l1-1,j:j+l2-1) * u(i:i+l1-1,j:j+l2-1)
+        v_ad(i + n1_51_ad - n,j + n2_51_ad - m) = tmp_save_51_ad * u(i + n1_51_ad - n,j + n2_51_ad - m) &
+                                                  + v_ad(i + n1_51_ad - n,j + n2_51_ad - m)
+        ! u(n:n+l1-1,m:m+l2-1) = v(i:i+l1-1,j:j+l2-1) * u(i:i+l1-1,j:j+l2-1)
+        u_ad(i + n1_51_ad - n,j + n2_51_ad - m) = tmp_save_51_ad * v(i + n1_51_ad - n,j + n2_51_ad - m) &
+                                                  + u_ad(i + n1_51_ad - n,j + n2_51_ad - m)
+        ! u(n:n+l1-1,m:m+l2-1) = v(i:i+l1-1,j:j+l2-1) * u(i:i+l1-1,j:j+l2-1)
       end do
     end do
 
