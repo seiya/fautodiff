@@ -7117,12 +7117,25 @@ def _wrap_fortran_line(line: str) -> List[str]:
         remaining = indent + rest
 
     if remaining:
+        tail = remaining
+        if comment_text is not None and had_trailing_ampersand:
+            tail = tail.rstrip()
+            if not tail.endswith("&"):
+                tail = f"{tail} &"
         needs_newline = has_newline or comment_text is not None
-        tail = f"{remaining}{'\n' if needs_newline else ''}"
+        if needs_newline and not tail.endswith("\n"):
+            tail = f"{tail}\n"
         pieces.append(tail)
     elif (has_newline or comment_text is not None) and pieces:
         # Preserve the trailing newline when the loop consumed the content.
-        pieces[-1] = pieces[-1][:-1] + "\n"
+        tail = pieces[-1]
+        if comment_text is not None and had_trailing_ampersand:
+            tail = tail.rstrip()
+            if not tail.endswith("&"):
+                tail = f"{tail} &"
+        if not tail.endswith("\n"):
+            tail = f"{tail}\n"
+        pieces[-1] = tail
 
     if comment_text is not None:
         if pieces and not pieces[-1].endswith("\n"):

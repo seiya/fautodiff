@@ -1256,7 +1256,7 @@ class TestRenderWrapping(unittest.TestCase):
     def test_inline_comment_with_existing_continuation_marker(self):
         stmt = Statement("foo & ! comment")
         lines = render_program(stmt, indent=1).splitlines()
-        self.assertEqual(lines[0], "  foo")
+        self.assertEqual(lines[0], "  foo &")
         self.assertTrue(lines[1].lstrip().startswith("!"))
 
     def test_comment_only_wraps_with_bang_prefix(self):
@@ -1268,6 +1268,18 @@ class TestRenderWrapping(unittest.TestCase):
             stripped = line.lstrip()
             self.assertTrue(stripped.startswith("!"))
             self.assertLessEqual(len(line), 132)
+
+    def test_inline_comment_preserves_continuation_for_followup_line(self):
+        block = Block(
+            [
+                Statement("call foo(a, b) & ! comment"),
+                Statement("& baz"),
+            ]
+        )
+        lines = render_program(block, indent=1).splitlines()
+        self.assertEqual(lines[0], "  call foo(a, b) &")
+        self.assertTrue(lines[1].lstrip().startswith("!"))
+        self.assertEqual(lines[2], "  & baz")
 
     def test_wrap_prefers_low_precedence_breaks(self):
         terms = [
