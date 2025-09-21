@@ -7194,7 +7194,7 @@ def _wrap_comment_text(comment: str, indent: str, has_newline: bool) -> List[str
     result: List[str] = []
     for idx, text in enumerate(lines):
         needs_nl = has_newline or idx < len(lines) - 1
-        result.append(f"{text}{'\n' if needs_nl else ''}")
+        result.append(text + ("\n" if needs_nl else ""))
     return result
 
 
