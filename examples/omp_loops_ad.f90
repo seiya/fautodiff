@@ -82,6 +82,7 @@ contains
     integer :: in
     integer :: ip
 
+    !$omp parallel do private(in, ip)
     do i = n, 1, - 1
       in = i - 1
       ip = i + 1
@@ -90,11 +91,12 @@ contains
       else if (i == n) then
         ip = 1
       end if
-      x_ad(i) = y_ad(i) * 2.0 / 4.0 + x_ad(i) ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
-      x_ad(in) = y_ad(i) / 4.0 + x_ad(in) ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
-      x_ad(ip) = y_ad(i) / 4.0 + x_ad(ip) ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
-      y_ad(i) = 0.0 ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      x_ad(i) = y_ad(in) / 4.0 + y_ad(ip) / 4.0 + y_ad(i) * 2.0 / 4.0 + x_ad(i)
+      ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0; y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0; y(i) = (2.0 * x(i) + x(in) + x(ip)) /
+      ! 4.0
     end do
+    !$omp end parallel do
+    y_ad = 0.0 ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
 
     return
   end subroutine stencil_loop_rev_ad

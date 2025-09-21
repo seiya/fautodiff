@@ -53,13 +53,16 @@ from .code_tree import (
 from .operators import (
     AryIndex,
     Kind,
+    OpAdd,
     OpComplex,
     Operator,
     OpFunc,
     OpInt,
+    OpNeg,
     OpNot,
     OpRange,
     OpReal,
+    OpSub,
     OpTrue,
     OpVar,
     VarType,
@@ -107,6 +110,257 @@ def _contains_pushpop(node: Node) -> bool:
     return False
 
 
+def _extract_int_value(op: Operator) -> Optional[int]:
+    """Return the integer value represented by ``op`` if possible."""
+
+    if isinstance(op, OpInt):
+        return op.val
+    if isinstance(op, OpNeg) and isinstance(op.args[0], OpInt):
+        return -op.args[0].val
+    return None
+
+
+def _flatten_add(op: Operator) -> List[Operator]:
+    """Return the list of additive terms contained in ``op``."""
+
+    if isinstance(op, OpAdd):
+        return _flatten_add(op.args[0]) + _flatten_add(op.args[1])
+    return [op]
+
+
+def _clone_var_with_index(var: OpVar, index: Optional[List[Operator]]) -> OpVar:
+    """Clone ``var`` and override its index list with ``index``."""
+
+    cloned_index = None
+    if index is not None:
+        cloned_index = AryIndex([idx.deep_clone() for idx in index])
+    return OpVar(
+        name=var.name,
+        index=cloned_index,
+        var_type=var.var_type.copy() if var.var_type else None,
+        dims=var.dims,
+        dims_raw=var.dims_raw,
+        reference=var.reference,
+        intent=var.intent,
+        ad_target=var.ad_target,
+        is_constant=var.is_constant,
+        allocatable=var.allocatable,
+        pointer=var.pointer,
+        optional=var.optional,
+        target=var.target,
+        save=var.save,
+        value=var.value,
+        volatile=var.volatile,
+        asynchronous=var.asynchronous,
+        declared_in=var.declared_in,
+        ref_var=var.ref_var,
+    )
+
+
+def _replace_var_index(
+    op: Operator, target: str, new_index: Operator
+) -> Operator:
+    """Deep-clone ``op`` and replace ``target`` variable indices with ``new_index``."""
+
+    def _replace(node: Operator) -> Operator:
+        if isinstance(node, OpVar) and node.name == target:
+            return _clone_var_with_index(node, [new_index])
+        if getattr(node, "args", None) is None:
+            return node
+        new_args = []
+        changed = False
+        for arg in node.args:
+            if isinstance(arg, Operator):
+                replaced = _replace(arg)
+                new_args.append(replaced)
+                if replaced is not arg:
+                    changed = True
+            else:
+                new_args.append(arg)
+        if changed:
+            return node.copy_with_args(new_args)
+        return node
+
+    return _replace(op.deep_clone())
+
+
+def _convert_scatter_to_gather(loop: DoLoop) -> Optional[List[Node]]:
+    """Attempt to rewrite scatter updates in ``loop`` into gather form.
+
+    Returns a list of nodes that should be inserted *after* the loop when a
+    transformation occurs. ``None`` is returned when the loop does not match the
+    expected pattern and no rewrite is performed.
+    """
+
+    index_var = loop.index
+    loop_range = loop.range
+    start, end, step = loop_range
+
+    step_val = 1
+    if step is not None:
+        step_int = _extract_int_value(step)
+        if step_int is None or abs(step_int) != 1:
+            return None
+        step_val = step_int
+
+    lower = start if step_val > 0 else end
+    upper = end if step_val > 0 else start
+
+    body_children = list(loop._body.iter_children())
+
+    alias_delta: Dict[str, int] = {}
+    alias_vars: Dict[str, OpVar] = {}
+    x_assignments: List[Assignment] = []
+    y_zero_assignment: Optional[Assignment] = None
+    for stmt in body_children:
+        if isinstance(stmt, ClearAssignment):
+            if y_zero_assignment is None:
+                y_zero_assignment = stmt
+                continue
+            return None
+        if isinstance(stmt, Assignment):
+            lhs = stmt.lhs
+            if lhs.index is None and lhs.var_type.is_integer_type():
+                rhs = stmt.rhs
+                delta: Optional[int] = None
+                if isinstance(rhs, OpVar) and rhs.name == index_var.name:
+                    delta = 0
+                elif isinstance(rhs, OpAdd):
+                    args = rhs.args
+                    if isinstance(args[0], OpVar) and args[0].name == index_var.name:
+                        const = _extract_int_value(args[1])
+                        if const is not None:
+                            delta = const
+                elif isinstance(rhs, OpSub):
+                    args = rhs.args
+                    if isinstance(args[0], OpVar) and args[0].name == index_var.name:
+                        const = _extract_int_value(args[1])
+                        if const is not None:
+                            delta = -const
+                if delta is None:
+                    return None
+                alias_delta[lhs.name] = delta
+                alias_vars[lhs.name] = lhs
+                continue
+            if lhs.index is not None and lhs.name.endswith(AD_SUFFIX):
+                if stmt.rhs.collect_vars() == []:
+                    if y_zero_assignment is None:
+                        y_zero_assignment = stmt
+                        continue
+                    return None
+                if x_assignments and lhs.name != x_assignments[0].lhs.name:
+                    return None
+                x_assignments.append(stmt)
+                continue
+        elif isinstance(stmt, IfBlock):
+            continue
+
+    if not x_assignments or y_zero_assignment is None:
+        return None
+
+    x_var = x_assignments[0].lhs
+    if x_var.index is None or len(x_var.index) != 1:
+        return None
+    y_var = y_zero_assignment.lhs
+    if y_var.index is None or len(y_var.index) != 1:
+        return None
+
+    gather_terms: List[Operator] = []
+    comments: List[str] = []
+
+    lower_clone = lower.deep_clone()
+
+    delta_alias: Dict[int, OpVar] = {}
+    for name, delta in alias_delta.items():
+        if delta not in delta_alias:
+            delta_alias[delta] = alias_vars[name]
+
+    for assign in x_assignments:
+        lhs = assign.lhs
+        idx_expr = lhs.index[0]
+        if isinstance(idx_expr, OpVar):
+            if idx_expr.name == index_var.name:
+                delta = 0
+            elif idx_expr.name in alias_delta:
+                delta = alias_delta[idx_expr.name]
+            else:
+                return None
+        else:
+            return None
+
+        terms = [term for term in _flatten_add(assign.rhs)]
+        terms = [t for t in terms if t != lhs]
+        if not terms:
+            continue
+
+        if delta == 0:
+            source_index = index_var.deep_clone()
+        else:
+            inv_alias = delta_alias.get(-delta)
+            if inv_alias is not None:
+                source_index = inv_alias.deep_clone()
+            else:
+                if delta > 0:
+                    source_index = index_var.deep_clone() - OpInt(delta)
+                else:
+                    source_index = index_var.deep_clone() + OpInt(-delta)
+
+        for term in terms:
+            gather_terms.append(
+                _replace_var_index(term, y_var.name, source_index)
+            )
+        if assign.ad_info:
+            comments.append(assign.ad_info)
+
+    if not gather_terms:
+        return None
+
+    lhs_var = _clone_var_with_index(x_var, [index_var.deep_clone()])
+    rhs = lhs_var.deep_clone()
+    for term in gather_terms:
+        rhs = term + rhs
+
+    new_assignment = Assignment(
+        lhs_var,
+        rhs,
+        info=x_assignments[0].info,
+        ad_info="; ".join(comments) if comments else x_assignments[0].ad_info,
+    )
+
+    new_children: List[Node] = []
+    inserted = False
+    for stmt in body_children:
+        if stmt in x_assignments:
+            if not inserted:
+                new_children.append(new_assignment)
+                inserted = True
+            continue
+        if stmt is y_zero_assignment:
+            continue
+        new_children.append(stmt)
+
+    loop._body._children = new_children
+    loop.build_context()
+
+    y_full = _clone_var_with_index(y_var, None)
+    if isinstance(y_zero_assignment, ClearAssignment):
+        zero_rhs = OpReal("0.0", kind=y_var.kind)
+        zero_info = y_zero_assignment.info
+        zero_comment = y_zero_assignment.ad_info
+    else:
+        zero_rhs = y_zero_assignment.rhs.deep_clone()
+        zero_info = y_zero_assignment.info
+        zero_comment = y_zero_assignment.ad_info
+    zero_stmt = Assignment(
+        y_full,
+        zero_rhs,
+        info=zero_info,
+        ad_info=zero_comment,
+    )
+
+    return [zero_stmt]
+
+
 def _strip_sequential_omp(
     node: Node, warnings: Optional[List[str]], *, reverse: bool
 ) -> Node:
@@ -142,6 +396,18 @@ def _strip_sequential_omp(
                     return node
                 if isinstance(check_body, DoLoop):
                     if check_body.has_modified_indices():
+                        extras = _convert_scatter_to_gather(check_body)
+                        if extras is not None:
+                            _warn(
+                                warnings,
+                                node.info,
+                                node.directive,
+                                "Converted scatter updates to gather form to keep OpenMP parallelism",
+                            )
+                            node.body = body
+                            if extras:
+                                return Block([node, *extras])
+                            return node
                         _warn(
                             warnings,
                             node.info,

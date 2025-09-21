@@ -161,7 +161,10 @@ include `parallel`, `parallel do` (and related forms such as `do`,
 derivative variables so that both the primal and `_ad` versions participate.
 Loops with cross‑iteration dependencies are detected during reverse-mode
 generation; in these cases the OpenMP directive is dropped and the loop runs
-sequentially.
+sequentially. When the dependency arises from scatter-style updates (e.g.
+stencil kernels) the generator rewrites the reverse loop to gather
+contributions instead. The OpenMP directive is preserved in those cases and a
+diagnostic message notes that the loop was rewritten for thread-safety.
 
 ## Runtime stack module
 
