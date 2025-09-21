@@ -40,7 +40,10 @@ This document summarizes the Fortran constructs handled by the AD code generator
   `reduction`, `copyin`, or `copyprivate`) automatically include the
   corresponding derivative variables with the `_ad` suffix.
 - In reverse mode, loops that introduce cross‑iteration dependencies are detected and
-  their OpenMP directives are removed so that the loop executes sequentially.
+  their OpenMP directives are removed so that the loop executes sequentially. When the
+  dependency stems from scatter-style assignments (such as stencil updates), the
+  generator rewrites the loop to use gather updates so that the OpenMP directive can be
+  preserved. A warning is emitted when this rewrite is applied.
 
 ## Parameter and module variables
 - Parameter constants remain untouched.

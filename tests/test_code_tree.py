@@ -501,6 +501,96 @@ class TestNodeMethods(unittest.TestCase):
             {str(v) for v in ifblk.required_vars(VarList([a]))}, {"i", "c", "b", "a"}
         )
 
+    def test_required_vars_guarded_assignment(self):
+        a = OpVar("a")
+        b = OpVar("b")
+        c = OpVar("c")
+        d = OpVar("d")
+        cond1 = a > OpInt(0)
+        cond2 = a < OpInt(0)
+        init_b = IfBlock([(cond1, Block([Assignment(b, OpReal("1.0"))]))])
+        init_d = IfBlock([(cond2, Block([Assignment(d, OpReal("1.0"))]))])
+        assign_c = Assignment(c, OpReal("1.0"))
+        use_b = IfBlock([(cond1, Block([Assignment(c, c + b)]))])
+        use_d = IfBlock([(cond2, Block([Assignment(c, c + d)]))])
+        program = Block([init_b, init_d, assign_c, use_b, use_d])
+
+        self.assertEqual({str(v) for v in program.required_vars()}, {"a"})
+
+    def test_required_vars_guard_mismatch(self):
+        a = OpVar("a")
+        b = OpVar("b")
+        c = OpVar("c")
+        cond_assign = a > OpInt(0)
+        cond_use_same = a > OpInt(0)
+        cond_use_diff = a > OpInt(-1)
+        init_b = IfBlock([(cond_assign, Block([Assignment(b, OpReal("1.0"))]))])
+        assign_c = Assignment(c, OpReal("1.0"))
+        use_same = IfBlock([(cond_use_same, Block([Assignment(c, c + b)]))])
+        use_diff = IfBlock([(cond_use_diff, Block([Assignment(c, c * b)]))])
+        program = Block([init_b, assign_c, use_same, use_diff])
+        self.assertEqual({str(v) for v in program.required_vars()}, {"a", "b"})
+
+    def test_required_vars_guarded_array_components(self):
+        i = OpVar("i")
+        istart = OpVar("istart")
+        iend = OpVar("iend")
+        cond = (i >= istart) & (i <= iend)
+        flux1 = OpVar("flux", index=[OpInt(1)])
+        flux2 = OpVar("flux", index=[OpInt(2)])
+        dhdt = OpVar("dhdt", index=[i])
+        assign1 = Assignment(flux1, dhdt)
+        assign2 = Assignment(flux2, dhdt)
+        read1 = Assignment(OpVar("u", index=[i]), flux1)
+        read2 = Assignment(OpVar("h", index=[i]), flux2)
+        program = Block(
+            [
+                IfBlock([(cond, Block([assign1]))]),
+                IfBlock([(cond, Block([assign2]))]),
+                IfBlock([(cond, Block([read1]))]),
+                IfBlock([(cond, Block([read2]))]),
+            ]
+        )
+        self.assertEqual(
+            {str(v) for v in program.required_vars()}, {"dhdt(i)", "i", "istart", "iend"}
+        )
+
+    def test_required_vars_guarded_array_components_with_dims(self):
+        i = OpVar("i")
+        istart = OpVar("istart")
+        iend = OpVar("iend")
+        cond = (i >= istart) & (i <= iend)
+
+        flux_dims = (OpRange([OpInt(1), OpInt(2)]),)
+        flux1 = OpVar(
+            "flux",
+            index=[OpInt(1)],
+            dims=flux_dims,
+            var_type=VarType("real"),
+        )
+        flux2 = OpVar(
+            "flux",
+            index=[OpInt(2)],
+            dims=flux_dims,
+            var_type=VarType("real"),
+        )
+        dhdt = OpVar("dhdt", index=[i])
+        assign1 = Assignment(flux1, dhdt)
+        assign2 = Assignment(flux2, dhdt)
+        read1 = Assignment(OpVar("u", index=[i]), flux1)
+        read2 = Assignment(OpVar("h", index=[i]), flux2)
+        program = Block(
+            [
+                IfBlock([(cond, Block([assign1]))]),
+                IfBlock([(cond, Block([assign2]))]),
+                IfBlock([(cond, Block([read1]))]),
+                IfBlock([(cond, Block([read2]))]),
+            ]
+        )
+        self.assertEqual(
+            {str(v) for v in program.required_vars()}, {"dhdt(i)", "i", "istart", "iend"}
+        )
+
     def test_check_initial_simple_accumulate_block(self):
         code = textwrap.dedent(
             """\

@@ -456,6 +456,19 @@ class AryIndex:
         else:
             return self
 
+    def replace_with(self, src: Operator, dest: Operator) -> AryIndex:
+        updated = False
+        new_dims: List[Operator] = []
+        for dim in self.dims:
+            new_dim = dim.replace_with(src, dest) if dim is not None else None
+            if new_dim is not dim:
+                updated = True
+            new_dims.append(new_dim)
+        if updated:
+            return AryIndex(new_dims)
+        else:
+            return self
+
     def collect_vars(self) -> List[OpVar]:
         """Collect all variables used within the index expressions."""
         if self.dims is None:
@@ -579,6 +592,14 @@ class Operator:
     def eval(cls, args: List[Optional[Operator]]) -> "Operator":
         return cls(args)
 
+    def get_int(self) -> int | None:
+        """Return integer value of ``op`` if it represents a literal."""
+        if isinstance(self, OpInt):
+            return self.val
+        if isinstance(self, OpNeg) and isinstance(self.args[0], OpInt):
+            return - self.args[0].val
+        return None
+
     def copy_with_args(self, args: List[Optional[Operator]]) -> "Operator":
         for i, arg in enumerate(args):
             if isinstance(arg, OpRange):
@@ -637,7 +658,7 @@ class Operator:
         args_new: List[Any] = []
         flag = False  # True if replaced
         for arg in self.args:
-            if arg is src:
+            if arg == src:
                 args_new.append(dest)
                 flag = True
             elif isinstance(arg, Operator):
@@ -666,7 +687,7 @@ class Operator:
         """Return the derivative operation with respetive to ```var```."""
         raise NotImplementedError(f"derivative in {type(self)}")
 
-    def __neg__(self):
+    def __neg__(self) -> "Operator":
         """Return the negated operator, simplifying when possible."""
         if isinstance(self, OpNeg):
             return self.args[0]
@@ -674,7 +695,7 @@ class Operator:
             return self
         return OpNeg(args=[self])
 
-    def __add__(self, other):
+    def __add__(self, other) -> "Operator":
         """Addition with various algebraic simplifications."""
         if isinstance(other, int):
             return self + OpInt(other)
@@ -733,6 +754,8 @@ class Operator:
                 and isinstance(self, OpNum)
             ):
                 return other.args[0] + (other.args[1] + self)
+            if isinstance(other, OpAdd):
+                return self + other.args[0] + other.args[1]
             if (
                 isinstance(self, OpSub)
                 and isinstance(self.args[0], OpNum)
@@ -761,12 +784,14 @@ class Operator:
                 return self.args[0]
             if isinstance(other, OpSub) and other.args[1] == self:
                 return other.args[0]
+            if isinstance(other, OpSub):
+                return self + other.args[0] - other.args[1]
             if isinstance(other, OpNeg):
                 return self - other.args[0]
             return OpAdd(args=[self, other])
         return NotImplemented
 
-    def __sub__(self, other):
+    def __sub__(self, other) -> "Operator":
         """Subtraction with algebraic simplifications."""
         if isinstance(other, int):
             return self - OpInt(other)
@@ -839,6 +864,8 @@ class Operator:
                 return -other.args[1]
             if isinstance(other, OpAdd) and other.args[1] == self:
                 return other.args[0]
+            if isinstance(other, OpAdd):
+                return self - other.args[0] - other.args[1]
             if (
                 isinstance(self, OpSub)
                 and isinstance(self.args[0], OpNum)
@@ -867,12 +894,14 @@ class Operator:
                 return -self.args[1]
             if isinstance(other, OpSub) and other.args[0] == self:
                 return other.args[1]
+            if isinstance(other, OpSub):
+                return self - other.args[0] + other.args[1]
             if isinstance(other, OpNeg):
                 return self + other.args[0]
             return OpSub(args=[self, other])
         return NotImplemented
 
-    def __mul__(self, other):
+    def __mul__(self, other) -> "Operator":
         """Multiplication with constant folding and simplifications."""
         if isinstance(other, int):
             return self * OpInt(other)
@@ -976,7 +1005,7 @@ class Operator:
             return OpMul(args=[self, other])
         return NotImplemented
 
-    def __truediv__(self, other):
+    def __truediv__(self, other) -> "Operator":
         """Division with simplifications and fraction handling."""
         if isinstance(other, int):
             return self / OpInt(other)
@@ -1023,7 +1052,7 @@ class Operator:
             return OpDiv(args=[self, other])
         return NotImplemented
 
-    def __pow__(self, other):
+    def __pow__(self, other) -> "Operator":
         if isinstance(other, int):
             return OpPow(args=[self, OpInt(other)])
         if isinstance(other, Operator):
@@ -1055,30 +1084,30 @@ class Operator:
             return OpPow(args=[self, other])
         return NotImplemented
 
-    def __lt__(self, other):
+    def __lt__(self, other) -> OpLogic:
         if isinstance(other, int):
             return self < OpInt(other)
         return OpLogic("<", args=[self, other])
 
-    def __le__(self, other):
+    def __le__(self, other) -> OpLogic:
         if isinstance(other, int):
             return self <= OpInt(other)
         return OpLogic("<=", args=[self, other])
 
-    def __gt__(self, other):
+    def __gt__(self, other) -> OpLogic:
         if isinstance(other, int):
             return self > OpInt(other)
         return OpLogic(">", args=[self, other])
 
-    def __ge__(self, other):
+    def __ge__(self, other) -> OpLogic:
         if isinstance(other, int):
             return self >= OpInt(other)
         return OpLogic(">=", args=[self, other])
 
-    def __and__(self, other):
+    def __and__(self, other) -> OpLogic:
         return OpLogic(".and.", args=[self, other])
 
-    def __or__(self, other):
+    def __or__(self, other) -> OpLogic:
         return OpLogic(".or.", args=[self, other])
 
 
@@ -1497,6 +1526,12 @@ class OpVar(OpLeaf):
             return False
         return self.var_type.typename.lower().startswith("complex")
 
+    @property
+    def is_integer_type(self) -> bool:
+        if self.var_type is None:
+            return False
+        return self.var_type.typename.lower().startswith("integer")
+
     def is_array(self) -> bool:
         if self.dims is None and self.index is None:
             return False
@@ -1535,6 +1570,22 @@ class OpVar(OpLeaf):
             declared_in=self.declared_in,
             ref_var=self.ref_var,
         )
+
+    def replace_with(self, src: Operator, dest: Operator) -> "OpVar":
+        if self == src:
+            return dest
+        index = self.index.replace_with(src, dest) if self.index is not None else None
+        if index is not self.index:
+            obj = self.deep_clone().change_index(index)
+        else:
+            obj = self
+        if self.ref_var:
+            ref_var = self.ref_var.replace_with(src, dest)
+            if ref_var is not self.ref_var:
+                if obj is not self:
+                    obj = self.deep_clone()
+                obj.ref_var = ref_var
+        return obj
 
     def add_suffix(self, suffix: Optional[str] = None) -> "OpVar":
         if suffix is None:
@@ -1909,7 +1960,7 @@ class OpPow(OpBinary):
 
 @dataclass
 class OpLogic(OpBinary):
-    """Logical operations (.and., .or., .gt., .ge., .lt., and .le.)."""
+    """Logical operations (.and., .or., .eq., .gt., .ge., .lt., and .le.)."""
 
     op: str = field(default="")
     PRIORITY: ClassVar[int] = 6

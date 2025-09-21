@@ -51,12 +51,28 @@ contains
     real, intent(out) :: y(n)
     real, intent(out) :: y_ad(n)
     logical, intent(in)  :: f
+    real, allocatable :: xtmp_ad(:)
+    real, allocatable :: xtmp(:)
 
+    allocate(xtmp(n))
+    allocate(xtmp_ad(n))
     if (f) then
-      y_ad = x_ad * 2.0 * x ! y = x ** 2
-      y = x**2
+      xtmp_ad = x_ad * 2.0 * x ! xtmp = x**2
+      xtmp = x**2
+      y_ad = xtmp_ad ! y = xtmp
+      y = xtmp
+      if (allocated(xtmp_ad)) then
+        deallocate(xtmp_ad)
+      end if
+      if (allocated(xtmp)) then
+        deallocate(xtmp)
+      end if
       return
     end if
+    xtmp_ad = x_ad ! xtmp = x + 1.0
+    xtmp = x + 1.0
+    y_ad = xtmp_ad * x + x_ad * xtmp ! y = xtmp * x
+    y = xtmp * x
 
     return
   end subroutine alloc_return_fwd_ad
@@ -67,17 +83,39 @@ contains
     real, intent(inout) :: x_ad(n)
     real, intent(inout) :: y_ad(n)
     logical, intent(in)  :: f
-    logical :: return_flag_27_ad
+    real, allocatable :: xtmp_ad(:)
+    logical :: return_flag_28_ad
+    real, allocatable :: xtmp(:)
 
-    return_flag_27_ad = .true.
+    return_flag_28_ad = .true.
+    allocate(xtmp_ad(n))
+    allocate(xtmp(n))
     if (f) then
-      return_flag_27_ad = .false.
+      return_flag_28_ad = .false.
+    end if
+    if (return_flag_28_ad) then
+      xtmp = x + 1.0
     end if
 
+    if (return_flag_28_ad) then
+      xtmp_ad = y_ad * x ! y = xtmp * x
+      x_ad = y_ad * xtmp + x_ad ! y = xtmp * x
+      y_ad = 0.0 ! y = xtmp * x
+      x_ad = xtmp_ad + x_ad ! xtmp = x + 1.0
+    end if
     if (f) then
-      return_flag_27_ad = .true. ! return
-      x_ad = y_ad * 2.0 * x + x_ad ! y = x ** 2
-      y_ad = 0.0 ! y = x ** 2
+      return_flag_28_ad = .true. ! return
+      xtmp_ad = y_ad ! y = xtmp
+      y_ad = 0.0 ! y = xtmp
+      x_ad = xtmp_ad * 2.0 * x + x_ad ! xtmp = x**2
+    end if
+    if (return_flag_28_ad) then
+      if (allocated(xtmp_ad)) then
+        deallocate(xtmp_ad)
+      end if
+      if (allocated(xtmp)) then
+        deallocate(xtmp)
+      end if
     end if
 
     return

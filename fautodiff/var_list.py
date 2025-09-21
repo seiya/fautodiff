@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union
 
 from .operators import AryIndex, Operator, OpInt, OpNeg, OpRange, OpVar
 from .var_dict import VarDict
@@ -1345,6 +1345,7 @@ class VarList:
 
     _store: Dict[str, IndexList] = field(default_factory=dict)
     _context: List[Tuple[OpVar, List[OpVar], OpRange]] = field(default_factory=list)
+    _guard_map: Dict[str, Set[Optional[str]]] = field(default_factory=dict)
 
     def __init__(
         self,
@@ -1363,6 +1364,7 @@ class VarList:
         # Internal unified store (name -> IndexList)
         self._store = {}
         self._context = context if context is not None else []
+        self._guard_map = {}
 
         # Add provided variables while skipping expensive reorganisations.
         if vars is not None:
@@ -1378,16 +1380,21 @@ class VarList:
         for name in self.names():
             var_list._store[name] = self._store[name].copy()
         var_list._context = list(self._context)
+        for name in self._guard_map:
+            var_list._guard_map[name] = set(self._guard_map[name])
         return var_list
 
     def copy_context(self) -> VarList:
         """Return a new variable list with the context copied from self"""
-        return VarList(context=self._context)
+        new_list = VarList(context=self._context)
+        return new_list
 
     def clone(self, src: str, dst: str) -> None:
         if src not in self._store:
             raise ValueError(f"{src} not in the list")
         self._store[dst] = self._store[src].copy()
+        if src in self._guard_map:
+            self._guard_map[dst] = set(self._guard_map[src])
 
     def push_context(self, context: Tuple[OpVar, List[OpVar], OpRange]) -> None:
         if not isinstance(context[0], OpVar):
@@ -1492,6 +1499,8 @@ class VarList:
     def remove_name(self, name: str) -> None:
         if name in self._store:
             del self._store[name]
+        if name in self._guard_map:
+            del self._guard_map[name]
 
     def get_vars(self, name: str) -> List[OpVar]:
         return [var for var in self._store[name].iter_opvars(name)]
@@ -1532,6 +1541,15 @@ class VarList:
             dst.merge_from(src)
             # Normalise per-name store
             dst.reorganize()
+            if name in other._guard_map:
+                guards = self._guard_map.setdefault(name, set())
+                guards.update(other._guard_map[name])
+        for name in other._guard_map.keys():
+            if name not in self._store:
+                continue
+            guards = self._guard_map.setdefault(name, set())
+            guards.update(other._guard_map[name])
+            self._normalize_guards(name)
 
         # Merge context
         for i, cont in enumerate(other._context):
@@ -1548,7 +1566,6 @@ class VarList:
                     self._context[i][1].append(var)
 
     # _force_stride_one moved to IndexList
-
     def push(self, var: OpVar, not_reorganize: bool = False) -> None:
         """Add ``var`` to the list, merging overlapping indices."""
 
@@ -1570,6 +1587,40 @@ class VarList:
         # Delegate push to IndexList
         il = self._store[name]
         il.push_var(var, not_reorganize=not_reorganize)
+        guards = self._guard_map.setdefault(name, {None})
+        if not guards:
+            self._guard_map[name] = {None}
+        else:
+            self._normalize_guards(name)
+
+    def set_guards(self, name: str, guards: Set[Optional[str]]) -> None:
+        if name not in self._store:
+            raise ValueError(f"{name} not in the list")
+        if not guards:
+            self._guard_map[name] = {None}
+        else:
+            self._guard_map[name] = set(guards)
+        self._normalize_guards(name)
+
+    def get_guards(self, name: str) -> Set[Optional[str]]:
+        if name not in self._guard_map or not self._guard_map[name]:
+            return {None}
+        return set(self._guard_map[name])
+
+    def apply_guard(self, guard: Optional[str]) -> None:
+        """Record that current requirements occur under ``guard``."""
+
+        if guard is None:
+            return
+        for name in list(self._store.keys()):
+            guards = self._guard_map.setdefault(name, {None})
+            if guards == {None}:
+                self._guard_map[name] = {guard}
+            else:
+                guards = set(guards)
+                guards.add(guard)
+                self._guard_map[name] = guards
+            self._normalize_guards(name)
 
     def remove(self, var) -> None:
         """Remove ``var`` from the list, splitting ranges as needed."""
@@ -1587,6 +1638,17 @@ class VarList:
         # cleanup if empty
         if not self._store[name].indices:
             del self._store[name]
+            if name in self._guard_map:
+                del self._guard_map[name]
+
+    def _normalize_guards(self, name: str) -> None:
+        guards = self._guard_map.get(name)
+        if guards is None:
+            return
+        guards = {g for g in guards if g is not None} or ({None} if None in guards else set())
+        if not guards:
+            guards = {None}
+        self._guard_map[name] = guards
 
     def add_exclude(self, var: OpVar):
         """Mark ``var`` as excluded from the list."""

@@ -1287,14 +1287,68 @@ def _parse_omp_directive(text: str) -> Tuple[bool, str, List[str]]:
         "ordered",
         "proc_bind",
     }
+    clause_requires_args = {
+        "private",
+        "shared",
+        "firstprivate",
+        "lastprivate",
+        "reduction",
+        "schedule",
+        "collapse",
+        "if",
+        "num_threads",
+        "default",
+        "copyin",
+        "copyprivate",
+        "proc_bind",
+    }
     directive_tokens: List[str] = []
     for tok in tokens:
+        if tok == "&":
+            continue
         low = tok.lower()
         if directive_tokens and ("(" in tok or "=" in tok or low in clause_keys):
             break
         directive_tokens.append(tok)
-    clauses = tokens[len(directive_tokens) :]
     directive = " ".join(directive_tokens)
+
+    clause_tokens = [tok for tok in tokens[len(directive_tokens) :] if tok != "&"]
+    clauses: List[str] = []
+    if clause_tokens:
+        current: List[str] = []
+        depth = 0
+        awaiting_args = False
+        for tok in clause_tokens:
+            if not tok:
+                continue
+            current.append(tok)
+            opens = tok.count("(")
+            closes = tok.count(")")
+            depth += opens - closes
+            low_tok = tok.lower()
+            if len(current) == 1:
+                key = re.split(r"[(:]", low_tok, 1)[0]
+                if (
+                    key in clause_requires_args
+                    and "(" not in tok
+                    and "=" not in tok
+                ):
+                    awaiting_args = True
+                else:
+                    awaiting_args = False
+            if awaiting_args and "(" in tok:
+                awaiting_args = False
+            if depth <= 0 and not awaiting_args:
+                clause = " ".join(current).strip()
+                if clause:
+                    clauses.append(clause)
+                current = []
+                depth = 0
+                awaiting_args = False
+        if current:
+            clause = " ".join(current).strip()
+            if clause:
+                clauses.append(clause)
     return end, directive, clauses
 
 

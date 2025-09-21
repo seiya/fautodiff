@@ -21,9 +21,12 @@ contains
 
   allocate(xtmp(n))
   if (f) then
-    y = x ** 2
+    xtmp = x**2
+    y = xtmp
     return
   end if
+  xtmp = x + 1.0
+  y = xtmp * x
 
   return
 end subroutine alloc_return
