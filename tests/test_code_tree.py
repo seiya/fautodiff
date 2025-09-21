@@ -22,6 +22,7 @@ from fautodiff.code_tree import (
     PushPop,
     ReturnStmt,
     SaveAssignment,
+    Statement,
     Subroutine,
     render_program,
 )
@@ -1187,6 +1188,117 @@ class TestCallStatement(unittest.TestCase):
     def test_keyword_render(self):
         node = CallStatement("foo", [OpInt(1), OpInt(2)], arg_keys=["a", "b"])
         self.assertEqual(render_program(Block([node])), "call foo(a=1, b=2)\n")
+
+
+class TestRenderWrapping(unittest.TestCase):
+    def test_assignment_alignment(self):
+        terms = [f"term{i}" for i in range(20)]
+        body = "result = " + " + ".join(terms)
+        stmt = Statement(body)
+        code = render_program(stmt, indent=1)
+        lines = code.splitlines()
+        self.assertGreater(len(lines), 1)
+        for idx, line in enumerate(lines):
+            self.assertLessEqual(len(line), 132)
+            if idx < len(lines) - 1:
+                self.assertTrue(line.endswith("&"))
+            else:
+                self.assertFalse(line.endswith("&"))
+
+        first = lines[0]
+        eq_idx = first.index("=")
+        rhs_start = eq_idx + 1
+        while rhs_start < len(first) and first[rhs_start] == " ":
+            rhs_start += 1
+
+        expected_single_line = "  " + body
+        reconstructed = first.rstrip("&").rstrip()
+        for cont in lines[1:]:
+            indent_width = len(cont) - len(cont.lstrip(" "))
+            self.assertEqual(indent_width, rhs_start)
+            reconstructed += " " + cont.lstrip()
+        self.assertEqual(reconstructed, expected_single_line)
+
+    def test_non_assignment_uses_block_indent(self):
+        args = [f"arg{i}" for i in range(20)]
+        body = "call foo(" + ", ".join(args) + ")"
+        stmt = Statement(body)
+        code = render_program(stmt, indent=1)
+        lines = code.splitlines()
+        self.assertGreater(len(lines), 1)
+        for idx, line in enumerate(lines):
+            self.assertLessEqual(len(line), 132)
+            if idx < len(lines) - 1:
+                self.assertTrue(line.endswith("&"))
+            else:
+                self.assertFalse(line.endswith("&"))
+
+        reconstructed = lines[0].rstrip("&").rstrip()
+        for cont in lines[1:]:
+            indent_width = len(cont) - len(cont.lstrip(" "))
+            self.assertEqual(indent_width, 2)
+            reconstructed += " " + cont.lstrip()
+        self.assertEqual(reconstructed, "  " + body)
+
+    def test_inline_comment_wrap_drops_ampersand(self):
+        args = [f"arg{i}" for i in range(10)]
+        comment = "! " + "comment text " * 12
+        body = "call foo(" + ", ".join(args) + ") " + comment
+        stmt = Statement(body)
+        lines = render_program(stmt, indent=1).splitlines()
+        self.assertGreater(len(lines), 1)
+        self.assertFalse(lines[0].endswith("&"))
+        for line in lines[1:]:
+            stripped = line.lstrip()
+            self.assertTrue(stripped.startswith("!"))
+            self.assertLessEqual(len(line), 132)
+
+    def test_inline_comment_with_existing_continuation_marker(self):
+        stmt = Statement("foo & ! comment")
+        lines = render_program(stmt, indent=1).splitlines()
+        self.assertEqual(lines[0], "  foo &")
+        self.assertTrue(lines[1].lstrip().startswith("!"))
+
+    def test_comment_only_wraps_with_bang_prefix(self):
+        comment = "!" + " long-comment" * 15
+        stmt = Statement(comment)
+        lines = render_program(stmt, indent=1).splitlines()
+        self.assertGreater(len(lines), 1)
+        for line in lines:
+            stripped = line.lstrip()
+            self.assertTrue(stripped.startswith("!"))
+            self.assertLessEqual(len(line), 132)
+
+    def test_inline_comment_preserves_continuation_for_followup_line(self):
+        block = Block(
+            [
+                Statement("call foo(a, b) & ! comment"),
+                Statement("& baz"),
+            ]
+        )
+        lines = render_program(block, indent=1).splitlines()
+        self.assertEqual(lines[0], "  call foo(a, b) &")
+        self.assertTrue(lines[1].lstrip().startswith("!"))
+        self.assertEqual(lines[2], "  & baz")
+
+    def test_wrap_prefers_low_precedence_breaks(self):
+        terms = [
+            f"very_long_variable_{idx} * other_operand_{idx}"
+            for idx in range(8)
+        ]
+        body = "res = " + " + ".join(terms)
+        stmt = Statement(body)
+        lines = render_program(stmt, indent=1).splitlines()
+        self.assertGreater(len(lines), 1)
+        for line in lines[1:]:
+            self.assertTrue(line.lstrip().startswith("+"))
+        reconstructed = lines[0].rstrip("&").rstrip()
+        for cont in lines[1:]:
+            stripped = cont.lstrip()
+            if stripped.endswith("&"):
+                stripped = stripped[:-1].rstrip()
+            reconstructed += " " + stripped
+        self.assertEqual(reconstructed, "  " + body)
 
 
 class TestLoopAnalysis(unittest.TestCase):

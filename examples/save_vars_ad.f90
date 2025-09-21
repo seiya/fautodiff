@@ -396,7 +396,8 @@ contains
     end do
     do j = 1, m
       do i = 1, n
-        z_ad(i,j) = work1_ad(1,i,j) * y(i,j) + y_ad(i,j) * work1(1,i,j) + work1_ad(2,i,j) * x(i,j) + x_ad(i,j) * work1(2,i,j) ! z(i,j) = work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+        z_ad(i,j) = work1_ad(1,i,j) * y(i,j) + y_ad(i,j) * work1(1,i,j) + work1_ad(2,i,j) * x(i,j) + x_ad(i,j) * work1(2,i,j)
+        ! z(i,j) = work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         z(i,j) = work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         do k = 1, 2
           work3_ad(k) = work1_ad(k,i,j) ! work3(k) = work1(k,i,j)
@@ -404,7 +405,9 @@ contains
           work1_ad(k,i,j) = x_ad(i,j) * work3(k) + work3_ad(k) * x(i,j) ! work1(k,i,j) = x(i,j) * work3(k)
           work1(k,i,j) = x(i,j) * work3(k)
         end do
-        z_ad(i,j) = z_ad(i,j) * (work3(1) + work3(2)) + work3_ad(1) * z(i,j) + work3_ad(2) * z(i,j) + work1_ad(1,i,j) * y(i,j) + y_ad(i,j) * work1(1,i,j) + work1_ad(2,i,j) * x(i,j) + x_ad(i,j) * work1(2,i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+        z_ad(i,j) = z_ad(i,j) * (work3(1) + work3(2)) + work3_ad(1) * z(i,j) + work3_ad(2) * z(i,j) + work1_ad(1,i,j) * y(i,j) &
+                    + y_ad(i,j) * work1(1,i,j) + work1_ad(2,i,j) * x(i,j) + x_ad(i,j) * work1(2,i,j)
+        ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
       end do
     end do
@@ -455,11 +458,16 @@ contains
         end do
         work3_ad(1) = z_ad(i,j) * z(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         work3_ad(2) = z_ad(i,j) * z(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
-        work1_ad(1,i,j) = z_ad(i,j) * y(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
-        y_ad(i,j) = z_ad(i,j) * work1(1,i,j) + y_ad(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
-        work1_ad(2,i,j) = z_ad(i,j) * x(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
-        x_ad(i,j) = z_ad(i,j) * work1(2,i,j) + x_ad(i,j) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
-        z_ad(i,j) = z_ad(i,j) * (work3(1) + work3(2)) ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+        work1_ad(1,i,j) = z_ad(i,j) * y(i,j)
+        ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+        y_ad(i,j) = z_ad(i,j) * work1(1,i,j) + y_ad(i,j)
+        ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+        work1_ad(2,i,j) = z_ad(i,j) * x(i,j)
+        ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+        x_ad(i,j) = z_ad(i,j) * work1(2,i,j) + x_ad(i,j)
+        ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
+        z_ad(i,j) = z_ad(i,j) * (work3(1) + work3(2))
+        ! z(i,j) = z(i,j) * (work3(1) + work3(2)) + work1(1,i,j) * y(i,j) + work1(2,i,j) * x(i,j)
         do k = 2, 1, - 1
           work1(k,i,j) = work1_save_131_ad(k)
           work3(k) = work1(k,i,j)
@@ -515,7 +523,8 @@ contains
     x_ad(1) = x_ad(1) * x(2) * 0.5 + x_ad(2) * x(1) * 0.5 ! x(1) = x(1) * x(2) * 0.5
     x(1) = x(1) * x(2) * 0.5
     do i = 2, n - 1
-      x_ad(i) = x_ad(i) * (x(i + 1) - x(i - 1)) * 0.5 + x_ad(i + 1) * x(i) * 0.5 - x_ad(i - 1) * x(i) * 0.5 ! x(i) = x(i) * (x(i+1) - x(i-1)) * 0.5
+      x_ad(i) = x_ad(i) * (x(i + 1) - x(i - 1)) * 0.5 + x_ad(i + 1) * x(i) * 0.5 - x_ad(i - 1) * x(i) * 0.5
+      ! x(i) = x(i) * (x(i+1) - x(i-1)) * 0.5
       x(i) = x(i) * (x(i + 1) - x(i - 1)) * 0.5
     end do
     x_ad(n) = - x_ad(n) * x(n - 1) * 0.5 - x_ad(n - 1) * x(n) * 0.5 ! x(n) = - x(n) * x(n-1) * 0.5

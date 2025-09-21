@@ -42,11 +42,15 @@ contains
     b = exp(x) + log(y) + log10(abs(x) + 1.0)
     c_ad = x_ad * (cos(x) + 1.0 / cos(x)**2) - y_ad * sin(y) ! c = sin(x) + cos(y) + tan(x)
     c = sin(x) + cos(y) + tan(x)
-    d_ad = x_ad * (1.0 / (pi * sqrt(1.0 - (x / pi)**2)) + 1.0 / (1.0 + x**2)) - y_ad / ((pi + 1.0) * sqrt(1.0 - (y / (pi + 1.0))**2)) ! d = asin(x / pi) + acos(y / (pi + 1.0)) + atan(x)
+    d_ad = x_ad * (1.0 / (pi * sqrt(1.0 - (x / pi)**2)) + 1.0 / (1.0 + x**2)) &
+           - y_ad / ((pi + 1.0) * sqrt(1.0 - (y / (pi + 1.0))**2))
+    ! d = asin(x / pi) + acos(y / (pi + 1.0)) + atan(x)
     d = asin(x / pi) + acos(y / (pi + 1.0)) + atan(x)
-    e_ad = x_ad * (1.0 / sqrt(x**2 + 1.0) + 1.0 / (1.0 - x**2)) + y_ad / (sqrt(y - 1.0) * sqrt(y + 1.0)) ! e = asinh(x) + acosh(y) + atanh(x)
+    e_ad = x_ad * (1.0 / sqrt(x**2 + 1.0) + 1.0 / (1.0 - x**2)) + y_ad / (sqrt(y - 1.0) * sqrt(y + 1.0))
+    ! e = asinh(x) + acosh(y) + atanh(x)
     e = asinh(x) + acosh(y) + atanh(x)
-    f_ad = x_ad * (y / (x**2 + y**2) + sinh(x) + 1.0 / cosh(x)**2) + y_ad * (- x / (x**2 + y**2) + cosh(y)) ! f = atan2(x, y) + cosh(x) + sinh(y) + tanh(x)
+    f_ad = x_ad * (y / (x**2 + y**2) + sinh(x) + 1.0 / cosh(x)**2) + y_ad * (- x / (x**2 + y**2) + cosh(y))
+    ! f = atan2(x, y) + cosh(x) + sinh(y) + tanh(x)
     f = atan2(x, y) + cosh(x) + sinh(y) + tanh(x)
     g_ad = x_ad * sign(1.0, x) * sign(1.0, y) ! g = sign(x, y)
     g = sign(x, y)
@@ -58,7 +62,8 @@ contains
     p = erf(x) + erfc(y)
     q_ad = x_ad - y_ad * real(int(x / y), kind(x)) ! q = mod(x, y)
     q = mod(x, y)
-    z_ad = a_ad + b_ad + c_ad + d_ad + e_ad + f_ad + g_ad + h_ad + o_ad + p_ad + q_ad ! z = a + b + c + d + e + f + g + h + o + p + q
+    z_ad = a_ad + b_ad + c_ad + d_ad + e_ad + f_ad + g_ad + h_ad + o_ad + p_ad + q_ad
+    ! z = a + b + c + d + e + f + g + h + o + p + q
     z = a + b + c + d + e + f + g + h + o + p + q
 
     return
@@ -110,7 +115,8 @@ contains
     y_ad = f_ad * (- x / (x**2 + y**2) + cosh(y)) + y_ad ! f = atan2(x, y) + cosh(x) + sinh(y) + tanh(x)
     x_ad = e_ad * (1.0 / sqrt(x**2 + 1.0) + 1.0 / (1.0 - x**2)) + x_ad ! e = asinh(x) + acosh(y) + atanh(x)
     y_ad = e_ad / (sqrt(y - 1.0) * sqrt(y + 1.0)) + y_ad ! e = asinh(x) + acosh(y) + atanh(x)
-    x_ad = d_ad * (1.0 / (pi * sqrt(1.0 - (x / pi)**2)) + 1.0 / (1.0 + x**2)) + x_ad ! d = asin(x / pi) + acos(y / (pi + 1.0)) + atan(x)
+    x_ad = d_ad * (1.0 / (pi * sqrt(1.0 - (x / pi)**2)) + 1.0 / (1.0 + x**2)) + x_ad
+    ! d = asin(x / pi) + acos(y / (pi + 1.0)) + atan(x)
     y_ad = - d_ad / ((pi + 1.0) * sqrt(1.0 - (y / (pi + 1.0))**2)) + y_ad ! d = asin(x / pi) + acos(y / (pi + 1.0)) + atan(x)
     x_ad = c_ad * (cos(x) + 1.0 / cos(x)**2) + x_ad ! c = sin(x) + cos(y) + tan(x)
     y_ad = - c_ad * sin(y) + y_ad ! c = sin(x) + cos(y) + tan(x)

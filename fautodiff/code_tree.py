@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import re
+import textwrap
 from dataclasses import dataclass, field
 from functools import reduce
 from typing import (
@@ -23,6 +24,43 @@ from typing import (
 AD_SUFFIX = "_ad"
 FWD_SUFFIX = "_fwd_ad"
 REV_SUFFIX = "_rev_ad"
+
+MAX_FORTRAN_LINE_LENGTH = 132
+
+
+_OPERATOR_BREAK_GROUPS: Tuple[Tuple[int, Tuple[str, ...]], ...] = (
+    (1, (".or.", ".eqv.", ".neqv.", ".xor.")),
+    (2, (".and.",)),
+    (
+        3,
+        (
+            ".lt.",
+            ".le.",
+            ".gt.",
+            ".ge.",
+            ".eq.",
+            ".ne.",
+            "<",
+            "<=",
+            ">",
+            ">=",
+            "==",
+            "/=",
+        ),
+    ),
+    (4, ("//",)),
+    (5, ("+", "-")),
+    (6, ("*", "/")),
+    (7, ("**",)),
+)
+
+_OPERATOR_BREAK_TOKENS: Tuple[Tuple[str, int], ...] = tuple(
+    (token, prio)
+    for prio, tokens in _OPERATOR_BREAK_GROUPS
+    for token in tokens
+)
+
+_OPERATOR_BREAK_TOKENS = tuple(sorted(_OPERATOR_BREAK_TOKENS, key=lambda item: -len(item[0])))
 
 from .operators import (
     AryIndex,
@@ -2273,12 +2311,13 @@ class CallStatement(Node):
             vars_target.append(var)
         return vars_target
 
-    def change_args(self,
-                    args_key: str,
-                    arg_info: Dict[str, List],
-                    reverse: bool,
-                    saved_vars: Optional[List[OpVar]] = None
-        ) -> Tuple[List[OpVar], List[Tuple[OpVar, Operator]]]:
+    def change_args(
+        self,
+        args_key: str,
+        arg_info: Dict[str, List],
+        reverse: bool,
+        saved_vars: Optional[List[OpVar]] = None,
+    ) -> Tuple[List[OpVar], List[Tuple[OpVar, Operator]]]:
         tmp_vars: List[Tuple[OpVar, Operator]] = []
         call_args = list(self.args)
         arg_keys = list(self.arg_keys)
@@ -2467,9 +2506,11 @@ class CallStatement(Node):
                 args = self.change_args("args_fwd_rev_ad", arg_info, False, saved_vars)
                 if args is not None:
                     for arg in args:
-                        if (not isinstance(arg, OpVar) or
-                            not arg.name.endswith(AD_SUFFIX) or
-                            arg.ad_target):
+                        if (
+                            not isinstance(arg, OpVar)
+                            or not arg.name.endswith(AD_SUFFIX)
+                            or arg.ad_target
+                        ):
                             continue
                         load = node._save_vars(arg, saved_vars)
                         loads.append(load)
@@ -3274,13 +3315,15 @@ class Declaration(Node):
             raise ValueError(f"var_type must be VarType: {type(self.var_type)}")
         if self.dims is not None and not isinstance(self.dims, tuple):
             raise ValueError(f"dims must be tuple: {type(self.dims)}")
-        if (isinstance(self.dims, tuple) and
-            any(dim is not None and not isinstance(dim, Operator) for dim in self.dims)):
+        if isinstance(self.dims, tuple) and any(
+            dim is not None and not isinstance(dim, Operator) for dim in self.dims
+        ):
             raise ValueError(f"dims must be tuple of None or Operator: {self.dims}")
         if self.dims_raw is not None and not isinstance(self.dims_raw, tuple):
             raise ValueError(f"dims_raw must be tuple: {type(self.dims_raw)}")
-        if (isinstance(self.dims_raw, tuple) and
-            any(not isinstance(dim, str) for dim in self.dims_raw)):
+        if isinstance(self.dims_raw, tuple) and any(
+            not isinstance(dim, str) for dim in self.dims_raw
+        ):
             raise ValueError(f"dims_raw must be tuple of str: {self.dims_raw}")
         if self.intent is not None and not isinstance(self.intent, str):
             raise ValueError(f"intent must be str: {type(self.intent)}")
@@ -3595,7 +3638,9 @@ class Interface(Node):
 
     def __str__(self) -> str:
         if self.module_procs:
-            return f"[Interface] {self.name}, module_procs: {', '.join(self.module_procs)}"
+            return (
+                f"[Interface] {self.name}, module_procs: {', '.join(self.module_procs)}"
+            )
         return f"[Interface] {self.name}"
 
 
@@ -4069,10 +4114,7 @@ class SaveAssignment(Node):
         return lines
 
     def alloc_node(self) -> Node | None:
-        if (self.lhs.allocatable and
-            not self.pushpop and
-            not self.load
-        ):
+        if self.lhs.allocatable and not self.pushpop and not self.load:
             lhs0 = self.lhs.change_index(None)
             rhs0 = self.rhs.change_index(None)
             alloc = Allocate([lhs0], mold=rhs0)
@@ -4083,10 +4125,7 @@ class SaveAssignment(Node):
         return None
 
     def dealloc_node(self) -> Deallocate | None:
-        if (self.load and
-            self.rhs.allocatable and
-            not self.pushpop
-        ):
+        if self.load and self.rhs.allocatable and not self.pushpop:
             rhs0 = self.rhs.change_index(None)
             return Deallocate([rhs0])
         return None
@@ -4391,7 +4430,7 @@ class Allocate(Node):
                 index = self.mold.dims
             index_new: List[OpRange] = []
             for idx in index:
-                if  isinstance(idx, OpRange):
+                if isinstance(idx, OpRange):
                     index_new.append(idx)
                 else:
                     index_new.append(OpRange([OpInt(1), idx]))
@@ -5653,7 +5692,9 @@ class DoLoop(DoAbst):
             raise ValueError(f"range must be OpRange: f{type(self.range)}")
 
     def __str__(self) -> str:
-        lines: List[str] = ["[Do] index: {self.index}, range: {self.range}, label: {self.label}"]
+        lines: List[str] = [
+            "[Do] index: {self.index}, range: {self.range}, label: {self.label}"
+        ]
         lines.extend("  " + line for line in str(self._body).splitlines())
         return "\n".join(lines)
 
@@ -6411,7 +6452,6 @@ class OmpDirective(Node):
             info=dict(self.info) if self.info is not None else None,
         )
 
-
     def insert_before(self, id: int, node: Node):
         if self.body is None:
             raise NotImplementedError("OmpDirective has no body")
@@ -6443,9 +6483,11 @@ class OmpDirective(Node):
         allocates: Optional[List[Node]] = None
         deallocates: Optional[List[Node]] = None
         if not self.skip_alloc:
-            def _find_saveassigns(node: Node,
-                                    allocates: Optional[List[Node]],
-                                    deallocates: Optional[List[Node]]
+
+            def _find_saveassigns(
+                node: Node,
+                allocates: Optional[List[Node]],
+                deallocates: Optional[List[Node]],
             ) -> Tuple[Optional[List[Node]], Optional[List[Node]]]:
                 if isinstance(node, SaveAssignment):
                     alloc = node.alloc_node()
@@ -6461,15 +6503,20 @@ class OmpDirective(Node):
                     node.skip_alloc = True
                     return (allocates, deallocates)
                 for child in node.iter_children():
-                    allocates, deallocates = _find_saveassigns(child, allocates, deallocates)
+                    allocates, deallocates = _find_saveassigns(
+                        child, allocates, deallocates
+                    )
                 return (allocates, deallocates)
+
             if "workshare" in self.directive:
                 if self.body is not None:
                     allocates, deallocates = _find_saveassigns(self.body, None, None)
             if self.directive == "parallel":
-                def _find_workshare(node: Node,
-                                    allocates: Optional[List[Node]],
-                                    deallocates: Optional[List[Node]]
+
+                def _find_workshare(
+                    node: Node,
+                    allocates: Optional[List[Node]],
+                    deallocates: Optional[List[Node]],
                 ) -> Tuple[Optional[List[Node]], Optional[List[Node]]]:
                     if isinstance(node, OmpDirective) and node.directive == "workshare":
                         al, de = _find_saveassigns(node, None, None)
@@ -6488,8 +6535,11 @@ class OmpDirective(Node):
                         node.skip_alloc = True
                         return (allocates, deallocates)
                     for child in node.iter_children():
-                        allocates, deallocates = _find_workshare(child, allocates, deallocates)
+                        allocates, deallocates = _find_workshare(
+                            child, allocates, deallocates
+                        )
                     return (allocates, deallocates)
+
                 if self.body is not None:
                     allocates, deallocates = _find_workshare(self.body, None, None)
 
@@ -6655,7 +6705,9 @@ class ForallBlock(Node):
 
     def __str__(self) -> str:
         lines: List[str] = ["[ForallBlock]"]
-        lines.append(f"  index_specs: {', '.join(str(spec) for spec in self.index_specs)}")
+        lines.append(
+            f"  index_specs: {', '.join(str(spec) for spec in self.index_specs)}"
+        )
         if self.mask is not None:
             lines.append(f"  mask: {self.mask}")
         lines.append(f"  body:")
@@ -6781,8 +6833,323 @@ class ForallBlock(Node):
         return self._body.check_initial(assigned_vars)
 
 
+def _find_assignment_eq(line: str) -> Optional[int]:
+    """Return the position of the assignment ``=`` outside parentheses.
+
+    Pointer assignments (``=>``) and comparison operators are ignored. The
+    returned index is relative to ``line`` without the trailing newline.
+    """
+
+    depth = 0
+    in_string = False
+    string_char = ""
+    idx = 0
+    length = len(line)
+    while idx < length:
+        ch = line[idx]
+        if in_string:
+            if ch == string_char:
+                # Handle doubled quotes inside strings.
+                if idx + 1 < length and line[idx + 1] == string_char:
+                    idx += 2
+                    continue
+                in_string = False
+            idx += 1
+            continue
+        if ch in "'\"":
+            in_string = True
+            string_char = ch
+            idx += 1
+            continue
+        if ch == "!":
+            break
+        if ch in "([":
+            depth += 1
+            idx += 1
+            continue
+        if ch in ")]":
+            if depth:
+                depth -= 1
+            idx += 1
+            continue
+        if ch == "=":
+            if depth:
+                idx += 1
+                continue
+            next_ch = line[idx + 1] if idx + 1 < length else ""
+            prev_ch = line[idx - 1] if idx > 0 else ""
+            if next_ch in ("=", ">", "<") or prev_ch in ("=", ">", "<", ":"):
+                idx += 1
+                continue
+            return idx
+        idx += 1
+    return None
+
+
+def _is_token_separated(text: str, start: int, end: int) -> bool:
+    """Return ``True`` when the token ``text[start:end]`` is space-delimited."""
+
+    if start <= 0 or end >= len(text):
+        return False
+    return text[start - 1] == " " and text[end] == " "
+
+
+def _match_operator_break(text: str, idx: int) -> Optional[int]:
+    """Return the priority of an operator token starting at ``idx`` if usable."""
+
+    for token, prio in _OPERATOR_BREAK_TOKENS:
+        end = idx + len(token)
+        if end > len(text):
+            continue
+        if text.startswith(token, idx) and _is_token_separated(text, idx, end):
+            return prio
+    return None
+
+
+def _choose_break_position(text: str, indent_len: int, limit: int) -> int:
+    """Return a preferred break position for ``text``.
+
+    ``indent_len`` is the number of leading spaces in ``text``. ``limit`` is the
+    maximum index (inclusive) to consider for the break. Candidates outside
+    parentheses are preferred. A fallback position is returned if no suitable
+    separator is found.
+    """
+
+    best_idx: Optional[int] = None
+    best_depth: Optional[int] = None
+    best_prio: Optional[int] = None
+    depth = 0
+    in_string = False
+    string_char = ""
+    idx = 0
+    length = len(text)
+    while idx < length and idx <= limit:
+        ch = text[idx]
+        if in_string:
+            if ch == string_char:
+                in_string = False
+            idx += 1
+            continue
+        if ch in "'\"":
+            in_string = True
+            string_char = ch
+            idx += 1
+            continue
+        if ch == "!":
+            break
+        if ch in "([":
+            depth += 1
+            idx += 1
+            continue
+        if ch in ")]":
+            if depth:
+                depth -= 1
+            idx += 1
+            continue
+        if idx <= indent_len:
+            idx += 1
+            continue
+        candidate: Optional[int] = None
+        prio: Optional[int] = None
+        if ch == ",":
+            candidate = min(length, idx + 1)
+            prio = 0
+        else:
+            op_prio = _match_operator_break(text, idx)
+            if op_prio is not None:
+                candidate = idx
+                prio = op_prio
+        if candidate is None and ch == " ":
+            candidate = idx
+            prio = 100
+        if candidate is not None and candidate > indent_len:
+            cand_depth = depth
+            if candidate <= indent_len + 8:
+                cand_depth += 1
+            better = False
+            if best_idx is None:
+                better = True
+            elif best_depth is None or cand_depth < best_depth:
+                better = True
+            elif cand_depth == best_depth:
+                if best_prio is None or (prio is not None and prio < best_prio):
+                    better = True
+                elif prio == best_prio and candidate > best_idx:
+                    better = True
+            if better:
+                best_idx = candidate
+                best_depth = cand_depth
+                best_prio = prio
+        idx += 1
+
+    if best_idx is None:
+        fallback = min(length - 1, max(indent_len + 1, limit))
+        best_idx = max(indent_len + 1, fallback)
+    return best_idx
+
+
+def _find_inline_comment(text: str) -> Optional[int]:
+    """Return the index of an inline ``!`` comment in ``text`` if present."""
+
+    in_single = False
+    in_double = False
+    idx = 0
+    length = len(text)
+    while idx < length:
+        ch = text[idx]
+        if ch == "'" and not in_double:
+            if idx + 1 < length and text[idx + 1] == "'":
+                idx += 2
+                continue
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            if idx + 1 < length and text[idx + 1] == '"':
+                idx += 2
+                continue
+            in_double = not in_double
+        elif ch == "!" and not in_single and not in_double:
+            return idx
+        idx += 1
+    return None
+
+
+def _wrap_comment_text(comment: str, indent: str, has_newline: bool) -> List[str]:
+    """Wrap a comment so each line starts with ``!`` and stays within the limit."""
+
+    if not comment.startswith("!"):
+        comment = "!" + comment.lstrip()
+
+    prefix_end = 1
+    length = len(comment)
+    while prefix_end < length and comment[prefix_end] not in (" ", "\t"):
+        prefix_end += 1
+
+    prefix = comment[:prefix_end]
+    remainder = comment[prefix_end:].lstrip()
+
+    lines: List[str] = []
+    if remainder:
+        width = MAX_FORTRAN_LINE_LENGTH - len(indent) - len(prefix) - 1
+        if width <= 0:
+            width = 1
+        wrapped = textwrap.wrap(
+            remainder,
+            width=width,
+            break_long_words=False,
+            break_on_hyphens=False,
+        )
+        for part in wrapped:
+            lines.append(f"{indent}{prefix} {part}")
+    else:
+        lines.append(f"{indent}{prefix}")
+
+    result: List[str] = []
+    for idx, text in enumerate(lines):
+        needs_nl = has_newline or idx < len(lines) - 1
+        result.append(f"{text}{'\n' if needs_nl else ''}")
+    return result
+
+
+def _wrap_fortran_line(line: str) -> List[str]:
+    """Split ``line`` into continuation lines limited to 132 characters."""
+
+    if not line:
+        return [line]
+    has_newline = line.endswith("\n")
+    content = line[:-1] if has_newline else line
+    original_content = content
+    stripped = content.lstrip()
+    if not stripped or stripped.startswith("#"):
+        return [line]
+
+    if stripped.startswith("!"):
+        indent_len = len(content) - len(stripped)
+        indent = content[:indent_len]
+        return _wrap_comment_text(stripped, indent, has_newline)
+
+    comment_start = _find_inline_comment(content)
+    comment_text: Optional[str] = None
+    had_trailing_ampersand = False
+    if comment_start is not None:
+        comment_text = content[comment_start:].lstrip()
+        content = content[:comment_start].rstrip()
+        if content.endswith("&"):
+            had_trailing_ampersand = True
+            content = content[:-1].rstrip()
+        if not content:
+            indent = " " * (comment_start)
+            return _wrap_comment_text(comment_text, indent, has_newline)
+        if not had_trailing_ampersand and len(original_content) <= MAX_FORTRAN_LINE_LENGTH:
+            return [line]
+
+    if len(content) <= MAX_FORTRAN_LINE_LENGTH and comment_text is None:
+        return [line]
+
+    assignment_pos = _find_assignment_eq(content)
+    base_indent_len = len(content) - len(content.lstrip(" "))
+    base_indent = " " * base_indent_len
+    if assignment_pos is not None:
+        rhs_start = assignment_pos + 1
+        while rhs_start < len(content) and content[rhs_start] == " ":
+            rhs_start += 1
+        continuation_indent = " " * rhs_start
+    else:
+        continuation_indent = base_indent
+
+    pieces: List[str] = []
+    remaining = content
+    while len(remaining) > MAX_FORTRAN_LINE_LENGTH:
+        current_indent_len = len(remaining) - len(remaining.lstrip(" "))
+        break_limit = MAX_FORTRAN_LINE_LENGTH - 2
+        break_pos = _choose_break_position(remaining, current_indent_len, break_limit)
+        if break_pos <= current_indent_len:
+            break_pos = min(len(remaining) - 1, current_indent_len + break_limit)
+            if break_pos <= current_indent_len:
+                break
+        first_part = remaining[:break_pos].rstrip()
+        pieces.append(f"{first_part} &\n")
+        rest = remaining[break_pos:]
+        rest = rest.lstrip()
+        if not rest:
+            remaining = ""
+            break
+        indent = continuation_indent if assignment_pos is not None else base_indent
+        remaining = indent + rest
+
+    if remaining:
+        tail = remaining
+        if comment_text is not None and had_trailing_ampersand:
+            tail = tail.rstrip()
+            if not tail.endswith("&"):
+                tail = f"{tail} &"
+        needs_newline = has_newline or comment_text is not None
+        if needs_newline and not tail.endswith("\n"):
+            tail = f"{tail}\n"
+        pieces.append(tail)
+    elif (has_newline or comment_text is not None) and pieces:
+        # Preserve the trailing newline when the loop consumed the content.
+        tail = pieces[-1]
+        if comment_text is not None and had_trailing_ampersand:
+            tail = tail.rstrip()
+            if not tail.endswith("&"):
+                tail = f"{tail} &"
+        if not tail.endswith("\n"):
+            tail = f"{tail}\n"
+        pieces[-1] = tail
+
+    if comment_text is not None:
+        if pieces and not pieces[-1].endswith("\n"):
+            pieces[-1] = pieces[-1] + "\n"
+        pieces.extend(_wrap_comment_text(comment_text, base_indent, has_newline))
+
+    return pieces
+
+
 def render_program(node: Node, indent: int = 0) -> str:
     """Return formatted Fortran code for the entire ``node`` tree."""
 
     lines = node.render(indent)
-    return "".join(lines)
+    wrapped: List[str] = []
+    for line in lines:
+        wrapped.extend(_wrap_fortran_line(line))
+    return "".join(wrapped)
