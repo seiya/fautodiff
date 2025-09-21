@@ -101,6 +101,78 @@ contains
     return
   end subroutine stencil_loop_rev_ad
 
+  subroutine stencil_loop_with_halo_fwd_ad(is, ie, istart, iend, h, h_ad, u, u_ad, dhdt, dhdt_ad)
+    integer, intent(in)  :: is
+    integer, intent(in)  :: ie
+    integer, intent(in)  :: istart
+    integer, intent(in)  :: iend
+    real, intent(in)  :: h(is:ie)
+    real, intent(in)  :: h_ad(is:ie)
+    real, intent(in)  :: u(is:ie)
+    real, intent(in)  :: u_ad(is:ie)
+    real, intent(out) :: dhdt(is:ie)
+    real, intent(out) :: dhdt_ad(is:ie)
+    real :: flux_ad(2)
+    integer :: i
+    real :: flux(2)
+
+    !$omp parallel do private(flux, flux_ad)
+    do i = istart, iend
+      flux_ad(1) = u_ad(i) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 - h_ad(i + 2) * u(i) / 6.0 &
+                   + h_ad(i + 1) * u(i) * 2.0 / 6.0 - h_ad(i) * u(i) * 2.0 / 6.0 + h_ad(i - 1) * u(i) / 6.0
+      ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+      flux(1) = u(i) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0
+      flux_ad(2) = u_ad(i - 1) * (- h(i + 1) + 2.0 * h(i) - 2.0 * h(i - 1) + h(i - 2)) / 6.0 - h_ad(i + 1) * u(i - 1) / 6.0 &
+                   + h_ad(i) * u(i - 1) * 2.0 / 6.0 - h_ad(i - 1) * u(i - 1) * 2.0 / 6.0 + h_ad(i - 2) * u(i - 1) / 6.0
+      ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      flux(2) = u(i - 1) * (- h(i + 1) + 2.0 * h(i) - 2.0 * h(i - 1) + h(i - 2)) / 6.0
+      dhdt_ad(i) = - flux_ad(1) + flux_ad(2) ! dhdt(i) = - (flux(1) - flux(2))
+      dhdt(i) = - (flux(1) - flux(2))
+    end do
+    !$omp end parallel do
+
+    return
+  end subroutine stencil_loop_with_halo_fwd_ad
+
+  subroutine stencil_loop_with_halo_rev_ad(is, ie, istart, iend, h, h_ad, u, u_ad, dhdt_ad)
+    integer, intent(in)  :: is
+    integer, intent(in)  :: ie
+    integer, intent(in)  :: istart
+    integer, intent(in)  :: iend
+    real, intent(in)  :: h(is:ie)
+    real, intent(inout) :: h_ad(is:ie)
+    real, intent(in)  :: u(is:ie)
+    real, intent(inout) :: u_ad(is:ie)
+    real, intent(inout) :: dhdt_ad(is:ie)
+    real :: flux_ad(2)
+    integer :: i
+
+    do i = iend, istart, - 1
+      flux_ad(1) = - dhdt_ad(i) ! dhdt(i) = - (flux(1) - flux(2))
+      flux_ad(2) = dhdt_ad(i) ! dhdt(i) = - (flux(1) - flux(2))
+      dhdt_ad(i) = 0.0 ! dhdt(i) = - (flux(1) - flux(2))
+      u_ad(i - 1) = flux_ad(2) * (- h(i + 1) + 2.0 * h(i) - 2.0 * h(i - 1) + h(i - 2)) / 6.0 + u_ad(i - 1)
+      ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      h_ad(i + 1) = - flux_ad(2) * u(i - 1) / 6.0 + h_ad(i + 1)
+      ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      h_ad(i) = flux_ad(2) * u(i - 1) * 2.0 / 6.0 + h_ad(i)
+      ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      h_ad(i - 1) = - flux_ad(2) * u(i - 1) * 2.0 / 6.0 + h_ad(i - 1)
+      ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      h_ad(i - 2) = flux_ad(2) * u(i - 1) / 6.0 + h_ad(i - 2)
+      ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      u_ad(i) = flux_ad(1) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 + u_ad(i)
+      ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+      h_ad(i + 2) = - flux_ad(1) * u(i) / 6.0 + h_ad(i + 2) ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+      h_ad(i + 1) = flux_ad(1) * u(i) * 2.0 / 6.0 + h_ad(i + 1)
+      ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+      h_ad(i) = - flux_ad(1) * u(i) * 2.0 / 6.0 + h_ad(i) ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+      h_ad(i - 1) = flux_ad(1) * u(i) / 6.0 + h_ad(i - 1) ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+    end do
+
+    return
+  end subroutine stencil_loop_with_halo_rev_ad
+
   subroutine omp_ws_alloc_fwd_ad(x, x_ad, y, y_ad)
     real, intent(inout), allocatable :: x(:)
     real, intent(inout), allocatable :: x_ad(:)
@@ -123,12 +195,12 @@ contains
     real, intent(inout), allocatable :: x(:)
     real, intent(inout), allocatable :: x_ad(:)
     real, intent(inout) :: y_ad(size(x))
-    real, allocatable :: x_save_53_ad(:)
+    real, allocatable :: x_save_74_ad(:)
 
-    allocate(x_save_53_ad, mold=x)
+    allocate(x_save_74_ad, mold=x)
     !$omp parallel
     !$omp workshare
-    x_save_53_ad(:) = x(:)
+    x_save_74_ad(:) = x(:)
     !$omp end workshare
     !$omp end parallel
 
@@ -136,12 +208,12 @@ contains
     !$omp workshare
     x_ad = y_ad + x_ad ! y = x
     y_ad = 0.0 ! y = x
-    x(:) = x_save_53_ad(:)
+    x(:) = x_save_74_ad(:)
     x_ad = x_ad * 2.0 * x ! x = x**2
     !$omp end workshare
     !$omp end parallel
-    if (allocated(x_save_53_ad)) then
-      deallocate(x_save_53_ad)
+    if (allocated(x_save_74_ad)) then
+      deallocate(x_save_74_ad)
     end if
 
     return
