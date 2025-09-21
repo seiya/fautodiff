@@ -14,7 +14,7 @@ import fparser
 from fparser.common.readfortran import FortranFileReader, FortranStringReader
 from fparser.two import Fortran2003, Fortran2008
 from fparser.two.parser import ParserFactory
-from fparser.two.utils import walk
+from fparser.two.utils import NoMatchError, walk
 
 
 def _eval_selected_real_kind(p: int, r: int) -> int:
@@ -929,6 +929,35 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
     print(stmt.items)
     print(stmt.__dict__)
     raise ValueError(f"Unsupported statement type: {type(stmt)}")
+
+
+def parse_bound_expression(expr: str) -> Operator:
+    """Parse a scalar expression used in bounds into an :class:`Operator`."""
+
+    src = "\n".join(
+        [
+            "module fad_tmp_mod",
+            "contains",
+            "subroutine fad_tmp()",
+            "  integer :: fad_tmp_val",
+            f"  fad_tmp_val = {expr}",
+            "end subroutine fad_tmp",
+            "end module fad_tmp_mod",
+            "",
+        ]
+    )
+    modules = parse_src(src)
+    if not modules:
+        raise ValueError(f"Failed to parse expression: {expr}")
+    routine = modules[0].routines[0]
+    assign = None
+    for node in routine.content.iter_children():
+        if isinstance(node, Assignment):
+            assign = node
+            break
+    if assign is None:
+        raise ValueError(f"Failed to parse expression: {expr}")
+    return assign.rhs.deep_clone()
 
 
 # Re-export commonly used classes and utilities so other modules do not need

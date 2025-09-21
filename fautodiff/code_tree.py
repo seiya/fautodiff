@@ -2163,6 +2163,7 @@ class CallStatement(Node):
     associated_vars: Optional[List[OpVar]] = field(default=None)
     donot_prune: bool = False
     org_node: Optional[Node] = None
+    arg_info: Optional[dict] = field(repr=False, default=None)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -2197,6 +2198,10 @@ class CallStatement(Node):
             self.result,
             self.info,
             self.ad_info,
+            associated_vars=self.associated_vars,
+            donot_prune=self.donot_prune,
+            org_node=self.org_node,
+            arg_info=self.arg_info,
         )
 
     def deep_clone(self) -> "CallStatement":
@@ -2214,6 +2219,7 @@ class CallStatement(Node):
             ad_info=self.ad_info,
             associated_vars=self.associated_vars,
             donot_prune=self.donot_prune,
+            arg_info=self.arg_info,
         )
 
     def _iter_vars(
@@ -2261,25 +2267,167 @@ class CallStatement(Node):
         without_savevar: bool = False,
     ) -> VarList:
         intents = self.intents or ["inout"] * len(self.args)
+        param_indices: List[Optional[int]] = [None] * len(self.args)
+        param_names: List[str] = []
+        param_dims: List[Optional[Tuple[str, ...]]] = []
+        param_actuals: List[Optional[Operator]] = []
+        if self.arg_info is not None and self.arg_info.get("args") is not None:
+            param_names = list(self.arg_info["args"])
+            param_dims = list(self.arg_info.get("dims", []))
+            if self.result is not None and param_names:
+                param_names = param_names[:-1]
+                param_dims = param_dims[:-1]
+            param_actuals = [None] * len(param_names)
+            used = [False] * len(param_names)
+            pos = 0
+            for i, (arg, key) in enumerate(zip(self.args, self.arg_keys)):
+                idx = None
+                if key is None:
+                    while pos < len(param_names) and used[pos]:
+                        pos += 1
+                    if pos < len(param_names):
+                        idx = pos
+                        used[idx] = True
+                        pos += 1
+                else:
+                    if key in param_names:
+                        idx = param_names.index(key)
+                        used[idx] = True
+                param_indices[i] = idx
+                if idx is not None:
+                    param_actuals[idx] = arg
         if vars is None:
             vars = VarList()
         else:
             vars = vars.copy()
-            for arg, intent in zip(self.args, intents):
+            for (arg, intent, param_idx) in zip(self.args, intents, param_indices):
                 if intent in ("out", "inout"):
                     for var in arg.collect_vars(without_index=True):
                         vars.remove(var)
             if self.result is not None:
                 vars.remove(self.result)
-        for arg, intent in zip(self.args, intents):
+        param_map = {}
+        if param_names:
+            for name, actual in zip(param_names, param_actuals):
+                if actual is not None:
+                    param_map[name] = actual
+        for (arg, intent, param_idx) in zip(self.args, intents, param_indices):
             if intent in ("in", "inout"):
                 for var in arg.collect_vars():
                     if not var.is_constant:
                         vars.push(var)
+                expanded = self._explicit_shape_slice(
+                    arg, param_idx, param_dims, param_map
+                )
+                if expanded is not None:
+                    vars.remove(arg)
+                    vars.push(expanded)
                 if self.associated_vars is not None:
                     for var in self.associated_vars:
                         vars.push(var)
         return vars
+
+    @staticmethod
+    def _parse_bound_expr(expr: str, param_map: Dict[str, Operator]) -> Optional[Operator]:
+        expr = expr.strip()
+        if not expr:
+            return None
+        from .parser import parse_bound_expression
+
+        bound = parse_bound_expression(expr)
+        return CallStatement._substitute_param_expr(bound, param_map)
+
+    @staticmethod
+    def _substitute_param_expr(
+        expr: Operator, param_map: Dict[str, Operator]
+    ) -> Operator:
+        result = expr
+        if not param_map:
+            return result
+        for var in expr.collect_vars():
+            repl = param_map.get(var.name)
+            if repl is None:
+                continue
+            repl_op = repl.deep_clone() if isinstance(repl, Operator) else repl
+            result = result.replace_with(var, repl_op)
+        return result
+
+    def _explicit_shape_slice(
+        self,
+        arg: Operator,
+        param_idx: Optional[int],
+        param_dims: List[Optional[Tuple[str, ...]]],
+        param_map: Dict[str, Operator],
+    ) -> Optional[OpVar]:
+        if (
+            param_idx is None
+            or not isinstance(arg, OpVar)
+            or arg.index is None
+            or param_idx >= len(param_dims)
+        ):
+            return None
+        dims_spec = param_dims[param_idx]
+        if not isinstance(dims_spec, tuple):
+            return None
+        dims_values = list(dims_spec)
+        index_dims = list(arg.index)
+        if len(dims_values) != len(index_dims):
+            return None
+        new_dims: List[Optional[Operator]] = []
+        changed = False
+        for dim_idx, (idx_val, dim_spec) in enumerate(zip(index_dims, dims_values)):
+            if idx_val is None:
+                new_dims.append(None)
+                continue
+            if isinstance(idx_val, OpRange):
+                new_dims.append(idx_val.deep_clone())
+                continue
+            if dim_spec is None:
+                new_dims.append(idx_val.deep_clone())
+                continue
+            dim_txt = dim_spec.strip()
+            if not dim_txt or dim_txt == ":":
+                new_dims.append(idx_val.deep_clone())
+                continue
+            lower: Optional[Operator] = None
+            upper: Optional[Operator] = None
+            if ":" in dim_txt:
+                parts = dim_txt.split(":", 1)
+                lower_txt = parts[0].strip()
+                upper_txt = parts[1].strip()
+                if not lower_txt:
+                    lower_txt = "1"
+            else:
+                lower_txt = "1"
+                upper_txt = dim_txt
+            lower_txt = lower_txt.strip()
+            upper_txt = upper_txt.strip()
+            if upper_txt == "*" or lower_txt == "*":
+                new_dims.append(idx_val.deep_clone())
+                continue
+            lower = (
+                self._parse_bound_expr(lower_txt, param_map)
+                if lower_txt
+                else None
+            )
+            upper = (
+                self._parse_bound_expr(upper_txt, param_map)
+                if upper_txt
+                else None
+            )
+            if lower is None or upper is None:
+                new_dims.append(idx_val.deep_clone())
+                continue
+            start = idx_val.deep_clone() if isinstance(idx_val, Operator) else idx_val
+            extent_minus_one = upper - lower
+            end = start + extent_minus_one
+            new_dims.append(OpRange([start, end]))
+            changed = True
+        if not changed:
+            return None
+        expanded = arg.deep_clone()
+        expanded.index = AryIndex(new_dims)
+        return expanded
 
     @classmethod
     def rename_args(
