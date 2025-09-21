@@ -708,6 +708,7 @@ def _set_call_intents(
     if isinstance(node, CallStatement):
         arg_info = Node.get_arg_info(node, routine_map, generic_map)
         if arg_info is not None and "intents" in arg_info:
+            node.arg_info = arg_info
             intents = list(arg_info["intents"])
             params = list(arg_info["args"])
             if node.result is not None:

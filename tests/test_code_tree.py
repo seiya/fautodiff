@@ -1189,6 +1189,19 @@ class TestCallStatement(unittest.TestCase):
         node = CallStatement("foo", [OpInt(1), OpInt(2)], arg_keys=["a", "b"])
         self.assertEqual(render_program(Block([node])), "call foo(a=1, b=2)\n")
 
+    def test_required_vars_explicit_shape_pointer(self):
+        m = OpVar("m")
+        i = OpVar("i")
+        actual = OpVar("a", index=[i])
+        node = CallStatement("foo", [m, actual], intents=["in", "inout"])
+        node.arg_info = {
+            "args": ["n", "a"],
+            "dims": [None, ("n",)],
+            "intents": ["in", "inout"],
+        }
+        required = {str(v) for v in node.required_vars()}
+        self.assertIn("a(i:i + m - 1)", required)
+
 
 class TestRenderWrapping(unittest.TestCase):
     def test_assignment_alignment(self):
