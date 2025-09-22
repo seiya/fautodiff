@@ -7194,7 +7194,7 @@ def _wrap_comment_text(comment: str, indent: str, has_newline: bool) -> List[str
     result: List[str] = []
     for idx, text in enumerate(lines):
         needs_nl = has_newline or idx < len(lines) - 1
-        result.append(f"{text}{'\n' if needs_nl else ''}")
+        result.append(text + ("\n" if needs_nl else ""))
     return result
 
 
@@ -7288,7 +7288,8 @@ def _wrap_fortran_line(line: str) -> List[str]:
     if comment_text is not None:
         if pieces and not pieces[-1].endswith("\n"):
             pieces[-1] = pieces[-1] + "\n"
-        pieces.extend(_wrap_comment_text(comment_text, base_indent, has_newline))
+        comment_indent = base_indent + "  "
+        pieces.extend(_wrap_comment_text(comment_text, comment_indent, has_newline))
 
     return pieces
 
