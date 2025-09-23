@@ -91,14 +91,14 @@ contains
       else if (i == n) then
         ip = 1
       end if
-      x_ad(i) = y_ad(in) / 4.0 + y_ad(ip) / 4.0 + y_ad(i) * 2.0 / 4.0 + x_ad(i)
-      ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0; y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0; y(i) = (2.0 * x(i) + x(in) + x(ip)) /
-      ! 4.0
+      x_ad(i) = y_ad(i) * 2.0 / 4.0 + y_ad(ip) / 4.0 + y_ad(in) / 4.0 + x_ad(i) ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
     end do
+    !$omp end parallel do
     !$omp parallel do
     do i = n, 1, - 1
       y_ad(i) = 0.0 ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
     end do
+    !$omp end parallel do
 
     return
   end subroutine stencil_loop_rev_ad
@@ -122,11 +122,11 @@ contains
     do i = istart, iend
       flux_ad(1) = u_ad(i) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 - h_ad(i + 2) * u(i) / 6.0 &
                    + h_ad(i + 1) * u(i) * 2.0 / 6.0 - h_ad(i) * u(i) * 2.0 / 6.0 + h_ad(i - 1) * u(i) / 6.0
-      ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+        ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
       flux(1) = u(i) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0
       flux_ad(2) = u_ad(i - 1) * (- h(i + 1) + 2.0 * h(i) - 2.0 * h(i - 1) + h(i - 2)) / 6.0 - h_ad(i + 1) * u(i - 1) / 6.0 &
                    + h_ad(i) * u(i - 1) * 2.0 / 6.0 - h_ad(i - 1) * u(i - 1) * 2.0 / 6.0 + h_ad(i - 2) * u(i - 1) / 6.0
-      ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+        ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
       flux(2) = u(i - 1) * (- h(i + 1) + 2.0 * h(i) - 2.0 * h(i - 1) + h(i - 2)) / 6.0
       dhdt_ad(i) = - flux_ad(1) + flux_ad(2) ! dhdt(i) = - (flux(1) - flux(2))
       dhdt(i) = - (flux(1) - flux(2))
@@ -146,69 +146,84 @@ contains
     real, intent(in)  :: u(is:ie)
     real, intent(inout) :: u_ad(is:ie)
     real, intent(inout) :: dhdt_ad(is:ie)
-    real :: flux_ad(2,- 2:2)
+    real :: flux_ad(2)
+    real :: flux_ad_n2(2)
+    real :: flux_ad_n1(2)
+    real :: flux_ad_p1(2)
+    real :: flux_ad_p2(2)
     integer :: i
 
-    !$omp parallel do private(flux_ad)
+    !$omp parallel do private(flux_ad, flux_ad_n2, flux_ad_n1, flux_ad_p1, flux_ad_p2)
     do i = iend + 2, istart - 2, - 1
-      if (i >= istart) then
-        flux_ad(1,- 2) = - dhdt_ad(i - 2) ! dhdt(i) = - (flux(1) - flux(2))
-      end if
-      if (i - 1 >= istart) then
-        flux_ad(1,- 1) = - dhdt_ad(i - 1) ! dhdt(i) = - (flux(1) - flux(2))
-        flux_ad(2,- 1) = dhdt_ad(i - 1) ! dhdt(i) = - (flux(1) - flux(2))
-      end if
-      flux_ad(1,0) = - dhdt_ad(i) ! dhdt(i) = - (flux(1) - flux(2))
-      flux_ad(2,0) = dhdt_ad(i) ! dhdt(i) = - (flux(1) - flux(2))
-      if (i + 1 <= iend) then
-        flux_ad(1,1) = - dhdt_ad(i + 1) ! dhdt(i) = - (flux(1) - flux(2))
-        flux_ad(2,1) = dhdt_ad(i + 1) ! dhdt(i) = - (flux(1) - flux(2))
-      end if
-      if (i <= iend) then
-        flux_ad(2,2) = dhdt_ad(i + 2) ! dhdt(i) = - (flux(1) - flux(2))
-      end if
-      if (i + 1 >= istart .and. i + 1 <= iend) then
-        u_ad(i) = flux_ad(2,1) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 + u_ad(i)
-        ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      if (i - 2 >= istart) then
+        flux_ad_n2(1) = - dhdt_ad(i - 2) ! dhdt(i) = - (flux(1) - flux(2))
       end if
       if (i - 1 >= istart .and. i - 1 <= iend) then
-        h_ad(i) = - flux_ad(2,- 1) * u(i - 2) / 6.0 + h_ad(i)
-        ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+        flux_ad_n1(1) = - dhdt_ad(i - 1) ! dhdt(i) = - (flux(1) - flux(2))
       end if
       if (i >= istart .and. i <= iend) then
-        h_ad(i) = flux_ad(2,0) * u(i - 1) * 2.0 / 6.0 + h_ad(i)
-        ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+        flux_ad(1) = - dhdt_ad(i) ! dhdt(i) = - (flux(1) - flux(2))
       end if
       if (i + 1 >= istart .and. i + 1 <= iend) then
-        h_ad(i) = - flux_ad(2,1) * u(i) * 2.0 / 6.0 + h_ad(i)
-        ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
-      end if
-      if (i + 2 >= istart .and. i + 2 <= iend) then
-        h_ad(i) = flux_ad(2,2) * u(i + 1) / 6.0 + h_ad(i)
-        ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
-      end if
-      if (i >= istart .and. i <= iend) then
-        u_ad(i) = flux_ad(1,0) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 + u_ad(i)
-        ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
-      end if
-      if (i - 2 >= istart .and. i - 2 <= iend) then
-        h_ad(i) = - flux_ad(1,- 2) * u(i - 2) / 6.0 + h_ad(i) ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+        flux_ad_p1(1) = - dhdt_ad(i + 1) ! dhdt(i) = - (flux(1) - flux(2))
       end if
       if (i - 1 >= istart .and. i - 1 <= iend) then
-        h_ad(i) = flux_ad(1,- 1) * u(i - 1) * 2.0 / 6.0 + h_ad(i)
-        ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+        flux_ad_n1(2) = dhdt_ad(i - 1) ! dhdt(i) = - (flux(1) - flux(2))
       end if
       if (i >= istart .and. i <= iend) then
-        h_ad(i) = - flux_ad(1,0) * u(i) * 2.0 / 6.0 + h_ad(i) ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+        flux_ad(2) = dhdt_ad(i) ! dhdt(i) = - (flux(1) - flux(2))
       end if
       if (i + 1 >= istart .and. i + 1 <= iend) then
-        h_ad(i) = flux_ad(1,1) * u(i+1) / 6.0 + h_ad(i) ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+        flux_ad_p1(2) = dhdt_ad(i + 1) ! dhdt(i) = - (flux(1) - flux(2))
+      end if
+      if (i + 2 <= iend) then
+        flux_ad_p2(2) = dhdt_ad(i + 2) ! dhdt(i) = - (flux(1) - flux(2))
+      end if
+      if (i + 1 >= istart .and. i + 1 <= iend) then
+        u_ad(i) = flux_ad_p1(2) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 + u_ad(i)
+          ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      end if
+      if (i - 1 >= istart .and. i - 1 <= iend) then
+        h_ad(i) = - flux_ad_n1(2) * u(i - 2) / 6.0 + h_ad(i)
+          ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      end if
+      if (i >= istart .and. i <= iend) then
+        h_ad(i) = flux_ad(2) * u(i - 1) * 2.0 / 6.0 + h_ad(i)
+          ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      end if
+      if (i + 1 >= istart .and. i + 1 <= iend) then
+        h_ad(i) = - flux_ad_p1(2) * u(i) * 2.0 / 6.0 + h_ad(i)
+          ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      end if
+      if (i + 2 <= iend) then
+        h_ad(i) = flux_ad_p2(2) * u(i + 1) / 6.0 + h_ad(i)
+          ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      end if
+      if (i >= istart .and. i <= iend) then
+        u_ad(i) = flux_ad(1) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 + u_ad(i)
+          ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+      end if
+      if (i - 2 >= istart) then
+        h_ad(i) = - flux_ad_n2(1) * u(i - 2) / 6.0 + h_ad(i)
+          ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+      end if
+      if (i - 1 >= istart .and. i - 1 <= iend) then
+        h_ad(i) = flux_ad_n1(1) * u(i - 1) * 2.0 / 6.0 + h_ad(i)
+          ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+      end if
+      if (i >= istart .and. i <= iend) then
+        h_ad(i) = - flux_ad(1) * u(i) * 2.0 / 6.0 + h_ad(i) ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+      end if
+      if (i + 1 >= istart .and. i + 1 <= iend) then
+        h_ad(i) = flux_ad_p1(1) * u(i + 1) / 6.0 + h_ad(i) ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
       end if
     end do
+    !$omp end parallel do
     !$omp parallel do
     do i = iend, istart, - 1
       dhdt_ad(i) = 0.0 ! dhdt(i) = - (flux(1) - flux(2))
     end do
+    !$omp end parallel do
 
     return
   end subroutine stencil_loop_with_halo_rev_ad
