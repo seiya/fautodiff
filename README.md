@@ -1,11 +1,13 @@
+![fautodiff Logo](docs/logo.svg)
+
 # fautodiff
 Autodiff code generator for Fortran
 
 This source-to-source tool parses existing Fortran programs and emits new modules
 with ``_ad`` suffixes, preserving the original structure while providing forward
 and reverse mode derivatives. Documentation of the supported Fortran constructs
-can be found in ``doc/fortran_support.md``.
-Basic C preprocessor macros are also recognized; see ``doc/preprocessor.md`` for
+can be found in ``docs/fortran_support.md``.
+Basic C preprocessor macros are also recognized; see ``docs/preprocessor.md`` for
 details.
 
 ## Installation
@@ -98,7 +100,7 @@ bin/fautodiff -M examples examples/cross_mod_a.f90
 bin/fautodiff -I examples examples/cross_mod_b.f90
 ```
 
-The structure of these files is documented in [doc/fadmod.md](doc/fadmod.md).
+The structure of these files is documented in [docs/fadmod.md](docs/fadmod.md).
 
 Generate code programmatically from Python:
 ```python
@@ -143,12 +145,12 @@ call foo_rev_ad(x, x_ad, y_ad) ! x: in, x_ad: out, y_ad: inout
 
 ## Directives
 
-See ``doc/directives.md`` for a description of optional directives that can control how AD code is generated.
-Details on how module variable assignments are handled in reverse mode are in the [Module variables in reverse mode](doc/fortran_support.md#module-variables-in-reverse-mode) section.
+See ``docs/directives.md`` for a description of optional directives that can control how AD code is generated.
+Details on how module variable assignments are handled in reverse mode are in the [Module variables in reverse mode](docs/fortran_support.md#module-variables-in-reverse-mode) section.
 
 ## Supported Fortran syntax and features
 
-See ``doc/fortran_support.md`` for a description of supported Fortran constructs.
+See ``docs/fortran_support.md`` for a description of supported Fortran constructs.
 
 ## OpenMP constructs
 
