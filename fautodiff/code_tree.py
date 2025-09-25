@@ -55,12 +55,12 @@ _OPERATOR_BREAK_GROUPS: Tuple[Tuple[int, Tuple[str, ...]], ...] = (
 )
 
 _OPERATOR_BREAK_TOKENS: Tuple[Tuple[str, int], ...] = tuple(
-    (token, prio)
-    for prio, tokens in _OPERATOR_BREAK_GROUPS
-    for token in tokens
+    (token, prio) for prio, tokens in _OPERATOR_BREAK_GROUPS for token in tokens
 )
 
-_OPERATOR_BREAK_TOKENS = tuple(sorted(_OPERATOR_BREAK_TOKENS, key=lambda item: -len(item[0])))
+_OPERATOR_BREAK_TOKENS = tuple(
+    sorted(_OPERATOR_BREAK_TOKENS, key=lambda item: -len(item[0]))
+)
 
 from .operators import (
     AryIndex,
@@ -2300,7 +2300,7 @@ class CallStatement(Node):
             vars = VarList()
         else:
             vars = vars.copy()
-            for (arg, intent, param_idx) in zip(self.args, intents, param_indices):
+            for arg, intent, param_idx in zip(self.args, intents, param_indices):
                 if intent in ("out", "inout"):
                     for var in arg.collect_vars(without_index=True):
                         vars.remove(var)
@@ -2311,7 +2311,7 @@ class CallStatement(Node):
             for name, actual in zip(param_names, param_actuals):
                 if actual is not None:
                     param_map[name] = actual
-        for (arg, intent, param_idx) in zip(self.args, intents, param_indices):
+        for arg, intent, param_idx in zip(self.args, intents, param_indices):
             if intent in ("in", "inout"):
                 for var in arg.collect_vars():
                     if not var.is_constant:
@@ -2328,7 +2328,9 @@ class CallStatement(Node):
         return vars
 
     @staticmethod
-    def _parse_bound_expr(expr: str, param_map: Dict[str, Operator]) -> Optional[Operator]:
+    def _parse_bound_expr(
+        expr: str, param_map: Dict[str, Operator]
+    ) -> Optional[Operator]:
         expr = expr.strip()
         if not expr:
             return None
@@ -2405,16 +2407,8 @@ class CallStatement(Node):
             if upper_txt == "*" or lower_txt == "*":
                 new_dims.append(idx_val.deep_clone())
                 continue
-            lower = (
-                self._parse_bound_expr(lower_txt, param_map)
-                if lower_txt
-                else None
-            )
-            upper = (
-                self._parse_bound_expr(upper_txt, param_map)
-                if upper_txt
-                else None
-            )
+            lower = self._parse_bound_expr(lower_txt, param_map) if lower_txt else None
+            upper = self._parse_bound_expr(upper_txt, param_map) if upper_txt else None
             if lower is None or upper is None:
                 new_dims.append(idx_val.deep_clone())
                 continue
@@ -7198,6 +7192,57 @@ def _wrap_comment_text(comment: str, indent: str, has_newline: bool) -> List[str
     return result
 
 
+def _wrap_openmp_directive(content: str, has_newline: bool) -> List[str]:
+    """Wrap an OpenMP directive ensuring continuation markers are preserved."""
+
+    indent_len = len(content) - len(content.lstrip(" "))
+    indent = content[:indent_len]
+    directive = content[indent_len:]
+
+    if len(content) <= MAX_FORTRAN_LINE_LENGTH:
+        return [content + ("\n" if has_newline else "")]
+
+    prefix_end = 0
+    length = len(directive)
+    while prefix_end < length and directive[prefix_end] not in (" ", "\t"):
+        prefix_end += 1
+
+    prefix = directive[:prefix_end]
+    remainder = directive[prefix_end:].lstrip()
+
+    if not remainder:
+        line = indent + prefix
+        if has_newline:
+            line += "\n"
+        return [line]
+
+    width = MAX_FORTRAN_LINE_LENGTH - indent_len - len(prefix) - 4
+    if width <= 0:
+        width = 1
+
+    wrapped = textwrap.wrap(
+        remainder,
+        width=width,
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+
+    lines: List[str] = []
+    for idx, part in enumerate(wrapped):
+        is_last = idx == len(wrapped) - 1
+        if idx == 0:
+            text = f"{indent}{prefix} {part}"
+        else:
+            text = f"{indent}{prefix}& {part}"
+        if not is_last:
+            text += " &"
+        if not is_last or has_newline:
+            text += "\n"
+        lines.append(text)
+
+    return lines
+
+
 def _wrap_fortran_line(line: str) -> List[str]:
     """Split ``line`` into continuation lines limited to 132 characters."""
 
@@ -7209,6 +7254,9 @@ def _wrap_fortran_line(line: str) -> List[str]:
     stripped = content.lstrip()
     if not stripped or stripped.startswith("#"):
         return [line]
+
+    if stripped.startswith("!$"):
+        return _wrap_openmp_directive(content, has_newline)
 
     if stripped.startswith("!"):
         indent_len = len(content) - len(stripped)
@@ -7227,7 +7275,10 @@ def _wrap_fortran_line(line: str) -> List[str]:
         if not content:
             indent = " " * (comment_start)
             return _wrap_comment_text(comment_text, indent, has_newline)
-        if not had_trailing_ampersand and len(original_content) <= MAX_FORTRAN_LINE_LENGTH:
+        if (
+            not had_trailing_ampersand
+            and len(original_content) <= MAX_FORTRAN_LINE_LENGTH
+        ):
             return [line]
 
     if len(content) <= MAX_FORTRAN_LINE_LENGTH and comment_text is None:

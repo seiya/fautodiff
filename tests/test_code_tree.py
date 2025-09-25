@@ -1294,11 +1294,27 @@ class TestRenderWrapping(unittest.TestCase):
         self.assertTrue(lines[1].lstrip().startswith("!"))
         self.assertEqual(lines[2], "  & baz")
 
+    def test_openmp_directive_wrap_keeps_continuation(self):
+        directive = "!$omp parallel do " + "private(x, y, z, very_long_name) " * 6
+        stmt = Statement(directive)
+        lines = render_program(stmt, indent=1).splitlines()
+
+        self.assertGreater(len(lines), 1)
+        for idx, line in enumerate(lines):
+            self.assertLessEqual(len(line), 132)
+            if idx < len(lines) - 1:
+                self.assertTrue(line.endswith("&"))
+            else:
+                self.assertFalse(line.endswith("&"))
+
+        first = lines[0]
+        self.assertTrue(first.strip().lower().startswith("!$omp"))
+        for continuation in lines[1:]:
+            stripped = continuation.lstrip()
+            self.assertTrue(stripped.lower().startswith("!$omp&"))
+
     def test_wrap_prefers_low_precedence_breaks(self):
-        terms = [
-            f"very_long_variable_{idx} * other_operand_{idx}"
-            for idx in range(8)
-        ]
+        terms = [f"very_long_variable_{idx} * other_operand_{idx}" for idx in range(8)]
         body = "res = " + " + ".join(terms)
         stmt = Statement(body)
         lines = render_program(stmt, indent=1).splitlines()
