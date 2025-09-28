@@ -1,5 +1,6 @@
 import sys
 import unittest
+import textwrap
 from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
@@ -195,6 +196,34 @@ class TestGenerator(unittest.TestCase):
         gen("examples/module_vars.f90", warn=False)
         fm = fadmod.FadmodBase.load(fadmod_path)
         self.assertIn("c", fm.variables_raw)
+
+    def test_reverse_shadowed_local_gradient(self):
+        code_tree.Node.reset()
+        src = textwrap.dedent(
+            """
+            module shadow_mod
+              real :: z
+            contains
+              subroutine foo(x, y)
+                real, intent(in) :: x
+                real, intent(out) :: y
+                real :: z
+                z = x + 1.0
+                block
+                  real :: z
+                  z = x + 2.0
+                  y = z
+                end block
+                y = y + z
+              end subroutine foo
+            end module shadow_mod
+            """
+        )
+        generated = generator.generate_ad(
+            src, "shadow.f90", warn=False, mode="reverse"
+        )
+        self.assertIn("z_ad = y_ad ! y = y + z", generated)
+        self.assertNotIn("z_ad = y_ad + z_ad ! y = y + z", generated)
 
     def test_fadmod_variable_defaults(self):
         code_tree.Node.reset()

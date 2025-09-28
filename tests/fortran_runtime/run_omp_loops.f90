@@ -11,6 +11,7 @@ program run_omp_loops
   integer, parameter :: I_stencil_loop_with_halo = 4
   integer, parameter :: I_indirect_access_loop = 5
   integer, parameter :: I_omp_ws_if = 6
+  integer, parameter :: I_omp_ws_alloc = 7
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -36,6 +37,8 @@ program run_omp_loops
               i_test = I_indirect_access_loop
            case ("omp_ws_if")
               i_test = I_omp_ws_if
+           case ("omp_ws_alloc")
+              i_test = I_omp_ws_alloc
            case default
               print *, 'Invalid test name: ', arg
               error stop 1
@@ -63,6 +66,9 @@ program run_omp_loops
   if (i_test == I_omp_ws_if .or. i_test == I_all) then
      call test_omp_ws_if
   end if
+  if (i_test == I_omp_ws_alloc .or. i_test == I_all) then
+     call test_omp_ws_alloc
+  end if
 
   stop
 contains
@@ -82,7 +88,8 @@ contains
     fd_s = (s_eps - s) / eps
     x_ad(:) = 1.0
     call sum_loop_fwd_ad(n, x, x_ad, y, y_ad, s, s_ad)
-    if (any(abs((y_ad(:) - fd_y(:)) / fd_y(:)) > tol) .or. abs((s_ad - fd_s) / fd_s) > tol) then
+    if (any(abs((y_ad(:) - fd_y(:)) / max(abs(fd_y(:)), tol)) > tol) .or. &
+        abs((s_ad - fd_s) / max(abs(fd_s), tol)) > tol) then
        print *, 'test_sum_loop_fwd failed'
        error stop 1
     end if
@@ -91,7 +98,7 @@ contains
     x_ad(:) = 0.0
     call sum_loop_rev_ad(n, x_ad, y_ad, s_ad)
     inner2 = sum(x_ad(:))
-    if (abs((inner2 - inner1) / inner1) > tol) then
+    if (abs((inner2 - inner1) / max(abs(inner1), tol)) > tol) then
       print *, 'test_sum_loop_rev failed', inner1, inner2
       error stop 1
     end if
@@ -114,7 +121,7 @@ contains
     fd_y(:) = (y_eps(:) - y(:)) / eps
     x_ad(:) = 1.0
     call stencil_loop_fwd_ad(n, x, x_ad, y, y_ad)
-    if (any(abs((y_ad(:) - fd_y(:)) / fd_y(:)) > tol_stencil)) then
+    if (any(abs((y_ad(:) - fd_y(:)) / max(abs(fd_y(:)), tol_stencil)) > tol_stencil)) then
        print *, 'test_stencil_loop_fwd failed'
        error stop 1
     end if
@@ -123,7 +130,7 @@ contains
     x_ad(:) = 0.0
     call stencil_loop_rev_ad(n, x_ad, y_ad)
     inner2 = sum(x_ad(:))
-    if (abs((inner2 - inner1) / inner1) > tol_stencil) then
+    if (abs((inner2 - inner1) / max(abs(inner1), tol_stencil)) > tol_stencil) then
        print *, 'test_stencil_loop_rev failed', inner1, inner2
        error stop 1
     end if
@@ -318,7 +325,7 @@ contains
     fd_y(:) = (y_eps(:) - y(:)) / eps
     x_ad(:) = 1.0
     call omp_ws_if_fwd_ad(x, x_ad, y, y_ad, f)
-    if (any(abs((y_ad(:) - fd_y(:)) / max(1.0e-12, fd_y(:))) > tol_ws)) then
+    if (any(abs((y_ad(:) - fd_y(:)) / max(1.0e-12, abs(fd_y(:)))) > tol_ws)) then
        print *, 'test_omp_ws_if_fwd (f=false) failed'
        error stop 1
     end if
@@ -339,7 +346,7 @@ contains
     fd_y(:) = (y_eps(:) - y(:)) / eps
     x_ad(:) = 1.0
     call omp_ws_if_fwd_ad(x, x_ad, y, y_ad, f)
-    if (any(abs((y_ad(:) - fd_y(:)) / max(1.0e-12, fd_y(:))) > tol_ws)) then
+    if (any(abs((y_ad(:) - fd_y(:)) / max(1.0e-12, abs(fd_y(:)))) > tol_ws)) then
        print *, 'test_omp_ws_if_fwd (f=true) failed'
        error stop 1
     end if
@@ -355,5 +362,62 @@ contains
 
     return
   end subroutine test_omp_ws_if
+
+  subroutine test_omp_ws_alloc
+    real, parameter :: eps = 1.0e-3
+    integer, parameter :: n = 4
+    real, parameter :: tol_alloc = 1.0e-3
+    real :: fd(n)
+    real :: inner1, inner2
+    real, allocatable :: x(:), x_seed(:), x_ad(:), x_out_ad(:)
+    real, allocatable :: y(:), y_eps(:), y_ad(:)
+    integer :: i
+
+    allocate(x_seed(n))
+    do i = 1, n
+       x_seed(i) = real(i)
+    end do
+
+    allocate(x(n), y(n))
+    x = x_seed
+    call omp_ws_alloc(x, y)
+
+    allocate(y_eps(n))
+    y_eps = 0.0
+    x = x_seed + eps
+    call omp_ws_alloc(x, y_eps)
+    fd(:) = (y_eps(:) - y(:)) / eps
+
+    x = x_seed
+    allocate(x_ad(n), y_ad(n), x_out_ad(n))
+    x_ad = 1.0
+    call omp_ws_alloc_fwd_ad(x, x_ad, y, y_ad)
+    if (maxval(abs((y_ad(:) - fd(:)) / max(abs(fd(:)), tol_alloc))) > tol_alloc) then
+       print *, 'test_omp_ws_alloc_fwd failed'
+       print *, maxval(abs((y_ad(:) - fd(:)) / max(abs(fd(:)), tol_alloc)))
+       error stop 1
+    end if
+
+    x_out_ad(:) = x_ad(:)
+    inner1 = sum(y_ad(:)**2) + sum(x_out_ad(:)**2)
+    x(:) = x_seed(:)
+    x_ad(:) = x_out_ad(:)
+    call omp_ws_alloc_rev_ad(x, x_ad, y_ad)
+    inner2 = sum(x_ad(:))
+    if (abs((inner2 - inner1) / max(abs(inner1), tol_alloc)) > tol_alloc) then
+       print *, 'test_omp_ws_alloc_rev failed', inner1, inner2
+       error stop 1
+    end if
+
+    deallocate(x)
+    deallocate(x_seed)
+    deallocate(x_ad)
+    deallocate(x_out_ad)
+    deallocate(y)
+    deallocate(y_eps)
+    deallocate(y_ad)
+
+    return
+  end subroutine test_omp_ws_alloc
 
 end program run_omp_loops

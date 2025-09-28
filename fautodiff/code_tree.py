@@ -6432,18 +6432,24 @@ class BlockConstruct(Node):
         warnings: Optional[List[str]] = None,
     ) -> List[Node]:
         decls = self.decls.deep_clone()
-        for node in self.decls.generate_ad(
-            saved_vars,
-            reverse,
-            assigned_advars,
-            routine_map,
-            generic_map,
-            mod_vars,
-            exitcycle_flags,
-            return_flags,
-            type_map,
-            warnings,
-        ):
+        generated_decls = list(
+            self.decls.generate_ad(
+                saved_vars,
+                reverse,
+                assigned_advars,
+                routine_map,
+                generic_map,
+                mod_vars,
+                exitcycle_flags,
+                return_flags,
+                type_map,
+                warnings,
+            )
+        )
+        for node in generated_decls:
+            if isinstance(node, Declaration) and node.name.endswith(AD_SUFFIX):
+                node.init_val = None
+        for node in generated_decls:
             decls.append(node)
         body_nodes = self.body.generate_ad(
             saved_vars,

@@ -21,7 +21,9 @@ PROGRAM_NAMES = run_simple_math.out run_arrays.out run_call_example.out run_cont
            run_exit_cycle.out run_pointer_arrays.out run_derived_alloc.out run_mpi_example.out \
                   run_mpi_persistent.out \
                    run_stack.out run_where_forall.out run_omp_loops.out run_return_example.out run_self_reference.out \
-           run_macro_args.out run_macro_multistmt.out run_use_module_conflict.out run_stop_example.out
+           run_macro_args.out run_macro_multistmt.out run_use_module_conflict.out run_stop_example.out \
+           run_block_construct.out run_conditional_macro.out run_keyword_args.out run_macro_sample.out \
+           run_preprocessor.out run_same_file_modules.out run_use_parameter.out run_mpi_sub_use.out
 PROGRAMS = $(addprefix $(OUTDIR)/,$(PROGRAM_NAMES))
 
 .PHONY: all clean
@@ -38,6 +40,9 @@ $(OUTDIR)/run_mpi_example.out: $(OUTDIR)/run_mpi_example.o
 $(OUTDIR)/run_mpi_persistent.out: $(OUTDIR)/run_mpi_persistent.o $(OUTDIR)/mpi_ad.o
 	$(MPIFC) $(FFLAGS) -o $@ $^
 
+$(OUTDIR)/run_mpi_sub_use.out: $(OUTDIR)/run_mpi_sub_use.o $(OUTDIR)/mpi_sub_use.o $(OUTDIR)/mpi_sub_use_ad.o $(OUTDIR)/mpi_ad.o
+	$(MPIFC) $(FFLAGS) -o $@ $^
+
 $(OUTDIR)/run_%.o: run_%.f90
 	$(FC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
 
@@ -45,6 +50,9 @@ $(OUTDIR)/run_mpi_example.o: run_mpi_example.f90
 	$(MPIFC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
 
 $(OUTDIR)/run_mpi_persistent.o: run_mpi_persistent.f90
+	$(MPIFC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
+
+$(OUTDIR)/run_mpi_sub_use.o: run_mpi_sub_use.f90
 	$(MPIFC) $(FFLAGS) -c $< -J $(OUTDIR) -o $@
 
 $(OUTDIR)/%.o: %.f90
@@ -81,6 +89,14 @@ $(OUTDIR)/run_derived_alloc.o: $(OUTDIR)/derived_alloc.o $(OUTDIR)/derived_alloc
 $(OUTDIR)/run_mpi_example.o: $(OUTDIR)/mpi_example.o $(OUTDIR)/mpi_example_ad.o $(OUTDIR)/mpi_ad.o
 $(OUTDIR)/run_mpi_persistent.o: $(OUTDIR)/mpi_ad.o
 $(OUTDIR)/run_where_forall.o: $(OUTDIR)/where_forall.o $(OUTDIR)/where_forall_ad.o
+$(OUTDIR)/run_block_construct.o: $(OUTDIR)/block_construct.o $(OUTDIR)/block_construct_ad.o
+$(OUTDIR)/run_conditional_macro.o: $(OUTDIR)/conditional_macro.o $(OUTDIR)/conditional_macro_ad.o
+$(OUTDIR)/run_keyword_args.o: $(OUTDIR)/keyword_args.o $(OUTDIR)/keyword_args_ad.o
+$(OUTDIR)/run_macro_sample.o: $(OUTDIR)/macro_sample.o $(OUTDIR)/macro_sample_ad.o
+$(OUTDIR)/run_preprocessor.o: $(OUTDIR)/preprocessor.o $(OUTDIR)/preprocessor_ad.o
+$(OUTDIR)/run_same_file_modules.o: $(OUTDIR)/same_file_modules.o $(OUTDIR)/same_file_modules_ad.o
+$(OUTDIR)/run_use_parameter.o: $(OUTDIR)/support_mod.o $(OUTDIR)/support_mod_ad.o $(OUTDIR)/use_parameter.o $(OUTDIR)/use_parameter_ad.o
+$(OUTDIR)/run_mpi_sub_use.o: $(OUTDIR)/mpi_sub_use.o $(OUTDIR)/mpi_sub_use_ad.o $(OUTDIR)/mpi_ad.o
 
 $(OUTDIR)/run_return_example.o: $(OUTDIR)/return_example.o $(OUTDIR)/return_example_ad.o
 
@@ -122,6 +138,14 @@ $(OUTDIR)/run_return_example.out: $(OUTDIR)/run_return_example.o $(OUTDIR)/retur
 $(OUTDIR)/run_stop_example.out: $(OUTDIR)/run_stop_example.o $(OUTDIR)/stop_example.o $(OUTDIR)/stop_example_ad.o
 
 $(OUTDIR)/run_omp_loops.out: $(OUTDIR)/run_omp_loops.o $(OUTDIR)/omp_loops.o $(OUTDIR)/omp_loops_ad.o
+
+$(OUTDIR)/run_block_construct.out: $(OUTDIR)/run_block_construct.o $(OUTDIR)/block_construct.o $(OUTDIR)/block_construct_ad.o
+$(OUTDIR)/run_conditional_macro.out: $(OUTDIR)/run_conditional_macro.o $(OUTDIR)/conditional_macro.o $(OUTDIR)/conditional_macro_ad.o
+$(OUTDIR)/run_keyword_args.out: $(OUTDIR)/run_keyword_args.o $(OUTDIR)/keyword_args.o $(OUTDIR)/keyword_args_ad.o
+$(OUTDIR)/run_macro_sample.out: $(OUTDIR)/run_macro_sample.o $(OUTDIR)/macro_sample.o $(OUTDIR)/macro_sample_ad.o
+$(OUTDIR)/run_preprocessor.out: $(OUTDIR)/run_preprocessor.o $(OUTDIR)/preprocessor.o $(OUTDIR)/preprocessor_ad.o
+$(OUTDIR)/run_same_file_modules.out: $(OUTDIR)/run_same_file_modules.o $(OUTDIR)/same_file_modules.o $(OUTDIR)/same_file_modules_ad.o
+$(OUTDIR)/run_use_parameter.out: $(OUTDIR)/run_use_parameter.o $(OUTDIR)/support_mod.o $(OUTDIR)/support_mod_ad.o $(OUTDIR)/use_parameter.o $(OUTDIR)/use_parameter_ad.o
 
 $(OUTDIR)/run_fautodiff_stack.out: $(OUTDIR)/run_fautodiff_stack.o $(OUTDIR)/fautodiff_stack.o
 

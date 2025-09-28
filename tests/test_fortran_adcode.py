@@ -127,20 +127,32 @@ class TestFortranADCode(unittest.TestCase):
             ],
         )
 
+    def test_keyword_args(self):
+        self._run_test("keyword_args", ["inc", "do_inc"])
+
     def test_real_kind(self):
         self._run_test("real_kind", ["scale_8", "scale_rp", "scale_dp"])
 
     def test_store_vars(self):
-        self._run_test("store_vars", ["do_with_recurrent_scalar"])
+        self._run_test("store_vars", ["do_with_recurrent_scalar", "do_while"])
 
     def test_directives(self):
         self._run_test("directives", ["add_const", "worker"])
 
+    def test_block_construct(self):
+        self._run_test("block_construct", ["compute_module", "use_block"])
+
     def test_parameter_var(self):
         self._run_test("parameter_var", ["compute_area"])
 
+    def test_use_parameter(self):
+        self._run_test("use_parameter", ["scale_and_shift"])
+
     def test_module_vars(self):
         self._run_test("module_vars", ["inc_and_use"])
+
+    def test_same_file_modules(self):
+        self._run_test("same_file_modules", ["add_b"])
 
     def test_call_module_vars(self):
         self._run_test(
@@ -197,6 +209,9 @@ class TestFortranADCode(unittest.TestCase):
             use_mpi=True,
         )
 
+    def test_mpi_sub_use(self):
+        self._run_test("mpi_sub_use", ["foo"], use_mpi=True)
+
     def test_where_forall(self):
         self._run_test("where_forall", ["where_example", "forall_example"])
 
@@ -210,17 +225,27 @@ class TestFortranADCode(unittest.TestCase):
                 "stencil_loop_with_halo",
                 "indirect_access_loop",
                 "omp_ws_if",
+                "omp_ws_alloc",
             ],
         )
 
     def test_return_example(self):
-        self._run_test("return_example", ["conditional_return"])
+        self._run_test("return_example", ["conditional_return", "alloc_return"])
 
     def test_macro_args(self):
         self._run_test("macro_args", ["foo"])
 
     def test_macro_multistmt(self):
         self._run_test("macro_multistmt", ["foo"])
+
+    def test_conditional_macro(self):
+        self._run_test("conditional_macro", ["foo"])
+
+    def test_macro_sample(self):
+        self._run_test("macro_sample", ["foo"])
+
+    def test_preprocessor(self):
+        self._run_test("preprocessor", ["foo"])
 
     def test_self_reference(self):
         self._run_test(
