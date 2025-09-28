@@ -7170,34 +7170,29 @@ class OmpDirective(Node):
                 if i in delta_rev:
                     max_delta -= 1
 
-            nodes_new: List[Node] = []
-            ad_info: str | None = None
             clear_vars: List[str] = []
             clear_nodes: List[Node] = []
-            private_varnames: Dict[Dict[int, str]] = {}
-            for node in loop._body:
-                if isinstance(node, ClearAssignment) and node.lhs.name in clear_vars:
-                    cassign = ClearAssignment(node.lhs, node.info, node.ad_info)
-                    clear_nodes.append(cassign)
-                    continue
-                if not isinstance(node, Assignment):
-                    nodes_new.append(node)
-                    ad_info = None
-                    continue
+            private_varnames: Dict[str, Dict[int, str]] = {}
 
-                lhs = node.lhs
-                rhs = node.rhs
+            def _process_assignment(
+                assign_node: Assignment,
+                nodes_result: List[Node],
+                ad_info_prev: Optional[str],
+            ) -> Optional[str]:
+                lhs = assign_node.lhs
+                rhs = assign_node.rhs
                 lhsname = lhs.name
+
                 if lhsname in private_vars:
                     if lhsname not in private_varnames:
                         private_varnames[lhsname] = {}
                     if not lhsname.endswith(AD_SUFFIX):
-                        nodes_new.append(node)
-                        continue
-                    for i in range(- max_delta, max_delta + 1):
+                        nodes_result.append(assign_node)
+                        return None
+                    for i in range(-max_delta, max_delta + 1):
                         if i == 0:
                             idx_new = do_index
-                            assign = node
+                            assign = assign_node
                         else:
                             idx_new = do_index + OpInt(i)
                             lhs_new = lhs.replace_with(do_index, idx_new)
@@ -7206,28 +7201,32 @@ class OmpDirective(Node):
                             if i in private_varnames[lhsname]:
                                 lhs_new.name = private_varnames[lhsname][i]
                             else:
-                                name_new = lhsname + "_" + ("p" if i > 0 else "n") + str(abs(i)) + AD_SUFFIX
+                                name_new = (
+                                    lhsname
+                                    + "_"
+                                    + ("p" if i > 0 else "n")
+                                    + str(abs(i))
+                                    + AD_SUFFIX
+                                )
                                 lhs_new.name = name_new
                                 private_varnames[lhsname][i] = name_new
                             rhs_new = rhs.replace_with(do_index, idx_new)
-                            assign = Assignment(lhs_new, rhs_new, ad_info = node.ad_info)
-                        if i == - max_delta:
+                            assign = Assignment(lhs_new, rhs_new, ad_info=assign_node.ad_info)
+                        if i == -max_delta:
                             cond = idx_new >= range_min
                         elif i == max_delta:
                             cond = idx_new <= range_max
                         else:
                             cond = (idx_new >= range_min) & (idx_new <= range_max)
                         node_new = IfBlock([(cond, Block([assign]))])
-                        nodes_new.append(node_new)
+                        nodes_result.append(node_new)
                     for var in rhs.collect_vars(without_index=True):
                         if var.index is not None and do_index in var.index.collect_vars():
                             if var.name not in clear_vars:
                                 clear_vars.append(var.name)
-                    ad_info = None
-                    continue
+                    return None
 
                 if lhsname not in target_vars:
-                    # print(7)
                     raise ConvertToSerial
 
                 idim = target_vars[lhs.name]
@@ -7241,14 +7240,14 @@ class OmpDirective(Node):
                     index_new = lhs.index.copy()
                     index_new[idim] = do_index
                     lhs = lhs.change_index(index_new)
-                    if - delta in delta_rev:
+                    if -delta in delta_rev:
                         idx_new = delta_rev[-delta]
                         cond = None
                     else:
                         idx_new = do_index - OpInt(delta)
                         if delta == max_delta:
                             cond = idx_new >= range_min
-                        elif delta == - max_delta:
+                        elif delta == -max_delta:
                             cond = idx_new <= range_max
                         else:
                             cond = (idx_new >= range_min) & (idx_new <= range_max)
@@ -7265,24 +7264,97 @@ class OmpDirective(Node):
                     cond = (do_index >= range_min) & (do_index <= range_max)
                 else:
                     cond = None
-                if cond:
-                    assign = Assignment(lhs, rhs, node.accumulate, node.info, node.ad_info)
+
+                if cond is not None:
+                    assign = Assignment(lhs, rhs, assign_node.accumulate, assign_node.info, assign_node.ad_info)
                     ifblock = IfBlock([(cond, Block([assign]))])
-                    nodes_new.append(ifblock)
-                elif node.ad_info == ad_info and isinstance(nodes_new[-1], Assignment) and nodes_new[-1].lhs == lhs:
-                    assign = nodes_new[-1]
-                    assign = Assignment(
-                        assign.lhs,
-                        assign.rhs + rhs,
-                        assign.accumulate,
-                        assign.info,
-                        assign.ad_info
+                    nodes_result.append(ifblock)
+                elif (
+                    assign_node.ad_info == ad_info_prev
+                    and nodes_result
+                    and isinstance(nodes_result[-1], Assignment)
+                    and nodes_result[-1].lhs == lhs
+                ):
+                    prev = nodes_result[-1]
+                    merged = Assignment(
+                        prev.lhs,
+                        prev.rhs + rhs,
+                        prev.accumulate,
+                        prev.info,
+                        prev.ad_info,
                     )
-                    nodes_new[-1] = assign
+                    nodes_result[-1] = merged
                 else:
-                    assign = Assignment(lhs, rhs, node.accumulate, node.info, node.ad_info)
-                    nodes_new.append(assign)
-                ad_info = node.ad_info
+                    assign = Assignment(lhs, rhs, assign_node.accumulate, assign_node.info, assign_node.ad_info)
+                    nodes_result.append(assign)
+
+                return assign_node.ad_info
+
+            def _transform_block(block: Block, top_level: bool) -> List[Node]:
+                nodes_result: List[Node] = []
+                ad_info_local: Optional[str] = None
+
+                for child in block:
+                    if (
+                        top_level
+                        and isinstance(child, ClearAssignment)
+                        and child.lhs.name in clear_vars
+                    ):
+                        cassign = ClearAssignment(child.lhs, child.info, child.ad_info)
+                        clear_nodes.append(cassign)
+                        continue
+
+                    if isinstance(child, Assignment):
+                        ad_info_local = _process_assignment(child, nodes_result, ad_info_local)
+                        continue
+
+                    ad_info_local = None
+
+                    if isinstance(child, DoLoop):
+                        inner_nodes = _transform_block(child._body, top_level=False)
+                        loop_new = DoLoop(
+                            Block(inner_nodes),
+                            child.index.deep_clone(),
+                            child.range.deep_clone(),
+                            child.label,
+                        )
+                        nodes_result.append(loop_new)
+                        continue
+
+                    if isinstance(child, BranchBlock):
+                        cond_blocks: List[Tuple[Union[Operator, Tuple[Operator]], Block]] = []
+                        for cond, blk in child.cond_blocks:
+                            if isinstance(child, SelectBlock):
+                                cond_clone = (
+                                    tuple(co.deep_clone() for co in cond)
+                                    if cond is not None
+                                    else None
+                                )
+                            else:
+                                cond_clone = cond.deep_clone() if cond is not None else None
+                            block_nodes = _transform_block(blk, top_level=False)
+                            cond_blocks.append((cond_clone, Block(block_nodes)))
+                        if isinstance(child, SelectBlock):
+                            branch_new = SelectBlock(cond_blocks, child.expr.deep_clone(), child.select_type)
+                        elif isinstance(child, WhereBlock):
+                            branch_new = WhereBlock(cond_blocks)
+                        elif isinstance(child, IfBlock):
+                            branch_new = IfBlock(cond_blocks)
+                        else:
+                            branch_new = child.__class__(cond_blocks)
+                        nodes_result.append(branch_new)
+                        continue
+
+                    if isinstance(child, Block):
+                        nested = _transform_block(child, top_level=False)
+                        nodes_result.append(Block(nested))
+                        continue
+
+                    nodes_result.append(child)
+
+                return nodes_result
+
+            nodes_new = _transform_block(loop._body, top_level=True)
 
             range_new = OpRange([range_max + max_delta, range_min - max_delta, -1])
             loop_new = DoLoop(Block(nodes_new), do_index, range_new, loop.label)

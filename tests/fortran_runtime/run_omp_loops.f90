@@ -109,27 +109,35 @@ contains
   subroutine test_stencil_loop
     real, parameter :: tol_stencil = 2.0e-4
     integer, parameter :: n = 3
-    real :: x(n), y(n)
-    real :: x_ad(n), y_ad(n)
-    real :: y_eps(n), fd_y(n), eps
+    integer, parameter :: m = 4
+    real :: x(n, m), y(n, m)
+    real :: x_eps(n, m)
+    real :: x_ad(n, m), y_ad(n, m)
+    real :: y_eps(n, m), fd_y(n, m), eps
     real :: inner1, inner2
+    integer :: i, j
 
     eps = 1.0e-3
-    x = (/1.0, 2.0, 3.0/)
-    call stencil_loop(n, x, y)
-    call stencil_loop(n, x + eps, y_eps)
-    fd_y(:) = (y_eps(:) - y(:)) / eps
-    x_ad(:) = 1.0
-    call stencil_loop_fwd_ad(n, x, x_ad, y, y_ad)
-    if (any(abs((y_ad(:) - fd_y(:)) / max(abs(fd_y(:)), tol_stencil)) > tol_stencil)) then
+    do j = 1, m
+       do i = 1, n
+          x(i, j) = 0.5 * real(i) + 0.25 * real(j)
+       end do
+    end do
+    call stencil_loop(n, m, x, y)
+    x_eps(:,:) = x(:,:) + eps
+    call stencil_loop(n, m, x_eps, y_eps)
+    fd_y(:,:) = (y_eps(:,:) - y(:,:)) / eps
+    x_ad(:,:) = 1.0
+    call stencil_loop_fwd_ad(n, m, x, x_ad, y, y_ad)
+    if (any(abs((y_ad(:,:) - fd_y(:,:)) / max(abs(fd_y(:,:)), tol_stencil)) > tol_stencil)) then
        print *, 'test_stencil_loop_fwd failed'
        error stop 1
     end if
 
-    inner1 = sum(y_ad(:)**2)
-    x_ad(:) = 0.0
-    call stencil_loop_rev_ad(n, x_ad, y_ad)
-    inner2 = sum(x_ad(:))
+    inner1 = sum(y_ad(:,:)**2)
+    x_ad(:,:) = 0.0
+    call stencil_loop_rev_ad(n, m, x_ad, y_ad)
+    inner2 = sum(x_ad(:,:))
     if (abs((inner2 - inner1) / max(abs(inner1), tol_stencil)) > tol_stencil) then
        print *, 'test_stencil_loop_rev failed', inner1, inner2
        error stop 1

@@ -22,22 +22,32 @@ contains
     return
   end subroutine sum_loop
 
-  subroutine stencil_loop(n, x, y)
-    integer, intent(in) :: n
-    real, intent(in) :: x(n)
-    real, intent(out) :: y(n)
+  subroutine stencil_loop(n, m, x, y)
+    integer, intent(in) :: n, m
+    real, intent(in) :: x(n, m)
+    real, intent(out) :: y(n, m)
     integer :: i, in, ip
+    integer :: j, jn, jp
 
-   !$omp parallel do private(in, ip)
-    do i = 1, n
-      in = i - 1
-      ip = i + 1
-      if (i == 1) then
-        in = n
-      else if (i == n) then
-        ip = 1
+   !$omp parallel do private(in, ip, jn, jp)
+    do j = 1, m
+      jn = j - 1
+      jp = j + 1
+      if (j == 1) then
+        jn = m
+      else if (j == m) then
+        jp = 1
       end if
-      y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      do i = 1, n
+        in = i - 1
+        ip = i + 1
+        if (i == 1) then
+          in = n
+        else if (i == n) then
+          ip = 1
+        end if
+        y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
+      end do
     end do
 
     return
