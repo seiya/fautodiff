@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import re
 import textwrap
+from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import reduce
 from typing import (
@@ -65,6 +66,7 @@ _OPERATOR_BREAK_TOKENS = tuple(
 from .operators import (
     AryIndex,
     Kind,
+    OpAdd,
     OpChar,
     Operator,
     OpFalse,
@@ -1076,9 +1078,6 @@ class Block(Node):
     def iter_children(self) -> Iterator[Node]:
         return iter(self._children)
 
-    def __getitem__(self, index: int) -> Node:
-        return self._children[index]
-
     def generate_ad(
         self,
         saved_vars: List[OpVar],
@@ -1210,6 +1209,9 @@ class Block(Node):
     def remove_child(self, child: Node) -> None:
         self._children.remove(child)
 
+    def __getitem__(self, index: int) -> Node:
+        return self._children[index]
+
     def first(self) -> Optional[Node]:
         """Return the first element."""
         if len(self._children) > 0:
@@ -1221,6 +1223,12 @@ class Block(Node):
         if len(self._children) > 0:
             return self._children[-1]
         return None
+
+    def __setitem__(self, index: int, node: Node) -> None:
+        if isinstance(node, Block):
+            raise ValueError(f"node must not be Block")
+        self._set_parent(node)
+        self._children[index] = node
 
     def append(self, node: Node) -> None:
         """Append ``node`` to this block."""
@@ -1273,6 +1281,16 @@ class Block(Node):
         node.build_do_index_list(self.do_index_list)
         self._set_parent(node)
         return self._children.insert(0, node)
+
+    def replace_at(self, idx: int, nodes: List[Node]) -> None:
+        if idx >= len(self):
+            raise IndexError(f"idx out of range: {idx} >= {len(self)}")
+        if len(nodes) == 0:
+            raise ValueError("length of nodes is zero")
+        self._children[idx] = nodes[0]
+        if len(nodes) > 1:
+            for i, node in enumerate(nodes[1:]):
+                self._children.insert(idx+i+1, node)
 
     def __iter__(self):
         return self.iter_children()
@@ -3117,8 +3135,6 @@ class Routine(Node):
                 self.dealloc_node = None  # type: Optional[Deallocate]
                 self.accessed: bool = False
                 self.alloc_in_branch: bool = False
-
-        from collections import defaultdict
 
         states: Dict[Tuple[int, ...], Dict[str, _State]] = defaultdict(dict)
         removals_alloc: Dict[int, Set[str]] = defaultdict(set)  # node_id -> var names
@@ -5352,9 +5368,34 @@ class BranchBlock(Node):
         else:
             vars = vars.copy()
         vars_new = vars.copy_context()
+
+        guard_partitions: Dict[Optional[str], VarList] = {}
+
+        if vars.names():
+
+            def _get_partition(key: Optional[str]) -> VarList:
+                part = guard_partitions.get(key)
+                if part is None:
+                    part = vars.copy_context()
+                    guard_partitions[key] = part
+                return part
+
+            for name in vars.names():
+                guards = vars.get_guards(name)
+                if not guards:
+                    guards = {None}
+                vars_for_name = vars.get_vars(name)
+                for guard in guards:
+                    part = _get_partition(guard)
+                    for var in vars_for_name:
+                        part.push(var)
+                    if guard is not None:
+                        part.set_guards(name, {guard})
+        remaining = vars.copy_context()
         cover_all = False  # if else or case default exists
         to_remove = set()
         origin_savevars = {name for name in vars.names() if Node.is_savevar(name)}
+        referenced_cache: Dict[int, Set[str]] = {}
 
         def _check(cond: Operator) -> bool:
             if isinstance(cond, OpLogic):
@@ -5365,6 +5406,45 @@ class BranchBlock(Node):
 
         for cond, block in self.cond_blocks:
             vs = block.required_vars(vars, no_accumulate, without_savevar)
+            cond_key: Optional[str] = str(cond) if cond is not None else None
+            if cond_key is not None:
+                block_id = id(block)
+                if block_id not in referenced_cache:
+                    referenced_cache[block_id] = {
+                        var.name_ext() for var in block.collect_vars()
+                    }
+                referenced = referenced_cache[block_id]
+                for name in vs.names():
+                    if name not in referenced:
+                        continue
+                    guards = set(vs.get_guards(name))
+                    guards.add(cond_key)
+                    vs.set_guards(name, guards)
+                if guard_partitions:
+                    if cond is None:
+                        target_keys: Iterable[Optional[str]] = (None,)
+                    else:
+                        target_keys = (cond_key,)
+                    for key in target_keys:
+                        part = guard_partitions.get(key)
+                        if part is None:
+                            continue
+                        updated = part.copy_context()
+                        if vs is not None and vs.names():
+                            for name in vs.names():
+                                guards_vs = vs.get_guards(name)
+                                if key is not None:
+                                    if key not in guards_vs:
+                                        continue
+                                else:
+                                    if guards_vs and None not in guards_vs:
+                                        continue
+                                for var in vs.get_vars(name):
+                                    if part.contains_with_context(var):
+                                        updated.push(var)
+                                if updated.has_name(name) and key is not None:
+                                    updated.set_guards(name, {key})
+                        guard_partitions[key] = updated
             vars_new.merge(vs)
             advars = {name for name in vs.names() if Node.is_savevar(name)}
             to_remove = to_remove | (origin_savevars - advars)
@@ -5378,7 +5458,10 @@ class BranchBlock(Node):
             if cond is None:
                 cover_all = True
         if not cover_all:
-            vars_new.merge(vars)
+            if guard_partitions:
+                for part in guard_partitions.values():
+                    remaining.merge(part)
+            vars_new.merge(remaining)
         for name in to_remove:
             if name in vars_new.names():
                 vars_new.remove_name(name)
@@ -6831,6 +6914,380 @@ class OmpDirective(Node):
         if self.body is None:
             return assigned_vars
         return self.body.check_initial(assigned_vars)
+
+    def convert_scatter_to_gather(self) -> Tuple[List[Node], str | None]:
+        if self.directive not in ["parallel do", "do"]:
+            return ([self], None)
+        if not (len(self.body) == 1 and isinstance(self.body[0], DoLoop)):
+            return ([self], None)
+
+        private_vars: List[str] = []
+        for clause in self.clauses:
+            if isinstance(clause, dict) and "private" in clause:
+                private_vars = clause["private"]
+
+        loop: DoLoop = self.body[0]
+        do_index = loop.index
+
+        if loop.range[2].get_int() != -1:
+            raise RuntimeError(f"Unexpected error: {range_new}")
+        do_range = loop.range.ascending()
+        range_min = do_range[0]
+        range_max = do_range[1]
+
+        class ConvertToSerial(Exception):
+            pass
+
+        def _in_parallel_region() -> bool:
+            parent = getattr(self, "parent", None)
+            while parent is not None:
+                if isinstance(parent, OmpDirective):
+                    if "parallel" in parent.directive.lower().split():
+                        return True
+                parent = getattr(parent, "parent", None)
+            return False
+
+        def _disable_parallel_execution() -> Tuple[List[Node], str | None]:
+            msg = (
+                "Disabled OpenMP parallelism due to unsupported scatter-to-gather conversion"
+            )
+            if _in_parallel_region():
+                self.directive = "single"
+                self.clauses = []
+                return ([self], msg)
+            parent_block = self.parent if isinstance(self.parent, Block) else None
+            loop_clone = loop.deep_clone()
+            if parent_block is not None:
+                loop_clone.set_parent(parent_block)
+                parent_indices = getattr(parent_block, "do_index_list", None) or []
+                loop_clone.build_do_index_list(parent_indices)
+            loop_clone.info = dict(self.info) if self.info is not None else None
+            return ([loop_clone], msg)
+
+        def _infer_modulo_delta(rhs: Operator) -> Optional[int]:
+            base = do_range[0]
+
+            mod_term: Optional[OpFunc] = None
+            other_terms: List[Operator] = []
+
+            if isinstance(rhs, OpAdd):
+                terms = list(rhs.args)
+            else:
+                terms = [rhs]
+
+            for term in terms:
+                if isinstance(term, OpFunc) and getattr(term, "name", "").lower() in {"mod", "modulo"}:
+                    if mod_term is not None:
+                        return None
+                    mod_term = term
+                else:
+                    other_terms.append(term)
+
+            if mod_term is None:
+                return None
+
+            if other_terms:
+                if len(other_terms) != 1 or base is None:
+                    return None
+                term = other_terms[0]
+                if term != base:
+                    base_int = AryIndex._get_int(base)
+                    term_int = AryIndex._get_int(term)
+                    if base_int is None or term_int is None or term_int != base_int:
+                        return None
+
+            if not mod_term.args:
+                return None
+
+            numerator = mod_term.args[0]
+            if base is None:
+                base_expr = do_index
+            else:
+                base_expr = do_index - base
+
+            delta = (numerator - base_expr).get_int()
+            if delta is None:
+                return None
+            return delta
+
+        def _collect_data(
+                node: Node,
+                delta_vars: List[Tuple[OpVar, int]],
+                ary_vars: Dict[str, List[AryIndex]],
+                do_index: OpVar,
+                do_range: OpRange,
+                cond: OpLogic | None
+        ) -> Tuple[List[Tuple[OpVar, int]], Dict[str, List[AryIndex]]]:
+            if isinstance(node, Assignment):
+                lhs: OpVar = node.lhs
+                lhsname = lhs.name
+                if lhs.is_integer_type and lhs.index is None: # for delta_vars
+                    if lhsname not in private_vars:
+                        raise RuntimeError(f"Scalar variable was found but not private: {lhsname}")
+                    rhs = node.rhs
+                    for var, delta in delta_vars:
+                        rhs = rhs.replace_with(var, do_index + OpInt(delta))
+                    if cond:
+                        if cond.args[0] != do_index:
+                            raise RuntimeError(f"Unexpected error: {type(cond)} {cond}")
+                        if cond.op == "==":
+                            v1 = rhs - cond.args[1]
+                            v2 = do_range[1] - do_range[0] + 1
+                            delta_new1 = (v1 - v2).get_int()
+                            delta_new2 = (v1 + v2).get_int()
+                            if delta_new1 is None and delta_new2 is None:
+                                delta_new = None
+                            elif delta_new1 is not None and delta_new2 is not None:
+                                delta_new = min(delta_new1, delta_new2)
+                            else:
+                                delta_new = delta_new1 if delta_new1 is not None else delta_new2
+                        else:
+                            # Not Implemented yet
+                            raise ConvertToSerial
+                    else:
+                        delta_new = (rhs - do_index).get_int()
+                    if delta_new is None:
+                        delta_new = _infer_modulo_delta(rhs)
+                    if delta_new is not None:
+                        found = False
+                        for var, delta in delta_vars:
+                            if lhsname == var.name:
+                                if delta_new is not delta:
+                                   raise ConvertToSerial
+                                found = True
+                        if not found:
+                            delta_vars.append((lhs, delta_new))
+                    else:
+                        if lhs in [v[0] for v in delta_vars]:
+                            #print(node)
+                            #print(delta_vars)
+                            raise ConvertToSerial
+                    return (delta_vars, ary_vars)
+                if lhsname.endswith(AD_SUFFIX): # for ary_vars
+                    index = lhs.index
+                    if index is not None and lhsname not in private_vars:
+                        if lhsname in ary_vars:
+                            if index not in ary_vars[lhsname]:
+                                ary_vars[lhsname].append(index)
+                        else:
+                            ary_vars[lhsname] = [index]
+                    return (delta_vars, ary_vars)
+            if isinstance(node, BranchBlock):
+                for cond_new, block in node.cond_blocks:
+                    if isinstance(cond_new, List): # select case
+                        # Not implemented yet
+                        raise ConvertToSerial
+                    elif isinstance(cond_new, OpLogic):
+                        lhs_cond = cond_new.args[0]
+                        rhs_cond = cond_new.args[1]
+                        for v, delta in delta_vars:
+                            dvar = do_index + OpInt(delta)
+                            lhs_cond = lhs_cond.replace_with(v, dvar)
+                            rhs_cond = rhs_cond.replace_with(v, dvar)
+                        if cond_new.op in (".eq.", "=="):
+                            if do_index in lhs_cond.collect_vars():
+                                rhs_cond = rhs_cond - lhs_cond + do_index
+                                cond = OpLogic("==", [do_index, rhs_cond])
+                            elif do_index in rhs_cond.collect_vars():
+                                rhs_cond = lhs_cond - rhs_cond + do_index
+                                cond = OpLogic("==", [do_index, rhs_cond])
+                        else:
+                            pass # todo for >, >=, <, <=, .gt., .ge., .lt., and .le
+                    else:
+                        raise RuntimeError(f"Unexpected error: {type(cond)} {cond}")
+                    delta_vars, ary_vars = _collect_data(block, delta_vars, ary_vars, do_index, do_range, cond)
+                return (delta_vars, ary_vars)
+            for child in node.iter_children():
+                delta_vars, ary_vars = _collect_data(child, delta_vars, ary_vars, do_index, do_range, cond)
+            return (delta_vars, ary_vars)
+
+        def _convert() -> Tuple[List[Node], str | None]:
+            delta_vars, ary_vars = _collect_data(loop._body, [], {}, do_index, do_range, None)
+            delta_vars.append((do_index, 0))
+
+            target_vars: Dict[str, int] = {}
+            max_delta = 0
+            for varname in ary_vars:
+                idim = None
+                deltas = set()
+                for idx in ary_vars[varname]:
+                    for i, dim in enumerate(idx):
+                        for dvar, delta in delta_vars:
+                            dim = dim.replace_with(dvar, do_index + OpInt(delta))
+                        delta_new = (dim - do_index).get_int()
+                        if delta_new is None:
+                            delta_new = _infer_modulo_delta(dim)
+                        if delta_new is None:
+                            raise ConvertToSerial
+                        max_delta = max(max_delta, abs(delta_new))
+                        if idim is None:
+                            idim = i
+                        elif i is not idim:
+                            raise ConvertToSerial
+                        deltas.add(delta_new)
+                if idim is not None and len(deltas) > 1:
+                    target_vars[varname] = idim
+
+            # print(delta_vars)
+            # print(target_vars)
+
+            if not target_vars:
+                return ([self], None)
+
+            delta_rev: Dict[int, OpVar] = {}
+            for var, delta in delta_vars:
+                delta_rev[delta] = var
+            for delta in list(delta_rev.keys()):
+                if - delta not in delta_rev:
+                    op = OpFunc("modulo", [do_index - delta - do_range[0], do_range[1] - do_range[0] + 1]) + do_range[0]
+                    delta_rev[- delta] = op
+            for i in range(max_delta, 0, -1):
+                if i in delta_rev:
+                    max_delta -= 1
+
+            nodes_new: List[Node] = []
+            ad_info: str | None = None
+            clear_vars: List[str] = []
+            clear_nodes: List[Node] = []
+            private_varnames: Dict[Dict[int, str]] = {}
+            for node in loop._body:
+                if isinstance(node, ClearAssignment) and node.lhs.name in clear_vars:
+                    cassign = ClearAssignment(node.lhs, node.info, node.ad_info)
+                    clear_nodes.append(cassign)
+                    continue
+                if not isinstance(node, Assignment):
+                    nodes_new.append(node)
+                    ad_info = None
+                    continue
+
+                lhs = node.lhs
+                rhs = node.rhs
+                lhsname = lhs.name
+                if lhsname not in private_varnames:
+                    private_varnames[lhsname] = {}
+                if lhsname in private_vars:
+                    if not lhsname.endswith(AD_SUFFIX):
+                        nodes_new.append(node)
+                        continue
+                    for i in range(- max_delta, max_delta + 1):
+                        if i == 0:
+                            idx_new = do_index
+                            assign = node
+                        else:
+                            idx_new = do_index + OpInt(i)
+                            lhs_new = lhs.replace_with(do_index, idx_new)
+                            if lhs_new is lhs:
+                                lhs_new = lhs_new.deep_clone()
+                            if i in private_varnames[lhsname]:
+                                lhs_new.name = private_varnames[lhsname][i]
+                            else:
+                                name_new = lhsname + "_" + ("p" if i > 0 else "n") + str(abs(i)) + AD_SUFFIX
+                                lhs_new.name = name_new
+                                private_varnames[lhsname][i] = name_new
+                            rhs_new = rhs.replace_with(do_index, idx_new)
+                            assign = Assignment(lhs_new, rhs_new, ad_info = node.ad_info)
+                        if i == - max_delta:
+                            cond = idx_new >= range_min
+                        elif i == max_delta:
+                            cond = idx_new <= range_max
+                        else:
+                            cond = (idx_new >= range_min) & (idx_new <= range_max)
+                        node_new = IfBlock([(cond, Block([assign]))])
+                        nodes_new.append(node_new)
+                    for var in rhs.collect_vars(without_index=True):
+                        if var.index is not None and do_index in var.index.collect_vars():
+                            if var.name not in clear_vars:
+                                clear_vars.append(var.name)
+                    ad_info = None
+                    continue
+
+                if lhsname not in target_vars:
+                    raise ConvertToSerial
+
+                idim = target_vars[lhs.name]
+                dim = lhs.index[idim]
+                if dim != do_index:
+                    for var, delta in delta_vars:
+                        dim = dim.replace_with(var, do_index + OpInt(delta))
+                    delta = (dim - do_index).get_int()
+                    if delta is None:
+                        raise RuntimeError(f"Unexpected error: {lhs} {dim}")
+                    index_new = lhs.index.copy()
+                    index_new[idim] = do_index
+                    lhs = lhs.change_index(index_new)
+                    if - delta in delta_rev:
+                        idx_new = delta_rev[-delta]
+                        cond = None
+                    else:
+                        idx_new = do_index - OpInt(delta)
+                        if delta == max_delta:
+                            cond = idx_new >= range_min
+                        elif delta == - max_delta:
+                            cond = idx_new <= range_max
+                        else:
+                            cond = (idx_new >= range_min) & (idx_new <= range_max)
+                    for var in rhs.collect_vars(without_index=True):
+                        if var.index is not None and do_index in var.index.collect_vars():
+                            if var.name not in clear_vars:
+                                clear_vars.append(var.name)
+                        if var.name in private_vars:
+                            var_new = var.deep_clone()
+                            var_new.name = private_varnames[var.name][-delta]
+                            rhs = rhs.replace_with(var, var_new)
+                    rhs = rhs.replace_with(do_index, idx_new)
+                elif max_delta > 0:
+                    cond = (do_index >= range_min) & (do_index <= range_max)
+                else:
+                    cond = None
+                if cond:
+                    assign = Assignment(lhs, rhs, node.accumulate, node.info, node.ad_info)
+                    ifblock = IfBlock([(cond, Block([assign]))])
+                    nodes_new.append(ifblock)
+                elif node.ad_info == ad_info and isinstance(nodes_new[-1], Assignment) and nodes_new[-1].lhs == lhs:
+                    assign = nodes_new[-1]
+                    assign = Assignment(
+                        assign.lhs,
+                        assign.rhs + rhs,
+                        assign.accumulate,
+                        assign.info,
+                        assign.ad_info
+                    )
+                    nodes_new[-1] = assign
+                else:
+                    assign = Assignment(lhs, rhs, node.accumulate, node.info, node.ad_info)
+                    nodes_new.append(assign)
+                ad_info = node.ad_info
+
+            range_new = OpRange([range_max + max_delta, range_min - max_delta, -1])
+            loop_new = DoLoop(Block(nodes_new), do_index, range_new, loop.label)
+            body_new = Block([loop_new])
+            clauses = list(self.clauses)
+            for clause in clauses:
+                if isinstance(clause, dict) and "private" in clause:
+                    for _, vnames in private_varnames.items():
+                        for vn in vnames.values():
+                            clause["private"].append(vn)
+                    break
+            nodes = [OmpDirective(
+                self.directive,
+                clauses,
+                body_new,
+                self.skip_alloc,
+                self.info
+            )]
+            if clear_nodes:
+                clear_loop = DoLoop(Block(clear_nodes), do_index, loop.range, loop.label)
+                node = OmpDirective(self.directive, [], Block([clear_loop]), info=self.info)
+                nodes.append(node)
+
+            # print(nodes[0])
+            msg = "Converted from scatter to gather store"
+            return (nodes, msg)
+
+        try:
+            return _convert()
+        except ConvertToSerial:
+            return _disable_parallel_execution()
 
 
 @dataclass

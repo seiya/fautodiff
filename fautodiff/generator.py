@@ -29,6 +29,7 @@ from .code_tree import (
     DoWhile,
     ForallBlock,
     Function,
+    BranchBlock,
     IfBlock,
     Interface,
     Module,
@@ -53,13 +54,16 @@ from .code_tree import (
 from .operators import (
     AryIndex,
     Kind,
+    OpAdd,
     OpComplex,
     Operator,
     OpFunc,
     OpInt,
+    OpNeg,
     OpNot,
     OpRange,
     OpReal,
+    OpSub,
     OpTrue,
     OpVar,
     VarType,
@@ -108,66 +112,55 @@ def _contains_pushpop(node: Node) -> bool:
 
 
 def _strip_sequential_omp(
-    node: Node, warnings: Optional[List[str]], *, reverse: bool
-) -> Node:
+    node: Node,
+    warnings: Optional[List[str]]
+) -> List[Node]:
     """Remove OpenMP directives for loops with modified indices in reverse mode."""
 
-    if isinstance(node, Block):
-        new_children = []
-        for child in list(node.iter_children()):
-            new_child = _strip_sequential_omp(child, warnings, reverse=reverse)
-            if isinstance(new_child, Block):
-                new_children.extend(list(new_child.iter_children()))
-            else:
-                new_children.append(new_child)
-        node._children = new_children
-        return node
-
     if isinstance(node, OmpDirective):
-        body = node.body
-        if body is not None:
-            body = _strip_sequential_omp(body, warnings, reverse=reverse)
-            check_body = body
-            if isinstance(body, Block):
-                children = list(body.iter_children())
-                if len(children) == 1 and isinstance(children[0], DoLoop):
-                    check_body = children[0]
-            if reverse:
-                dir_norm = node.directive.split("(")[0].strip().lower()
-                # Preserve plain parallel regions even if inner constructs are
-                # rewritten to sequential form. We still keep the wrapper so
-                # that user-intended parallel regions are not pruned.
-                if dir_norm == "parallel":
-                    node.body = body
-                    return node
-                if isinstance(check_body, DoLoop):
-                    if check_body.has_modified_indices():
-                        _warn(
-                            warnings,
-                            node.info,
-                            node.directive,
-                            "Dropped OpenMP directive: loop runs sequentially in reverse mode due to index dependency",
-                        )
-                        return check_body
-                    node.body = body
-                    return node
-                if "workshare" in dir_norm:
-                    # Preserve workshare regions in reverse mode. Even if
-                    # conservative dependency checks would flag potential
-                    # conflicts, keep the directive to match expected AD
-                    # output and allow the compiler/runtime to handle
-                    # semantics of array assignments.
-                    node.body = body
-                    return node
-                return body
-            node.body = body
-            return node
-        return Block([]) if reverse else node
+        nodes, msg = node.convert_scatter_to_gather()
+        if msg is not None and nodes:
+            _warn(warnings, nodes[0].info, "OpenMP", msg)
 
-    for child in list(getattr(node, "iter_children", lambda: [])()):
-        _strip_sequential_omp(child, warnings, reverse=reverse)
-    return node
-
+        processed: List[Node] = []
+        for new_node in nodes:
+            if isinstance(new_node, OmpDirective) and new_node.body is not None:
+                body_nodes = _strip_sequential_omp(new_node.body, warnings)
+                if len(body_nodes) == 1 and body_nodes[0] is new_node.body:
+                    pass
+                else:
+                    if len(body_nodes) == 1:
+                        new_body = body_nodes[0]
+                    else:
+                        new_body = Block(body_nodes)
+                    new_body.set_parent(new_node)
+                    new_node.body = new_body
+            else:
+                sub_nodes = _strip_sequential_omp(new_node, warnings)
+                if len(sub_nodes) > 1 or sub_nodes[0] is not new_node:
+                    processed.extend(sub_nodes)
+                    continue
+            processed.append(new_node)
+        return processed
+    if isinstance(node, Block):
+        for i, child in enumerate(list(node.iter_children())):
+            nodes = _strip_sequential_omp(child, warnings)
+            if len(nodes) > 1 or nodes[0] is not child:
+                node.replace_at(i, nodes)
+        return [node]
+    if isinstance(node, DoAbst):
+        nodes = _strip_sequential_omp(node._body, warnings)
+        if len(nodes) > 1 or nodes[0] is not node._body:
+            node._body = Block(nodes)
+        return [node]
+    if isinstance(node, BranchBlock):
+        for i, cond_block in enumerate(node.cond_blocks):
+            block = cond_block[1]
+            nodes = _strip_sequential_omp(block, warnings)
+            if len(nodes) > 1 or nodes[0] is not block:
+                node.cond_blocks[i] = (cond_block[0], Block(nodes))
+        return [node]
+    return [node]
 
 def _add_fwd_rev_calls(
     node: Node,
@@ -1308,6 +1301,22 @@ def _generate_ad_subroutine(
         # Before any pruning, mark reverse MPI calls to avoid being dropped
         if reverse:
             _mark_mpi_rev_calls_donot_prune(ad_code)
+
+        # Remove statements unrelated to derivative targets
+        if reverse:
+            targets = VarList(grad_args + mod_ad_vars + save_ad_vars)
+        else:
+            targets = VarList(
+                grad_args + out_args + mod_ad_vars + mod_vars + save_ad_vars + save_vars
+            )
+        ad_code = ad_code.prune_for(targets, mod_vars + save_vars, base_targets=targets)
+        # print(render_program(ad_code))
+
+        if reverse:
+            ad_code.check_initial(VarList(grad_args + mod_ad_vars + save_ad_vars))
+
+            _strip_sequential_omp(ad_code, warnings)
+
         # Declare any temporary gradient variables introduced by AD code
         for var in ad_code.assigned_vars(without_savevar=True):
             name = var.name
@@ -1316,7 +1325,12 @@ def _generate_ad_subroutine(
                     continue
                 if var.is_module_var(mod_var_names, check_ad=True):
                     continue
-                base_decl = routine_org.decls.find_by_name(name.removesuffix(AD_SUFFIX))
+                name_org = name.removesuffix(AD_SUFFIX)
+                base_decl = routine_org.decls.find_by_name(name_org)
+                if base_decl is None:
+                    # for variables generated for OmpDirective.convert_scatter_to_gather
+                    name_org = re.sub(r'_[np]\d+$', '', name_org).removesuffix(AD_SUFFIX)
+                    base_decl = routine_org.decls.find_by_name(name_org)
                 if base_decl is not None and not subroutine.is_declared(name):
                     subroutine.decls.append(
                         Declaration(
@@ -1338,35 +1352,11 @@ def _generate_ad_subroutine(
                         )
                     )
 
-        if reverse:
-            targets = VarList(in_grad_args + mod_ad_vars + save_ad_vars)
-            ad_code.check_initial(targets)
-
-        if reverse:
-            targets = VarList(grad_args + mod_ad_vars + save_ad_vars)
-        else:
-            targets = VarList(
-                grad_args + out_args + mod_ad_vars + mod_vars + save_ad_vars + save_vars
-            )
-        # print(render_program(ad_code))
-
-        # Remove statements unrelated to derivative targets
-        ad_code = ad_code.prune_for(targets, mod_vars + save_vars, base_targets=targets)
-        # print(render_program(ad_code))
-
-        if reverse:
-            ad_code.check_initial(VarList(grad_args + mod_ad_vars + save_ad_vars))
-            ad_code = ad_code.prune_for(
-                targets, mod_vars + save_vars, base_targets=targets
-            )
-            # print(render_program(ad_code))
-
     for node in ad_code:
         if not node.is_effectively_empty():
             ad_block.append(node)
 
     if reverse:
-        _strip_sequential_omp(ad_block, warnings, reverse=True)
         targets = ad_block.required_vars()
 
         fw_block = Block(
@@ -1388,8 +1378,6 @@ def _generate_ad_subroutine(
         )
 
         # print(render_program(fw_block))
-
-        _strip_sequential_omp(fw_block, warnings, reverse=True)
 
         assigned = routine_org.content.assigned_vars(without_savevar=True)
         required = ad_block.required_vars(without_savevar=True)
@@ -2039,8 +2027,6 @@ def _generate_ad_subroutine(
     # declaration of saved variables
     for var in reversed(saved_vars):
         if var.index is not None and var.name in save_assigns:
-            if len(save_assigns[var.name]) < 2:
-                raise RuntimeError(f"Unexpected: {var.name}")
 
             # find reduced_dims
             index_list = var.index_list()

@@ -7,7 +7,10 @@ program run_omp_loops
   integer, parameter :: I_all = 0
   integer, parameter :: I_sum_loop = 1
   integer, parameter :: I_stencil_loop = 2
-  integer, parameter :: I_omp_ws_if = 3
+  integer, parameter :: I_stencil_loop_mod = 3
+  integer, parameter :: I_stencil_loop_with_halo = 4
+  integer, parameter :: I_indirect_access_loop = 5
+  integer, parameter :: I_omp_ws_if = 6
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -25,6 +28,12 @@ program run_omp_loops
               i_test = I_sum_loop
            case ("stencil_loop")
               i_test = I_stencil_loop
+           case ("stencil_loop_mod")
+              i_test = I_stencil_loop_mod
+           case ("stencil_loop_with_halo")
+              i_test = I_stencil_loop_with_halo
+           case ("indirect_access_loop")
+              i_test = I_indirect_access_loop
            case ("omp_ws_if")
               i_test = I_omp_ws_if
            case default
@@ -41,6 +50,15 @@ program run_omp_loops
   end if
   if (i_test == I_stencil_loop .or. i_test == I_all) then
      call test_stencil_loop
+  end if
+  if (i_test == I_stencil_loop_mod .or. i_test == I_all) then
+     call test_stencil_loop_mod
+  end if
+  if (i_test == I_stencil_loop_with_halo .or. i_test == I_all) then
+     call test_stencil_loop_with_halo
+  end if
+  if (i_test == I_indirect_access_loop .or. i_test == I_all) then
+     call test_indirect_access_loop
   end if
   if (i_test == I_omp_ws_if .or. i_test == I_all) then
      call test_omp_ws_if
@@ -112,6 +130,174 @@ contains
 
     return
   end subroutine test_stencil_loop
+
+  subroutine test_stencil_loop_mod
+    real, parameter :: tol_stencil = 2.0e-4
+    integer, parameter :: n = 3
+    integer, parameter :: is = 1
+    integer, parameter :: ie = n
+    real :: x(is:ie), y(is:ie)
+    real :: x_eps(is:ie)
+    real :: x_ad(is:ie), y_ad(is:ie)
+    real :: y_eps(is:ie), fd_y(is:ie), eps
+    real :: inner1, inner2
+
+    eps = 1.0e-3
+    x = (/1.0, 2.0, 3.0/)
+    call stencil_loop_mod(is, ie, x, y)
+    x_eps(:) = x(:) + eps
+    call stencil_loop_mod(is, ie, x_eps, y_eps)
+    fd_y(:) = (y_eps(:) - y(:)) / eps
+    x_ad(:) = 1.0
+    call stencil_loop_mod_fwd_ad(is, ie, x, x_ad, y, y_ad)
+    if (any(abs((y_ad(:) - fd_y(:)) / fd_y(:)) > tol_stencil)) then
+       print *, 'test_stencil_loop_mod_fwd failed'
+       error stop 1
+    end if
+
+    inner1 = sum(y_ad(:)**2)
+    x_ad(:) = 0.0
+    call stencil_loop_mod_rev_ad(is, ie, x_ad, y_ad)
+    inner2 = sum(x_ad(:))
+    if (abs((inner2 - inner1) / inner1) > tol_stencil) then
+       print *, 'test_stencil_loop_mod_rev failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_stencil_loop_mod
+
+  subroutine test_stencil_loop_with_halo
+    real, parameter :: tol_halo = 5.0e-4
+    integer, parameter :: is = 0
+    integer, parameter :: ie = 6
+    integer, parameter :: istart = 2
+    integer, parameter :: iend = 4
+    real :: h(is:ie), u(is:ie)
+    real :: h_eps(is:ie), u_eps(is:ie)
+    real :: dhdt(is:ie), dhdt_eps(is:ie), dhdt_eps_minus(is:ie)
+    real :: fd_dhdt(is:ie)
+    real :: h_ad(is:ie), u_ad(is:ie), dhdt_ad(is:ie)
+    real :: dhdt_bar(is:ie)
+    real :: h_seed(is:ie), u_seed(is:ie)
+    real :: inner1, inner2, eps
+    integer :: i
+
+    eps = 5.0e-4
+    do i = is, ie
+       h(i) = 0.5 + 0.1 * real(i)
+       u(i) = 1.0 + 0.05 * real(i)
+    end do
+
+    ! Forward/Reverse checks for perturbations in h
+    call stencil_loop_with_halo(is, ie, istart, iend, h, u, dhdt)
+    do i = is, ie
+       h_seed(i) = 10.0 * real(i - is + 1)
+    end do
+    h_eps(:) = h(:) + eps * h_seed(:)
+    call stencil_loop_with_halo(is, ie, istart, iend, h_eps, u, dhdt_eps)
+    h_eps(:) = h(:) - eps * h_seed(:)
+    call stencil_loop_with_halo(is, ie, istart, iend, h_eps, u, dhdt_eps_minus)
+    fd_dhdt(:) = 0.0
+    fd_dhdt(istart:iend) = (dhdt_eps(istart:iend) - dhdt_eps_minus(istart:iend)) / (2.0 * eps)
+
+    h_ad(:) = h_seed(:)
+    u_ad(:) = 0.0
+    call stencil_loop_with_halo_fwd_ad(is, ie, istart, iend, h, h_ad, u, u_ad, dhdt, dhdt_ad)
+    if (any(abs((dhdt_ad(istart:iend) - fd_dhdt(istart:iend)) / &
+         & max(1.0e-12, abs(fd_dhdt(istart:iend)))) > tol_halo)) then
+       print *, 'test_stencil_loop_with_halo_fwd (h) failed'
+       error stop 1
+    end if
+
+    dhdt_bar(:) = dhdt_ad(:)
+    inner1 = sum(dhdt_ad(istart:iend) * dhdt_bar(istart:iend))
+    h_ad(:) = 0.0
+    u_ad(:) = 0.0
+    dhdt_ad(:) = dhdt_bar(:)
+    call stencil_loop_with_halo_rev_ad(is, ie, istart, iend, h, h_ad, u, u_ad, dhdt_ad)
+    inner2 = sum(h_seed(:) * h_ad(:))
+    if (abs((inner2 - inner1) / max(1.0e-12, abs(inner1))) > tol_halo) then
+       print *, 'test_stencil_loop_with_halo_rev (h) failed', inner1, inner2
+       error stop 1
+    end if
+
+    ! Forward/Reverse checks for perturbations in u
+    call stencil_loop_with_halo(is, ie, istart, iend, h, u, dhdt)
+    do i = is, ie
+       u_seed(i) = 5.0 * real(i - is + 1)
+    end do
+    u_eps(:) = u(:) + eps * u_seed(:)
+    call stencil_loop_with_halo(is, ie, istart, iend, h, u_eps, dhdt_eps)
+    u_eps(:) = u(:) - eps * u_seed(:)
+    call stencil_loop_with_halo(is, ie, istart, iend, h, u_eps, dhdt_eps_minus)
+    fd_dhdt(:) = 0.0
+    fd_dhdt(istart:iend) = (dhdt_eps(istart:iend) - dhdt_eps_minus(istart:iend)) / (2.0 * eps)
+
+    h_ad(:) = 0.0
+    u_ad(:) = u_seed(:)
+    call stencil_loop_with_halo_fwd_ad(is, ie, istart, iend, h, h_ad, u, u_ad, dhdt, dhdt_ad)
+    if (any(abs((dhdt_ad(istart:iend) - fd_dhdt(istart:iend)) / &
+         & max(1.0e-12, abs(fd_dhdt(istart:iend)))) > tol_halo)) then
+       print *, 'test_stencil_loop_with_halo_fwd (u) failed'
+       error stop 1
+    end if
+
+    dhdt_bar(:) = dhdt_ad(:)
+    inner1 = sum(dhdt_ad(istart:iend) * dhdt_bar(istart:iend))
+    h_ad(:) = 0.0
+    u_ad(:) = 0.0
+    dhdt_ad(:) = dhdt_bar(:)
+    call stencil_loop_with_halo_rev_ad(is, ie, istart, iend, h, h_ad, u, u_ad, dhdt_ad)
+    inner2 = sum(u_seed(:) * u_ad(:))
+    if (abs((inner2 - inner1) / max(1.0e-12, abs(inner1))) > tol_halo) then
+       print *, 'test_stencil_loop_with_halo_rev (u) failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_stencil_loop_with_halo
+
+  subroutine test_indirect_access_loop
+    real, parameter :: tol_indirect = 1.0e-4
+    integer, parameter :: n = 3
+    integer, parameter :: m = 5
+    integer :: idx(n)
+    real :: x(m), x_eps_plus(m), x_eps_minus(m)
+    real :: y(n), y_eps(n), y_eps_minus(n), fd_y(n)
+    real :: x_ad(m), y_ad(n)
+    real :: inner1, inner2, eps
+
+    eps = 1.0e-3
+    x = (/1.0, -0.5, 3.5, 4.0, -1.0/)
+    idx = (/4, 3, 5/)
+
+    call indirect_access_loop(n, m, idx, x, y)
+
+    x_eps_plus(:) = x(:) + eps
+    call indirect_access_loop(n, m, idx, x_eps_plus, y_eps)
+    x_eps_minus(:) = x(:) - eps
+    call indirect_access_loop(n, m, idx, x_eps_minus, y_eps_minus)
+    fd_y(:) = (y_eps(:) - y_eps_minus(:)) / (2.0 * eps)
+
+    x_ad(:) = 1.0
+    call indirect_access_loop_fwd_ad(n, m, idx, x, x_ad, y, y_ad)
+    if (any(abs((y_ad(:) - fd_y(:)) / max(1.0e-12, abs(fd_y(:)))) > tol_indirect)) then
+       print *, 'test_indirect_access_loop_fwd failed'
+       error stop 1
+    end if
+
+    inner1 = sum(y_ad(:)**2)
+    x_ad(:) = 0.0
+    call indirect_access_loop_rev_ad(n, m, idx, x_ad, y_ad)
+    inner2 = sum(x_ad(:))
+    if (abs((inner2 - inner1) / max(1.0e-12, abs(inner1))) > tol_indirect) then
+       print *, 'test_indirect_access_loop_rev failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_indirect_access_loop
 
   subroutine test_omp_ws_if
     integer, parameter :: n = 3

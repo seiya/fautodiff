@@ -864,6 +864,31 @@ class TestParserOmp(unittest.TestCase):
         self.assertEqual(stmt.directive.lower(), "parallel do")
         self.assertIsInstance(stmt.body, code_tree.DoLoop)
 
+    def test_parse_omp_private_clause_variables(self):
+        src = textwrap.dedent(
+            """
+            module test
+            contains
+              subroutine foo(n, x, y)
+                integer, intent(in) :: n
+                real, intent(in) :: x(n)
+                real, intent(out) :: y(n)
+                integer :: i, in, ip
+!$omp parallel do private(in, ip)
+                do i = 1, n
+                  in = i - 1
+                  ip = i + 1
+                  y(i) = x(i)
+                end do
+              end subroutine foo
+            end module test
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        omp_dir = next(n for n in routine.content if isinstance(n, OmpDirective))
+        self.assertEqual(omp_dir.clauses, [{"private": ["in", "ip"]}])
+
     def test_parse_omp_do_no_end(self):
         src = textwrap.dedent(
             """
