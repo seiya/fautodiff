@@ -47,56 +47,83 @@ contains
     return
   end subroutine sum_loop_rev_ad
 
-  subroutine stencil_loop_fwd_ad(n, x, x_ad, y, y_ad)
+  subroutine stencil_loop_fwd_ad(n, m, x, x_ad, y, y_ad)
     integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
-    real, intent(in)  :: x_ad(n)
-    real, intent(out) :: y(n)
-    real, intent(out) :: y_ad(n)
+    integer, intent(in)  :: m
+    real, intent(in)  :: x(n,m)
+    real, intent(in)  :: x_ad(n,m)
+    real, intent(out) :: y(n,m)
+    real, intent(out) :: y_ad(n,m)
+    integer :: j
+    integer :: jn
+    integer :: jp
     integer :: i
     integer :: in
     integer :: ip
 
-    !$omp parallel do private(in, ip)
-    do i = 1, n
-      in = i - 1
-      ip = i + 1
-      if (i == 1) then
-        in = n
-      else if (i == n) then
-        ip = 1
+    !$omp parallel do private(in, ip, jn, jp)
+    do j = 1, m
+      jn = j - 1
+      jp = j + 1
+      if (j == 1) then
+        jn = m
+      else if (j == m) then
+        jp = 1
       end if
-      y_ad(i) = x_ad(i) * 2.0 / 4.0 + x_ad(in) / 4.0 + x_ad(ip) / 4.0 ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
-      y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      do i = 1, n
+        in = i - 1
+        ip = i + 1
+        if (i == 1) then
+          in = n
+        else if (i == n) then
+          ip = 1
+        end if
+        y_ad(i,j) = x_ad(i,j) * 4.0 / 8.0 + x_ad(in,j) / 8.0 + x_ad(ip,j) / 8.0 + x_ad(i,jn) / 8.0 + x_ad(i,jp) / 8.0
+          ! y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
+        y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
+      end do
     end do
     !$omp end parallel do
 
     return
   end subroutine stencil_loop_fwd_ad
 
-  subroutine stencil_loop_rev_ad(n, x_ad, y_ad)
+  subroutine stencil_loop_rev_ad(n, m, x_ad, y_ad)
     integer, intent(in)  :: n
-    real, intent(inout) :: x_ad(n)
-    real, intent(inout) :: y_ad(n)
+    integer, intent(in)  :: m
+    real, intent(inout) :: x_ad(n,m)
+    real, intent(inout) :: y_ad(n,m)
+    integer :: j
+    integer :: jn
+    integer :: jp
     integer :: i
     integer :: in
     integer :: ip
 
-    !$omp parallel do private(in, ip)
-    do i = n, 1, - 1
-      in = i - 1
-      ip = i + 1
-      if (i == 1) then
-        in = n
-      else if (i == n) then
-        ip = 1
+    !$omp parallel do private(in, ip, jn, jp)
+    do j = m, 1, - 1
+      jn = j - 1
+      jp = j + 1
+      if (j == 1) then
+        jn = m
+      else if (j == m) then
+        jp = 1
       end if
-      x_ad(i) = y_ad(i) * 2.0 / 4.0 + y_ad(ip) / 4.0 + y_ad(in) / 4.0 + x_ad(i) ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
-    end do
-    !$omp end parallel do
-    !$omp parallel do
-    do i = n, 1, - 1
-      y_ad(i) = 0.0 ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      do i = n, 1, - 1
+        in = i - 1
+        ip = i + 1
+        if (i == 1) then
+          in = n
+        else if (i == n) then
+          ip = 1
+        end if
+        x_ad(i,j) = y_ad(i,j) * 4.0 / 8.0 + x_ad(i,j) ! y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
+        x_ad(in,j) = y_ad(i,j) / 8.0 + x_ad(in,j) ! y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
+        x_ad(ip,j) = y_ad(i,j) / 8.0 + x_ad(ip,j) ! y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
+        x_ad(i,j) = y_ad(i,jp) / 8.0 + y_ad(i,jn) / 8.0 + x_ad(i,j)
+          ! y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
+        y_ad(i,j) = 0.0 ! y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
+      end do
     end do
     !$omp end parallel do
 
@@ -340,12 +367,12 @@ contains
     real, intent(inout), allocatable :: x(:)
     real, intent(inout), allocatable :: x_ad(:)
     real, intent(inout) :: y_ad(size(x))
-    real, allocatable :: x_save_111_ad(:)
+    real, allocatable :: x_save_124_ad(:)
 
-    allocate(x_save_111_ad, mold=x)
+    allocate(x_save_124_ad, mold=x)
     !$omp parallel
     !$omp workshare
-    x_save_111_ad(:) = x(:)
+    x_save_124_ad(:) = x(:)
     !$omp end workshare
     !$omp end parallel
 
@@ -353,12 +380,12 @@ contains
     !$omp workshare
     x_ad = y_ad + x_ad ! y = x
     y_ad = 0.0 ! y = x
-    x(:) = x_save_111_ad(:)
+    x(:) = x_save_124_ad(:)
     x_ad = x_ad * 2.0 * x ! x = x**2
     !$omp end workshare
     !$omp end parallel
-    if (allocated(x_save_111_ad)) then
-      deallocate(x_save_111_ad)
+    if (allocated(x_save_124_ad)) then
+      deallocate(x_save_124_ad)
     end if
 
     return
