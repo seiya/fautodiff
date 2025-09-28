@@ -91,7 +91,7 @@ class TestOperatorsBasic(unittest.TestCase):
         c = OpVar("c")
         d = OpVar("d")
         expr = (a + b) - (c + d)
-        self.assertEqual(str(expr), "a + b - (c + d)")
+        self.assertEqual(str(expr), "a + b - c - d")
 
     def test_power_special_cases(self):
         x = OpVar("x")

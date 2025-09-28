@@ -37,7 +37,7 @@ contains
     z = x + 1.0
     block
       real :: z
-      real :: z_ad = 0.0
+      real :: z_ad
 
       z_ad = x_ad ! z = x + 2.0
       z = x + 2.0

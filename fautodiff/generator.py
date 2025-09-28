@@ -1217,6 +1217,17 @@ def _generate_ad_subroutine(
             has_mod_grad_input = True
     mod_var_names = [v.name for v in mod_vars]
 
+    routine_local_names = {
+        decl.name
+        for decl in routine_org.decls.iter_children()
+        if isinstance(decl, Declaration)
+    }
+    mod_ad_vars_filtered = [
+        var
+        for var in mod_ad_vars
+        if var.name.removesuffix(AD_SUFFIX) not in routine_local_names
+    ]
+
     # SAVE variables behave like module variables and may carry gradients
     save_vars = []
     save_ad_vars = []
@@ -1304,7 +1315,7 @@ def _generate_ad_subroutine(
 
         # Remove statements unrelated to derivative targets
         if reverse:
-            targets = VarList(grad_args + mod_ad_vars + save_ad_vars)
+            targets = VarList(grad_args + mod_ad_vars_filtered + save_ad_vars)
         else:
             targets = VarList(
                 grad_args + out_args + mod_ad_vars + mod_vars + save_ad_vars + save_vars
@@ -1313,7 +1324,7 @@ def _generate_ad_subroutine(
         # print(render_program(ad_code))
 
         if reverse:
-            ad_code.check_initial(VarList(grad_args + mod_ad_vars + save_ad_vars))
+            ad_code.check_initial(VarList(grad_args + mod_ad_vars_filtered + save_ad_vars))
 
             _strip_sequential_omp(ad_code, warnings)
 
