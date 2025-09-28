@@ -6970,11 +6970,10 @@ class OmpDirective(Node):
             loop_clone.info = dict(self.info) if self.info is not None else None
             return ([loop_clone], msg)
 
-        def _infer_modulo_delta(rhs: Operator) -> Optional[int]:
-            base = do_range[0]
-
-            mod_term: Optional[OpFunc] = None
-            other_terms: List[Operator] = []
+        def _infer_func_delta(rhs: Operator) -> Optional[int]:
+            func_name: str = None
+            func_term: Optional[OpFunc] = None
+            other_term: Optional[Operator] = None
 
             if isinstance(rhs, OpAdd):
                 terms = list(rhs.args)
@@ -6982,39 +6981,42 @@ class OmpDirective(Node):
                 terms = [rhs]
 
             for term in terms:
-                if isinstance(term, OpFunc) and getattr(term, "name", "").lower() in {"mod", "modulo"}:
-                    if mod_term is not None:
+                if isinstance(term, OpFunc):
+                    if func_term is not None: # only one func_term is allowed
                         return None
-                    mod_term = term
+                    func_name = term.name.lower()
+                    if func_name in {"mod", "modulo", "min", "max"}:
+                        func_term = term
+                    else:
+                        return None
                 else:
-                    other_terms.append(term)
-
-            if mod_term is None:
+                    if other_term is not None: # only one other_term is allowed
+                        return None
+                    other_term = term
+            if func_term is None:
                 return None
 
-            if other_terms:
-                if len(other_terms) != 1 or base is None:
+            if func_name in {"mod", "modulo"}:
+                base = do_range[0]
+                if other_term is None or base is None:
                     return None
-                term = other_terms[0]
-                if term != base:
-                    base_int = AryIndex._get_int(base)
-                    term_int = AryIndex._get_int(term)
+                if other_term != base:
+                    base_int = base.get_int()
+                    term_int = other_term.get_int()
                     if base_int is None or term_int is None or term_int != base_int:
                         return None
-
-            if not mod_term.args:
-                return None
-
-            numerator = mod_term.args[0]
-            if base is None:
-                base_expr = do_index
-            else:
+                numerator = func_term.args[0]
                 base_expr = do_index - base
+                return (numerator - base_expr).get_int()
 
-            delta = (numerator - base_expr).get_int()
-            if delta is None:
-                return None
-            return delta
+            if func_name == "min":
+                if func_term.args[0] != do_range[1] and func_term.args[1] != do_range[1]:
+                    return None
+                return (func_term.args[0] - do_index).get_int() or (func_term.args[1] - do_index).get_int()
+            if func_name == "max":
+                if func_term.args[0] != do_range[0] and func_term.args[1] != do_range[0]:
+                    return None
+                return (func_term.args[0] - do_index).get_int() or (func_term.args[1] - do_index).get_int()
 
         def _collect_data(
                 node: Node,
@@ -7054,7 +7056,7 @@ class OmpDirective(Node):
                     else:
                         delta_new = (rhs - do_index).get_int()
                     if delta_new is None:
-                        delta_new = _infer_modulo_delta(rhs)
+                        delta_new = _infer_func_delta(rhs)
                     if delta_new is not None:
                         found = False
                         for var, delta in delta_vars:
@@ -7067,8 +7069,8 @@ class OmpDirective(Node):
                             delta_vars.append((lhs, delta_new))
                     else:
                         if lhs in [v[0] for v in delta_vars]:
-                            #print(node)
-                            #print(delta_vars)
+                            # print(node)
+                            # print(delta_vars)
                             # print(3)
                             raise ConvertToSerial
                     return (delta_vars, ary_vars)
@@ -7137,10 +7139,12 @@ class OmpDirective(Node):
                             dim = dim.replace_with(dvar, do_index + OpInt(delta))
                         delta_new = (dim - do_index).get_int()
                         if delta_new is None:
-                            delta_new = _infer_modulo_delta(dim)
+                            delta_new = _infer_func_delta(dim)
                         if delta_new is None:
                             if i == idim or do_index in dim.collect_vars():
                                 # print(5)
+                                # print(varname, ary_vars[varname])
+                                # print(dim, do_index)
                                 raise ConvertToSerial
                             continue
                         max_delta = max(max_delta, abs(delta_new))
@@ -7155,6 +7159,7 @@ class OmpDirective(Node):
 
             # print(delta_vars)
             # print(target_vars)
+            # print(max_delta)
 
             if not target_vars:
                 return ([self], None)
@@ -7166,9 +7171,11 @@ class OmpDirective(Node):
                 if - delta not in delta_rev:
                     op = OpFunc("modulo", [do_index - delta - do_range[0], do_range[1] - do_range[0] + 1]) + do_range[0]
                     delta_rev[- delta] = op
+
+            nhalo = max_delta
             for i in range(max_delta, 0, -1):
                 if i in delta_rev:
-                    max_delta -= 1
+                    nhalo -= 1
 
             clear_vars: List[str] = []
             clear_nodes: List[Node] = []
@@ -7186,9 +7193,6 @@ class OmpDirective(Node):
                 if lhsname in private_vars:
                     if lhsname not in private_varnames:
                         private_varnames[lhsname] = {}
-                    if not lhsname.endswith(AD_SUFFIX):
-                        nodes_result.append(assign_node)
-                        return None
                     for i in range(-max_delta, max_delta + 1):
                         if i == 0:
                             idx_new = do_index
@@ -7212,22 +7216,27 @@ class OmpDirective(Node):
                                 private_varnames[lhsname][i] = name_new
                             rhs_new = rhs.replace_with(do_index, idx_new)
                             assign = Assignment(lhs_new, rhs_new, ad_info=assign_node.ad_info)
-                        if i == -max_delta:
-                            cond = idx_new >= range_min
-                        elif i == max_delta:
-                            cond = idx_new <= range_max
+                        if nhalo == 0:
+                            nodes_result.append(assign)
                         else:
-                            cond = (idx_new >= range_min) & (idx_new <= range_max)
-                        node_new = IfBlock([(cond, Block([assign]))])
-                        nodes_result.append(node_new)
-                    for var in rhs.collect_vars(without_index=True):
-                        if var.index is not None and do_index in var.index.collect_vars():
-                            if var.name not in clear_vars:
-                                clear_vars.append(var.name)
+                            if i == -nhalo:
+                                cond = idx_new >= range_min
+                            elif i == nhalo:
+                                cond = idx_new <= range_max
+                            else:
+                                cond = (idx_new >= range_min) & (idx_new <= range_max)
+                            node_new = IfBlock([(cond, Block([assign]))])
+                            nodes_result.append(node_new)
+                    if lhsname.endswith(AD_SUFFIX):
+                        for var in rhs.collect_vars(without_index=True):
+                            if var.index is not None and do_index in var.index.collect_vars():
+                                if var.name not in clear_vars:
+                                    clear_vars.append(var.name)
                     return None
 
                 if lhsname not in target_vars:
-                    raise ConvertToSerial
+                    nodes_result.append(assign_node)
+                    return None
 
                 idim = target_vars[lhs.name]
                 dim = lhs.index[idim]
@@ -7245,9 +7254,9 @@ class OmpDirective(Node):
                         cond = None
                     else:
                         idx_new = do_index - OpInt(delta)
-                        if delta == max_delta:
+                        if delta == nhalo:
                             cond = idx_new >= range_min
-                        elif delta == -max_delta:
+                        elif delta == -nhalo:
                             cond = idx_new <= range_max
                         else:
                             cond = (idx_new >= range_min) & (idx_new <= range_max)
@@ -7260,7 +7269,7 @@ class OmpDirective(Node):
                             var_new.name = private_varnames[var.name][-delta]
                             rhs = rhs.replace_with(var, var_new)
                     rhs = rhs.replace_with(do_index, idx_new)
-                elif max_delta > 0:
+                elif nhalo > 0:
                     cond = (do_index >= range_min) & (do_index <= range_max)
                 else:
                     cond = None
@@ -7356,7 +7365,7 @@ class OmpDirective(Node):
 
             nodes_new = _transform_block(loop._body, top_level=True)
 
-            range_new = OpRange([range_max + max_delta, range_min - max_delta, -1])
+            range_new = OpRange([range_max + nhalo, range_min - nhalo, -1])
             loop_new = DoLoop(Block(nodes_new), do_index, range_new, loop.label)
             body_new = Block([loop_new])
             clauses = list(self.clauses)
