@@ -43,6 +43,7 @@ $(OUTDIR)/derived_alloc_ad.o: $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/pointer_arrays_ad.o: $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/control_flow_ad.o: $(OUTDIR)/fautodiff_stack.o
 $(OUTDIR)/mpi_example_ad.o: $(OUTDIR)/mpi_ad.o
+$(OUTDIR)/mpi_sub_use_ad.o: $(OUTDIR)/mpi_ad.o
 
 clean:
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.mod

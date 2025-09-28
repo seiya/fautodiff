@@ -55,16 +55,15 @@ contains
     real, intent(inout) :: y_ad
     real :: z_ad
 
-    z_ad = y_ad + z_ad ! y = y + z
+    z_ad = y_ad ! y = y + z
     block
-      real :: z_ad = 0.0
+      real :: z_ad
 
       z_ad = y_ad ! y = z + 1.0
       y_ad = 0.0 ! y = z + 1.0
       x_ad = z_ad + x_ad ! z = x + 2.0
     end block
     x_ad = z_ad + x_ad ! z = x + 1.0
-    z_ad = 0.0 ! z = x + 1.0
 
     return
   end subroutine use_block_rev_ad

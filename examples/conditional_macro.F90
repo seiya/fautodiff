@@ -1,7 +1,6 @@
 #define BASE 1
 #define TEMP BASE
 #define DOUBLE TEMP
-#undef TEMP
 #ifndef OMIT
 #define COND 5
 #endif
