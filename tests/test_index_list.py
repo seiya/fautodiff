@@ -13,7 +13,7 @@ from fautodiff.operators import (
     OpVar,
     VarType,
 )
-from fautodiff.var_list import IndexList
+from fautodiff.var_list import IndexList, VarList
 
 
 def v(name, *idx_dims) -> OpVar:
@@ -59,6 +59,12 @@ def v(name, *idx_dims) -> OpVar:
 
 
 class TestIndexList(unittest.TestCase):
+    def test_var_in_None(self):
+        il = IndexList()
+        i = AryIndex([OpVar("i")])
+        il.push(None)
+        self.assertTrue(il.contains(i))
+
     def test_remove_var(self):
         il = IndexList()
         i = OpVar("i")
@@ -70,25 +76,17 @@ class TestIndexList(unittest.TestCase):
         self.assertEqual(len(il.exclude), 1)
         self.assertEqual(str(il.exclude[0]), "i")
 
-    def test_exit_context_and_remove(self):
-        il = IndexList()
-        il.dims = [2]
-
-        i = OpVar("i")
-        n = OpVar("n")
-        il.push(AryIndex([OpRange([OpInt(1), OpInt(2)]), i]))
-        il.exit_context((i, [i], OpRange([OpInt(1), n])))
-        il.remove(AryIndex([OpInt(1), i]))
-        il.exit_context((i, [i], OpRange([OpInt(1), n])))
-        self.assertEqual([str(idx) for idx in il.indices], ["2,1:n"])
-        self.assertEqual(il.exclude, [])
-
     def test_push_in_range(self):
         il = IndexList()
         i = OpVar("i")
         il.push(AryIndex([OpRange([i - 1, i + 1])]))
         il.push(AryIndex([i]))
         self.assertEqual(str(il), "(i - 1:i + 1)")
+
+    def test_push_wider_range(self):
+        il = IndexList([AryIndex([OpInt(1)])])
+        il.push(AryIndex([OpRange([OpInt(1),OpInt(2)])]))
+        self.assertEqual(str(il), "(1:2)")
 
     def test_push_merge(self):
         il = IndexList()
@@ -97,6 +95,12 @@ class TestIndexList(unittest.TestCase):
         il.push(AryIndex([OpRange([i + 1, i + 2])]))
         il.push(AryIndex([i]))
         self.assertEqual(str(il), "(i - 2:i + 2)")
+
+    def test_merge_wider_range(self):
+        il1 = IndexList([AryIndex([OpInt(1)])])
+        il2 = IndexList([AryIndex([OpRange([OpInt(1),OpInt(2)])])])
+        il1.merge_from(il2)
+        self.assertEqual(str(il1), "(1:2)")
 
     def test_push_merge_adjacent_int_and_range(self):
         il = IndexList()
@@ -139,18 +143,6 @@ class TestIndexList(unittest.TestCase):
         self.assertTrue(inter.contains(AryIndex([OpInt(4)])))
         self.assertFalse(inter.contains(AryIndex([OpInt(2)])))
 
-    def test_update_index_upward(self):
-        il = IndexList()
-        il.push(AryIndex([OpRange([OpInt(1), OpInt(3)])]))
-        il.update_index_upward(0, OpRange([OpInt(1), OpInt(5)]))
-        self.assertTrue(il.contains(AryIndex([OpInt(5)])))
-
-    def test_update_index_downward(self):
-        il = IndexList(indices=[AryIndex([OpInt(1)])])
-        i = OpVar("i")
-        il.update_index_downward(0, 1, i)
-        self.assertTrue(all(str(idx[0]) == "i" for idx in il.indices))
-
     def test_negative_stride_normalized_in_push(self):
         i0 = OpInt(1)
         i5 = OpInt(5)
@@ -187,6 +179,14 @@ class TestIndexList(unittest.TestCase):
         il.push(AryIndex([OpRange([OpInt(1), OpInt(5)])]))
         il.push(AryIndex([OpRange([OpInt(6), OpInt(10)])]))
         self.assertTrue(il.contains(AryIndex([OpRange([OpInt(1), OpInt(10)])])))
+        self.assertEqual(len(il.indices), 1)
+
+    def test_merge_adjacent_ranges_scalar(self):
+        i = OpVar("i")
+        il = IndexList()
+        il.push(AryIndex([OpRange([i - OpInt(1), i + OpInt(1)])]))
+        il.push(AryIndex([i - OpInt(2)]))
+        self.assertTrue(il.contains(AryIndex([OpRange([i - OpInt(2), i + OpInt(1)])])))
         self.assertEqual(len(il.indices), 1)
 
     def test_merge_overlapping_ranges(self):
@@ -266,6 +266,19 @@ class TestIndexList(unittest.TestCase):
         self.assertFalse(
             il.contains(AryIndex([OpRange([OpInt(1), OpInt(10)]), OpInt(2)]))
         )
+
+    def test_exit_context_and_remove(self):
+        il = IndexList()
+        il.dims = [2]
+
+        i = OpVar("i")
+        n = OpVar("n")
+        il.push(AryIndex([OpRange([OpInt(1), OpInt(2)]), i]))
+        il.exit_context((i, [i], OpRange([OpInt(1), n])))
+        il.remove(AryIndex([OpInt(1), i]))
+        il.exit_context((i, [i], OpRange([OpInt(1), n])))
+        self.assertEqual([str(idx) for idx in il.indices], ["2,1:n"])
+        self.assertEqual(il.exclude, [])
 
     def test_contains_with_context_scalar_substitution(self):
         # Stored numeric range; query contains symbolic i. Context should decide membership.
@@ -361,14 +374,15 @@ class TestIndexList(unittest.TestCase):
         i = OpVar("i")
         j = OpVar("j")
         idx = AryIndex([i, j])
+        il = IndexList([idx])
         ctx = [(i, [j], OpRange([OpInt(1), OpInt(3)]))]
 
         # For indices (for_exclude=False): i -> 1:3, j -> :
-        idx_for_indices = IndexList._apply_context_index(idx, ctx, for_exclude=False)
+        idx_for_indices = il._apply_context_index(idx, ctx, for_exclude=False)
         self.assertEqual(str(idx_for_indices), "1:3,:")
 
         # For excludes (for_exclude=True): i -> 1:3, j unchanged
-        idx_for_exclude = IndexList._apply_context_index(idx, ctx, for_exclude=True)
+        idx_for_exclude = il._apply_context_index(idx, ctx, for_exclude=True)
         self.assertEqual(str(idx_for_exclude), "1:3,j")
 
     def test_exit_context_converts_exclude_to_residual(self):
@@ -663,6 +677,56 @@ class TestIndexList(unittest.TestCase):
         self.assertEqual(len(il.indices), 1)
         self.assertEqual(str(il.indices[0]), "1")
         self.assertEqual(il.exclude, [])
+
+    def test_push_scalar_lower_endpoint_trims_exclude(self):
+        # Guard removes a lower slice; re-adding endpoint should trim the hole.
+        il = IndexList()
+        il.push(None)
+        il.remove(AryIndex([OpRange([OpInt(1), OpInt(7)])]))
+        self.assertEqual([str(ex) for ex in il.exclude], ["1:7"])
+
+        il.push(AryIndex([OpInt(1)]))
+        self.assertEqual([str(ex) for ex in il.exclude], ["2:7"])
+
+    def test_push_scalar_upper_endpoint_trims_exclude(self):
+        # Guard removes an upper slice; re-adding endpoint should trim from the top.
+        il = IndexList()
+        il.push(None)
+        il.remove(AryIndex([OpRange([OpInt(1), OpInt(7)])]))
+        self.assertEqual([str(ex) for ex in il.exclude], ["1:7"])
+
+        il.push(AryIndex([OpInt(7)]))
+        self.assertEqual([str(ex) for ex in il.exclude], ["1:6"])
+
+    def test_push_scalar_middle_splits_exclude(self):
+        # Guard leaves a band hole; re-adding a middle scalar should split it.
+        il = IndexList()
+        il.push(None)
+        il.remove(AryIndex([OpRange([OpInt(1), OpInt(7)])]))
+
+        il.push(AryIndex([OpInt(4)]))
+        self.assertEqual([str(ex) for ex in il.exclude], ["1:3", "5:7"])
+
+    def test_push_range_eliminates_matching_exclude(self):
+        # Guard carved out a range; pushing the same range should clear the guard hole.
+        il = IndexList()
+        il.push(None)
+        il.remove(AryIndex([OpRange([OpInt(1), OpInt(7)])]))
+        self.assertEqual([str(ex) for ex in il.exclude], ["1:7"])
+
+        il.push(AryIndex([OpRange([OpInt(1), OpInt(7)])]))
+        self.assertEqual(il.exclude, [])
+
+    def test_remove_range_keeps_full_coverage_entry(self):
+        # Removing inside a guard should keep the full-coverage entry but record the gap.
+        il = IndexList()
+        il.push(None)
+        il.remove(AryIndex([OpRange([OpInt(3), OpInt(6)])]))
+
+        self.assertEqual(il.indices, [None])
+        self.assertEqual([str(ex) for ex in il.exclude], ["3:6"])
+        self.assertFalse(il.contains(AryIndex([OpInt(4)])))
+        self.assertTrue(il.contains(AryIndex([OpInt(2)])))
 
 
 if __name__ == "__main__":

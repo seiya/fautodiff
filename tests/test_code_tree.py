@@ -485,6 +485,29 @@ class TestNodeMethods(unittest.TestCase):
             {"a_ad(1:n,1:m)", "b_ad(1:n,1:m)", "m", "n"},
         )
 
+    def test_required_vars_loop_with_guarded_neighbors(self):
+        i = OpVar("i")
+        n = OpVar("n")
+        one = OpInt(1)
+        z = OpVar("z", index=[i], dims=(OpRange([one,n]),))
+        x = OpVar("x", index=[i - one], dims=(OpRange([one,n]),))
+        y = OpVar("y", index=[i + one], dims=(OpRange([one,n]),))
+        loop = DoLoop(
+            Block([
+                Assignment(OpVar("z", index=[i]), OpReal("0.0")),
+                IfBlock([(i >= OpInt(2), Block([Assignment(z, x + z)]))]),
+                IfBlock([(i <= n - OpInt(1), Block([Assignment(z, y + z)]))]),
+            ]),
+            index=i,
+            range=OpRange([OpInt(1), n]),
+        )
+
+        required = {str(v) for v in loop.required_vars()}
+        self.assertEqual(
+            set(required),
+            {"n", "x(1:n - 1)", "y(2:n)"},
+        )
+
     def test_required_vars_in_if(self):
         i = OpVar("i")
         a = OpVar("a")
@@ -502,6 +525,18 @@ class TestNodeMethods(unittest.TestCase):
         )
 
     def test_required_vars_guarded_assignment(self):
+        a = OpVar("a")
+        b = OpVar("b")
+        c = OpVar("c")
+        cond1 = a > OpInt(0)
+        init_b = IfBlock([(cond1, Block([Assignment(b, OpReal("1.0"))]))])
+        assign_c = Assignment(c, OpReal("1.0"))
+        use_b = IfBlock([(cond1, Block([Assignment(c, c + b)]))])
+        program = Block([init_b, assign_c, use_b])
+
+        self.assertEqual({str(v) for v in program.required_vars()}, {"a"})
+
+    def test_required_vars_multiple_guarded_assignment(self):
         a = OpVar("a")
         b = OpVar("b")
         c = OpVar("c")
