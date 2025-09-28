@@ -2027,6 +2027,9 @@ def _generate_ad_subroutine(
             do_index = node.index
             for var in node.collect_vars():
                 if var.name == name:
+                    index = var.concat_index()
+                    if index is None:
+                        return
                     for i, idx in enumerate(var.concat_index()):
                         if idx == do_index:
                             i0, i1, _ = node.range.ascending()
@@ -2459,6 +2462,7 @@ def _generate_ad_subroutine(
         if blk is not None:
             _drop_empty_branches_global(blk)
 
+    # print(subroutine.ad_content)
     return subroutine, uses_pushpop, called_mods
 
 

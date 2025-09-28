@@ -108,6 +108,7 @@ class Node:
     __id: int = field(init=False, repr=False)
     parent: "Node" = field(init=False, repr=False, default=None)
     do_index_list: List[str] = field(init=False, repr=False, default=None)
+    debug: bool = field(init=False, repr=False, default=False)
 
     _id_counter = 0
 
@@ -229,7 +230,7 @@ class Node:
         override this to insert conditional blocks around exit or cycle
         statements.
         """
-        return [self]
+        return [self.copy()]
 
     def has_returnexitcycle_flags(self) -> bool:
         for child in self.iter_children():
@@ -1311,7 +1312,13 @@ class Block(Node):
         without_savevar: bool = False,
     ) -> VarList:
         for child in reversed(self._children):
+            if child.debug:
+                vars_org = vars # for debug
             vars = child.required_vars(vars, no_accumulate, without_savevar)
+            if child.debug:
+                print(1, vars_org)
+                print(child)
+                print(2, vars)
         if vars is None:
             vars = VarList()
         return vars
@@ -1395,6 +1402,9 @@ class Block(Node):
                 targets = pruned.required_vars(targets)
                 if isinstance(pruned, ReturnStmt):
                     targets = base_targets.copy()
+            # print(child)
+            # print(1, targets)
+            # print("pruned" if pruned is None else "keep")
         children = new_children
 
         if len(children) >= 2:
@@ -1500,34 +1510,36 @@ class Block(Node):
                     if isinstance(child, IfBlock) and isinstance(last, IfBlock):
                         cb1 = child.cond_blocks[0]
                         cb2 = last.cond_blocks[0]
-                        if (
-                            cb1[0] == cb2[0]
-                            and cb1[1][0]
-                            and isinstance(cb1[1][0], SaveAssignment)
-                            and not cb1[1][0].pushpop
-                            and cb2[1][-1]
-                            and isinstance(cb2[1][-1], SaveAssignment)
-                            and not cb2[1][-1].pushpop
-                            and cb1[1][0].var.name == cb2[1][-1].var.name
-                            and cb1[1][0].id == cb2[1][-1].id
-                            and cb1[1][0].load != cb2[1][-1].load
-                        ):
-                            cb1[1].remove_child(cb1[1][0])
-                            cb2[1].remove_child(cb2[1][-1])
-                            flag = True
-                            if last.is_effectively_empty():
-                                new_children.remove(last)
-                            if not child.is_effectively_empty():
-                                new_children.append(child)
-                            continue
-                        if (
-                            cb1[0] == cb2[0]
-                            and len(child.cond_blocks) == 1
-                            and len(last.cond_blocks)
-                            and not last.has_returnexitcycle_flags()
-                        ):  # merge
-                            last.cond_blocks[0][1].extend(child.cond_blocks[0][1])
-                            continue
+                        if (cb1[0] == cb2[0]):
+                            if (cb1[1][0]
+                                and isinstance(cb1[1][0], SaveAssignment)
+                                and not cb1[1][0].pushpop
+                                and cb2[1][-1]
+                                and isinstance(cb2[1][-1], SaveAssignment)
+                                and not cb2[1][-1].pushpop
+                                and cb1[1][0].var.name == cb2[1][-1].var.name
+                                and cb1[1][0].id == cb2[1][-1].id
+                                and cb1[1][0].load != cb2[1][-1].load
+                            ):
+                                cb1[1].remove_child(cb1[1][0])
+                                cb2[1].remove_child(cb2[1][-1])
+                                flag = False
+                                if last.is_effectively_empty():
+                                    new_children.remove(last)
+                                    flag = True
+                                if child.is_effectively_empty():
+                                    continue
+                                if flag:
+                                    new_children.append(child)
+                                    continue
+                            if (len(child.cond_blocks) == 1
+                                and len(last.cond_blocks) == 1
+                                and not last.has_returnexitcycle_flags()
+                            ):  # merge
+                                last.cond_blocks[0][1].extend(child.cond_blocks[0][1])
+                                continue
+                        new_children.append(child)
+                        continue
                     if (
                         isinstance(last, Assignment)
                         and isinstance(last.rhs, OpTrue)
@@ -4244,7 +4256,7 @@ class SaveAssignment(Node):
         return f"[SaveAssignment] {self.lhs} = {self.rhs}"
 
     def copy(self) -> "SaveAssignment":
-        return SaveAssignment(self.var, self.id, self.tmpvar, self.load)
+        return type(self)(self.var, self.id, self.tmpvar, self.load)
 
     def deep_clone(self) -> "SaveAssignment":
         return self.copy()
@@ -4332,11 +4344,20 @@ class SaveAssignment(Node):
         # For pointer push/pop loads, conservatively keep them
         if isinstance(self, PushPop) and self.pointer and self.load:
             return self
+
         # Keep only if the assigned variable is part of the targets. Whether a
         # load is needed should be determined by required-vars propagation in the
         # surrounding Block (which will add the LHS when later statements use it).
+        if self.debug:
+            print(self)
+            print(targets)
+            print(targets._current_guard)
+            name = self.lhs.name_ext()
+            print(targets._store[name] if name in targets._store else "NONE")
+            print(targets._guarded[name] if name in targets._guarded else "NONE")
         if self.lhs not in targets:
             return None
+
         if self.load and self.var.ref_var is None:
             name = self.var.name_ext()
             index = self.var.concat_index()
@@ -4346,7 +4367,7 @@ class SaveAssignment(Node):
                 raise RuntimeError
             index_target = None
             flag = True
-            for idx in targets[name]:
+            for idx in targets.get_list(name):
                 if idx is None or not idx <= index:
                     flag = False
                     break
@@ -4395,6 +4416,9 @@ class PushPop(SaveAssignment):
 
     pushpop: ClassVar[bool] = True
     pointer: bool = False
+
+    def __str__(self) -> str:
+        return f"[PushPop] {'pop' if self.load else 'push'} {self.var} id={self.id}"
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -4448,6 +4472,9 @@ class PushPopL(PushPop):
 
     def copy(self) -> "PushPopL":
         return PushPopL(self.flag)
+
+    def __str__(self) -> str:
+        return f"[PusPopL] 'push' {self.flag}"
 
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
@@ -4931,9 +4958,9 @@ class PointerAssignment(Node):
             lhs_name = self.lhs.name_ext()
             rhs_name = self.rhs.name_ext()
             if lhs_name in names and rhs_name not in names:
-                assigned_vars.clone(lhs_name, rhs_name)
+                assigned_vars.clone_var(lhs_name, rhs_name)
             if rhs_name in names and lhs_name not in names:
-                assigned_vars.clone(rhs_name, lhs_name)
+                assigned_vars.clone_var(rhs_name, lhs_name)
         return assigned_vars
 
 
@@ -5099,7 +5126,7 @@ class PointerClear(Node):
 class BranchBlock(Node):
     """An abstract class for ``if`` and ``select case`` branch stracture."""
 
-    cond_blocks: List[Tuple[Union[Operator, Tuple[Operator]], Block]] = field(
+    cond_blocks: List[Tuple[Union[None, Operator, Tuple[Operator]], Block]] = field(
         default_factory=list
     )
 
@@ -5151,8 +5178,6 @@ class BranchBlock(Node):
             c = cond.deep_clone()
 
             def _rewrite(op: Operator) -> Operator:
-                from .operators import OpFunc, OpLogic
-
                 if isinstance(op, OpFunc) and op.name in ("allocated", "associated"):
                     args = list(op.args)
                     if args and isinstance(args[0], OpVar):
@@ -5209,16 +5234,13 @@ class BranchBlock(Node):
                 _scan(block)
 
                 def _collect_guard_vars(op: Operator) -> tuple[bool, set[str]]:
-                    from .operators import OpFunc, OpLogic
-                    from .operators import OpVar as _OpVar
-
                     # returns (is_pure_guard, var_names)
                     if isinstance(op, OpFunc) and op.name in (
                         "allocated",
                         "associated",
                     ):
                         args = list(op.args)
-                        if not args or not isinstance(args[0], _OpVar):
+                        if not args or not isinstance(args[0], OpVar):
                             return (False, set())
                         return (True, {args[0].name})
                     if isinstance(op, OpLogic):
@@ -5234,8 +5256,6 @@ class BranchBlock(Node):
                         and vars_in_cond
                         and vars_in_cond.issubset(dealloc_names)
                     ):
-                        from .operators import OpNot
-
                         # Replace to use AD vars and invert for allocation in reverse
                         cond = _cond_use_advar(cond)
                         cond = OpNot([cond])
@@ -5359,6 +5379,17 @@ class BranchBlock(Node):
         else:  # WhereBlock
             return [WhereBlock(cond_blocks)]
 
+    def _use_guard(self) -> bool:
+        if isinstance(self, IfBlock) and len(self.cond_blocks) == 1:
+            cond, block = self.cond_blocks[0]
+            if block and isinstance(block[0], (Allocate, Deallocate)):
+                return False
+            for v in cond.collect_vars():
+                if not v.is_read_only and v.name not in self.do_index_list:
+                    return False
+            return True
+        return False
+
     def required_vars(
         self,
         vars: Optional[VarList] = None,
@@ -5369,35 +5400,6 @@ class BranchBlock(Node):
             vars = VarList()
         else:
             vars = vars.copy()
-        vars_new = vars.copy_context()
-
-        guard_partitions: Dict[Optional[str], VarList] = {}
-
-        if vars.names():
-
-            def _get_partition(key: Optional[str]) -> VarList:
-                part = guard_partitions.get(key)
-                if part is None:
-                    part = vars.copy_context()
-                    guard_partitions[key] = part
-                return part
-
-            for name in vars.names():
-                guards = vars.get_guards(name)
-                if not guards:
-                    guards = {None}
-                vars_for_name = vars.get_vars(name)
-                for guard in guards:
-                    part = _get_partition(guard)
-                    for var in vars_for_name:
-                        part.push(var)
-                    if guard is not None:
-                        part.set_guards(name, {guard})
-        remaining = vars.copy_context()
-        cover_all = False  # if else or case default exists
-        to_remove = set()
-        origin_savevars = {name for name in vars.names() if Node.is_savevar(name)}
-        referenced_cache: Dict[int, Set[str]] = {}
 
         def _check(cond: Operator) -> bool:
             if isinstance(cond, OpLogic):
@@ -5406,79 +5408,52 @@ class BranchBlock(Node):
                 return True
             return False
 
-        for cond, block in self.cond_blocks:
-            vs = block.required_vars(vars, no_accumulate, without_savevar)
-            cond_key: Optional[str] = str(cond) if cond is not None else None
-            if cond_key is not None:
-                block_id = id(block)
-                if block_id not in referenced_cache:
-                    referenced_cache[block_id] = {
-                        var.name_ext() for var in block.collect_vars()
-                    }
-                referenced = referenced_cache[block_id]
-                for name in vs.names():
-                    if name not in referenced:
-                        continue
-                    guards = set(vs.get_guards(name))
-                    guards.add(cond_key)
-                    vs.set_guards(name, guards)
-                if guard_partitions:
-                    if cond is None:
-                        target_keys: Iterable[Optional[str]] = (None,)
-                    else:
-                        target_keys = (cond_key,)
-                    for key in target_keys:
-                        part = guard_partitions.get(key)
-                        if part is None:
-                            continue
-                        updated = part.copy_context()
-                        if vs is not None and vs.names():
-                            for name in vs.names():
-                                guards_vs = vs.get_guards(name)
-                                if key is not None:
-                                    if key not in guards_vs:
-                                        continue
-                                else:
-                                    if guards_vs and None not in guards_vs:
-                                        continue
-                                for var in vs.get_vars(name):
-                                    if part.contains_with_context(var):
-                                        updated.push(var)
-                                if updated.has_name(name) and key is not None:
-                                    updated.set_guards(name, {key})
-                        guard_partitions[key] = updated
-            vars_new.merge(vs)
-            advars = {name for name in vs.names() if Node.is_savevar(name)}
-            to_remove = to_remove | (origin_savevars - advars)
-            if (
-                isinstance(self, (IfBlock, WhereBlock))
-                and len(block) > 0
-                and isinstance(block[0], Deallocate)
-            ):
-                if cond is not None and _check(cond):
-                    to_remove = to_remove | {v.name_ext() for v in block[0].vars}
-            if cond is None:
-                cover_all = True
-        if not cover_all:
-            if guard_partitions:
-                for part in guard_partitions.values():
-                    remaining.merge(part)
-            vars_new.merge(remaining)
+        use_guard = self._use_guard()
+        vars_new = vars.copy_context()
+        origin_savevars = {name for name in vars.names() if Node.is_savevar(name)}
+        if use_guard:
+            if str(self.cond_blocks[0][0]) == vars._current_guard:
+                raise RuntimeError("Same gurad was detected in required_vars")
+            vars.enter_guard(self.cond_blocks[0][0])
+            vars_new = self.cond_blocks[0][1].required_vars(
+                vars, no_accumulate, without_savevar
+            )
+            vars_new.leave_guard()
+            advars = {name for name in vars_new.names() if Node.is_savevar(name)}
+            to_remove = origin_savevars - advars
+        else:
+            cover_all = False  # if else or case default exists
+            to_remove = set()
+            for cond, block in self.cond_blocks:
+                vs = block.required_vars(vars, no_accumulate, without_savevar)
+                vars_new.merge(vs)
+                advars = {name for name in vs.names() if Node.is_savevar(name)}
+                to_remove = to_remove | (origin_savevars - advars)
+                if (
+                    isinstance(self, (IfBlock, WhereBlock))
+                    and len(block) > 0
+                    and isinstance(block[0], Deallocate)
+                ):
+                    if cond is not None and _check(cond):
+                        to_remove = to_remove | {v.name_ext() for v in block[0].vars}
+                if cond is None:
+                    cover_all = True
+            if not cover_all:
+                vars_new.merge(vars)
+
         for name in to_remove:
             if name in vars_new.names():
                 vars_new.remove_name(name)
+
         for cond, _ in self.cond_blocks:
-            if cond is not None:
-                if isinstance(self, (IfBlock, WhereBlock)):
-                    if not _check(cond):
-                        for var in cond.collect_vars(without_checkfunc=True):
-                            vars_new.push(var)
-                elif isinstance(self, SelectBlock):
-                    for co in cond:
-                        for var in co.collect_vars(without_checkfunc=True):
-                            vars_new.push(var)
-                else:
-                    raise ValueError
+            if isinstance(cond, Operator): # IfBlock, WhereBlock
+                if not _check(cond):
+                    for var in cond.collect_vars(without_checkfunc=True):
+                        vars_new.push(var)
+            elif isinstance(cond, tuple): # SelectBlock
+                for co in cond:
+                    for var in co.collect_vars(without_checkfunc=True):
+                        vars_new.push(var)
         return vars_new
 
     def unrefered_advars(self, vars: Optional[VarList] = None) -> VarList:
@@ -5498,6 +5473,8 @@ class BranchBlock(Node):
     ) -> Optional[Node]:
         if base_targets is None:
             base_targets = targets.copy()
+
+        use_guard = self._use_guard()
         new_condblocks: List[tuple] = []
         flag = False
         for cond, block in self.cond_blocks:
@@ -5505,7 +5482,11 @@ class BranchBlock(Node):
             returns = block.collect_return()
             if returns:
                 block_targets = base_targets
+            if use_guard:
+                block_targets.enter_guard(cond)
             new_block = block.prune_for(block_targets, mod_vars, decl_map, base_targets)
+            if use_guard:
+                block_targets.leave_guard()
             new_condblocks.append((cond, new_block))
             if new_block is not None:
                 flag = True
@@ -5581,7 +5562,7 @@ class SelectBlock(BranchBlock):
     select_type: bool = False
 
     def __str__(self) -> str:
-        lines: List[str] = ["[SelectBlock] expr: {self.expr}"]
+        lines: List[str] = [f"[SelectBlock] expr: {self.expr}"]
         for cond, block in self.cond_blocks:
             lines.append(f"  cond: {str(cond)}")
             lines.extend("  " + line for line in str(block).splitlines())
@@ -5883,12 +5864,12 @@ class DoAbst(Node):
             do_index = self.index.name
             for name in common_var_names:
                 flag = False
-                for index in required_vars[name]:
+                for index in required_vars.get_list(name):
                     if index is None or not do_index in index.list():
                         flag = True
                         break
                 if not flag:
-                    for index in assigned_vars[name]:
+                    for index in assigned_vars.get_list(name):
                         if index is None or not do_index in index.list():
                             flag = True
                             break
@@ -5920,7 +5901,7 @@ class DoLoop(DoAbst):
 
     def __str__(self) -> str:
         lines: List[str] = [
-            "[Do] index: {self.index}, range: {self.range}, label: {self.label}"
+            f"[Do] index: {self.index}, range: {self.range}, label: {self.label}"
         ]
         lines.extend("  " + line for line in str(self._body).splitlines())
         return "\n".join(lines)
@@ -5980,6 +5961,14 @@ class DoLoop(DoAbst):
                 for i, idx in enumerate(index):
                     if isinstance(idx, OpVar) and idx == self.index:
                         index_map[var.name_ext()] = (i, len(index))
+                        break
+                    if isinstance(idx, Operator):
+                        for v in idx.collect_vars():
+                            if v.name == self.index.name:
+                                index_map[var.name_ext()] = (i, len(index))
+                                break
+                        if var.name_ext() in index_map:
+                            break
         return index_map
 
     def find_index(self, var: OpVar, name: str) -> Optional[int]:
@@ -6060,12 +6049,12 @@ class DoLoop(DoAbst):
         var_names = []
         for name in common_var_names:
             flag = True
-            for index in required_vars[name]:
+            for index in required_vars.get_list(name):
                 if index is not None and do_index_list <= set(index.list()):
                     flag = False
                     break
             if flag:
-                for index in assigned_vars[name]:
+                for index in assigned_vars.get_list(name):
                     if index is not None and do_index_list <= set(index.list()):
                         flag = False
                         break
@@ -6151,36 +6140,6 @@ class DoLoop(DoAbst):
         if self.index in vars:
             vars.remove(self.index)
 
-        index_map = self._build_index_map()
-        if (
-            self.range[2] is None
-            or (isinstance(self.range[2], OpInt) and self.range[2].val == 1)
-            or (
-                isinstance(self.range[2], OpNeg)
-                and isinstance(self.range[2].args[0], OpInt)
-                and self.range[2].args[0].val == 1
-            )
-        ):
-            step = 1 if self.range[2] is None else self.range[2]
-            plusOne = self.index + step
-            minusOne = self.index - step
-        for name in vars.names():
-            if name in index_map:
-                do_index, _ = index_map[name]
-            else:
-                continue
-            index_new = []
-            for index in vars[name]:
-                if index is not None and index[do_index] is not None:
-                    if index[do_index] == plusOne:
-                        index = index.copy()
-                        index[do_index] = self.range[1] + step
-                    elif index[do_index] == minusOne:
-                        index = index.copy()
-                        index[do_index] = self.range[0] - step
-                index_new.append(index)
-            vars[name].set_indices(index_new)
-
         vars.pop_context()
 
         for var in self.range.collect_vars():
@@ -6240,6 +6199,7 @@ class DoLoop(DoAbst):
             new_body = self._body.prune_for(
                 targets_for_body, mod_vars, decl_map, base_targets
             )
+            new_body.build_do_index_list(self.do_index_list)
             for var in new_body.required_vars(targets_for_body):
                 if var.name == self.index.name:
                     continue
@@ -6267,7 +6227,7 @@ class DoLoop(DoAbst):
         vars = self._body.assigned_vars(check_init_advars=True)
         do_index = self.index.name
         for varname in vars.names():
-            for idx in vars[varname]:
+            for idx in vars.get_list(varname):
                 if idx is None or do_index not in [str(v) for v in idx]:
                     for var in vars.get_vars(varname):
                         assigned_vars.push(var)
@@ -6293,7 +6253,7 @@ class DoWhile(DoAbst):
         self.do_index_list = ["__never_match__"]
 
     def __str__(self) -> str:
-        lines: List[str] = ["[DoWhile] cond: {self.cond}, label: {self.label}"]
+        lines: List[str] = [f"[DoWhile] cond: {self.cond}, label: {self.label}"]
         lines.extend("  " + line for line in str(self._body).splitlines())
         return "\n".join(lines)
 
@@ -6358,7 +6318,9 @@ class DoWhile(DoAbst):
             base_targets = targets.copy()
         new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
         targets = targets.copy()
-        targets.merge(new_body.required_vars(targets))
+        for var in new_body.required_vars(targets):
+            if var not in targets:
+                targets.push(var)
         for var in self.cond.collect_vars():
             targets.push(var)
         new_body = self._body.prune_for(targets, mod_vars, decl_map, base_targets)
@@ -6486,7 +6448,7 @@ class BlockConstruct(Node):
         saved = {}
         for name in names:
             if vars.has_name(name):
-                saved[name] = vars[name].copy()
+                saved[name] = vars.get_list(name)
                 vars.remove_name(name)
         return saved
 
@@ -6500,7 +6462,7 @@ class BlockConstruct(Node):
     @staticmethod
     def _restore(vars: VarList, saved: Dict[str, IndexList]):
         for name, idx_list in saved.items():
-            vars[name] = idx_list
+            vars._store[name] = idx_list
 
     def required_vars(
         self,
@@ -6947,12 +6909,12 @@ class OmpDirective(Node):
             pass
 
         def _in_parallel_region() -> bool:
-            parent = getattr(self, "parent", None)
+            parent = self.parent
             while parent is not None:
                 if isinstance(parent, OmpDirective):
                     if "parallel" in parent.directive.lower().split():
                         return True
-                parent = getattr(parent, "parent", None)
+                parent = parent.parent
             return False
 
         def _disable_parallel_execution() -> Tuple[List[Node], str | None]:
@@ -6967,7 +6929,7 @@ class OmpDirective(Node):
             loop_clone = loop.deep_clone()
             if parent_block is not None:
                 loop_clone.set_parent(parent_block)
-                parent_indices = getattr(parent_block, "do_index_list", None) or []
+                parent_indices = parent_block.do_index_list
                 loop_clone.build_do_index_list(parent_indices)
             loop_clone.info = dict(self.info) if self.info is not None else None
             return ([loop_clone], msg)
@@ -7180,7 +7142,6 @@ class OmpDirective(Node):
                     nhalo -= 1
 
             clear_vars: List[str] = []
-            clear_nodes: List[Node] = []
             private_varnames: Dict[str, Dict[int, str]] = {}
 
             def _process_assignment(
@@ -7301,14 +7262,13 @@ class OmpDirective(Node):
 
                 return assign_node.ad_info
 
-            def _transform_block(block: Block, top_level: bool) -> List[Node]:
+            def _transform_block(block: Block, clear_nodes: List[Node]) -> List[Node]:
                 nodes_result: List[Node] = []
                 ad_info_local: Optional[str] = None
 
                 for child in block:
                     if (
-                        top_level
-                        and isinstance(child, ClearAssignment)
+                        isinstance(child, ClearAssignment)
                         and child.lhs.name in clear_vars
                     ):
                         cassign = ClearAssignment(child.lhs, child.info, child.ad_info)
@@ -7322,7 +7282,8 @@ class OmpDirective(Node):
                     ad_info_local = None
 
                     if isinstance(child, DoLoop):
-                        inner_nodes = _transform_block(child._body, top_level=False)
+                        clear_nodes_child = []
+                        inner_nodes = _transform_block(child._body, clear_nodes=clear_nodes_child)
                         loop_new = DoLoop(
                             Block(inner_nodes),
                             child.index.deep_clone(),
@@ -7330,6 +7291,14 @@ class OmpDirective(Node):
                             child.label,
                         )
                         nodes_result.append(loop_new)
+                        if clear_nodes_child:
+                            clear_loop = DoLoop(
+                                Block(clear_nodes_child),
+                                child.index.deep_clone(),
+                                child.range.deep_clone(),
+                                child.label
+                            )
+                            clear_nodes.append(clear_loop)
                         continue
 
                     if isinstance(child, BranchBlock):
@@ -7343,7 +7312,7 @@ class OmpDirective(Node):
                                 )
                             else:
                                 cond_clone = cond.deep_clone() if cond is not None else None
-                            block_nodes = _transform_block(blk, top_level=False)
+                            block_nodes = _transform_block(blk, clear_nodes)
                             cond_blocks.append((cond_clone, Block(block_nodes)))
                         if isinstance(child, SelectBlock):
                             branch_new = SelectBlock(cond_blocks, child.expr.deep_clone(), child.select_type)
@@ -7357,7 +7326,7 @@ class OmpDirective(Node):
                         continue
 
                     if isinstance(child, Block):
-                        nested = _transform_block(child, top_level=False)
+                        nested = _transform_block(child, clear_nodes)
                         nodes_result.append(Block(nested))
                         continue
 
@@ -7365,7 +7334,8 @@ class OmpDirective(Node):
 
                 return nodes_result
 
-            nodes_new = _transform_block(loop._body, top_level=True)
+            clear_nodes: List[Node] = []
+            nodes_new = _transform_block(loop._body, clear_nodes=clear_nodes)
 
             range_new = OpRange([range_max + nhalo, range_min - nhalo, -1])
             loop_new = DoLoop(Block(nodes_new), do_index, range_new, loop.label)
@@ -7384,9 +7354,11 @@ class OmpDirective(Node):
                 self.skip_alloc,
                 self.info
             )]
+            nodes[0].build_do_index_list(self.do_index_list)
             if clear_nodes:
                 clear_loop = DoLoop(Block(clear_nodes), do_index, loop.range, loop.label)
                 node = OmpDirective(self.directive, [], Block([clear_loop]), info=self.info)
+                node.build_do_index_list(self.do_index_list)
                 nodes.append(node)
 
             # print(nodes[0])

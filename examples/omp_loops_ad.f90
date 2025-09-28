@@ -122,6 +122,12 @@ contains
         x_ad(ip,j) = y_ad(i,j) / 8.0 + x_ad(ip,j) ! y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
         x_ad(i,j) = y_ad(i,jp) / 8.0 + y_ad(i,jn) / 8.0 + x_ad(i,j)
           ! y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
+      end do
+    end do
+    !$omp end parallel do
+    !$omp parallel do
+    do j = m, 1, - 1
+      do i = n, 1, - 1
         y_ad(i,j) = 0.0 ! y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
       end do
     end do

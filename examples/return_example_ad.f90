@@ -91,6 +91,7 @@ contains
     allocate(xtmp_ad(n))
     allocate(xtmp(n))
     if (f) then
+      xtmp = x**2
       return_flag_28_ad = .false.
     end if
     if (return_flag_28_ad) then

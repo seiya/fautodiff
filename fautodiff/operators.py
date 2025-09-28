@@ -788,6 +788,11 @@ class Operator:
                 return self + other.args[0] - other.args[1]
             if isinstance(other, OpNeg):
                 return self - other.args[0]
+            if isinstance(self, OpNeg):
+                if isinstance(self.args[0], OpInt) and isinstance(other, OpInt):
+                    return OpInt(other.val - self.args[0].val)
+                if self.args[0] == other:
+                    return OpInt(0)
             return OpAdd(args=[self, other])
         return NotImplemented
 
@@ -898,6 +903,8 @@ class Operator:
                 return self - other.args[0] + other.args[1]
             if isinstance(other, OpNeg):
                 return self + other.args[0]
+            if isinstance(self, OpNeg) and isinstance(self.args[0], OpInt) and isinstance(other, OpInt):
+                return OpInt(- self.args[0].val - other.val)
             return OpSub(args=[self, other])
         return NotImplemented
 
@@ -2500,9 +2507,33 @@ class OpRange(Operator):
     def strict_in(self, other) -> bool:
         if other is None:
             return False
-        if isinstance(other, OpRange):
-            raise NotImplementedError
         i0, i1, i2 = self
+        if isinstance(other, OpRange):
+            i2 = i2.get_int() if i2 is not None else None
+            if i2 is not None and abs(i2) != 1:
+                return False
+            j0, j1, j2 = other
+            j2 = j2.get_int() if j2 is not None else None
+            if j2 is not None and abs(j2) != 1:
+                return False
+            if i2 == -1:
+                i0, i1 = i1, i0
+            if j2 == -1:
+                j0, j1 = j1, j0
+            if j0 is None and i0 is not None:
+                return False
+            if j1 is None and i1 is not None:
+                return False
+            if i0 is not None and j0 is not None:
+                d0 = (i0 - j0).get_int()
+                if d0 is None or d0 > 0:
+                    return False
+            if i1 is not None and j1 is not None:
+                d1 = (j1 - i1).get_int()
+                if d1 is None or d1 > 0:
+                    return False
+            return True
+
         if i0 == other:
             return True
         if i1 == other and (i2 is None or AryIndex._get_int(i2) == 1):
