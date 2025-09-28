@@ -7049,6 +7049,7 @@ class OmpDirective(Node):
                                 delta_new = delta_new1 if delta_new1 is not None else delta_new2
                         else:
                             # Not Implemented yet
+                            # print(1)
                             raise ConvertToSerial
                     else:
                         delta_new = (rhs - do_index).get_int()
@@ -7059,6 +7060,7 @@ class OmpDirective(Node):
                         for var, delta in delta_vars:
                             if lhsname == var.name:
                                 if delta_new is not delta:
+                                   # print(2)
                                    raise ConvertToSerial
                                 found = True
                         if not found:
@@ -7067,6 +7069,7 @@ class OmpDirective(Node):
                         if lhs in [v[0] for v in delta_vars]:
                             #print(node)
                             #print(delta_vars)
+                            # print(3)
                             raise ConvertToSerial
                     return (delta_vars, ary_vars)
                 if lhsname.endswith(AD_SUFFIX): # for ary_vars
@@ -7079,9 +7082,11 @@ class OmpDirective(Node):
                             ary_vars[lhsname] = [index]
                     return (delta_vars, ary_vars)
             if isinstance(node, BranchBlock):
+                cond_list = []
                 for cond_new, block in node.cond_blocks:
                     if isinstance(cond_new, List): # select case
                         # Not implemented yet
+                        # print(4)
                         raise ConvertToSerial
                     elif isinstance(cond_new, OpLogic):
                         lhs_cond = cond_new.args[0]
@@ -7098,9 +7103,19 @@ class OmpDirective(Node):
                                 rhs_cond = lhs_cond - rhs_cond + do_index
                                 cond = OpLogic("==", [do_index, rhs_cond])
                         else:
-                            pass # todo for >, >=, <, <=, .gt., .ge., .lt., and .le
+                            if do_index in lhs_cond.collect_vars() or do_index in rhs_cond.collect_vars():
+                                # todo for >, >=, <, <=, .gt., .ge., .lt., and .le
+                                cond = OpLogic(cond_new.op, [lhs_cond, rhs_cond])
+                            else:
+                                cond = cond_new
                     else:
-                        raise RuntimeError(f"Unexpected error: {type(cond)} {cond}")
+                        if cond_new is None: # else
+                            cond = OpNot([reduce(lambda x, y: x & y, cond_list)])
+                        elif do_index in cond_new.collect_vars():
+                            raise RuntimeError(f"Unexpected Error: {cond_new}")
+                        else:
+                            cond = cond_new
+                    cond_list.append(cond)
                     delta_vars, ary_vars = _collect_data(block, delta_vars, ary_vars, do_index, do_range, cond)
                 return (delta_vars, ary_vars)
             for child in node.iter_children():
@@ -7124,11 +7139,15 @@ class OmpDirective(Node):
                         if delta_new is None:
                             delta_new = _infer_modulo_delta(dim)
                         if delta_new is None:
-                            raise ConvertToSerial
+                            if i == idim or do_index in dim.collect_vars():
+                                # print(5)
+                                raise ConvertToSerial
+                            continue
                         max_delta = max(max_delta, abs(delta_new))
                         if idim is None:
                             idim = i
                         elif i is not idim:
+                            # print(6)
                             raise ConvertToSerial
                         deltas.add(delta_new)
                 if idim is not None and len(deltas) > 1:
@@ -7169,9 +7188,9 @@ class OmpDirective(Node):
                 lhs = node.lhs
                 rhs = node.rhs
                 lhsname = lhs.name
-                if lhsname not in private_varnames:
-                    private_varnames[lhsname] = {}
                 if lhsname in private_vars:
+                    if lhsname not in private_varnames:
+                        private_varnames[lhsname] = {}
                     if not lhsname.endswith(AD_SUFFIX):
                         nodes_new.append(node)
                         continue
@@ -7208,6 +7227,7 @@ class OmpDirective(Node):
                     continue
 
                 if lhsname not in target_vars:
+                    # print(7)
                     raise ConvertToSerial
 
                 idim = target_vars[lhs.name]
