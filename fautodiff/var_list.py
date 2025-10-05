@@ -405,11 +405,11 @@ class IndexList:
                 if i0 is None:
                     diff0 = 0 if j0 is None else 999
                 else:
-                    diff0 = AryIndex._get_int(j0 - i0) if j0 is not None else -999
+                    diff0 = (j0 - i0).get_int() if j0 is not None else -999
                 if i1 is None:
                     diff1 = 0 if j1 is None else 999
                 else:
-                    diff1 = AryIndex._get_int(i1 - j1) if j1 is not None else -999
+                    diff1 = (i1 - j1).get_int() if j1 is not None else -999
 
                 if diff0 is None or diff1 is None:
                     # could be partially overlapped
@@ -457,7 +457,7 @@ class IndexList:
 
             # dim1 is range and dim2 is scalar
             if isinstance(dim1, OpRange):
-                if not (dim1[2] is None or AryIndex._get_int(dim1[2]) == 1):
+                if not (dim1[2] is None or dim1[2].get_int() == 1):
                     index_list.append(index)
                     if not added:
                         self.add_exclude(var_index, not_reorganize=True)
@@ -491,8 +491,8 @@ class IndexList:
                         )
                         index_list.append(index_new)
                     continue
-                d0 = AryIndex._get_int(dim1[0] - dim2)
-                d1 = AryIndex._get_int(dim2 - dim1[1])
+                d0 = (dim1[0] - dim2).get_int()
+                d1 = (dim2 - dim1[1]).get_int()
                 index_list.append(index)
                 if (isinstance(d0, int) and d0 > 0) or (isinstance(d1, int) and d1 > 0):
                     continue  # do not change
@@ -503,7 +503,7 @@ class IndexList:
 
             # dim2 is range and dim1 is scalar
             if isinstance(dim2, OpRange):
-                if not (dim2[2] is None or AryIndex._get_int(dim2[2]) == 1):
+                if not (dim2[2] is None or dim2[2].get_int() == 1):
                     index_list.append(index)
                     continue
                 if dim2.strict_in(dim1):
@@ -820,7 +820,7 @@ class IndexList:
                             self.indices.append(None)
                     else:
                         # Replay through push without further reorganize.
-                        self.push(index, True)
+                        self.push(index, not_reorganize=True)
             self.exclude = exclude
 
             if self.indices == prev_indices and self.exclude == prev_exclude:
@@ -956,7 +956,7 @@ class IndexList:
 
             # both are scalar
             if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
-                diff = AryIndex._get_int(dim1 - dim2)
+                diff = (dim1 - dim2).get_int()
                 if isinstance(diff, int):
                     if diff == 1:
                         work[i] = OpRange([dim2, dim1])
@@ -1013,7 +1013,7 @@ class IndexList:
         if isinstance(var.index, AryIndex):
             index_new = []
             for idx in var.index:
-                if isinstance(idx, OpRange) and AryIndex._get_int(idx[2]) == -1:
+                if isinstance(idx, OpRange) and idx[2] is not None and idx[2].get_int() == -1:
                     index_new.append(OpRange([idx[1], idx[0]]))
                     replaced = True
                 else:
@@ -1188,9 +1188,9 @@ class IndexList:
                     continue
 
                 if isinstance(dim1, OpRange):
-                    i0 = AryIndex._get_int(dim1[0])
-                    i1 = AryIndex._get_int(dim1[1])
-                    i2 = AryIndex._get_int(dim1[2]) if dim1[2] is not None else 1
+                    i0 = dim1[0].get_int()
+                    i1 = dim1[1].get_int()
+                    i2 = dim1[2].get_int() if dim1[2] is not None else 1
                     if not (isinstance(i2, int) and abs(i2) == 1):
                         continue  # assumes no overlap
                     if not (isinstance(dim2, OpInt) or isinstance(dim2, OpRange)):
@@ -1199,9 +1199,9 @@ class IndexList:
                         continue
 
                 if isinstance(dim2, OpRange):
-                    j0 = AryIndex._get_int(dim2[0])
-                    j1 = AryIndex._get_int(dim2[1])
-                    j2 = AryIndex._get_int(dim2[2]) if dim2[2] is not None else 1
+                    j0 = dim2[0].get_int()
+                    j1 = dim2[1].get_int()
+                    j2 = dim2[2].get_int() if dim2[2] is not None else 1
                     if not (isinstance(j2, int) and abs(j2) == 1):
                         continue  # assumes no overlap
                     if not (isinstance(dim1, OpInt) or isinstance(dim1, OpRange)):
@@ -1209,8 +1209,8 @@ class IndexList:
                         index_list.append(index)
                         continue
 
-                v1 = AryIndex._get_int(dim1)
-                v2 = AryIndex._get_int(dim2)
+                v1 = dim1.get_int()
+                v2 = dim2.get_int()
                 if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
                     # both are not range
                     if v1 is not None and v2 is not None:  # both are int
@@ -1227,10 +1227,10 @@ class IndexList:
                         continue
 
                 if isinstance(dim1, OpRange) and isinstance(dim2, OpRange):
-                    i0 = AryIndex._get_int(dim1[0])
-                    i1 = AryIndex._get_int(dim1[1])
-                    j0 = AryIndex._get_int(dim2[0])
-                    j1 = AryIndex._get_int(dim2[1])
+                    i0 = dim1[0].get_int()
+                    i1 = dim1[1].get_int()
+                    j0 = dim2[0].get_int()
+                    j1 = dim2[1].get_int()
                     if not (
                         (dim1[0] is None or isinstance(i0, int))
                         and (dim1[1] is None or isinstance(i1, int))
@@ -1262,8 +1262,8 @@ class IndexList:
                         raise RuntimeError(f"Unexpected: {type(dim2)}")
                     range_ = dim2
                     v = v1
-                i0 = AryIndex._get_int(range_[0])
-                i1 = AryIndex._get_int(range_[1])
+                i0 = range_[0].get_int()
+                i1 = range_[1].get_int()
                 if (i0 is not None and v < i0) or (i1 is not None and i1 < v):
                     continue
                 index[i] = OpInt(v)

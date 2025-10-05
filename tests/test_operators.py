@@ -189,6 +189,28 @@ class TestOperatorsBasic(unittest.TestCase):
         self.assertEqual(str(maxloc_expr.derivative(x)), "0")
         self.assertEqual(str(minloc_expr.derivative(x)), "0")
 
+    def test_replace_range_with_range(self):
+        i = OpVar("i")
+        n = OpVar("n")
+        src = OpRange([i - 1, i + 1])
+        dst = OpRange([OpInt(1), n])
+        replaced = src.replace_with(i, dst)
+        self.assertEqual(replaced[0], OpInt(0))
+        self.assertEqual(replaced[1], n + 1)
+
+    def test_replace_func_with_range(self):
+        i = OpVar("i")
+        n = OpVar("n")
+        src = OpFunc("func", [i])
+        dst = OpRange([OpInt(1), n])
+        replaced = src.replace_with(i, dst)
+        print(replaced)
+        self.assertTrue(isinstance(replaced, OpRange))
+        self.assertTrue(isinstance(replaced[0], OpFunc))
+        self.assertTrue(isinstance(replaced[1], OpFunc))
+        self.assertEqual(replaced[0].args[0], OpInt(1))
+        self.assertEqual(replaced[1].args[0], n)
+
 
 if __name__ == "__main__":
     unittest.main()
