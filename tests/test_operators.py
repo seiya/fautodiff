@@ -42,6 +42,16 @@ class TestOperatorsBasic(unittest.TestCase):
         self.assertEqual(v, OpVar("a"))
         self.assertNotEqual(v, OpVar("b"))
 
+    def test_opvar_read_only_flag(self):
+        const_var = OpVar("p", is_constant=True)
+        self.assertTrue(const_var.is_read_only)
+        intent_in_var = OpVar("x", intent="IN")
+        self.assertTrue(intent_in_var.is_read_only)
+        intent_inout_var = OpVar("y", intent="inout")
+        self.assertFalse(intent_inout_var.is_read_only)
+        explicit_var = OpVar("z", is_read_only=True)
+        self.assertTrue(explicit_var.is_read_only)
+
     def test_basic_arithmetic_simplify(self):
         x = OpVar("x", var_type=VarType("real"))
         y = OpVar("y")

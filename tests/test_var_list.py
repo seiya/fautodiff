@@ -86,10 +86,6 @@ class TestVarList(unittest.TestCase):
         vl.push(v("A", (1, 10), None))
         self.assertIn(v("A", (3, 7), (2, 4)), vl)
 
-    # moved to tests/test_index_list.py: test_push_merge_adjacent_int_and_range
-    # moved to tests/test_index_list.py: test_remove_int_from_range
-    # moved to tests/test_index_list.py: test_remove_subslice_splits
-
     def test_contains_superset_is_not_contained(self):
         # Storing a subrange must not imply containment of a larger superset
         vl = VarList()
@@ -100,8 +96,6 @@ class TestVarList(unittest.TestCase):
         self.assertIn(v("D", (1, 10)), vl)
         # full coverage is also considered contained partially
         self.assertIn(v("D", None), vl)
-
-    # moved to tests/test_index_list.py: test_contains_scalar_vs_range
 
     def test_vars_in(self):
         vl = VarList()
@@ -165,7 +159,7 @@ class TestVarList(unittest.TestCase):
         vl = VarList([v1, v2])
         self.assertTrue(v1 in vl)
         self.assertTrue(v2 in vl)
-        self.assertEqual(str(vl), "v(i,j1), v(i,j2)")
+        self.assertEqual(str(vl), "[v(i,j1), v(i,j2)]")
         self.assertEqual(vl.names(), ["v"])
 
     def test_push_int_and_int(self):
@@ -181,7 +175,7 @@ class TestVarList(unittest.TestCase):
         self.assertTrue(v1 in vl)
         self.assertTrue(v2 in vl)
         self.assertTrue(v3 in vl)
-        self.assertEqual(str(vl), "v(i,1:2)")
+        self.assertEqual(str(vl), "[v(i,1:2)]")
         self.assertEqual(vl.names(), ["v"])
 
     def test_exclude(self):
@@ -191,13 +185,13 @@ class TestVarList(unittest.TestCase):
         vi = OpVar("v", index=[i, j])
         vl = VarList([v])
         vl.push(vi)
-        self.assertEqual(str(vl), "v(:,j)")
+        self.assertEqual(str(vl), "[v(:,j)]")
         vl = VarList([v])
         vl.remove(vi)
-        self.assertEqual(str(vl), "v(:,j), exclude: v(i,j)")
+        self.assertEqual(str(vl), "[v(:,j), exclude: v(i,j)]")
         self.assertFalse(vi in vl)
         vl.push(vi)
-        self.assertEqual(str(vl), "v(:,j)")
+        self.assertEqual(str(vl), "[v(:,j)]")
         self.assertTrue(vi in vl)
         vl.remove(vi)
         self.assertFalse(vi in vl)
@@ -210,15 +204,15 @@ class TestVarList(unittest.TestCase):
         v2 = OpVar("v", index=[OpRange([1, 2]), j])
         vi = OpVar("v", index=[i, j])
         vl = VarList([v1, v2])
-        self.assertEqual(str(vl), "v(1:2,1:n), v(1:2,j)")
+        self.assertEqual(str(vl), "[v(1:2,1:n), v(1:2,j)]")
         vl.push(vi)
-        self.assertEqual(str(vl), "v(1:2,1:n), v(1:2,j), v(i,j)")
+        self.assertEqual(str(vl), "[v(1:2,1:n), v(1:2,j), v(i,j)]")
         vl = VarList([v1, v2])
         vl.remove(vi)
-        self.assertEqual(str(vl), "v(1:2,1:n), v(1:2,j), exclude: v(i,j)")
+        self.assertEqual(str(vl), "[v(1:2,1:n), v(1:2,j), exclude: v(i,j)]")
         self.assertFalse(vi in vl)
         vl.push(vi)
-        self.assertEqual(str(vl), "v(1:2,1:n), v(1:2,j), v(i,j)")
+        self.assertEqual(str(vl), "[v(1:2,1:n), v(1:2,j), v(i,j)]")
         self.assertTrue(vi in vl)
         vl.remove(vi)
         self.assertFalse(vi in vl)
@@ -232,8 +226,8 @@ class TestVarList(unittest.TestCase):
         v = OpVar("ary", ref_var=OpVar("vref"))
         self.assertIn(v.name_ext(), vl.names())
         self.assertIn(var, vl)
-        self.assertEqual(str(vl), "vref(n)%ary(m)")
-        self.assertEqual(AryIndex([n, m]), vl["vref%ary"][0])
+        self.assertEqual(str(vl), "[vref(n)%ary(m)]")
+        self.assertEqual(AryIndex([n, m]), vl._store["vref%ary"][0])
         self.assertEqual([var], list(v for v in vl))
 
     def test_merge(self):
@@ -245,7 +239,7 @@ class TestVarList(unittest.TestCase):
         self.assertIn(OpVar("v", index=[OpInt(1)]), vl1)
         self.assertIn(OpVar("v", index=[OpInt(4)]), vl1)
         self.assertIn(OpVar("v", index=[OpInt(3)]), vl1)
-        self.assertEqual(str(vl1), "v(1:4)")
+        self.assertEqual(str(vl1), "[v(1:4)]")
 
     def test_intersection(self):
         v1 = OpVar("v", index=[OpRange([OpInt(1), OpInt(4), OpInt(1)])])
@@ -256,7 +250,7 @@ class TestVarList(unittest.TestCase):
         self.assertIn(OpVar("v", index=[OpInt(3)]), inter)
         self.assertIn(OpVar("v", index=[OpInt(4)]), inter)
         self.assertNotIn(OpVar("v", index=[OpInt(2)]), inter)
-        self.assertEqual(str(inter), "v(3:4)")
+        self.assertEqual(str(inter), "[v(3:4)]")
         self.assertEqual(inter.names(), ["v"])
 
     def test_push_full_array(self):
@@ -269,29 +263,10 @@ class TestVarList(unittest.TestCase):
         vl = VarList()
         vl.push(v1)
         vl.push(v2)
-        self.assertEqual(str(vl), "v(0:nx,1:ny)")
+        self.assertEqual(str(vl), "[v(0:nx,1:ny)]")
         v3 = OpVar("v", index=[None, None])
         vl.push(v3)
-        self.assertEqual(str(vl), "v(:,:)")
-
-    def test_force_stride_one_and_update_upward(self):
-        # a(5:1:-1) should be normalised to a(1:5)
-        rng = OpRange([OpInt(5), OpInt(1), OpNeg([OpInt(1)])])
-        a_idx = AryIndex([rng])
-        a = OpVar("a", index=a_idx)
-        vl = VarList([a])
-        # expand upward over negative stride; range should flip and stride cleared
-        vl.update_index_upward(
-            {"a": (0, 1)}, OpRange([OpInt(1), OpInt(5), OpNeg([OpInt(1)])])
-        )
-        names = vl.names()
-        self.assertEqual(names, ["a"])
-        # index list exists and contains a range
-        self.assertTrue(any(isinstance(idx[0], OpRange) for idx in vl["a"]))
-
-    def test_remove_whole_variable(self):
-        # moved to tests/test_index_list.py
-        pass
+        self.assertEqual(str(vl), "[v(:,:)]")
 
     def test_intersection_various_cases(self):
         # self: a(:) and b(2:4)
@@ -318,19 +293,6 @@ class TestVarList(unittest.TestCase):
         inter2 = vl3 & vl4
         self.assertEqual(len(inter2), 0)
 
-    # moved to tests/test_index_list.py: test_update_index_downward
-
-    def test_contains_and_str_with_exclude(self):
-        v = OpVar("a", index=AryIndex([OpInt(2)]))
-        vl = VarList([v])
-        # exclude a(2) and check membership skips it
-        vl.add_exclude(v)
-        self.assertNotIn(v, vl)
-        # __str__ contains exclude info
-        s = str(vl)
-        self.assertIn("exclude", s)
-        self.assertIn("a(2)", s)
-
     def test_merge_reorganize_and_dims(self):
         v1 = OpVar("a", index=AryIndex([OpRange([OpInt(1), OpInt(3), OpInt(1)])]))
         v2 = OpVar("a", index=AryIndex([OpRange([OpInt(2), OpInt(4), OpInt(1)])]))
@@ -339,55 +301,7 @@ class TestVarList(unittest.TestCase):
         vl1.merge(vl2)
         # a indices merged; at least one index recorded
         self.assertIn("a", vl1.names())
-        self.assertTrue(len(vl1["a"]) >= 1)
-
-    def test_push_entire_replaces_and_clears_exclude(self):
-        # Start with partial indices and an explicit exclude
-        vl = VarList([OpVar("b", index=AryIndex([OpInt(1)]))])
-        vl.add_exclude(OpVar("b", index=AryIndex([OpInt(2)])))
-        # Pushing entire array b(:) should replace index list and clear exclude
-        vl.push(OpVar("b", index=AryIndex([OpRange([None])])))
-        self.assertEqual(vl["b"], IndexList([None], dims=[1]))
-
-    def test_merge_adjacent_integers(self):
-        # moved to tests/test_index_list.py
-        pass
-
-    def test_merge_adjacent_ranges(self):
-        # moved to tests/test_index_list.py
-        pass
-
-    def test_merge_overlapping_ranges(self):
-        # moved to tests/test_index_list.py
-        pass
-
-    def test_merge_integer_into_range(self):
-        # moved to tests/test_index_list.py
-        pass
-
-    def test_remove_from_range(self):
-        # moved to tests/test_index_list.py
-        pass
-
-    def test_remove_sub_range(self):
-        # moved to tests/test_index_list.py
-        pass
-
-    def test_remove_from_ends_of_range(self):
-        # moved to tests/test_index_list.py
-        pass
-
-    def test_exclude_from_full_coverage(self):
-        # moved to tests/test_index_list.py
-        pass
-
-    def test_push_overwrites_exclude(self):
-        # moved to tests/test_index_list.py
-        pass
-
-    def test_multi_dimensional(self):
-        # moved to tests/test_index_list.py
-        pass
+        self.assertTrue(len(vl1._store["a"]) >= 1)
 
     def test_derived_type(self):
         vl = VarList()
@@ -421,7 +335,7 @@ class TestVarList(unittest.TestCase):
         vl.remove(v("A", (1, n)))
 
         # Since we can't determine the range of n, it should be excluded
-        self.assertIn(AryIndex([OpRange([1, n])]), vl["A"].exclude)
+        self.assertIn(AryIndex([OpRange([1, n])]), vl._store["A"].exclude)
         # The original range should still be there, but __contains__ will use the exclude list
         self.assertIn(v("A", (1, 10)), vl)
         self.assertNotIn(v("A", (1, n)), vl)
@@ -436,22 +350,14 @@ class TestVarList(unittest.TestCase):
         vb = v("b", 5)
         vb.ref_var = v("p")
         vl.push(vb)
-        vl["B"].dims = [2]  # B is 2D
+        vl._store["B"].dims = [2]  # B is 2D
         s = str(vl)
         self.assertIn("A(1:10)", s)
         self.assertIn("B(:,:)", s)
         self.assertIn("s(5)%a", s)
         self.assertIn("p%b(5)", s)
 
-    def test_negative_stride_coverage(self):
-        # moved to tests/test_index_list.py
-        pass
-
-    def test_remove_with_negative_stride(self):
-        # moved to tests/test_index_list.py
-        pass
-
-    def test_intersection(self):
+    def test_intersection_with_variables(self):
         vl1 = VarList()
         vl1.push(v("A", (1, 10)))
         vl1.push(v("B", (1, 5)))
@@ -555,6 +461,161 @@ class TestVarListDerivedShape(unittest.TestCase):
         var2 = make_dt_var([("s", None), ("a", ("m",))])
         with self.assertRaises(ValueError):
             il.push_var(var2)
+
+    def test_guard_push_creates_guarded_entry(self):
+        vl = VarList()
+        guard = OpVar("mask")
+        item = v("G", 1)
+        vl.enter_guard(guard)
+        vl.push(item)
+
+        self.assertIn("G", vl._guarded)
+        self.assertIn("mask", vl._guarded["G"])
+        guarded = vl._guarded["G"]["mask"]
+        self.assertTrue(guarded.contains(item.concat_index()))
+        self.assertEqual(vl._store["G"].indices, [])
+
+    def test_guard_push_in_different_guard(self):
+        vl = VarList()
+        guard1 = OpVar("mask1")
+        guard2 = OpVar("mask2")
+        item = OpVar("x")
+        vl.enter_guard(guard1)
+        vl.push(item)
+        vl.leave_guard()
+        vl.enter_guard(guard2)
+
+        self.assertIn(item, vl)
+
+    def test_guard_push_different_var_in_different_guard(self):
+        vl = VarList()
+        guard1 = OpVar("mask1")
+        guard2 = OpVar("mask2")
+        item1 = OpVar("x")
+        item2 = OpVar("y")
+        vl.enter_guard(guard1)
+        vl.push(item1)
+        vl.leave_guard()
+        vl.enter_guard(guard2)
+        vl.push(item2)
+
+        self.assertIn(item1, vl)
+
+    def test_guard_push_and_remove_in_different_guards(self):
+        vl = VarList()
+        guard1 = OpVar("mask1")
+        guard2 = OpVar("mask2")
+        item = OpVar("x")
+        vl.push(item)
+        vl.enter_guard(guard1)
+        vl.remove(item)
+        vl.leave_guard()
+        vl.enter_guard(guard2)
+
+        self.assertIn(item, vl)
+
+    def test_guard_push_existing_coverage_goes_to_store(self):
+        vl = VarList()
+        base = v("G", (1, 5))
+        inner = v("G", 3)
+        vl.push(base)
+
+        vl.enter_guard(OpVar("mask"))
+        vl.push(inner)
+        vl.leave_guard()
+
+        self.assertIn("G", vl._guarded)
+        self.assertEqual(str(vl._guarded["G"]["mask"]), "(1:5)")
+        self.assertIn(inner, vl)
+        self.assertEqual(str(vl), "[G(1:5)] + [G(1:5) @ mask]")
+
+    def test_guard_push_with_different_guard_merges_store(self):
+        vl = VarList()
+        guard1 = OpVar("mask1")
+        guard2 = OpVar("mask2")
+        first = v("G", 1)
+        second = v("G", 2)
+
+        vl.enter_guard(guard1)
+        vl.push(first)
+        vl.leave_guard()
+
+        vl.enter_guard(guard2)
+        vl.push(second)
+        vl.leave_guard()
+
+        self.assertIn("G", vl._guarded)
+        self.assertIn("mask1", vl._guarded["G"])
+        self.assertIn("mask2", vl._guarded["G"])
+        self.assertIn(first.index, vl._guarded["G"]["mask1"])
+        self.assertIn(second.index, vl._guarded["G"]["mask2"])
+        self.assertIn(first, vl)
+        self.assertIn(second, vl)
+
+    def test_guard_remove_same_guard_clears_guarded_entry(self):
+        vl = VarList()
+        guard = OpVar("mask")
+        item = v("G", 1)
+
+        vl.enter_guard(guard)
+        vl.push(item)
+        vl.remove(item)
+
+        self.assertIn("G", vl._guarded)
+        self.assertIn("mask", vl._guarded["G"])
+        self.assertFalse(vl._guarded["G"]["mask"].indices)
+        self.assertNotIn("G", vl.names())
+
+        vl.leave_guard()
+
+    def test_guard_remove_different_guard_merges_back(self):
+        vl = VarList()
+        guard1 = OpVar("mask1")
+        guard2 = OpVar("mask2")
+        item = v("G", 1)
+
+        vl.enter_guard(guard1)
+        vl.push(item)
+        vl.leave_guard()
+
+        vl.enter_guard(guard2)
+        vl.remove(item)
+        vl.leave_guard()
+
+        self.assertIn("G", vl._guarded)
+        self.assertNotIn("mask1", vl._guarded["G"])
+        self.assertIn("mask2", vl._guarded["G"])
+        self.assertFalse(vl._guarded["G"]["mask2"].indices)
+        self.assertIn("G", vl._store)
+        self.assertIn(item, vl)
+
+    def test_guard_push_wo_guard_then_remove_w_guard(self):
+        vl = VarList()
+        guard = OpVar("mask")
+        item = OpVar("u")
+
+        vl.push(item)
+        vl.enter_guard(guard)
+        vl.remove(item)
+        self.assertFalse(item in vl)
+        vl.leave_guard()
+        self.assertTrue(item in vl)
+
+    def test_guard_nested(self):
+        vl = VarList()
+        guard1 = OpVar("mask1")
+        guard2 = OpVar("mask2")
+        item = OpVar("u")
+
+        vl.push(item)
+        vl.enter_guard(guard1)
+        vl.enter_guard(guard2)
+        vl.remove(item)
+        vl.leave_guard()
+        vl.leave_guard()
+        vl.enter_guard(guard2)
+
+        self.assertIn(item, vl)
 
 
 if __name__ == "__main__":

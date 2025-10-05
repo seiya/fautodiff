@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple, Union
 
-from .operators import AryIndex, Operator, OpInt, OpNeg, OpRange, OpVar
+from .operators import AryIndex, Operator, OpInt, OpNeg, OpRange, OpVar, OpTrue, OpFalse, OpLogic, OpNot
 from .var_dict import VarDict
 
 
@@ -39,6 +39,9 @@ class IndexList:
 
     def __getitem__(self, index: int) -> Optional[AryIndex]:
         return self.indices[index]
+
+    def __contains__(self, item: Optional[AryIndex]) -> bool:
+        return self.contains(item)
 
     def __str__(self) -> str:
         """Human readable representation used for debugging.
@@ -207,8 +210,8 @@ class IndexList:
         return True
 
     # --- Shared context application helper ---
-    @staticmethod
     def _apply_context_index(
+        self,
         idx: Optional[AryIndex],
         context: Optional[List[Tuple[OpVar, List[OpVar], OpRange]]],
         for_exclude: bool = False,
@@ -237,7 +240,7 @@ class IndexList:
                         slice_vars.append(v)
 
         dims_new: List[Optional[Operator]] = []
-        for dim in idx:
+        for n, dim in enumerate(idx):
             d = dim
             if d is not None:
                 replaced = False
@@ -246,6 +249,14 @@ class IndexList:
                     d_new = d.replace_with(var, rng)
                     if d_new is not d:
                         d = d_new
+                        # trimming out-of-bounds ranges to shape if known
+                        if self.shape and self.shape[n] is not None and isinstance(d, OpRange):
+                            i0 = (self.shape[n][0] - d[0]).get_int()
+                            if i0 is not None and i0 > 0:
+                                d.args[0] = self.shape[n][0]
+                            i1 = (d[1] - self.shape[n][1]).get_int()
+                            if i1 is not None and i1 > 0:
+                                d.args[1] = self.shape[n][1]
                         replaced = True
                 # If not exclude and base_var not replaced, slice other vars
                 if not for_exclude and not replaced and slice_vars:
@@ -536,76 +547,30 @@ class IndexList:
                 raise RuntimeError("Unexpected")
             # Replace base_var using shared context applicator; excludes do not
             # require the fallback ':' behaviour for other vars.
-            ex_new = IndexList._apply_context_index(ex, ctx, for_exclude=True)
-
-            # Special case: with known 1D shape and full coverage indices, removing
-            # (shape_lb+1 : shape_ub-1) should leave endpoints [lb] and [ub] in indices
-            # and no residual excludes.
-            try:
-                if (
-                    self.shape is not None
-                    and len(self.shape) == 1
-                    and len(idx_list.indices) == 1
-                    and idx_list.indices[0] is None
-                    and ex_new is not None
-                    and isinstance(ex_new[0], OpRange)
-                ):
-                    shp = self.shape[0]
-                    if isinstance(shp, OpRange):
-                        s0, s1 = shp[0], shp[1]
-                        e0, e1, _ = ex_new[0].ascending()
-                        if s0 is not None and s1 is not None and e0 is not None and e1 is not None:
-                            cond_lb = str(e0) == str(s0 + OpInt(1))
-                            cond_ub = str(e1) == str(s1 - OpInt(1))
-                            if cond_lb and cond_ub:
-                                idx_list.indices = [AryIndex([s0]), AryIndex([s1])]
-                                # Do not record residual excludes or perform default removal
-                                continue
-            except Exception:
-                pass
+            ex_new = self._apply_context_index(ex, ctx, for_exclude=True)
 
             # Residual of ex_new w.r.t. current indices
             if ex_new is not None:
                 residual = IndexList(indices=[ex_new])
                 for idx in idx_list.indices:
                     if idx is None:
-                        # For full coverage, keep residual exclude unless it equals full shape
-                        try:
-                            if not self._is_full_shape_index(ex_new):
-                                residual.indices = [ex_new]
-                            else:
-                                residual.indices = []
-                        except Exception:
-                            residual.indices = [ex_new]
+                        remove = False
+                        if self._is_full_shape_index(ex_new):
+                            remove = True
+                        elif self.shape is not None:
+                            remove = True
+                            for d, s in zip(ex_new, self.shape):
+                                if s is None or d == s:
+                                    continue
+                                if not s.strict_in(d):
+                                    remove = False
+                                    break
+                        if remove:
+                             residual.indices = []
                         break
                     residual.remove(idx)
                     if not residual.indices:
                         break
-                # If symbolic upper bound prevented trimming the leading edge (e.g., 1:n minus 1),
-                # synthesize 2:n when safe (i0 known integer and idx equals i0)
-                if residual.indices == [ex_new]:
-                    try:
-                        ex_dim = ex_new[0]
-                        if isinstance(ex_dim, OpRange) and (
-                            ex_dim[2] is None or AryIndex._get_int(ex_dim[2]) == 1
-                        ):
-                            i0 = ex_dim[0]
-                            i1 = ex_dim[1]
-                            if isinstance(i0, OpInt):
-                                hit_start = False
-                                for idx in idx_list.indices:
-                                    if idx is None:
-                                        continue
-                                    d = idx[0]
-                                    if isinstance(d, OpInt) and d.val == i0.val:
-                                        hit_start = True
-                                        break
-                                if hit_start:
-                                    residual.indices = [
-                                        AryIndex([OpRange([OpInt(i0.val + 1), i1])])
-                                    ]
-                    except Exception:
-                        pass
                 for r in residual.indices:
                     if r is not None and r not in new_excludes:
                         new_excludes.append(r)
@@ -616,7 +581,6 @@ class IndexList:
         # Adopt indices possibly modified by removals above
         if not idx_list.indices:
             self.indices = []
-            self.dims = []
         else:
             self.indices = list(idx_list.indices)
 
@@ -626,14 +590,13 @@ class IndexList:
         else:
             self.clear_exclude()
 
-        indices_ctx = [(base_var, vars, rng)]
         indices: List[Optional[AryIndex]] = []
         for idx in self.indices:
             if idx is None:
                 indices.append(None)
             else:
                 indices.append(
-                    IndexList._apply_context_index(idx, indices_ctx, for_exclude=False)
+                    self._apply_context_index(idx, ctx, for_exclude=False)
                 )
         self.indices = indices
         self.reorganize()
@@ -688,6 +651,10 @@ class IndexList:
           the query, remove those parts and then check the remainder against the
           stored indices.
         """
+        if not(index_item is None or isinstance(index_item, AryIndex)):
+            raise ValueError(
+                f"index_item must be None or AryIndex, not {type(index_item)}"
+            )
         # Exact exclude match short-circuits in the trivial no-context case,
         # but do not treat an entire-dimension query like AryIndex([None]) as
         # exactly equal to a partial exclude range.
@@ -702,12 +669,12 @@ class IndexList:
         index_item = self._apply_shape_index(index_item)
 
         # Apply context to the queried index and all excludes
-        q = IndexList._apply_context_index(index_item, context, for_exclude=False)
+        q = self._apply_context_index(index_item, context, for_exclude=False)
         # If shape is known, queries fully outside the shape domain are not contained
         if self.shape is not None and q is not None and not self._overlaps_shape(q):
             return False
         excludes_ctx: List[Optional[AryIndex]] = [
-            IndexList._apply_context_index(ex, context, for_exclude=True)
+            self._apply_context_index(ex, context, for_exclude=True)
             for ex in self.exclude
         ]
 
@@ -752,7 +719,7 @@ class IndexList:
 
         # Now test whether any stored index overlaps the remaining query
         for index in self.indices:
-            idx = IndexList._apply_context_index(index, context, for_exclude=False)
+            idx = self._apply_context_index(index, context, for_exclude=False)
             if idx is None:
                 # Entire coverage; we already ensured q is not fully excluded
                 return True
@@ -801,6 +768,7 @@ class IndexList:
             self.dims = list(ndims)
             return
         if len(self.dims) != len(ndims):
+            print(self.__dict__)
             raise ValueError(f"Different number of dimensions: {self.dims} {ndims}")
         for i in range(len(self.dims)):
             if self.dims[i] != ndims[i]:
@@ -818,12 +786,12 @@ class IndexList:
             self.set_shape(other.shape)
         # merge indices (preserve existing ordering where possible)
         for idx in other.indices:
-            if idx not in self.indices:
-                self.indices.append(idx if idx is None else idx.copy())
-        # merge exclude
-        for ex in other.exclude:
-            if ex not in self.exclude:
-                self.exclude.append(ex if ex is None else ex.copy())
+            self.push(idx)
+        # merge exclude (intersect with existing excludes)
+        exclude_new = IndexList(list(self.exclude)).intersect_with(IndexList(list(other.exclude))).indices
+        self.exclude = exclude_new
+        self.reorganize()
+
         # update dims compatibly
         self.update_dims_compat(other.dims)
 
@@ -857,34 +825,6 @@ class IndexList:
 
             if self.indices == prev_indices and self.exclude == prev_exclude:
                 break
-
-    def update_index_upward(self, do_index: int, rng: OpRange) -> None:
-        new_list: List[Optional[AryIndex]] = []
-        for index in self.indices:
-            if (
-                index is not None
-                and index[do_index] is not None
-                and index[do_index] in rng
-            ):
-                idx = index.copy()
-                idx[do_index] = rng
-                new_list.append(idx)
-            else:
-                new_list.append(index)
-        self.indices = new_list
-
-    def update_index_downward(
-        self, do_index: int, ndim: int, do_index_var: OpVar
-    ) -> None:
-        new_list: List[Optional[AryIndex]] = []
-        for index in self.indices:
-            if index is None:
-                idx = AryIndex([None] * ndim)
-            else:
-                idx = index.copy()
-            idx[do_index] = do_index_var
-            new_list.append(idx)
-        self.indices = new_list
 
     def push(self, var_index: Optional[AryIndex], not_reorganize: bool = False) -> None:
         """Push a raw AryIndex into this IndexList, merging/normalizing indices.
@@ -1037,16 +977,15 @@ class IndexList:
                 raise RuntimeError(f"Unexpected: {type(dim1)} {type(dim2)}")
             i0, i1 = rng[0], rng[1]
             # If scalar lies within range (including endpoints), nothing to change
-            try:
-                if rng.strict_in(scalar):
-                    found = True
-                    break
-            except Exception:
-                pass
-            diff0 = AryIndex._get_int(i0 - scalar) if i0 is not None else 999
-            diff1 = AryIndex._get_int(scalar - i1) if i1 is not None else -999
+            if rng.strict_in(scalar):
+                work[i] = rng
+                found = True
+                break
+            diff0 = (i0 - scalar).get_int() if i0 is not None else 999
+            diff1 = (scalar - i1).get_int() if i1 is not None else -999
             # Check inside
             if diff0 is not None and diff1 is not None and diff0 < 0 and diff1 < 0:
+                work[i] = rng
                 found = True
                 break
             # Check adjacency at start
@@ -1093,6 +1032,7 @@ class IndexList:
                     var_type=var.var_type.copy() if var.var_type else None,
                     ad_target=var.ad_target,
                     is_constant=var.is_constant,
+                    is_read_only=var.is_read_only,
                     ref_var=ref_var,
                 )
         return var
@@ -1343,10 +1283,6 @@ class VarList:
     understand which elements of an array are accessed.
     """
 
-    _store: Dict[str, IndexList] = field(default_factory=dict)
-    _context: List[Tuple[OpVar, List[OpVar], OpRange]] = field(default_factory=list)
-    _guard_map: Dict[str, Set[Optional[str]]] = field(default_factory=dict)
-
     def __init__(
         self,
         vars: Optional[List[OpVar]] = None,
@@ -1358,13 +1294,18 @@ class VarList:
         ----------
         vars:
             Optional initial list of variables to populate the set with.
+        context:
+            Optional context information.
         """
 
         super().__init__()
         # Internal unified store (name -> IndexList)
-        self._store = {}
-        self._context = context if context is not None else []
-        self._guard_map = {}
+        self._store: Dict[str, IndexList] = {}
+        self._context: List[Tuple[OpVar, List[OpVar], OpRange]] = context if context is not None else []
+        self._guarded: Dict[str, Dict[str, IndexList]] = {}
+        self._current_guard: str | None = None
+        self._guards: List[str] = []
+        self._guard_dict: Dict[str, Operator] = {}
 
         # Add provided variables while skipping expensive reorganisations.
         if vars is not None:
@@ -1377,24 +1318,42 @@ class VarList:
         var_list = VarList()
 
         # Deep copy the store
-        for name in self.names():
+        for name in self._store:
             var_list._store[name] = self._store[name].copy()
+        for name in self._guarded:
+            if name not in var_list._guarded:
+                var_list._guarded[name] = {}
+            for gname, guarded in self._guarded[name].items():
+                var_list._guarded[name][gname] = guarded.copy()
+        var_list._current_guard = self._current_guard
+        var_list._guards = list(self._guards)
+        for gname in self._guard_dict:
+            var_list._guard_dict[gname] = self._guard_dict[gname].deep_clone()
         var_list._context = list(self._context)
-        for name in self._guard_map:
-            var_list._guard_map[name] = set(self._guard_map[name])
         return var_list
 
     def copy_context(self) -> VarList:
         """Return a new variable list with the context copied from self"""
         new_list = VarList(context=self._context)
+        new_list._current_guard = self._current_guard
+        new_list._guards = list(self._guards)
+        for gname in self._guard_dict:
+            new_list._guard_dict[gname] = self._guard_dict[gname].deep_clone()
         return new_list
 
-    def clone(self, src: str, dst: str) -> None:
-        if src not in self._store:
-            raise ValueError(f"{src} not in the list")
-        self._store[dst] = self._store[src].copy()
-        if src in self._guard_map:
-            self._guard_map[dst] = set(self._guard_map[src])
+    def clone_var(self, src: str, dst: str) -> None:
+        found = False
+        if src in self._store:
+            self._store[dst] = self._store[src].copy()
+            found = True
+        if src in self._guarded:
+            if dst not in self._guarded:
+                self._guarded[dst] = {}
+            for gname, guraded in self._guarded[src].items():
+                self._guarded[dst][gname] = guraded.copy()
+            found = True
+        if not found:
+            raise ValueError(f"Variable not found: {src}")
 
     def push_context(self, context: Tuple[OpVar, List[OpVar], OpRange]) -> None:
         if not isinstance(context[0], OpVar):
@@ -1410,11 +1369,62 @@ class VarList:
         if len(self._context) == 0:
             raise RuntimeError("Context is empty")
         base_var, vars, range = self._context.pop()
-        for name in list(self._store.keys()):
-            il = self._store[name]
+        for _, il in self._store.items():
             il.exit_context((base_var, vars, range))
-            # drop empty entries
-            if not il.indices:
+
+        def _remove_var(guard: Operator, vars: List[OpVar]) -> Operator | None:
+            if isinstance(guard, (OpTrue, OpFalse)):
+                return guard
+            if isinstance(guard, OpNot):
+                arg = _remove_var(guard.args[0], vars)
+                if arg is None:
+                    return None
+                if arg is not guard.args[0]:
+                    return OpNot([arg])
+                return guard
+            if not isinstance(guard, OpLogic):
+                op_vars = guard.collect_vars()
+                for var in vars:
+                    if var in op_vars:
+                        return None
+                return guard
+            arg0 = _remove_var(guard.args[0], vars)
+            arg1 = _remove_var(guard.args[1], vars)
+            if arg0 is None and arg1 is None:
+                raise RuntimeError(f"Unexpected guard: {guard}")
+            if arg0 is None:
+                return arg1
+            if arg1 is None:
+                return arg0
+            if arg0 is not guard.args[0] or arg1 is not guard.args[1]:
+                return OpLogic(guard.op, [arg0, arg1])
+            return guard
+        all_vars = [base_var] + vars
+        to_remove: List[str] = []
+        for name in self._guarded:
+            for gname in list(self._guarded[name].keys()):
+                guarded = self._guarded[name][gname]
+                guarded.exit_context((base_var, vars, range))
+                guard = self._guard_dict[gname]
+                guard_new = _remove_var(guard, all_vars)
+                if guard_new is not guard: # changed
+                    # print("del in pop_content 1", name, gname)
+                    del self._guarded[name][gname]
+                    if guard_new is not None:
+                        gname_new = str(guard_new)
+                        self._guarded[name][gname_new] = guarded
+                        if gname_new not in self._guard_dict:
+                            self._guard_dict[gname_new] = guard_new
+                    if gname not in to_remove:
+                        to_remove.append(gname)
+                else:
+                    self._guarded[name][gname] = guarded
+        for gname in to_remove:
+            del self._guard_dict[gname]
+
+        # drop empty entries
+        for name in list(self._store.keys()):
+            if not self._store[name].indices:
                 del self._store[name]
 
     def __contains__(self, item: OpVar) -> bool:
@@ -1433,11 +1443,12 @@ class VarList:
         if not isinstance(item, OpVar):
             raise ValueError(f"Must be OpVar: {type(item)}")
         name = item.name_ext()
-        if not self.has_name(name):
+        il = self.get_list(name)
+        if il is None:
             return False
         index_item = item.concat_index()
         context = None if without_context else self._context
-        return self._store[name].contains(index_item, context=context)
+        return il.contains(index_item, context=context)
 
     def __str__(self) -> str:
         """Human readable representation used for debugging.
@@ -1446,52 +1457,89 @@ class VarList:
         that strings like 'v(:,:)' appear even when the internal representation
         uses ``None`` for entire coverage.
         """
-
         parts: List[str] = []
-        for name in self.names():
-            parts.extend(self._store[name].format_strings(name))
-        res = ", ".join(parts)
-
         excl_parts: List[str] = []
         for name in sorted(self._store.keys()):
-            excl_parts.extend(self._store[name].format_exclude_strings(name))
+            il = self._store[name]
+            if il.indices:
+                parts.extend(il.format_strings(name))
+            if il.exclude:
+                excl_parts.extend(il.format_exclude_strings(name))
+        res = ", ".join(parts)
         if excl_parts:
             res = f"{res}, exclude: {', '.join(excl_parts)}"
-        return res
+
+        guard: Dict[str, Tuple[List[str], List[str]]] = {}
+        for name in sorted(self._guarded.keys()):
+            for gname, guarded in self._guarded[name].items():
+                if gname not in guard:
+                    guard[gname] = ([], [])
+                if guarded.indices:
+                    guard[gname][0].extend(guarded.format_strings(name))
+                if guarded.exclude:
+                    guard[gname][1].extend(guarded.format_exclude_strings(name))
+        res_total = ["[" + res + "]"]
+        for gname in sorted(guard.keys()):
+            parts = guard[gname][0]
+            excl_parts = guard[gname][1]
+            res2 = ", ".join(parts)
+            if excl_parts:
+                res2 = f"{res2}, exclude: {', '.join(excl_parts)}"
+            res2 = "[" + res2 + " @ " + str(gname) + "]"
+            res_total.append(res2)
+        return " + ".join(res_total)
 
     def __len__(self) -> int:
         """Return number of variable names tracked."""
-
         return len(self.names())
 
-    def __getitem__(self, name: str) -> IndexList:
+    def get_list(self, name: str) -> IndexList | None:
         """Return index list for ``name``."""
-
-        return self._store[name]
-
-    def __setitem__(self, name: str, item: IndexList) -> None:
-        if not isinstance(item, IndexList):
-            raise ValueError(f"item must be IndexList: {type(item)}")
-        self._store[name] = item
+        if self._current_guard is not None:
+            if name in self._guarded and self._current_guard in self._guarded[name]:
+                return self._guarded[name][self._current_guard]
+        res: IndexList | None = None
+        if name in self._store:
+            res = self._store[name].copy()
+        if name in self._guarded:
+            for guarded in self._guarded[name].values():
+                if res is None:
+                    res = guarded.copy()
+                else:
+                    res.merge_from(guarded)
+        return res
 
     def __iter__(self) -> Iterator[OpVar]:
         """Iterate over stored variables as ``OpVar`` objects."""
         for name in self.names():
-            yield from self._store[name].iter_opvars(name)
+            il = self.get_list(name)
+            if il is not None:
+                yield from il.iter_opvars(name)
 
-    # --- New public API over unified store ---
+    def get_vars(self, name: str) -> List[OpVar]:
+        """Return a list of stored variables for ``name``."""
+        il = self.get_list(name)
+        if il is None:
+            return []
+        return [var for var in il.iter_opvars(name)]
+
     def names(self) -> List[str]:
         """Return a sorted list of variable names currently stored."""
-        out: List[str] = []
-        for name in sorted(self._store.keys()):
-            il = self._store[name]
-            if il.indices:
-                out.append(name)
-        return out
+        names: List[str] = []
+        names = [name for name in self._store]
+        names.extend([name for name in self._guarded if name not in names])
+        names_new: list[str] = []
+        for name in names:
+            il = self.get_list(name)
+            if il is not None and il.indices:
+                names_new.append(name)
+        return sorted(names_new)
 
     def has_name(self, name: str) -> bool:
-        il = self._store.get(name)
-        return bool(il and il.indices)
+        il = self.get_list(name)
+        if il is not None and il.indices:
+            return True
+        return False
 
     def dims(self, name: str) -> List[int]:
         return self._store[name].dims
@@ -1499,57 +1547,48 @@ class VarList:
     def remove_name(self, name: str) -> None:
         if name in self._store:
             del self._store[name]
-        if name in self._guard_map:
-            del self._guard_map[name]
-
-    def get_vars(self, name: str) -> List[OpVar]:
-        return [var for var in self._store[name].iter_opvars(name)]
-
-    def _get_op(self, op: Optional[Union[Operator, int]]) -> Optional[Operator]:
-        """Resolve variables from context and normalise integers to OpInt."""
-        if isinstance(op, int):
-            return OpInt(op)
-        if op is None:
-            return None
-        for var, range in self._context.items():
-            op = op.replace_with(var, range)
-        return op
-
-    def _update_dims(self, name: str, ndims: List[int]):
-        """Update stored dimension information for ``name``."""
-
-        if name not in self._store:
-            self._store[name] = IndexList()
-        il = self._store[name]
-        if not il.get_dims():
-            il.set_dims(ndims)
-        else:
-            il.update_dims_compat(ndims)
+        if name in self._guarded:
+            # print("del in remove_name", name)
+            del self._guarded[name]
 
     def merge(self, other: VarList) -> None:
         """Merge variables from ``other`` into this list."""
 
         if not isinstance(other, VarList):
-            raise ValueError(f"Must be VarList: {type(other)}")
+            raise ValueError(f"other must be VarList: {type(other)}")
 
         # Per-name merge via IndexList.merge_from + reorganize
-        for name in other._store.keys():
+        for name in other._store:
             src = other._store[name]
             if name not in self._store:
-                self._store[name] = IndexList()
+                self._store[name] = IndexList(dims=list(src.dims))
             dst = self._store[name]
             dst.merge_from(src)
-            # Normalise per-name store
-            dst.reorganize()
-            if name in other._guard_map:
-                guards = self._guard_map.setdefault(name, set())
-                guards.update(other._guard_map[name])
-        for name in other._guard_map.keys():
-            if name not in self._store:
-                continue
-            guards = self._guard_map.setdefault(name, set())
-            guards.update(other._guard_map[name])
-            self._normalize_guards(name)
+        for name in other._guarded:
+            if name in self._guarded:
+                for gname, guarded in other._guarded[name].items():
+                    if gname not in self._guarded[name]:
+                        self._guarded[name][gname] = guarded.copy()
+                        if gname not in self._guard_dict:
+                            self._guard_dict[gname] = other._guard_dict[gname].deep_clone()
+                    else:
+                        self._guarded[name][gname].merge_from(guarded)
+            else:
+                self._guarded[name] = {}
+                for gname, guarded in other._guarded[name].items():
+                    self._guarded[name][gname] = guarded.copy()
+                    if gname not in self._guard_dict:
+                        self._guard_dict[gname] = other._guard_dict[gname].deep_clone()
+
+        # Merge current_guard
+        if self._current_guard is not None:
+            if other._current_guard is not None and self._current_guard != other._current_guard:
+                raise RuntimeError("current_guard is not consistent")
+        elif other._current_guard is not None:
+            gname = other._current_guard
+            self._current_guard = gname
+            if gname not in self._guard_dict:
+                self._guard_dict[gname] = other._guard_dict[gname].deep_clone()
 
         # Merge context
         for i, cont in enumerate(other._context):
@@ -1565,108 +1604,116 @@ class VarList:
                 if var not in self._context[i][1]:
                     self._context[i][1].append(var)
 
+    def enter_guard(self, guard: Operator) -> None:
+        self._guards.append(self._current_guard)
+        if self._current_guard is not None:
+            guard = OpLogic(".and.", [self._guard_dict[self._current_guard], guard])
+        self._current_guard = str(guard)
+        if self._current_guard not in self._guard_dict:
+            self._guard_dict[self._current_guard] = guard.deep_clone()
+
+    def leave_guard(self) -> None:
+        self._current_guard = self._guards.pop()
+
     # _force_stride_one moved to IndexList
     def push(self, var: OpVar, not_reorganize: bool = False) -> None:
         """Add ``var`` to the list, merging overlapping indices."""
 
         if not isinstance(var, OpVar):
             raise ValueError(f"Must be OpVar: {type(var)}")
-
         if var.name == var.macro_name:
             return
 
         name = var.name_ext()
-        # Update dims info
+        dims = var.ndims_ext()
+        index = var.concat_index()
+
+        # Update dims and shape info
         if name not in self._store:
-            self._store[name] = IndexList()
-        (
-            self._store[name].update_dims_compat(var.ndims_ext())
-            if self._store[name].dims
-            else self._store[name].set_dims(var.ndims_ext())
-        )
-        # Delegate push to IndexList
-        il = self._store[name]
-        il.push_var(var, not_reorganize=not_reorganize)
-        guards = self._guard_map.setdefault(name, {None})
-        if not guards:
-            self._guard_map[name] = {None}
+            self._store[name] = IndexList(dims=list(dims))
         else:
-            self._normalize_guards(name)
-
-    def set_guards(self, name: str, guards: Set[Optional[str]]) -> None:
-        if name not in self._store:
-            raise ValueError(f"{name} not in the list")
-        if not guards:
-            self._guard_map[name] = {None}
-        else:
-            self._guard_map[name] = set(guards)
-        self._normalize_guards(name)
-
-    def get_guards(self, name: str) -> Set[Optional[str]]:
-        if name not in self._guard_map or not self._guard_map[name]:
-            return {None}
-        return set(self._guard_map[name])
-
-    def apply_guard(self, guard: Optional[str]) -> None:
-        """Record that current requirements occur under ``guard``."""
-
-        if guard is None:
-            return
-        for name in list(self._store.keys()):
-            guards = self._guard_map.setdefault(name, {None})
-            if guards == {None}:
-                self._guard_map[name] = {guard}
+            if self._store[name].dims:
+                self._store[name].update_dims_compat(dims)
             else:
-                guards = set(guards)
-                guards.add(guard)
-                self._guard_map[name] = guards
-            self._normalize_guards(name)
+                self._store[name].set_dims(dims)
+        self._store[name]._ensure_or_set_shape_from_var(var)
+
+        # Delegate push to IndexList
+        if self._current_guard is None:
+            self._store[name].push_var(var, not_reorganize=not_reorganize)
+            if name in self._guarded:
+                for gname, guarded in self._guarded[name].items():
+                    guarded.push_var(var, not_reorganize=not_reorganize)
+            return
+        found = False
+        if name not in self._guarded:
+            self._guarded[name] = {}
+        else:
+            for gname in list(self._guarded[name].keys()):
+                guarded = self._guarded[name][gname]
+                if gname == self._current_guard:
+                    guarded.push_var(var, not_reorganize=not_reorganize)
+                    found = True
+                    continue
+                if not guarded or guarded.contains(index, self._context):
+                    if guarded:
+                        self._store[name].merge_from(guarded)
+                    # print("del in push", name, gname)
+                    del self._guarded[name][gname]
+        if not found:
+            guarded = self._store[name].copy()
+            guarded.push_var(var, not_reorganize=not_reorganize)
+            self._guarded[name][self._current_guard] = guarded
 
     def remove(self, var) -> None:
         """Remove ``var`` from the list, splitting ranges as needed."""
 
         if not isinstance(var, OpVar):
             raise ValueError("Must be OpVar")
-
         if var.name == var.macro_name:
             return
 
         name = var.name_ext()
-        if name not in self._store:
+        index = var.concat_index()
+
+        if name not in self._store and name not in self._guarded:
             return
-        self._store[name].remove_var(var)
+
+        # Delegate remove to IndexList
+        if self._current_guard is None:
+            if name in self._store:
+                self._store[name].remove_var(var)
+            if name in self._guarded:
+                for guarded in self._guarded[name].values():
+                    guarded.remove_var(var)
+        else:
+            if name not in self._guarded:
+                self._guarded[name] = {}
+            found = False
+            for gname in list(self._guarded[name].keys()):
+                guarded = self._guarded[name][gname]
+                if gname == self._current_guard:
+                    guarded.remove_var(var)
+                    found = True
+                    continue
+                if guarded.contains(index, self._context):
+                    if name in self._store:
+                        self._store[name].merge_from(guarded)
+                    else:
+                        self._store[name] = guarded
+                    # print("del in remove 1", name, gname)
+                    del self._guarded[name][gname]
+            if not found:
+                guarded = self._store[name].copy()
+                guarded.remove_var(var)
+                self._guarded[name][self._current_guard] = guarded
+
         # cleanup if empty
-        if not self._store[name].indices:
+        if name in self._guarded and not self._guarded[name]:
+            # print("del in remove 2", name)
+            del self._guarded[name]
+        if name in self._store and not self._store[name].indices and name not in self._guarded:
             del self._store[name]
-            if name in self._guard_map:
-                del self._guard_map[name]
-
-    def _normalize_guards(self, name: str) -> None:
-        guards = self._guard_map.get(name)
-        if guards is None:
-            return
-        guards = {g for g in guards if g is not None} or ({None} if None in guards else set())
-        if not guards:
-            guards = {None}
-        self._guard_map[name] = guards
-
-    def add_exclude(self, var: OpVar):
-        """Mark ``var`` as excluded from the list."""
-
-        name = var.name_ext()
-        if name not in self._store:
-            self._store[name] = IndexList()
-        (
-            self._store[name].update_dims_compat(var.ndims_ext())
-            if self._store[name].dims
-            else self._store[name].set_dims(var.ndims_ext())
-        )
-        var_index = var.concat_index()
-        if var_index is None:
-            raise ValueError("index must not be None for exclude")
-        il = self._store[name]
-        if var_index not in il.exclude:
-            il.exclude.append(var_index)
 
     def __and__(self, other: VarList) -> VarList:
         """Return intersection of this list with ``other``."""
@@ -1677,45 +1724,13 @@ class VarList:
         var_list = VarList()
 
         for name in other.names():
-            if not self.has_name(name):
+            il_self = self.get_list(name)
+            if il_self is None or not il_self.indices:
                 continue
-            left = self._store[name]
-            right = other._store[name]
-            inter = left.intersect_with(right)
+            il_other = other.get_list(name)
+            if il_other is None or not il_other.indices:
+                continue
+            inter = il_self.intersect_with(il_other)
             if inter.indices:
                 var_list._store[name] = inter
         return var_list
-
-    def update_index_upward(self, index_map: dict, range: OpRange) -> None:
-        """Expand indices covered by ``range`` for variables in ``index_map``."""
-
-        if range[2] is not None and isinstance(range[2], OpNeg):
-            slice = -range[2]
-            if isinstance(slice, OpInt) and slice.val == 1:
-                slice = None
-            range = OpRange([range[1], range[0], slice])
-        for name in self.names():
-            if name not in index_map:
-                continue
-            do_index, _ = index_map[name]
-            il = self._store[name]
-            # normalise negative stride
-            rng = range
-            if rng[2] is not None and isinstance(rng[2], OpNeg):
-                slice_ = -rng[2]
-                if isinstance(slice_, OpInt) and slice_.val == 1:
-                    slice_ = None
-                rng = OpRange([rng[1], rng[0], slice_])
-            il.update_index_upward(do_index, rng)
-            il.reorganize()
-
-    def update_index_downward(self, index_map: dict, do_index_var: OpVar) -> None:
-        """Replace index ``do_index`` with ``do_index_var`` for given names."""
-
-        for name in self.names():
-            if name not in index_map:
-                continue
-            do_index, ndim = index_map[name]
-            il = self._store[name]
-            il.update_index_downward(do_index, ndim, do_index_var)
-            il.reorganize()

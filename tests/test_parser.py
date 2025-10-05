@@ -324,6 +324,7 @@ class TestParser(unittest.TestCase):
         var = routine.get_var("RP")
         self.assertIsNotNone(var)
         self.assertTrue(var.is_constant)
+        self.assertTrue(var.is_read_only)
 
     def test_module_level_decls(self):
         src = textwrap.dedent(
@@ -362,7 +363,11 @@ class TestParser(unittest.TestCase):
         self.assertIsNotNone(decl)
         self.assertFalse(decl.constant)
         var = module.routines[0].get_var("c")
+        self.assertFalse(var.is_read_only)
         self.assertTrue(var.ad_target)
+        x_var = module.routines[0].get_var("x")
+        self.assertIsNotNone(x_var)
+        self.assertTrue(x_var.is_read_only)
 
     def test_parse_example_module_vars(self):
         base = Path(__file__).resolve().parents[1]
