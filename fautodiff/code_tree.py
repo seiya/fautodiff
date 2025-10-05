@@ -7198,8 +7198,7 @@ class OmpDirective(Node):
                     return None
 
                 if lhsname not in target_vars:
-                    nodes_result.append(assign_node)
-                    return None
+                    raise ConvertToSerial
 
                 idim = target_vars[lhs.name]
                 dim = lhs.index[idim]
