@@ -1325,6 +1325,7 @@ class OpVar(OpLeaf):
     intent: Optional[str] = field(default=None, repr=False)
     ad_target: Optional[bool] = field(default=None, repr=False)
     is_constant: Optional[bool] = field(default=None, repr=False)
+    is_read_only: Optional[bool] = field(default=None, repr=False)
     reference: Optional["OpVar"] = field(repr=False, default=None)
     allocatable: Optional[bool] = field(default=None, repr=False)
     pointer: Optional[bool] = field(default=None, repr=False)
@@ -1349,6 +1350,7 @@ class OpVar(OpLeaf):
         intent: Optional[str] = None,
         ad_target: Optional[bool] = None,
         is_constant: Optional[bool] = None,
+        is_read_only: Optional[bool] = None,
         allocatable: Optional[bool] = None,
         pointer: Optional[bool] = None,
         optional: Optional[bool] = None,
@@ -1385,6 +1387,7 @@ class OpVar(OpLeaf):
         self.intent = intent
         self.ad_target = ad_target
         self.is_constant = is_constant
+        self.is_read_only = is_read_only
         self.allocatable = allocatable
         self.pointer = pointer
         self.optional = optional
@@ -1395,6 +1398,13 @@ class OpVar(OpLeaf):
         self.asynchronous = asynchronous
         self.declared_in = declared_in
         self.ref_var = ref_var
+        if self.is_read_only is None:
+            if self.is_constant:
+                self.is_read_only = True
+            elif isinstance(self.intent, str):
+                self.is_read_only = self.intent.lower() == "in"
+            else:
+                self.is_read_only = False
         if self.ad_target is None and self.var_type is not None:
             typename = self.var_type.typename.lower()
             if typename.startswith(("type", "class")):
@@ -1559,6 +1569,7 @@ class OpVar(OpLeaf):
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,
+            is_read_only=self.is_read_only,
             allocatable=self.allocatable,
             pointer=self.pointer,
             optional=self.optional,
@@ -1608,6 +1619,7 @@ class OpVar(OpLeaf):
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,
+            is_read_only=self.is_read_only,
             allocatable=self.allocatable,
             pointer=self.pointer,
             optional=self.optional,
@@ -1657,6 +1669,7 @@ class OpVar(OpLeaf):
             intent=self.intent,
             ad_target=self.ad_target,
             is_constant=self.is_constant,
+            is_read_only=self.is_read_only,
             allocatable=self.allocatable,
             pointer=self.pointer,
             optional=self.optional,

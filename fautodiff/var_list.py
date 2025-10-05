@@ -1093,6 +1093,7 @@ class IndexList:
                     var_type=var.var_type.copy() if var.var_type else None,
                     ad_target=var.ad_target,
                     is_constant=var.is_constant,
+                    is_read_only=var.is_read_only,
                     ref_var=ref_var,
                 )
         return var

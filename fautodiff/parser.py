@@ -712,6 +712,7 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                 allocatable=getattr(decl, "allocatable", False),
                 pointer=getattr(decl, "pointer", False),
                 optional=getattr(decl, "optional", False),
+                intent=decl.intent,
                 declared_in=decl.declared_in,
             )
         if name in type_map:
@@ -726,6 +727,7 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                 allocatable=getattr(decl, "allocatable", False),
                 pointer=getattr(decl, "pointer", False),
                 optional=getattr(decl, "optional", False),
+                intent=decl.intent,
                 declared_in=decl.declared_in,
             )
         if name in macro_table:
@@ -781,6 +783,7 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
                 allocatable=getattr(decl, "allocatable", False),
                 pointer=getattr(decl, "pointer", False),
                 optional=getattr(decl, "optional", False),
+                intent=decl.intent,
                 declared_in=decl.declared_in,
             )
         else:  # must be function

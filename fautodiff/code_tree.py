@@ -3560,6 +3560,7 @@ class Declaration(Node):
                 asynchronous=self.asynchronous,
                 dims=(tuple(self.dims) if self.dims is not None else None),
                 dims_raw=(tuple(self.dims_raw) if self.dims_raw is not None else None),
+                intent=self.intent,
                 declared_in=self.declared_in,
             )
         else:
@@ -4228,6 +4229,7 @@ class SaveAssignment(Node):
                 var_type=self.var.var_type.copy() if self.var.var_type else None,
                 ad_target=self.var.ad_target,
                 is_constant=self.var.is_constant,
+                is_read_only=self.var.is_read_only,
                 reference=self.var,
                 allocatable=self.var.allocatable,
             )
