@@ -143,10 +143,12 @@ def _strip_sequential_omp(
             processed.append(new_node)
         return processed
     if isinstance(node, Block):
+        idx = 0
         for i, child in enumerate(list(node.iter_children())):
             nodes = _strip_sequential_omp(child, warnings)
             if len(nodes) > 1 or nodes[0] is not child:
-                node.replace_at(i, nodes)
+                node.replace_at(idx, nodes)
+                idx += len(nodes)
         return [node]
     if isinstance(node, DoAbst):
         nodes = _strip_sequential_omp(node._body, warnings)
