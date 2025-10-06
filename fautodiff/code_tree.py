@@ -7200,10 +7200,13 @@ class OmpDirective(Node):
                     return None
 
                 if lhsname not in target_vars:
-                    # print(7)
-                    # print(lhsname)
-                    # print(target_vars)
-                    raise ConvertToSerial
+                    if nhalo > 0:
+                        cond = (do_index >= range_min) & (do_index <= range_max)
+                        guard = IfBlock([(cond, Block([assign_node]))])
+                        nodes_result.append(guard)
+                    else:
+                        nodes_result.append(assign_node)
+                    return None
 
                 idim = target_vars[lhs.name]
                 dim = lhs.index[idim]
