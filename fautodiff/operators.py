@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import copy
 import re
 from dataclasses import dataclass, field
 from fractions import Fraction
-from typing import Any, ClassVar, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import Any, ClassVar, Iterable, Iterator, List, Optional, Tuple, Union, overload
 
 from .var_dict import VarDict
 
@@ -17,12 +16,17 @@ _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")  # pattern for valid variable n
 AD_SUFFIX = "_ad"
 
 
+class _Sentinel():
+    pass
+_sentinel = _Sentinel()
+
+
 @dataclass
 class Kind:
     """Representation of a Fortran kind."""
 
     var: Operator
-    val: int = field(default=None)
+    val: int | None = field(default=None)
     use_kind_keyword: bool = True
 
     def __post_init__(self):
@@ -37,9 +41,20 @@ class Kind:
             elif not isinstance(self.var, OpVar):
                 raise ValueError("val must be provided if var is not OpInt or OpVar")
 
+    def deep_clone(self) -> "Kind":
+        return Kind(
+            var = self.var.deep_clone(),
+            val = self.val,
+            use_kind_keyword = self.use_kind_keyword
+        )
+
     def copy(self) -> "Kind":
-        """Create a copy of this kind."""
-        return Kind(var=self.var, val=self.val, use_kind_keyword=self.use_kind_keyword)
+        """Create a shallow copy of this kind."""
+        return Kind(
+            var = self.var,
+            val = self.val,
+            use_kind_keyword = self.use_kind_keyword
+            )
 
     def __str__(self) -> str:
         """Return a string representation of the kind."""
@@ -75,6 +90,12 @@ class VarType:
             raise ValueError(
                 f"char_len must be a string or None: {type(self.char_len)}"
             )
+    def deep_clone(self) -> "VarType":
+        return VarType(
+            typename = self.typename,
+            kind = self.kind.deep_clone() if self.kind is not None else None,
+            char_len = self.char_len
+        )
 
     def copy(self) -> "VarType":
         return VarType(
@@ -112,7 +133,10 @@ class VarType:
         if other is None:
             return self.copy()
         if self.kind is not None and other.kind is not None:
-            kind = self.kind if self.kind.val > other.kind.val else other.kind
+            if self.kind.val is not None and other.kind.val is not None:
+                kind = self.kind if self.kind.val > other.kind.val else other.kind
+            else:
+                kind = self.kind
         else:
             kind = self.kind or other.kind
         if self.is_complex_type() and other.is_complex_type():
@@ -175,18 +199,16 @@ class AryIndex:
 
     def copy(self) -> AryIndex:
         """Create a shallow copy of this index."""
-        return AryIndex(list(self.dims) if self.dims is not None else None)
+        return AryIndex(list(self.dims))
 
     def deep_clone(self) -> "AryIndex":
         """Return a deep copy where nested operators are cloned."""
-        dims: List[Optional[Operator]] | None = None
-        if self.dims is not None:
-            dims = []
-            for dim in self.dims:
-                if isinstance(dim, Operator):
-                    dims.append(dim.deep_clone())
-                else:
-                    dims.append(dim)
+        dims: List[Optional[Operator]] = []
+        for dim in self.dims:
+            if isinstance(dim, Operator):
+                dims.append(dim.deep_clone())
+            else:
+                dims.append(dim)
         return AryIndex(dims)
 
     def __len__(self) -> int:
@@ -279,15 +301,6 @@ class AryIndex:
         return diff_dim
 
     @staticmethod
-    def _get_int(op) -> Optional[int]:
-        """Return integer value of ``op`` if it represents a literal."""
-        if isinstance(op, OpInt):
-            return op.val
-        if isinstance(op, OpNeg) and isinstance(op.args[0], OpInt):
-            return -op.args[0].val
-        return None
-
-    @staticmethod
     def check_overlap(
         index1: "AryIndex", index2: "AryIndex", context: Optional[VarDict] = None
     ) -> bool:
@@ -317,7 +330,7 @@ class AryIndex:
                 if dim1 not in dim2:
                     return False
             if not (isinstance(dim1, OpRange) or isinstance(dim2, OpRange)):
-                diff = AryIndex._get_int(dim1 - dim2)
+                diff = (dim1 - dim2).get_int()
                 if diff is not None and diff != 0:
                     return False
         return True
@@ -341,7 +354,7 @@ class AryIndex:
             if dim2 is None:
                 continue
             if not isinstance(dim1, OpRange):
-                if isinstance(dim2, OpRange) or AryIndex._get_int(dim1 - dim2) != 0:
+                if isinstance(dim2, OpRange) or (dim1 - dim2).get_int() != 0:
                     return True
                 continue
 
@@ -352,10 +365,10 @@ class AryIndex:
                     continue
                 if i0_op == dim2 or i1_op == dim2:
                     continue
-                diff = AryIndex._get_int(i0_op - dim2)
+                diff = (i0_op - dim2).get_int()
                 if diff is not None and diff > 0:
                     return True
-                diff = AryIndex._get_int(dim2 - i1_op)
+                diff = (dim2 - i1_op).get_int()
                 if diff is not None and diff > 0:
                     return True
                 continue
@@ -364,8 +377,8 @@ class AryIndex:
 
             if i0_op == j0_op and i1_op == j1_op:
                 continue
-            d0 = AryIndex._get_int(j0_op - i0_op) if i0_op is not None else 999
-            d1 = AryIndex._get_int(i1_op - j1_op) if i1_op is not None else 999
+            d0 = (j0_op - i0_op).get_int() if i0_op is not None else 999
+            d1 = (i1_op - j1_op).get_int() if i1_op is not None else 999
             if (d0 is not None and d0 < 0) or (d1 is not None and d1 < 0):
                 return True
             continue
@@ -396,13 +409,13 @@ class AryIndex:
 
             i0_op, i1_op, stride1 = dim1.ascending()
             if stride1 is not None:
-                stride1_val = AryIndex._get_int(stride1)
+                stride1_val = stride1.get_int()
                 if stride1_val is None or abs(stride1_val) != 1:
                     return False
 
             j0_op, j1_op, stride2 = dim2
             if stride2 is not None:
-                stride2_val = AryIndex._get_int(stride2)
+                stride2_val = stride2.get_int()
                 if stride2_val is None or abs(stride2_val) != 1:
                     return False
 
@@ -412,8 +425,8 @@ class AryIndex:
                 j1_op is None and i1_op is not None
             ):
                 return False
-            d0 = AryIndex._get_int(j0_op - i0_op) if i0_op is not None else 999
-            d1 = AryIndex._get_int(i1_op - j1_op) if i1_op is not None else 999
+            d0 = (j0_op - i0_op).get_int() if i0_op is not None else 999
+            d1 = (i1_op - j1_op).get_int() if i1_op is not None else 999
             if (d0 is not None and d0 >= 0) and (d1 is not None and d1 >= 0):
                 continue
             else:
@@ -456,9 +469,9 @@ class AryIndex:
         else:
             return self
 
-    def replace_with(self, src: Operator, dest: Operator) -> AryIndex:
+    def replace_with(self, src: Operator, dest: Operator) -> "AryIndex":
         updated = False
-        new_dims: List[Operator] = []
+        new_dims: List[Operator | None] = []
         for dim in self.dims:
             new_dim = dim.replace_with(src, dest) if dim is not None else None
             if new_dim is not dim:
@@ -551,46 +564,28 @@ class Operator:
 
     def deep_clone(self) -> "Operator":
         """Create a deep copy of the operator tree."""
-        clone = copy.copy(self)
         if self.args is not None:
-            clone.args = [
+            args = [
                 arg.deep_clone() if isinstance(arg, Operator) else arg
                 for arg in self.args
             ]
-        return clone
+        else:
+            args = None
+        return self.__class__(
+            args,
+            var_type = self.var_type.deep_clone() if self.var_type is not None else None,
+            macro_name = self.macro_name
+            )
 
-    def simplify(self) -> "Operator":
-        """Return a simplified operator by recursively simplifying arguments
-        and invoking the class' ``eval`` to fold constants and normalize.
+    def clone_with_args(self, args: List[Operator | None] | None) -> "Operator":
+        return self.__class__(
+            args = list(args) if args is not None else None,
+            var_type = self.var_type.deep_clone() if self.var_type is not None else None,
+            macro_name = self.macro_name
+            ).eval()
 
-        This performs a light-weight pass and relies on each operator's
-        algebra implemented in ``__add__``, ``__sub__``, etc., and ``eval``.
-        """
-        # Leaf or no-arg operators are already simplest
-        if self.args is None or len(self.args) == 0:
-            return self
-
-        # Simplify children first
-        new_args = []
-        changed = False
-        for a in self.args:
-            if isinstance(a, Operator):
-                sa = a.simplify()
-                new_args.append(sa)
-                if sa is not a:
-                    changed = True
-            else:
-                new_args.append(a)
-
-        # Try to re-evaluate with simplified args to trigger folding
-        try:
-            return type(self).eval(new_args)
-        except Exception:
-            return self.copy_with_args(new_args) if changed else self
-
-    @classmethod
-    def eval(cls, args: List[Optional[Operator]]) -> "Operator":
-        return cls(args)
+    def eval(self) -> "Operator":
+        return self
 
     def get_int(self) -> int | None:
         """Return integer value of ``op`` if it represents a literal."""
@@ -599,23 +594,6 @@ class Operator:
         if isinstance(self, OpNeg) and isinstance(self.args[0], OpInt):
             return - self.args[0].val
         return None
-
-    def copy_with_args(self, args: List[Optional[Operator]]) -> "Operator":
-        for i, arg in enumerate(args):
-            if isinstance(arg, OpRange):
-                arg_new = list(args)
-                dims = []
-                for j in range(3):
-                    if arg[j] is None:
-                        dims.append(None)
-                    else:
-                        arg_new[i] = arg.args[j]
-                        dims.append(type(self).eval(arg_new))
-                return OpRange(dims)
-
-        clone = copy.copy(self)
-        clone.args = args
-        return clone
 
     def collect_vars(
         self,
@@ -670,12 +648,24 @@ class Operator:
                 args_new.append(arg)
         if not flag:
             return self
+
         # Build a new operator from updated args (preserving OpRange lifting)
-        new_op = self.copy_with_args(args_new)
-        # And simplify the result once to fold constants and normalize
-        if isinstance(new_op, Operator):
-            return new_op.simplify()
-        return new_op
+        for i, arg in enumerate(args_new):
+            if isinstance(arg, OpRange):
+                # Op(OpRange([i:j:k])) -> OpRange([Op(i):Op(j):Op(k)])
+                dims = []
+                for j in range(3):
+                    if arg[j] is None:
+                        dims.append(None)
+                    else:
+                        arg_new = list(args_new)
+                        arg_new[i] = arg.args[j]
+                        clone = self.clone_with_args(arg_new)
+                        dims.append(clone)
+                return OpRange(dims)
+
+        clone = self.clone_with_args(args_new)
+        return clone
 
     def derivative(
         self,
@@ -1139,6 +1129,9 @@ class OpLeaf(Operator):
 
 @dataclass
 class OpNum(OpLeaf):
+    def clone_with_args(self, args) -> "OpNum":
+        return self.deep_clone()
+
     def collect_vars(
         self,
         without_index: bool = False,
@@ -1188,6 +1181,13 @@ class OpInt(OpNum):
             return -instance
         else:
             return super().__new__(cls)
+
+    def deep_clone(self) -> "OpInt":
+        return OpInt(
+            self.val,
+            kind = self.kind.deep_clone() if self.kind is not None else None,
+            target = self.target.deep_clone() if self.target is not None else None,
+        )
 
     def __reduce__(self):
         return (
@@ -1245,6 +1245,13 @@ class OpReal(OpNum):
         self.val = val
         self.expo = expo
 
+    def deep_clone(self) -> "OpReal":
+        return OpReal(
+            val = self.val,
+            kind = self.kind.deep_clone() if self.kind is not None else None,
+            expo = self.expo
+        )
+
     def __str__(self) -> str:
         if self.macro_name:
             return self.macro_name
@@ -1259,6 +1266,31 @@ class OpReal(OpNum):
             else:
                 return f"{self.val}_{kind.var}"
         return str(self.val)
+
+
+@dataclass
+class OpComplex(OpNum):
+    real: Operator = field(default=None)
+    imag: Operator = field(default=None)
+
+    def __init__(self, real: Operator, imag: Operator, kind: Optional[Kind] = None):
+        super().__init__(args=[real, imag], var_type=VarType("complex", kind=kind))
+        self.real = real
+        self.imag = imag
+        if kind is not None:
+            self.kind = kind
+
+    def deep_clone(self) -> "OpComplex":
+        return OpComplex(
+            real = self.real.deep_clone(),
+            imag = self.imag.deep_clone(),
+            kind = self.kind.deep_clone() if self.kind is not None else None
+        )
+
+    def __str__(self) -> str:
+        if self.macro_name:
+            return self.macro_name
+        return f"({self.real}, {self.imag})"
 
 
 @dataclass
@@ -1277,6 +1309,14 @@ class OpChar(OpLeaf):
         super().__init__(args=[], var_type=VarType("character"))
         self.name = name
 
+    def deep_clone(self) -> "OpChar":
+        return OpChar(
+            name = self.name
+        )
+
+    def clone_with_args(self, args) -> "OpChar":
+        return self.deep_clone()
+
     def __str__(self) -> str:
         if self.macro_name:
             return self.macro_name
@@ -1287,6 +1327,12 @@ class OpChar(OpLeaf):
 class OpTrue(OpLeaf):
     def __init__(self):
         super().__init__(args=[], var_type=VarType("logical"))
+
+    def deep_clone(self) -> "OpTrue":
+        return OpTrue()
+
+    def clone_with_args(self, args) -> "OpTrue":
+        return self.deep_clone()
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -1299,6 +1345,12 @@ class OpFalse(OpLeaf):
     def __init__(self):
         super().__init__(args=[], var_type=VarType("logical"))
 
+    def deep_clone(self) -> "OpFalse":
+        return OpFalse()
+
+    def clone_with_args(self, args) -> "OpFalse":
+        return self.deep_clone()
+
     def __str__(self) -> str:
         if self.macro_name:
             return self.macro_name
@@ -1306,34 +1358,16 @@ class OpFalse(OpLeaf):
 
 
 @dataclass
-class OpComplex(OpNum):
-    real: Operator = field(default=None)
-    imag: Operator = field(default=None)
-
-    def __init__(self, real: Operator, imag: Operator, kind: Optional[Kind] = None):
-        super().__init__(args=[real, imag], var_type=VarType("complex", kind=kind))
-        self.real = real
-        self.imag = imag
-        if kind is not None:
-            self.kind = kind
-
-    def __str__(self) -> str:
-        if self.macro_name:
-            return self.macro_name
-        return f"({self.real}, {self.imag})"
-
-
-@dataclass
 class OpVar(OpLeaf):
     name: str = field(default="")
     index: Optional[AryIndex] = None
-    dims: Optional[Tuple[Optional[Operator]]] = field(repr=False, default=None)
-    dims_raw: Optional[Tuple[str]] = field(repr=False, default=None)
+    dims: Optional[Tuple[Optional[Operator], ...]] = field(repr=False, default=None)
+    dims_raw: Optional[Tuple[str, ...]] = field(repr=False, default=None)
+    reference: Optional["OpVar"] = field(repr=False, default=None)
     intent: Optional[str] = field(default=None, repr=False)
     ad_target: Optional[bool] = field(default=None, repr=False)
     is_constant: Optional[bool] = field(default=None, repr=False)
     is_read_only: Optional[bool] = field(default=None, repr=False)
-    reference: Optional["OpVar"] = field(repr=False, default=None)
     allocatable: Optional[bool] = field(default=None, repr=False)
     pointer: Optional[bool] = field(default=None, repr=False)
     optional: Optional[bool] = field(default=None, repr=False)
@@ -1351,8 +1385,9 @@ class OpVar(OpLeaf):
         name: str,
         index: Optional[AryIndex] = None,
         var_type: Optional[VarType] = None,
-        dims: Optional[Tuple[Optional[Operator]]] = None,
-        dims_raw: Optional[Tuple[str]] = None,
+        macro_name: Optional[str] = None,
+        dims: Optional[Tuple[Optional[Operator], ...]] = None,
+        dims_raw: Optional[Tuple[str, ...]] = None,
         reference: Optional[OpVar] = None,
         intent: Optional[str] = None,
         ad_target: Optional[bool] = None,
@@ -1368,6 +1403,7 @@ class OpVar(OpLeaf):
         asynchronous: Optional[bool] = None,
         declared_in: Optional[str] = None,
         ref_var: Optional[OpVar] = None,
+        reduced_dims: Optional[List[int]] = None,
     ):
         if var_type is None:
             var_type = VarType("unknown")
@@ -1388,6 +1424,7 @@ class OpVar(OpLeaf):
                     raise ValueError(f"dims must be None or tuple of Operator: {type(dim)}")
         elif dims is not None:
             raise ValueError(f"dims must be None or tuple of Operator: {type(dims)}")
+        self.macro_name = macro_name
         self.dims = dims
         self.dims_raw = dims_raw
         self.reference = reference
@@ -1405,6 +1442,7 @@ class OpVar(OpLeaf):
         self.asynchronous = asynchronous
         self.declared_in = declared_in
         self.ref_var = ref_var
+        self.reduced_dims = reduced_dims
         if self.is_read_only is None:
             if self.is_constant:
                 self.is_read_only = True
@@ -1426,8 +1464,92 @@ class OpVar(OpLeaf):
         elif self.ad_target is None:
             self.ad_target = False
 
+    @overload
+    def clone_with(
+        self,
+        *,
+        name: Optional[str] = ...,
+        index: Optional[AryIndex] = ...,
+        var_type: Optional[VarType] = ...,
+        macro_name: Optional[str] = ...,
+        dims: Optional[Tuple[Optional["Operator"], ...]] = ...,
+        dims_raw: Optional[Tuple[str, ...]] = ...,
+        reference: Optional["OpVar"] = ...,
+        intent: Optional[str] = ...,
+        ad_target: Optional[bool] = ...,
+        is_constant: Optional[bool] = ...,
+        is_read_only: Optional[bool] = ...,
+        allocatable: Optional[bool] = ...,
+        pointer: Optional[bool] = ...,
+        optional: Optional[bool] = ...,
+        target: Optional[bool] = ...,
+        save: Optional[bool] = ...,
+        value: Optional[bool] = ...,
+        volatile: Optional[bool] = ...,
+        asynchronous: Optional[bool] = ...,
+        declared_in: Optional[str] = ...,
+        ref_var: Optional["OpVar"] = ...,
+        reduced_dims: Optional[List[int]] = ...,
+    ) -> "OpVar": ...
+    def clone_with(
+        self,
+        *,
+        name: object = _sentinel,
+        index: object = _sentinel,
+        var_type: object = _sentinel,
+        macro_name: object = _sentinel,
+        dims: object = _sentinel,
+        dims_raw: object = _sentinel,
+        reference: object = _sentinel,
+        intent: object = _sentinel,
+        ad_target: object = _sentinel,
+        is_constant: object = _sentinel,
+        is_read_only: object = _sentinel,
+        allocatable: object = _sentinel,
+        pointer: object = _sentinel,
+        optional: object = _sentinel,
+        target: object = _sentinel,
+        save: object = _sentinel,
+        value: object = _sentinel,
+        volatile: object = _sentinel,
+        asynchronous: object = _sentinel,
+        declared_in: object = _sentinel,
+        ref_var: object = _sentinel,
+        reduced_dims: object = _sentinel,
+    ) -> "OpVar":
+        return OpVar(
+            name = name if name is not _sentinel else self.name,
+            index = index if index is not _sentinel else (self.index.deep_clone() if self.index is not None else None),
+            var_type = var_type if var_type is not _sentinel else (self.var_type.deep_clone() if self.var_type is not None else None),
+            macro_name = macro_name if macro_name is not _sentinel else self.macro_name,
+            dims = dims if dims is not _sentinel else (tuple((dim.deep_clone() if dim is not None else None) for dim in self.dims) if self.dims is not None else None),
+            dims_raw = dims_raw if dims_raw is not _sentinel else (tuple(self.dims_raw) if self.dims_raw is not None else None),
+            reference = reference if reference is not _sentinel else (self.reference.deep_clone() if self.reference is not None else None),
+            intent = intent if intent is not _sentinel else self.intent,
+            ad_target = ad_target if ad_target is not _sentinel else self.ad_target,
+            is_constant = is_constant if is_constant is not _sentinel else self.is_constant,
+            is_read_only = is_read_only if is_read_only is not _sentinel else self.is_read_only,
+            allocatable = allocatable if allocatable is not _sentinel else self.allocatable,
+            pointer = pointer if pointer is not _sentinel else self.pointer,
+            optional = optional if optional is not _sentinel else self.optional,
+            target = target if target is not _sentinel else self.target,
+            save = save if save is not _sentinel else self.save,
+            value = value if value is not _sentinel else self.value,
+            volatile = volatile if volatile is not _sentinel else self.volatile,
+            asynchronous = asynchronous if asynchronous is not _sentinel else self.asynchronous,
+            declared_in = declared_in if declared_in is not _sentinel else self.declared_in,
+            ref_var = ref_var if ref_var is not _sentinel else (self.ref_var.deep_clone() if self.ref_var is not None else None),
+            reduced_dims = reduced_dims if reduced_dims is not _sentinel else (list(self.reduced_dims) if self.reduced_dims is not None else None)
+        )
+
+    def deep_clone(self) -> "OpVar":
+        return self.clone_with()
+
+    def clone_with_args(self, args) -> "OpVar":
+        return self.deep_clone()
+
     @property
-    def kind_val(self) -> Optional[str]:
+    def kind_val(self) -> Optional[int]:
         return (
             self.var_type.kind.val
             if self.var_type and self.var_type.kind is not None
@@ -1566,41 +1688,20 @@ class OpVar(OpLeaf):
             and index == self.index
         ):
             return self
-        return OpVar(
-            name=self.name,
-            index=index,
-            var_type=self.var_type.copy() if self.var_type else None,
-            dims=self.dims,
-            dims_raw=self.dims_raw,
-            reference=self.reference,
-            intent=self.intent,
-            ad_target=self.ad_target,
-            is_constant=self.is_constant,
-            is_read_only=self.is_read_only,
-            allocatable=self.allocatable,
-            pointer=self.pointer,
-            optional=self.optional,
-            target=self.target,
-            save=self.save,
-            value=self.value,
-            volatile=self.volatile,
-            asynchronous=self.asynchronous,
-            declared_in=self.declared_in,
-            ref_var=self.ref_var,
-        )
+        return self.clone_with(index=index)
 
-    def replace_with(self, src: Operator, dest: Operator) -> "OpVar":
+    def replace_with(self, src: Operator, dest: Operator) -> Operator:
         if self == src:
             return dest
         index = self.index.replace_with(src, dest) if self.index is not None else None
         if index is not self.index:
-            obj = self.deep_clone().change_index(index)
+            obj = self.change_index(index)
         else:
             obj = self
         if self.ref_var:
             ref_var = self.ref_var.replace_with(src, dest)
             if ref_var is not self.ref_var:
-                if obj is not self:
+                if obj is self:
                     obj = self.deep_clone()
                 obj.ref_var = ref_var
         return obj
@@ -1608,35 +1709,14 @@ class OpVar(OpLeaf):
     def add_suffix(self, suffix: Optional[str] = None) -> "OpVar":
         if suffix is None:
             return self
-        index = self.index
         name = f"{self.name}{suffix}"
         if self.ref_var is None:
-            if index is not None:
-                index = AryIndex(list(index.dims) if index.dims is not None else None)
             ref_var = None
         else:
             ref_var = self.ref_var.add_suffix(suffix)
-        return OpVar(
-            name,
-            index=index,
-            var_type=self.var_type.copy() if self.var_type else None,
-            dims=self.dims,
-            dims_raw=self.dims_raw,
-            reference=self.reference,
-            intent=self.intent,
-            ad_target=self.ad_target,
-            is_constant=self.is_constant,
-            is_read_only=self.is_read_only,
-            allocatable=self.allocatable,
-            pointer=self.pointer,
-            optional=self.optional,
-            target=self.target,
-            save=self.save,
-            value=self.value,
-            volatile=self.volatile,
-            asynchronous=self.asynchronous,
-            declared_in=self.declared_in,
-            ref_var=ref_var,
+        return self.clone_with(
+            name = name,
+            ref_var = ref_var
         )
 
     def is_module_var(self, mod_var_names: List[str], check_ad: bool = False) -> bool:
@@ -1658,48 +1738,15 @@ class OpVar(OpLeaf):
     def remove_suffix(self, suffix: Optional[str] = None) -> "OpVar":
         if suffix is None:
             return self
-        index = self.index
         name = self.name.removesuffix(suffix)
         if self.ref_var is None:
-            if index is not None:
-                index = AryIndex(list(index.dims) if index.dims is not None else None)
             ref_var = None
         else:
             ref_var = self.ref_var.remove_suffix(suffix)
-        return OpVar(
-            name,
-            index=index,
-            var_type=self.var_type.copy() if self.var_type else None,
-            dims=self.dims,
-            dims_raw=self.dims_raw,
-            reference=self.reference,
-            intent=self.intent,
-            ad_target=self.ad_target,
-            is_constant=self.is_constant,
-            is_read_only=self.is_read_only,
-            allocatable=self.allocatable,
-            pointer=self.pointer,
-            optional=self.optional,
-            target=self.target,
-            save=self.save,
-            value=self.value,
-            volatile=self.volatile,
-            asynchronous=self.asynchronous,
-            declared_in=self.declared_in,
-            ref_var=ref_var,
+        return self.clone_with(
+            name = name,
+            ref_var = ref_var
         )
-
-    def deep_clone(self) -> "OpVar":
-        clone = copy.copy(self)
-        if self.index is not None:
-            clone.index = self.index.deep_clone()
-        if self.dims is not None:
-            clone.dims = tuple(
-                d.deep_clone() if d is not None else None for d in self.dims
-            )
-        if self.dims_raw is not None:
-            clone.dims_raw = tuple(self.dims_raw)
-        return clone
 
     def collect_vars(
         self,
@@ -1707,7 +1754,7 @@ class OpVar(OpLeaf):
         without_refvar: bool = False,
         without_checkfunc: bool = False,
     ) -> List["OpVar"]:
-        vars = [self]
+        vars: List[OpVar] = [self]
         if (not without_index) and self.index is not None:
             for i, idx in enumerate(self.index):
                 if idx is not None and (
@@ -1792,9 +1839,8 @@ class OpNeg(OpUnary):
     OP: ClassVar[str] = "-"
     PRIORITY: ClassVar[int] = 4
 
-    @classmethod
-    def eval(cls, args: List[Operator]) -> Operator:
-        return -args[0]
+    def eval(self) -> Operator:
+        return - self.args[0]
 
     def derivative(
         self,
@@ -1842,9 +1888,8 @@ class OpAdd(OpBinary):
     OP: ClassVar[str] = "+"
     PRIORITY: ClassVar[int] = 5
 
-    @classmethod
-    def eval(cls, args: List[Operator]) -> Operator:
-        return args[0] + args[1]
+    def eval(self) -> Operator:
+        return self.args[0] + self.args[1]
 
     def derivative(
         self,
@@ -1863,9 +1908,8 @@ class OpSub(OpBinary):
     OP: ClassVar[str] = "-"
     PRIORITY: ClassVar[int] = 5
 
-    @classmethod
-    def eval(self, args: List[Operator]) -> Operator:
-        return args[0] - args[1]
+    def eval(self) -> Operator:
+        return self.args[0] - self.args[1]
 
     def derivative(
         self,
@@ -1884,9 +1928,8 @@ class OpMul(OpBinary):
     OP: ClassVar[str] = "*"
     PRIORITY: ClassVar[int] = 4
 
-    @classmethod
-    def eval(cls, args: List[Operator]) -> Operator:
-        return args[0] * args[1]
+    def eval(self) -> Operator:
+        return self.args[0] * self.args[1]
 
     def derivative(
         self,
@@ -1907,9 +1950,8 @@ class OpDiv(OpBinary):
     OP: ClassVar[str] = "/"
     PRIORITY: ClassVar[int] = 4
 
-    @classmethod
-    def eval(cls, args: List[Operator]) -> Operator:
-        return args[0] / args[1]
+    def eval(self) -> Operator:
+        return self.args[0] / self.args[1]
 
     def derivative(
         self,
@@ -1934,6 +1976,9 @@ class OpPow(OpBinary):
     OP: ClassVar[str] = "**"
     PRIORITY: ClassVar[int] = 2
 
+    def eval(self) -> Operator:
+        return self.args[0] ** self.args[1]
+
     def __str__(self) -> str:
         if self.macro_name:
             return self.macro_name
@@ -1948,10 +1993,6 @@ class OpPow(OpBinary):
             return a0
         else:
             return f"{a0}**{a1}"
-
-    @classmethod
-    def eval(cls, args: List[Operator]) -> Operator:
-        return args[0] ** args[1]
 
     def derivative(
         self,
@@ -1990,6 +2031,18 @@ class OpLogic(OpBinary):
         if not op:
             raise ValueError("op should not be empty")
         self.op = op
+
+    def deep_clone(self) -> "OpLogic":
+        return OpLogic(
+            op = self.op,
+            args = [op.deep_clone() for op in self.args]
+        )
+
+    def clone_with_args(self, args: List[Operator]) -> "OpLogic":
+        return OpLogic(
+            op = self.op,
+            args = args
+        )
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -2087,7 +2140,22 @@ class OpFunc(Operator):
             raise ValueError("name should not be empty")
         if self.args is None:
             self.args = []
+        for arg in self.args:
+            if not isinstance(arg, Operator):
+                raise ValueError(f"args must be list of Operator: {type(arg)}")
         self.name = name
+
+    def deep_clone(self) -> "OpFunc":
+        return OpFunc(
+            name = self.name,
+            args = [arg.deep_clone() for arg in self.args]
+        )
+
+    def clone_with_args(self, args: List[Operator] | None) -> "OpFunc":
+        return OpFunc(
+            name = self.name,
+            args = args
+        )
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -2311,6 +2379,22 @@ class OpFuncUser(Operator):
                 if not isinstance(arg, Operator):
                     raise TypeError(f"args[{i}] must be an Operator: {type(arg)}")
 
+    def deep_clone(self) -> "OpFuncUser":
+        return OpFuncUser(
+            name = self.name,
+            args = [arg.deep_clone() for arg in self.args],
+            intents = list(self.intents) if self.intents is not None else None,
+            var_type = self.var_type.deep_clone() if self.var_type is not None else None
+        )
+
+    def clone_with_args(self, args) -> "OpFuncUser":
+        return OpFuncUser(
+            name = self.name,
+            args = args,
+            intents = list(self.intents) if self.intents is not None else None,
+            var_type = self.var_type.deep_clone() if self.var_type is not None else None
+        )
+
     def __str__(self) -> str:
         if self.macro_name:
             return self.macro_name
@@ -2358,28 +2442,29 @@ class OpRange(Operator):
         updated = False
         if isinstance(dest, OpRange):
             range_found = False
-            for dim in self.args:
-                if dim is not None and src in dim.collect_vars():
-                    range_found = True
-                    break
-                dims.append(dim)
+            if self.args is not None:
+                for dim in self.args:
+                    if dim is not None and src in dim.collect_vars():
+                        range_found = True
+                        break
+                    dims.append(dim)
             if range_found:
-                i0, i1, i2 = self
-                j0, j1, j2 = dest
-                if i2 is not None and isinstance(i2, OpNeg):
-                    if j2 is not None and not isinstance(j2, OpNeg):
-                        j0, j1 = j1, j0
-                else:
-                    if j2 is not None and isinstance(j2, OpNeg):
-                        j0, j1 = j1, j0
+                i0, i1, i2 = self.ascending()
+                j0, j1, _ = dest.ascending()
                 i0 = i0.replace_with(src, j0)
                 i1 = i1.replace_with(src, j1)
-                return OpRange([i0, i1, i2])
+                new_range = OpRange([i0, i1, i2])
+                if i2 == self[2]:
+                    return new_range
+                else:
+                    return new_range.reverse()
         else:
-            for dim in self.args:
-                dims.append(dim.replace_with(src, dest))
-                if dims[-1] is not dim:
-                    updated = True
+            if self.args is not None:
+                for dim in self.args:
+                    dim_new = dim.replace_with(src, dest) if dim is not None else None
+                    dims.append(dim_new)
+                    if dim_new is not dim:
+                        updated = True
         if updated:
             return OpRange(dims)
         else:
@@ -2428,7 +2513,7 @@ class OpRange(Operator):
         if isinstance(inc, OpNeg) and isinstance(inc.args[0], OpInt):
             return self.reverse()
         diff = (
-            AryIndex._get_int(end - start)
+            (end - start).get_int()
             if end is not None and start is not None
             else None
         )
@@ -2486,11 +2571,11 @@ class OpRange(Operator):
             if isinstance(other[2], OpNeg):
                 j0, j1 = j1, j0
             if i0 is not None and j1 is not None:
-                d = AryIndex._get_int(i0 - j1)
+                d = (i0 - j1).get_int()
                 if d is not None and d > 0:
                     return False
             if i1 is not None and j0 is not None:
-                d = AryIndex._get_int(j0 - i1)
+                d = (j0 - i1).get_int()
                 if d is not None and d > 0:
                     return False
             return True
@@ -2536,7 +2621,7 @@ class OpRange(Operator):
 
         if i0 == other:
             return True
-        if i1 == other and (i2 is None or AryIndex._get_int(i2) == 1):
+        if i1 == other and (i2 is None or i2.get_int() == 1):
             return True
         i0, i1, _ = self.ascending()
         if i1 is not None:
@@ -2558,6 +2643,14 @@ class OpType(Operator):
     def __init__(self, name: str):
         self.name = name
         self.args = None
+
+    def deep_clone(self) -> "OpType":
+        return OpType(
+            name = self.name
+        )
+
+    def clone_with_args(self, args) -> "OpType":
+        return self.deep_clone()
 
     def __str__(self) -> str:
         if self.macro_name:
