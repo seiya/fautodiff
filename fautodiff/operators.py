@@ -2451,8 +2451,8 @@ class OpRange(Operator):
             if range_found:
                 i0, i1, i2 = self.ascending()
                 j0, j1, _ = dest.ascending()
-                i0 = i0.replace_with(src, j0)
-                i1 = i1.replace_with(src, j1)
+                i0 = i0.replace_with(src, j0) if j0 is not None else None
+                i1 = i1.replace_with(src, j1) if j1 is not None else None
                 new_range = OpRange([i0, i1, i2])
                 if i2 == self[2]:
                     return new_range

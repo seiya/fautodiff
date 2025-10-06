@@ -143,46 +143,63 @@ contains
     real, intent(in)  :: x_ad(is:ie)
     real, intent(out) :: y(is:ie)
     real, intent(out) :: y_ad(is:ie)
+    real :: work_ad
     integer :: len
     integer :: i
     integer :: in
     integer :: ip
+    real :: work
 
     len = ie - is + 1
-    !$omp parallel do private(in, ip)
+    !$omp parallel do private(in, ip, work, work_ad)
     do i = is, ie
       in = modulo(i - is - 1, len) + is
       ip = modulo(i - is + 1, len) + is
-      y_ad(i) = x_ad(i) * 2.0 / 4.0 + x_ad(in) / 4.0 + x_ad(ip) / 4.0 ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
-      y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      work_ad = x_ad(i) ! work = x(i)
+      work = x(i)
+      y_ad(i) = work_ad * (2.0 * x(i) + x(in) + x(ip)) / 4.0 + x_ad(i) * work * 2.0 / 4.0 + x_ad(in) * work / 4.0 &
+                + x_ad(ip) * work / 4.0
+        ! y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
     end do
     !$omp end parallel do
 
     return
   end subroutine stencil_loop_mod_fwd_ad
 
-  subroutine stencil_loop_mod_rev_ad(is, ie, x_ad, y_ad)
+  subroutine stencil_loop_mod_rev_ad(is, ie, x, x_ad, y_ad)
     integer, intent(in)  :: is
     integer, intent(in)  :: ie
+    real, intent(in)  :: x(is:ie)
     real, intent(inout) :: x_ad(is:ie)
     real, intent(inout) :: y_ad(is:ie)
+    real :: work_ad
+    real :: work_n1_ad
+    real :: work_p1_ad
     integer :: len
     integer :: i
     integer :: in
     integer :: ip
+    real :: work
 
     len = ie - is + 1
 
-    !$omp parallel do private(in, ip)
+    !$omp parallel do private(in, ip, work, work_ad, work_n1_ad, work_p1_ad)
     do i = ie, is, - 1
       in = modulo(i - is - 1, len) + is
       ip = modulo(i - is + 1, len) + is
-      x_ad(i) = y_ad(i) * 2.0 / 4.0 + y_ad(ip) / 4.0 + y_ad(in) / 4.0 + x_ad(i) ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      work_n1_ad = x(in)
+      work = x(i)
+      work_p1_ad = x(ip)
+      work_ad = y_ad(i) * (2.0 * x(i) + x(in) + x(ip)) / 4.0 ! y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      x_ad(i) = y_ad(i) * work * 2.0 / 4.0 + y_ad(ip) * work_p1_ad / 4.0 + y_ad(in) * work_n1_ad / 4.0 + x_ad(i)
+        ! y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      x_ad(i) = work_ad + x_ad(i) ! work = x(i)
     end do
     !$omp end parallel do
     !$omp parallel do
     do i = ie, is, - 1
-      y_ad(i) = 0.0 ! y(i) = (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      y_ad(i) = 0.0 ! y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
     end do
     !$omp end parallel do
 
@@ -373,12 +390,12 @@ contains
     real, intent(inout), allocatable :: x(:)
     real, intent(inout), allocatable :: x_ad(:)
     real, intent(inout) :: y_ad(size(x))
-    real, allocatable :: x_save_124_ad(:)
+    real, allocatable :: x_save_126_ad(:)
 
-    allocate(x_save_124_ad, mold=x)
+    allocate(x_save_126_ad, mold=x)
     !$omp parallel
     !$omp workshare
-    x_save_124_ad(:) = x(:)
+    x_save_126_ad(:) = x(:)
     !$omp end workshare
     !$omp end parallel
 
@@ -386,12 +403,12 @@ contains
     !$omp workshare
     x_ad = y_ad + x_ad ! y = x
     y_ad = 0.0 ! y = x
-    x(:) = x_save_124_ad(:)
+    x(:) = x_save_126_ad(:)
     x_ad = x_ad * 2.0 * x ! x = x**2
     !$omp end workshare
     !$omp end parallel
-    if (allocated(x_save_124_ad)) then
-      deallocate(x_save_124_ad)
+    if (allocated(x_save_126_ad)) then
+      deallocate(x_save_126_ad)
     end if
 
     return

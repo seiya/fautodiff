@@ -7038,6 +7038,7 @@ class OmpDirective(Node):
                             # print(3)
                             raise ConvertToSerial
                     return (delta_vars, ary_vars)
+
                 if lhsname.endswith(AD_SUFFIX): # for ary_vars
                     index = lhs.index
                     if index is not None and lhsname not in private_vars:
@@ -7047,6 +7048,7 @@ class OmpDirective(Node):
                         else:
                             ary_vars[lhsname] = [index]
                     return (delta_vars, ary_vars)
+
             if isinstance(node, BranchBlock):
                 cond_list = []
                 for cond_new, block in node.cond_blocks:
@@ -7161,7 +7163,7 @@ class OmpDirective(Node):
                             idx_new = do_index
                             assign = assign_node
                         else:
-                            idx_new = do_index + OpInt(i)
+                            idx_new = delta_rev[i] if i in delta_rev else do_index + OpInt(i)
                             lhs_new = lhs.replace_with(do_index, idx_new)
                             if lhs_new is lhs:
                                 lhs_new = lhs_new.deep_clone()
@@ -7198,7 +7200,13 @@ class OmpDirective(Node):
                     return None
 
                 if lhsname not in target_vars:
-                    raise ConvertToSerial
+                    if nhalo > 0:
+                        cond = (do_index >= range_min) & (do_index <= range_max)
+                        guard = IfBlock([(cond, Block([assign_node]))])
+                        nodes_result.append(guard)
+                    else:
+                        nodes_result.append(assign_node)
+                    return None
 
                 idim = target_vars[lhs.name]
                 dim = lhs.index[idim]
