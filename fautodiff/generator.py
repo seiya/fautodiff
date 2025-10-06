@@ -149,6 +149,8 @@ def _strip_sequential_omp(
             if len(nodes) > 1 or nodes[0] is not child:
                 node.replace_at(idx, nodes)
                 idx += len(nodes)
+            else:
+                idx += 1
         return [node]
     if isinstance(node, DoAbst):
         nodes = _strip_sequential_omp(node._body, warnings)
