@@ -7133,15 +7133,13 @@ class OmpDirective(Node):
             delta_rev: Dict[int, OpVar] = {}
             for var, delta in delta_vars:
                 delta_rev[delta] = var
-            for delta in list(delta_rev.keys()):
-                if - delta not in delta_rev:
-                    op = OpFunc("modulo", [do_index - delta - do_range[0], do_range[1] - do_range[0] + 1]) + do_range[0]
-                    delta_rev[- delta] = op
 
             nhalo = max_delta
             for i in range(max_delta, 0, -1):
                 if i in delta_rev:
                     nhalo -= 1
+
+            delta_varnames = [v.name for v, _ in delta_vars]
 
             clear_vars: List[str] = []
             private_varnames: Dict[str, Dict[int, str]] = {}
@@ -7155,6 +7153,21 @@ class OmpDirective(Node):
                 rhs = assign_node.rhs
                 lhsname = lhs.name
 
+                if lhsname in delta_varnames:
+                    nodes_result.append(assign_node)
+                    return None
+
+                def _idx(i: int) -> OpVar:
+                    if i == 0:
+                        return do_index
+                    if i in delta_rev:
+                        return delta_rev[i]
+                    if nhalo == 0:
+                        op = OpFunc("modulo", [do_index + OpInt(i) - do_range[0], do_range[1] - do_range[0] + 1]) + do_range[0]
+                        delta_rev[i] = op
+                        return op
+                    return do_index + OpInt(i)
+
                 if lhsname in private_vars:
                     if lhsname not in private_varnames:
                         private_varnames[lhsname] = {}
@@ -7163,24 +7176,46 @@ class OmpDirective(Node):
                             idx_new = do_index
                             assign = assign_node
                         else:
-                            idx_new = delta_rev[i] if i in delta_rev else do_index + OpInt(i)
-                            lhs_new = lhs.replace_with(do_index, idx_new)
-                            if lhs_new is lhs:
-                                lhs_new = lhs_new.deep_clone()
-                            if i in private_varnames[lhsname]:
-                                lhs_new.name = private_varnames[lhsname][i]
+                            rhs_new = rhs
+                            for vn in private_varnames:
+                                if vn == lhsname or vn in delta_varnames:
+                                    continue
+                                src = OpVar(vn)
+                                if i not in private_varnames[vn]:
+                                    print(self)
+                                    print(assign_node)
+                                    print(vn)
+                                    print(i)
+                                    print(private_varnames[vn])
+                                    raise RuntimeError(f"Unexpected Error: {private_varnames[vn]} {i}")
+                                dst = OpVar(private_varnames[vn][i])
+                                rhs_new = rhs_new.replace_with(src, dst)
+                            for ii in range(-max_delta, max_delta+1) if i < 0 else range(max_delta, -max_delta-1, -1):
+                                src = _idx(ii)
+                                dst = _idx(ii + i)
+                                rhs_new = rhs_new.replace_with(src, dst)
+                            if rhs_new is rhs:
+                                if i not in private_varnames[lhsname]:
+                                    private_varnames[lhsname][i] = lhsname
+                                continue
                             else:
-                                name_new = (
-                                    lhsname
-                                    + "_"
-                                    + ("p" if i > 0 else "n")
-                                    + str(abs(i))
-                                    + AD_SUFFIX
-                                )
-                                lhs_new.name = name_new
-                                private_varnames[lhsname][i] = name_new
-                            rhs_new = rhs.replace_with(do_index, idx_new)
-                            assign = Assignment(lhs_new, rhs_new, ad_info=assign_node.ad_info)
+                                idx_new = _idx(i)
+                                lhs_new = lhs.replace_with(do_index, idx_new)
+                                if lhs_new is lhs:
+                                    lhs_new = lhs_new.deep_clone()
+                                if i in private_varnames[lhsname]:
+                                    lhs_new.name = private_varnames[lhsname][i]
+                                else:
+                                    name_new = (
+                                        lhsname
+                                        + "_"
+                                        + ("p" if i > 0 else "n")
+                                        + str(abs(i))
+                                        + AD_SUFFIX
+                                    )
+                                    lhs_new.name = name_new
+                                    private_varnames[lhsname][i] = name_new
+                                assign = Assignment(lhs_new, rhs_new, ad_info=assign_node.ad_info)
                         if nhalo == 0:
                             nodes_result.append(assign)
                         else:
@@ -7352,7 +7387,8 @@ class OmpDirective(Node):
                 if isinstance(clause, dict) and "private" in clause:
                     for _, vnames in private_varnames.items():
                         for vn in vnames.values():
-                            clause["private"].append(vn)
+                            if vn not in clause["private"]:
+                                clause["private"].append(vn)
                     break
             nodes = [OmpDirective(
                 self.directive,
