@@ -7144,9 +7144,21 @@ class OmpDirective(Node):
             clear_vars: List[str] = []
             private_varnames: Dict[str, Dict[int, str]] = {}
 
+            def _idx_delta(i: int) -> OpVar:
+                if i == 0:
+                    return do_index
+                if i in delta_rev:
+                    return delta_rev[i]
+                if nhalo == 0:
+                    op = OpFunc("modulo", [do_index + OpInt(i) - do_range[0], do_range[1] - do_range[0] + 1]) + do_range[0]
+                    delta_rev[i] = op
+                    return op
+                return do_index + OpInt(i)
+
             def _process_assignment(
                 assign_node: Assignment,
-                nodes_result: List[Node],
+                delta: int,
+                result_nodes: List[Node],
                 ad_info_prev: Optional[str],
             ) -> Optional[str]:
                 lhs = assign_node.lhs
@@ -7154,93 +7166,86 @@ class OmpDirective(Node):
                 lhsname = lhs.name
 
                 if lhsname in delta_varnames:
-                    nodes_result.append(assign_node)
+                    result_nodes.append(assign_node)
                     return None
-
-                def _idx(i: int) -> OpVar:
-                    if i == 0:
-                        return do_index
-                    if i in delta_rev:
-                        return delta_rev[i]
-                    if nhalo == 0:
-                        op = OpFunc("modulo", [do_index + OpInt(i) - do_range[0], do_range[1] - do_range[0] + 1]) + do_range[0]
-                        delta_rev[i] = op
-                        return op
-                    return do_index + OpInt(i)
 
                 if lhsname in private_vars:
                     if lhsname not in private_varnames:
                         private_varnames[lhsname] = {}
-                    for i in range(-max_delta, max_delta + 1):
-                        if i == 0:
-                            idx_new = do_index
-                            assign = assign_node
-                        else:
-                            rhs_new = rhs
-                            for vn in private_varnames:
-                                if vn == lhsname or vn in delta_varnames:
-                                    continue
-                                src = OpVar(vn)
-                                if i not in private_varnames[vn]:
-                                    print(self)
-                                    print(assign_node)
-                                    print(vn)
-                                    print(i)
-                                    print(private_varnames[vn])
-                                    raise RuntimeError(f"Unexpected Error: {private_varnames[vn]} {i}")
-                                dst = OpVar(private_varnames[vn][i])
-                                rhs_new = rhs_new.replace_with(src, dst)
-                            for ii in range(-max_delta, max_delta+1) if i < 0 else range(max_delta, -max_delta-1, -1):
-                                src = _idx(ii)
-                                dst = _idx(ii + i)
-                                rhs_new = rhs_new.replace_with(src, dst)
-                            if rhs_new is rhs:
-                                if i not in private_varnames[lhsname]:
-                                    private_varnames[lhsname][i] = lhsname
+                    if delta == 0:
+                        idx_new = do_index
+                        assign = assign_node
+                    else:
+                        rhs_new = rhs
+                        for vn in private_varnames:
+                            if vn == lhsname or vn in delta_varnames:
                                 continue
-                            else:
-                                idx_new = _idx(i)
-                                lhs_new = lhs.replace_with(do_index, idx_new)
-                                if lhs_new is lhs:
-                                    lhs_new = lhs_new.deep_clone()
-                                if i in private_varnames[lhsname]:
-                                    lhs_new.name = private_varnames[lhsname][i]
-                                else:
-                                    name_new = (
-                                        lhsname
-                                        + "_"
-                                        + ("p" if i > 0 else "n")
-                                        + str(abs(i))
-                                        + AD_SUFFIX
-                                    )
-                                    lhs_new.name = name_new
-                                    private_varnames[lhsname][i] = name_new
-                                assign = Assignment(lhs_new, rhs_new, ad_info=assign_node.ad_info)
-                        if nhalo == 0:
-                            nodes_result.append(assign)
+                            src = OpVar(vn)
+                            if delta not in private_varnames[vn]:
+                                print(self)
+                                print(assign_node)
+                                print(vn)
+                                print(delta)
+                                print(private_varnames[vn])
+                                raise RuntimeError(f"Unexpected Error: {private_varnames[vn]} {delta}")
+                            dst = OpVar(private_varnames[vn][delta])
+                            rhs_new = rhs_new.replace_with(src, dst)
+                        for d in range(-max_delta, max_delta+1) if delta < 0 else range(max_delta, -max_delta-1, -1):
+                            src = _idx_delta(d)
+                            dst = _idx_delta(d + delta)
+                            rhs_new = rhs_new.replace_with(src, dst)
+                        if rhs_new is rhs:
+                            if delta not in private_varnames[lhsname]:
+                                private_varnames[lhsname][delta] = lhsname
+                            return None
+                        idx_new = _idx_delta(delta)
+                        lhs_new = lhs.replace_with(do_index, idx_new)
+                        if lhs_new is lhs:
+                            lhs_new = lhs_new.deep_clone()
+                        if delta in private_varnames[lhsname]:
+                            lhs_new.name = private_varnames[lhsname][delta]
                         else:
-                            if i == -nhalo:
-                                cond = idx_new >= range_min
-                            elif i == nhalo:
-                                cond = idx_new <= range_max
-                            else:
-                                cond = (idx_new >= range_min) & (idx_new <= range_max)
-                            node_new = IfBlock([(cond, Block([assign]))])
-                            nodes_result.append(node_new)
-                    if lhsname.endswith(AD_SUFFIX):
-                        for var in rhs.collect_vars(without_index=True):
-                            if var.index is not None and do_index in var.index.collect_vars():
-                                if var.name not in clear_vars:
-                                    clear_vars.append(var.name)
+                            name_new = (
+                                lhsname
+                                + "_"
+                                + ("p" if delta > 0 else "n")
+                                + str(abs(delta))
+                                + AD_SUFFIX
+                            )
+                            lhs_new.name = name_new
+                            private_varnames[lhsname][delta] = name_new
+                        assign = Assignment(lhs_new, rhs_new, ad_info=assign_node.ad_info)
+                    if nhalo == 0:
+                        result_nodes.append(assign)
+                    else:
+                        if delta == -nhalo:
+                            cond = idx_new >= range_min
+                        elif delta == nhalo:
+                            cond = idx_new <= range_max
+                        else:
+                            cond = (idx_new >= range_min) & (idx_new <= range_max)
+                        node_new = IfBlock([(cond, Block([assign]))])
+                        result_nodes.append(node_new)
+                    if delta == 0:
+                        if lhsname.endswith(AD_SUFFIX):
+                            for var in rhs.collect_vars(without_index=True):
+                                if var.index is not None and do_index in var.index.collect_vars():
+                                    if var.name not in clear_vars:
+                                        clear_vars.append(var.name)
+                        return None
+
+                if delta != 0:
+                    if lhsname in target_vars:
+                        return ad_info_local
                     return None
 
                 if lhsname not in target_vars:
                     if nhalo > 0:
                         cond = (do_index >= range_min) & (do_index <= range_max)
                         guard = IfBlock([(cond, Block([assign_node]))])
-                        nodes_result.append(guard)
+                        result_nodes.append(guard)
                     else:
-                        nodes_result.append(assign_node)
+                        result_nodes.append(assign_node)
                     return None
 
                 idim = target_vars[lhs.name]
@@ -7282,14 +7287,14 @@ class OmpDirective(Node):
                 if cond is not None:
                     assign = Assignment(lhs, rhs, assign_node.accumulate, assign_node.info, assign_node.ad_info)
                     ifblock = IfBlock([(cond, Block([assign]))])
-                    nodes_result.append(ifblock)
+                    result_nodes.append(ifblock)
                 elif (
                     assign_node.ad_info == ad_info_prev
-                    and nodes_result
-                    and isinstance(nodes_result[-1], Assignment)
-                    and nodes_result[-1].lhs == lhs
+                    and result_nodes
+                    and isinstance(result_nodes[-1], Assignment)
+                    and result_nodes[-1].lhs == lhs
                 ):
-                    prev = nodes_result[-1]
+                    prev = result_nodes[-1]
                     merged = Assignment(
                         prev.lhs,
                         prev.rhs + rhs,
@@ -7297,90 +7302,100 @@ class OmpDirective(Node):
                         prev.info,
                         prev.ad_info,
                     )
-                    nodes_result[-1] = merged
+                    result_nodes[-1] = merged
                 else:
                     assign = Assignment(lhs, rhs, assign_node.accumulate, assign_node.info, assign_node.ad_info)
-                    nodes_result.append(assign)
+                    result_nodes.append(assign)
 
                 return assign_node.ad_info
 
-            def _transform_block(block: Block, clear_nodes: List[Node]) -> List[Node]:
-                nodes_result: List[Node] = []
-                ad_info_local: Optional[str] = None
+            def _transform_node(
+                    node: Node,
+                    delta: int,
+                    result_nodes: List[Node],
+                    clear_nodes: List[Node],
+                    ad_info_local: str | None = None
+                ) -> str | None:
 
-                for child in block:
-                    if (
-                        isinstance(child, ClearAssignment)
-                        and child.lhs.name in clear_vars
-                    ):
-                        cassign = ClearAssignment(child.lhs, child.info, child.ad_info)
-                        clear_nodes.append(cassign)
-                        continue
+                if (
+                    isinstance(node, ClearAssignment)
+                    and node.lhs.name in clear_vars
+                ):
+                    clear_nodes.append(node.copy())
+                    return None
 
-                    if isinstance(child, Assignment):
-                        ad_info_local = _process_assignment(child, nodes_result, ad_info_local)
-                        continue
+                if isinstance(node, Assignment):
+                    return _process_assignment(node, delta, result_nodes, ad_info_local)
 
-                    ad_info_local = None
+                ad_info_local = None
+                idx_new = _idx_delta(delta)
 
-                    if isinstance(child, DoLoop):
-                        clear_nodes_child = []
-                        inner_nodes = _transform_block(child._body, clear_nodes=clear_nodes_child)
+                if isinstance(node, DoLoop):
+                    if delta == 0 or do_index in node.range.collect_vars():
+                        clear_nodes_child: List[Node] = []
+                        inner_nodes: List[Node] = []
+                        for child in node._body:
+                            _transform_node(child, delta, inner_nodes, clear_nodes_child)
                         loop_new = DoLoop(
                             Block(inner_nodes),
-                            child.index.deep_clone(),
-                            child.range.deep_clone(),
-                            child.label,
+                            node.index.replace_with(do_index, idx_new),
+                            node.range.replace_with(do_index, idx_new),
+                            node.label,
                         )
-                        nodes_result.append(loop_new)
-                        if clear_nodes_child:
+                        result_nodes.append(loop_new)
+                        if delta == 0 and clear_nodes_child:
                             clear_loop = DoLoop(
                                 Block(clear_nodes_child),
-                                child.index.deep_clone(),
-                                child.range.deep_clone(),
-                                child.label
+                                node.index.deep_clone(),
+                                node.range.deep_clone(),
+                                node.label
                             )
                             clear_nodes.append(clear_loop)
-                        continue
+                    return None
 
-                    if isinstance(child, BranchBlock):
-                        cond_blocks: List[Tuple[Union[Operator, Tuple[Operator]], Block]] = []
-                        for cond, blk in child.cond_blocks:
-                            if isinstance(child, SelectBlock):
-                                cond_clone = (
-                                    tuple(co.deep_clone() for co in cond)
-                                    if cond is not None
-                                    else None
-                                )
-                            else:
-                                cond_clone = cond.deep_clone() if cond is not None else None
-                            block_nodes = _transform_block(blk, clear_nodes)
-                            cond_blocks.append((cond_clone, Block(block_nodes)))
-                        if isinstance(child, SelectBlock):
-                            branch_new = SelectBlock(cond_blocks, child.expr.deep_clone(), child.select_type)
-                        elif isinstance(child, WhereBlock):
-                            branch_new = WhereBlock(cond_blocks)
-                        elif isinstance(child, IfBlock):
-                            branch_new = IfBlock(cond_blocks)
+                if isinstance(node, BranchBlock):
+                    cond_blocks: List[Tuple[Union[Operator, Tuple[Operator]], Block]] = []
+                    for cond, blk in node.cond_blocks:
+                        if isinstance(cond, tuple):
+                            cond_clone = (
+                                tuple(co.replace_with(do_index, idx_new) for co in cond)
+                                if cond is not None
+                                else None
+                            )
                         else:
-                            branch_new = child.__class__(cond_blocks)
-                        nodes_result.append(branch_new)
-                        continue
+                            cond_clone = cond.replace_with(do_index, idx_new) if cond is not None else None
+                        block_nodes: List[Node] = []
+                        for child in blk:
+                            _transform_node(child, delta, block_nodes, clear_nodes)
+                        cond_blocks.append((cond_clone, Block(block_nodes)))
+                    if isinstance(node, SelectBlock):
+                        branch_new = SelectBlock(cond_blocks, node.expr.replace_with(do_index, idx_new), node.select_type)
+                    elif isinstance(node, WhereBlock):
+                        branch_new = WhereBlock(cond_blocks)
+                    elif isinstance(node, IfBlock):
+                        branch_new = IfBlock(cond_blocks)
+                    else:
+                        raise RuntimeError(f"Unexpected error: {node}")
+                    result_nodes.append(branch_new)
+                    return None
 
-                    if isinstance(child, Block):
-                        nested = _transform_block(child, clear_nodes)
-                        nodes_result.append(Block(nested))
-                        continue
+                if isinstance(node, Block):
+                    for child in node:
+                        ad_info_local = _transform_node(child, delta, result_nodes, clear_nodes, ad_info_local)
+                    return None
 
-                    nodes_result.append(child)
+                result_nodes.append(node)
+                return None
 
-                return nodes_result
-
+            result_nodes: List[Node] = []
             clear_nodes: List[Node] = []
-            nodes_new = _transform_block(loop._body, clear_nodes=clear_nodes)
+            ad_info_local: str | None = None
+            for node in loop._body:
+                for delta in range(-max_delta, max_delta + 1):
+                    ad_info_local = _transform_node(node, delta, result_nodes, clear_nodes, ad_info_local)
 
             range_new = OpRange([range_max + nhalo, range_min - nhalo, -1])
-            loop_new = DoLoop(Block(nodes_new), do_index, range_new, loop.label)
+            loop_new = DoLoop(Block(result_nodes), do_index, range_new, loop.label)
             body_new = Block([loop_new])
             clauses = list(self.clauses)
             for clause in clauses:
