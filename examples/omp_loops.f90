@@ -69,7 +69,11 @@ contains
     do i = is, ie
       in = modulo(i - is - 1, len) + is
       ip = modulo(i - is + 1, len) + is
-      work = x(i)
+      if (x(i) > 0.0) then
+        work = x(in)
+      else
+        work = x(ip)
+      end if
       if (work >= 0.0) then
         y(i) = work * (2.0 * x(i) + x(in)) / 4.0
       else

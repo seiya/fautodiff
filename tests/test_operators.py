@@ -204,7 +204,6 @@ class TestOperatorsBasic(unittest.TestCase):
         src = OpFunc("func", [i])
         dst = OpRange([OpInt(1), n])
         replaced = src.replace_with(i, dst)
-        print(replaced)
         self.assertTrue(isinstance(replaced, OpRange))
         self.assertTrue(isinstance(replaced[0], OpFunc))
         self.assertTrue(isinstance(replaced[1], OpFunc))

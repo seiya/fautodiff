@@ -147,7 +147,7 @@ contains
   end subroutine test_stencil_loop
 
   subroutine test_stencil_loop_mod
-    real, parameter :: tol_stencil = 4.7e-4
+    real, parameter :: tol_stencil = 4.3e-3
     integer, parameter :: n = 3
     integer, parameter :: is = 1
     integer, parameter :: ie = n

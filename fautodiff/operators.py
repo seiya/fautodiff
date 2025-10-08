@@ -587,6 +587,18 @@ class Operator:
     def eval(self) -> "Operator":
         return self
 
+    def print(self) -> str:
+        if isinstance(self, OpVar):
+            return str(self)
+        if isinstance(self, OpNum):
+            return str(self.val)
+        if isinstance(self, OpUnary):
+            return f"{self.OP}({self.args[0].print()})"
+        if isinstance(self, OpBinary):
+            return f"{self.OP}({self.args[0].print()}, {self.args[1].print()})"
+        else:
+            return str(self)
+
     def get_int(self) -> int | None:
         """Return integer value of ``op`` if it represents a literal."""
         if isinstance(self, OpInt):
@@ -665,6 +677,8 @@ class Operator:
                 return OpRange(dims)
 
         clone = self.clone_with_args(args_new)
+        if not isinstance(dest, OpVar):
+            clone = clone.eval()
         return clone
 
     def derivative(
@@ -693,9 +707,9 @@ class Operator:
             if self.macro_name or other.macro_name:
                 return OpAdd(args=[self, other])
             if isinstance(self, OpInt) and self.val == 0:
-                return other
+                return other.eval()
             if isinstance(other, OpInt) and other.val == 0:
-                return self
+                return self.eval()
             if isinstance(self, OpInt) and isinstance(other, OpInt):
                 return OpInt(self.val + other.val, target=self.target, kind=self.kind)
             if (
@@ -728,10 +742,22 @@ class Operator:
                 return self.args[1] + (self.args[0] + other)
             if (
                 isinstance(self, OpAdd)
+                and isinstance(self.args[0], OpInt)
+                and isinstance(other, OpVar)
+            ):
+                return self.args[1] + other + self.args[0]
+            if (
+                isinstance(self, OpAdd)
                 and isinstance(self.args[1], OpNum)
                 and isinstance(other, OpNum)
             ):
                 return self.args[0] + (self.args[1] + other)
+            if (
+                isinstance(self, OpAdd)
+                and isinstance(self.args[1], OpInt)
+                and isinstance(other, OpVar)
+            ):
+                return self.args[0] + other + self.args[1]
             if (
                 isinstance(other, OpAdd)
                 and isinstance(other.args[0], OpNum)
@@ -740,12 +766,22 @@ class Operator:
                 return other.args[1] + (other.args[0] + self)
             if (
                 isinstance(other, OpAdd)
+                and isinstance(other.args[0], OpInt)
+                and isinstance(self, OpVar)
+            ):
+                return self + other.args[1] + other.args[0]
+            if (
+                isinstance(other, OpAdd)
                 and isinstance(other.args[1], OpNum)
                 and isinstance(self, OpNum)
             ):
                 return other.args[0] + (other.args[1] + self)
-            if isinstance(other, OpAdd):
-                return self + other.args[0] + other.args[1]
+            if (
+                isinstance(other, OpAdd)
+                and isinstance(other.args[1], OpInt)
+                and isinstance(self, OpVar)
+            ):
+                return other.args[0] + self + other.args[1]
             if (
                 isinstance(self, OpSub)
                 and isinstance(self.args[0], OpNum)
@@ -754,10 +790,22 @@ class Operator:
                 return -self.args[1] + (self.args[0] + other)
             if (
                 isinstance(self, OpSub)
+                and isinstance(self.args[0], OpInt)
+                and isinstance(other, OpVar)
+            ):
+                return -self.args[1] + other + self.args[0]
+            if (
+                isinstance(self, OpSub)
                 and isinstance(self.args[1], OpNum)
                 and isinstance(other, OpNum)
             ):
                 return self.args[0] + (other - self.args[1])
+            if (
+                isinstance(self, OpSub)
+                and isinstance(self.args[1], OpInt)
+                and isinstance(other, OpVar)
+            ):
+                return self.args[0] + other - self.args[1]
             if (
                 isinstance(other, OpSub)
                 and isinstance(other.args[0], OpNum)
@@ -766,16 +814,26 @@ class Operator:
                 return -other.args[1] + (other.args[0] + self)
             if (
                 isinstance(other, OpSub)
+                and isinstance(other.args[0], OpInt)
+                and isinstance(self, OpVar)
+            ):
+                return self - other.args[1] + other.args[0]
+            if (
+                isinstance(other, OpSub)
                 and isinstance(other.args[1], OpNum)
                 and isinstance(self, OpNum)
             ):
                 return other.args[0] + (self - other.args[1])
+            if (
+                isinstance(other, OpSub)
+                and isinstance(other.args[1], OpInt)
+                and isinstance(self, OpVar)
+            ):
+                return self + other.args[0] - other.args[1]
             if isinstance(self, OpSub) and self.args[1] == other:
                 return self.args[0]
             if isinstance(other, OpSub) and other.args[1] == self:
                 return other.args[0]
-            if isinstance(other, OpSub):
-                return self + other.args[0] - other.args[1]
             if isinstance(other, OpNeg):
                 return self - other.args[0]
             if isinstance(self, OpNeg):
@@ -783,6 +841,14 @@ class Operator:
                     return OpInt(other.val - self.args[0].val)
                 if self.args[0] == other:
                     return OpInt(0)
+            if isinstance(self, OpAdd) and isinstance(self.args[0], OpInt):
+                return self.args[1] + other + self.args[0]
+            if isinstance(self, OpAdd) and isinstance(self.args[1], OpInt):
+                return self.args[0] + other + self.args[1]
+            if isinstance(self, OpSub) and isinstance(self.args[0], OpInt):
+                return - self.args[1] + other + self.args[0]
+            if isinstance(self, OpSub) and isinstance(self.args[1], OpInt):
+                return self.args[0] + other - self.args[1]
             return OpAdd(args=[self, other])
         return NotImplemented
 
@@ -796,9 +862,9 @@ class Operator:
             if self == other:
                 return OpInt(0)
             if isinstance(self, OpInt) and self.val == 0:
-                return -other
+                return -other.eval()
             if isinstance(other, OpInt) and other.val == 0:
-                return self
+                return self.eval()
             if isinstance(self, OpInt) and isinstance(other, OpInt):
                 val = self.val - other.val
                 if val < 0:
@@ -835,10 +901,22 @@ class Operator:
                 return self.args[1] + (self.args[0] - other)
             if (
                 isinstance(self, OpAdd)
+                and isinstance(self.args[0], OpInt)
+                and isinstance(other, OpVar)
+            ):
+                return self.args[1] - other + self.args[0]
+            if (
+                isinstance(self, OpAdd)
                 and isinstance(self.args[1], OpNum)
                 and isinstance(other, OpNum)
             ):
                 return self.args[0] + (self.args[1] - other)
+            if (
+                isinstance(self, OpAdd)
+                and isinstance(self.args[1], OpInt)
+                and isinstance(other, OpVar)
+            ):
+                return self.args[0] - other + self.args[1]
             if (
                 isinstance(other, OpAdd)
                 and isinstance(other.args[0], OpNum)
@@ -847,10 +925,22 @@ class Operator:
                 return -other.args[1] + (self - other.args[0])
             if (
                 isinstance(other, OpAdd)
+                and isinstance(other.args[0], OpInt)
+                and isinstance(self, OpVar)
+            ):
+                return self - other.args[1] - other.args[0]
+            if (
+                isinstance(other, OpAdd)
                 and isinstance(other.args[1], OpNum)
                 and isinstance(self, OpNum)
             ):
                 return -other.args[0] + (self - other.args[1])
+            if (
+                isinstance(other, OpAdd)
+                and isinstance(other.args[1], OpInt)
+                and isinstance(self, OpVar)
+            ):
+                return self - other.args[0] - other.args[1]
             if isinstance(self, OpAdd) and self.args[0] == other:
                 return self.args[1]
             if isinstance(self, OpAdd) and self.args[1] == other:
@@ -869,10 +959,22 @@ class Operator:
                 return -self.args[1] + (self.args[0] - other)
             if (
                 isinstance(self, OpSub)
+                and isinstance(self.args[0], OpInt)
+                and isinstance(other, OpVar)
+            ):
+                return -self.args[1] - other + self.args[0]
+            if (
+                isinstance(self, OpSub)
                 and isinstance(self.args[1], OpNum)
                 and isinstance(other, OpNum)
             ):
                 return self.args[0] - (self.args[1] + other)
+            if (
+                isinstance(self, OpSub)
+                and isinstance(self.args[1], OpInt)
+                and isinstance(other, OpVar)
+            ):
+                return self.args[0] - other - self.args[1]
             if (
                 isinstance(other, OpSub)
                 and isinstance(other.args[0], OpNum)
@@ -881,10 +983,22 @@ class Operator:
                 return other.args[1] + (self - other.args[0])
             if (
                 isinstance(other, OpSub)
+                and isinstance(other.args[0], OpInt)
+                and isinstance(self, OpVar)
+            ):
+                return self + other.args[1] - other.args[0]
+            if (
+                isinstance(other, OpSub)
                 and isinstance(other.args[1], OpNum)
                 and isinstance(self, OpNum)
             ):
                 return -other.args[0] + (self + other.args[1])
+            if (
+                isinstance(other, OpSub)
+                and isinstance(other.args[1], OpInt)
+                and isinstance(self, OpVar)
+            ):
+                return self - other.args[0] + other.args[1]
             if isinstance(self, OpSub) and self.args[0] == other:
                 return -self.args[1]
             if isinstance(other, OpSub) and other.args[0] == self:
@@ -895,6 +1009,15 @@ class Operator:
                 return self + other.args[0]
             if isinstance(self, OpNeg) and isinstance(self.args[0], OpInt) and isinstance(other, OpInt):
                 return OpInt(- self.args[0].val - other.val)
+            if isinstance(self, OpAdd) and isinstance(self.args[0], OpInt):
+                return self.args[1] - other + self.args[0]
+            if isinstance(self, OpAdd) and isinstance(self.args[1], OpInt):
+                return self.args[0] - other + self.args[1]
+            if isinstance(self, OpSub) and isinstance(self.args[0], OpInt):
+                return - self.args[1] + other + self.args[0]
+            if isinstance(self, OpSub) and isinstance(self.args[1], OpInt):
+                return self.args[0] - other - self.args[1]
+
             return OpSub(args=[self, other])
         return NotImplemented
 
@@ -906,17 +1029,17 @@ class Operator:
             if self.macro_name or other.macro_name:
                 return OpMul(args=[self, other])
             if isinstance(self, OpInt) and self.val == 1:
-                return other
+                return other.eval()
             if isinstance(other, OpInt) and other.val == 1:
-                return self
+                return self.eval()
             if isinstance(self, OpInt) and self.val == 0:
                 return OpInt(0, target=self.target, kind=other.var_type.kind)
             if isinstance(other, OpInt) and other.val == 0:
                 return OpInt(0, target=other.target, kind=self.var_type.kind)
             if isinstance(self, OpInt) and self.val == -1:
-                return -other
+                return -other.eval()
             if isinstance(other, OpInt) and other.val == -1:
-                return -self
+                return -self.eval()
             if isinstance(self, OpInt) and isinstance(other, OpInt):
                 return OpInt(
                     self.val * other.val, target=self.target, kind=self.var_type.kind
@@ -967,14 +1090,14 @@ class Operator:
                 return -(self * other.args[0])
             if (
                 isinstance(other, OpMul)
-                and isinstance(self, OpNum)
-                and isinstance(other.args[0], OpNum)
+                and isinstance(self, OpInt)
+                and isinstance(other.args[0], OpInt)
             ):
                 return (self * other.args[0]) * other.args[1]
             if (
                 isinstance(other, OpMul)
-                and isinstance(self, OpNum)
-                and isinstance(other.args[1], OpNum)
+                and isinstance(self, OpInt)
+                and isinstance(other.args[1], OpInt)
             ):
                 return (self * other.args[1]) * other.args[0]
             if (
@@ -1010,7 +1133,7 @@ class Operator:
             if self.macro_name or other.macro_name:
                 return OpDiv(args=[self, other])
             if isinstance(other, OpInt) and other.val == 1:
-                return self
+                return self.eval()
             if isinstance(self, OpInt) and self.val == 0:
                 return self
             if isinstance(self, OpNeg):
@@ -1251,6 +1374,14 @@ class OpReal(OpNum):
             kind = self.kind.deep_clone() if self.kind is not None else None,
             expo = self.expo
         )
+
+    # def eval(self) -> Operator:
+    #     val = float(self.val)
+    #     if (self.val == str(val) and
+    #         val.is_integer()
+    #     ):
+    #         return OpInt(int(val), target=OpVar("dummy", var_type=self.var_type))
+    #     return self
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -1823,6 +1954,8 @@ class OpUnary(Operator):
         super().__post_init__()
         if self.args is None or len(self.args) != 1:
             raise ValueError("length of args must 1")
+        if self.macro_name is not None:
+            self.args[0] = self.args[0].eval()
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -1840,7 +1973,7 @@ class OpNeg(OpUnary):
     PRIORITY: ClassVar[int] = 4
 
     def eval(self) -> Operator:
-        return - self.args[0]
+        return - self.args[0].eval()
 
     def derivative(
         self,
@@ -1866,6 +1999,9 @@ class OpBinary(Operator):
         super().__post_init__()
         if self.args is None or len(self.args) != 2:
             raise ValueError("length of args must 2")
+        if self.macro_name is not None:
+            for i, arg in enumerate(self.args):
+                self.args[i] = arg.eval()
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -1889,7 +2025,7 @@ class OpAdd(OpBinary):
     PRIORITY: ClassVar[int] = 5
 
     def eval(self) -> Operator:
-        return self.args[0] + self.args[1]
+        return self.args[0].eval() + self.args[1].eval()
 
     def derivative(
         self,
@@ -1909,7 +2045,7 @@ class OpSub(OpBinary):
     PRIORITY: ClassVar[int] = 5
 
     def eval(self) -> Operator:
-        return self.args[0] - self.args[1]
+        return self.args[0].eval() - self.args[1].eval()
 
     def derivative(
         self,
@@ -1929,7 +2065,7 @@ class OpMul(OpBinary):
     PRIORITY: ClassVar[int] = 4
 
     def eval(self) -> Operator:
-        return self.args[0] * self.args[1]
+        return self.args[0].eval() * self.args[1].eval()
 
     def derivative(
         self,
@@ -1951,7 +2087,7 @@ class OpDiv(OpBinary):
     PRIORITY: ClassVar[int] = 4
 
     def eval(self) -> Operator:
-        return self.args[0] / self.args[1]
+        return self.args[0].eval() / self.args[1].eval()
 
     def derivative(
         self,
@@ -1977,7 +2113,7 @@ class OpPow(OpBinary):
     PRIORITY: ClassVar[int] = 2
 
     def eval(self) -> Operator:
-        return self.args[0] ** self.args[1]
+        return self.args[0].eval() ** self.args[1].eval()
 
     def __str__(self) -> str:
         if self.macro_name:
@@ -2165,6 +2301,12 @@ class OpFunc(Operator):
             args.append(f"{arg}")
         args = ", ".join(args)
         return f"{self.name}({args})"
+
+    def eval(self) -> Operator:
+        new_args = []
+        for arg in self.args:
+            new_args.append(arg.eval())
+        return OpFunc(name=self.name, args=new_args)
 
     def is_array(self) -> bool:
         return any([arg.is_array() for arg in self.args])

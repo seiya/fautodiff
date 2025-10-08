@@ -861,9 +861,9 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
             _stmt2op(stmt.items[2], decl_map, type_map),
         ]
         if op == "+":
-            return OpAdd(args)
+            return args[0] + args[1]
         elif op == "-":
-            return OpSub(args)
+            return args[0] - args[1]
         else:
             raise ValueError(f"Unsupported Level_2_Expr type: {stmt}")
 
@@ -874,9 +874,9 @@ def _stmt2op(stmt, decl_map: dict, type_map: dict) -> Operator:
             _stmt2op(stmt.items[2], decl_map, type_map),
         ]
         if op == "*":
-            return OpMul(args)
+            return args[0] * args[1]
         elif op == "/":
-            return OpDiv(args)
+            return args[0] / args[1]
         else:
             raise ValueError(f"Unsupported Add_Operand type: {stmt}")
 
