@@ -6986,10 +6986,11 @@ class OmpDirective(Node):
                 node: Node,
                 delta_vars: List[Tuple[OpVar, int]],
                 ary_vars: Dict[str, List[AryIndex]],
+                clear_vars: List[str],
                 do_index: OpVar,
                 do_range: OpRange,
                 cond: OpLogic | None
-        ) -> Tuple[List[Tuple[OpVar, int]], Dict[str, List[AryIndex]]]:
+        ) -> Tuple[List[Tuple[OpVar, int]], Dict[str, List[AryIndex]], List[str]]:
             if isinstance(node, Assignment):
                 lhs: OpVar = node.lhs
                 lhsname = lhs.name
@@ -7037,9 +7038,9 @@ class OmpDirective(Node):
                             # print(delta_vars)
                             # print(3)
                             raise ConvertToSerial
-                    return (delta_vars, ary_vars)
+                    return (delta_vars, ary_vars, clear_vars)
 
-                if lhsname.endswith(AD_SUFFIX): # for ary_vars
+                if lhsname.endswith(AD_SUFFIX): # for ary_vars and clear_vars
                     index = lhs.index
                     if index is not None and lhsname not in private_vars:
                         if lhsname in ary_vars:
@@ -7047,7 +7048,11 @@ class OmpDirective(Node):
                                 ary_vars[lhsname].append(index)
                         else:
                             ary_vars[lhsname] = [index]
-                    return (delta_vars, ary_vars)
+                    for var in node.rhs.collect_vars(without_index=True):
+                        if var.index is not None and do_index in var.index.collect_vars():
+                            if var.name not in clear_vars:
+                                clear_vars.append(var.name)
+                    return (delta_vars, ary_vars, clear_vars)
 
             if isinstance(node, BranchBlock):
                 cond_list = []
@@ -7084,14 +7089,14 @@ class OmpDirective(Node):
                         else:
                             cond = cond_new
                     cond_list.append(cond)
-                    delta_vars, ary_vars = _collect_data(block, delta_vars, ary_vars, do_index, do_range, cond)
-                return (delta_vars, ary_vars)
+                    delta_vars, ary_vars, clear_vars = _collect_data(block, delta_vars, ary_vars, clear_vars, do_index, do_range, cond)
+                return (delta_vars, ary_vars, clear_vars)
             for child in node.iter_children():
-                delta_vars, ary_vars = _collect_data(child, delta_vars, ary_vars, do_index, do_range, cond)
-            return (delta_vars, ary_vars)
+                delta_vars, ary_vars, clear_vars = _collect_data(child, delta_vars, ary_vars, clear_vars, do_index, do_range, cond)
+            return (delta_vars, ary_vars, clear_vars)
 
         def _convert() -> Tuple[List[Node], str | None]:
-            delta_vars, ary_vars = _collect_data(loop._body, [], {}, do_index, do_range, None)
+            delta_vars, ary_vars, clear_vars = _collect_data(loop._body, [], {}, [], do_index, do_range, None)
             delta_vars.append((do_index, 0))
 
             target_vars: Dict[str, int] = {}
@@ -7141,7 +7146,6 @@ class OmpDirective(Node):
 
             delta_varnames = [v.name for v, _ in delta_vars]
 
-            clear_vars: List[str] = []
             private_varnames: Dict[str, Dict[int, str]] = {}
 
             def _idx_delta(i: int) -> OpVar:
@@ -7165,10 +7169,6 @@ class OmpDirective(Node):
                 rhs = assign_node.rhs
                 lhsname = lhs.name
 
-                if lhsname in delta_varnames:
-                    result_nodes.append(assign_node)
-                    return None
-
                 if lhsname in private_vars:
                     if lhsname not in private_varnames:
                         private_varnames[lhsname] = {}
@@ -7178,9 +7178,11 @@ class OmpDirective(Node):
                     else:
                         rhs_new = rhs
                         for vn in private_varnames:
-                            if vn == lhsname or vn in delta_varnames:
+                            if vn == lhsname:
                                 continue
                             src = OpVar(vn)
+                            if src not in rhs_new.collect_vars():
+                                continue
                             if delta not in private_varnames[vn]:
                                 print(self)
                                 print(assign_node)
@@ -7226,12 +7228,6 @@ class OmpDirective(Node):
                             cond = (idx_new >= range_min) & (idx_new <= range_max)
                         node_new = IfBlock([(cond, Block([assign]))])
                         result_nodes.append(node_new)
-                    if delta == 0:
-                        if lhsname.endswith(AD_SUFFIX):
-                            for var in rhs.collect_vars(without_index=True):
-                                if var.index is not None and do_index in var.index.collect_vars():
-                                    if var.name not in clear_vars:
-                                        clear_vars.append(var.name)
                         return None
 
                 if delta != 0:
@@ -7321,7 +7317,8 @@ class OmpDirective(Node):
                     isinstance(node, ClearAssignment)
                     and node.lhs.name in clear_vars
                 ):
-                    clear_nodes.append(node.copy())
+                    if delta == 0:
+                        clear_nodes.append(node.copy())
                     return None
 
                 if isinstance(node, Assignment):
@@ -7331,26 +7328,26 @@ class OmpDirective(Node):
                 idx_new = _idx_delta(delta)
 
                 if isinstance(node, DoLoop):
-                    if delta == 0 or do_index in node.range.collect_vars():
-                        clear_nodes_child: List[Node] = []
-                        inner_nodes: List[Node] = []
-                        for child in node._body:
-                            _transform_node(child, delta, inner_nodes, clear_nodes_child)
-                        loop_new = DoLoop(
-                            Block(inner_nodes),
-                            node.index.replace_with(do_index, idx_new),
-                            node.range.replace_with(do_index, idx_new),
-                            node.label,
+                    if delta != 0 and do_index in node.range.collect_vars():
+                        raise ConvertToSerial
+                    clear_nodes_child: List[Node] = []
+                    inner_nodes: List[Node] = []
+                    _transform_node(node._body, delta, inner_nodes, clear_nodes_child)
+                    loop_new = DoLoop(
+                        Block(inner_nodes),
+                        node.index.replace_with(do_index, idx_new),
+                        node.range.replace_with(do_index, idx_new),
+                        node.label,
+                    )
+                    result_nodes.append(loop_new)
+                    if delta == 0 and clear_nodes_child:
+                        clear_loop = DoLoop(
+                            Block(clear_nodes_child),
+                            node.index.deep_clone(),
+                            node.range.deep_clone(),
+                            node.label
                         )
-                        result_nodes.append(loop_new)
-                        if delta == 0 and clear_nodes_child:
-                            clear_loop = DoLoop(
-                                Block(clear_nodes_child),
-                                node.index.deep_clone(),
-                                node.range.deep_clone(),
-                                node.label
-                            )
-                            clear_nodes.append(clear_loop)
+                        clear_nodes.append(clear_loop)
                     return None
 
                 if isinstance(node, BranchBlock):
@@ -7365,8 +7362,7 @@ class OmpDirective(Node):
                         else:
                             cond_clone = cond.replace_with(do_index, idx_new) if cond is not None else None
                         block_nodes: List[Node] = []
-                        for child in blk:
-                            _transform_node(child, delta, block_nodes, clear_nodes)
+                        _transform_node(blk, delta, block_nodes, clear_nodes)
                         cond_blocks.append((cond_clone, Block(block_nodes)))
                     if isinstance(node, SelectBlock):
                         branch_new = SelectBlock(cond_blocks, node.expr.replace_with(do_index, idx_new), node.select_type)
@@ -7380,7 +7376,7 @@ class OmpDirective(Node):
                     return None
 
                 if isinstance(node, Block):
-                    for child in node:
+                    for child in node.iter_children():
                         ad_info_local = _transform_node(child, delta, result_nodes, clear_nodes, ad_info_local)
                     return None
 
