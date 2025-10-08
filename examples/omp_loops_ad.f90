@@ -157,10 +157,15 @@ contains
       ip = modulo(i - is + 1, len) + is
       work_ad = x_ad(i) ! work = x(i)
       work = x(i)
-      y_ad(i) = work_ad * (2.0 * x(i) + x(in) + x(ip)) / 4.0 + x_ad(i) * work * 2.0 / 4.0 + x_ad(in) * work / 4.0 &
-                + x_ad(ip) * work / 4.0
-        ! y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
-      y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      if (work >= 0.0) then
+        y_ad(i) = work_ad * (2.0 * x(i) + x(in)) / 4.0 + x_ad(i) * work * 2.0 / 4.0 + x_ad(in) * work / 4.0
+          ! y(i) = work * (2.0 * x(i) + x(in)) / 4.0
+        y(i) = work * (2.0 * x(i) + x(in)) / 4.0
+      else
+        y_ad(i) = work_ad * (2.0 * x(i) + x(ip)) / 4.0 + x_ad(i) * work * 2.0 / 4.0 + x_ad(ip) * work / 4.0
+          ! y(i) = work * (2.0 * x(i) + x(ip)) / 4.0
+        y(i) = work * (2.0 * x(i) + x(ip)) / 4.0
+      end if
     end do
     !$omp end parallel do
 
@@ -191,15 +196,31 @@ contains
       work_n1_ad = x(in)
       work = x(i)
       work_p1_ad = x(ip)
-      work_ad = y_ad(i) * (2.0 * x(i) + x(in) + x(ip)) / 4.0 ! y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
-      x_ad(i) = y_ad(i) * work * 2.0 / 4.0 + y_ad(ip) * work_p1_ad / 4.0 + y_ad(in) * work_n1_ad / 4.0 + x_ad(i)
-        ! y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      if (work_n1_ad >= 0.0) then
+      else
+        x_ad(i) = y_ad(in) * work_n1_ad / 4.0 + x_ad(i) ! y(i) = work * (2.0 * x(i) + x(ip)) / 4.0
+      end if
+      if (work >= 0.0) then
+        work_ad = y_ad(i) * (2.0 * x(i) + x(in)) / 4.0 ! y(i) = work * (2.0 * x(i) + x(in)) / 4.0
+        x_ad(i) = y_ad(i) * work * 2.0 / 4.0 + x_ad(i) ! y(i) = work * (2.0 * x(i) + x(in)) / 4.0
+      else
+        work_ad = y_ad(i) * (2.0 * x(i) + x(ip)) / 4.0 ! y(i) = work * (2.0 * x(i) + x(ip)) / 4.0
+        x_ad(i) = y_ad(i) * work * 2.0 / 4.0 + x_ad(i) ! y(i) = work * (2.0 * x(i) + x(ip)) / 4.0
+      end if
+      if (work_p1_ad >= 0.0) then
+        x_ad(i) = y_ad(ip) * work_p1_ad / 4.0 + x_ad(i) ! y(i) = work * (2.0 * x(i) + x(in)) / 4.0
+      end if
       x_ad(i) = work_ad + x_ad(i) ! work = x(i)
     end do
     !$omp end parallel do
-    !$omp parallel do
+    !$omp parallel do private(work)
     do i = ie, is, - 1
-      y_ad(i) = 0.0 ! y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      work = x(i)
+      if (work >= 0.0) then
+        y_ad(i) = 0.0 ! y(i) = work * (2.0 * x(i) + x(in)) / 4.0
+      else
+        y_ad(i) = 0.0 ! y(i) = work * (2.0 * x(i) + x(ip)) / 4.0
+      end if
     end do
     !$omp end parallel do
 
@@ -390,12 +411,12 @@ contains
     real, intent(inout), allocatable :: x(:)
     real, intent(inout), allocatable :: x_ad(:)
     real, intent(inout) :: y_ad(size(x))
-    real, allocatable :: x_save_126_ad(:)
+    real, allocatable :: x_save_130_ad(:)
 
-    allocate(x_save_126_ad, mold=x)
+    allocate(x_save_130_ad, mold=x)
     !$omp parallel
     !$omp workshare
-    x_save_126_ad(:) = x(:)
+    x_save_130_ad(:) = x(:)
     !$omp end workshare
     !$omp end parallel
 
@@ -403,12 +424,12 @@ contains
     !$omp workshare
     x_ad = y_ad + x_ad ! y = x
     y_ad = 0.0 ! y = x
-    x(:) = x_save_126_ad(:)
+    x(:) = x_save_130_ad(:)
     x_ad = x_ad * 2.0 * x ! x = x**2
     !$omp end workshare
     !$omp end parallel
-    if (allocated(x_save_126_ad)) then
-      deallocate(x_save_126_ad)
+    if (allocated(x_save_130_ad)) then
+      deallocate(x_save_130_ad)
     end if
 
     return

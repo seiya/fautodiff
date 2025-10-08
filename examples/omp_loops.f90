@@ -70,7 +70,11 @@ contains
       in = modulo(i - is - 1, len) + is
       ip = modulo(i - is + 1, len) + is
       work = x(i)
-      y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      if (work >= 0.0) then
+        y(i) = work * (2.0 * x(i) + x(in)) / 4.0
+      else
+        y(i) = work * (2.0 * x(i) + x(ip)) / 4.0
+      end if
     end do
 
     return
