@@ -144,23 +144,31 @@ contains
     real, intent(out) :: y(is:ie)
     real, intent(out) :: y_ad(is:ie)
     real :: work_ad
+    real :: xn_ad
+    real :: xp_ad
     integer :: len
     integer :: i
     integer :: in
     integer :: ip
+    real :: xn
+    real :: xp
     real :: work
 
     len = ie - is + 1
-    !$omp parallel do private(in, ip, work, work_ad)
+    !$omp parallel do private(in, ip, xn, xp, work, xn_ad, xp_ad, work_ad)
     do i = is, ie
       in = modulo(i - is - 1, len) + is
       ip = modulo(i - is + 1, len) + is
+      xn_ad = x_ad(in) ! xn = x(in)
+      xn = x(in)
+      xp_ad = x_ad(ip) ! xp = x(ip)
+      xp = x(ip)
       if (x(i) > 0.0) then
-        work_ad = x_ad(in) ! work = x(in)
-        work = x(in)
+        work_ad = xn_ad ! work = xn
+        work = xn
       else
-        work_ad = x_ad(ip) ! work = x(ip)
-        work = x(ip)
+        work_ad = xp_ad ! work = xp
+        work = xp
       end if
       if (work >= 0.0) then
         y_ad(i) = work_ad * (2.0 * x(i) + x(in)) / 4.0 + x_ad(i) * work * 2.0 / 4.0 + x_ad(in) * work / 4.0
@@ -189,34 +197,51 @@ contains
     real :: work_ad_p1_ad
     real :: work_n1_ad
     real :: work_p1_ad
+    real :: xn_ad_p1_ad
+    real :: xn_n1_ad
+    real :: xn_p1_ad
+    real :: xp_ad_n1_ad
+    real :: xp_n1_ad
+    real :: xp_p1_ad
     integer :: len
     integer :: i
     integer :: in
     integer :: ip
+    real :: xn
+    real :: xp
     real :: work
 
     len = ie - is + 1
 
-    !$omp parallel do private(in, ip, work, in_n1_ad, ip_p1_ad, work_n1_ad, work_p1_ad, work_ad_n1_ad, work_ad_p1_ad)
+    !$omp parallel do private(in, ip, xn, xp, work, in_n1_ad, ip_p1_ad, xn_n1_ad, xn_p1_ad, xp_n1_ad, xp_p1_ad, work_n1_ad, &
+    !$omp& work_p1_ad, xn_ad_p1_ad, xp_ad_n1_ad, work_ad_n1_ad, work_ad_p1_ad)
     do i = ie, is, - 1
+      xn_ad_p1_ad = 0.0
+      xp_ad_n1_ad = 0.0
       in_n1_ad = modulo(i - is - 2, len) + is
       in = modulo(i - is - 1, len) + is
       ip = modulo(i - is + 1, len) + is
       ip_p1_ad = modulo(i - is + 2, len) + is
+      xn_n1_ad = x(in_n1_ad)
+      xn = x(in)
+      xn_p1_ad = x(i)
+      xp_n1_ad = x(i)
+      xp = x(ip)
+      xp_p1_ad = x(ip_p1_ad)
       if (x(in) > 0.0) then
-        work_n1_ad = x(in_n1_ad)
+        work_n1_ad = xn_n1_ad
       else
-        work_n1_ad = x(i)
+        work_n1_ad = xp_n1_ad
       end if
       if (x(i) > 0.0) then
-        work = x(in)
+        work = xn
       else
-        work = x(ip)
+        work = xp
       end if
       if (x(ip) > 0.0) then
-        work_p1_ad = x(i)
+        work_p1_ad = xn_p1_ad
       else
-        work_p1_ad = x(ip_p1_ad)
+        work_p1_ad = xp_p1_ad
       end if
       if (work_n1_ad >= 0.0) then
         work_ad_n1_ad = y_ad(in) * (2.0 * x(in) + x(in_n1_ad)) / 4.0 ! y(i) = work * (2.0 * x(i) + x(in)) / 4.0
@@ -237,11 +262,13 @@ contains
       end if
       if (x(in) > 0.0) then
       else
-        x_ad(i) = work_ad_n1_ad + x_ad(i) ! work = x(ip)
+        xp_ad_n1_ad = work_ad_n1_ad ! work = xp
       end if
       if (x(ip) > 0.0) then
-        x_ad(i) = work_ad_p1_ad + x_ad(i) ! work = x(in)
+        xn_ad_p1_ad = work_ad_p1_ad ! work = xn
       end if
+      x_ad(i) = xp_ad_n1_ad + x_ad(i) ! xp = x(ip)
+      x_ad(i) = xn_ad_p1_ad + x_ad(i) ! xn = x(in)
     end do
     !$omp end parallel do
     !$omp parallel do
@@ -437,12 +464,12 @@ contains
     real, intent(inout), allocatable :: x(:)
     real, intent(inout), allocatable :: x_ad(:)
     real, intent(inout) :: y_ad(size(x))
-    real, allocatable :: x_save_134_ad(:)
+    real, allocatable :: x_save_138_ad(:)
 
-    allocate(x_save_134_ad, mold=x)
+    allocate(x_save_138_ad, mold=x)
     !$omp parallel
     !$omp workshare
-    x_save_134_ad(:) = x(:)
+    x_save_138_ad(:) = x(:)
     !$omp end workshare
     !$omp end parallel
 
@@ -450,12 +477,12 @@ contains
     !$omp workshare
     x_ad = y_ad + x_ad ! y = x
     y_ad = 0.0 ! y = x
-    x(:) = x_save_134_ad(:)
+    x(:) = x_save_138_ad(:)
     x_ad = x_ad * 2.0 * x ! x = x**2
     !$omp end workshare
     !$omp end parallel
-    if (allocated(x_save_134_ad)) then
-      deallocate(x_save_134_ad)
+    if (allocated(x_save_138_ad)) then
+      deallocate(x_save_138_ad)
     end if
 
     return

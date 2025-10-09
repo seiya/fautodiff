@@ -1211,7 +1211,7 @@ def _generate_ad_subroutine(
         for var in routine_org.arg_vars()
         if (var.intent is None or var.intent in ("out", "inout"))
     ]
-    ad_block = subroutine.ad_content
+    ad_block: Block = subroutine.ad_content
 
     sub_fwd_rev: Optional[Subroutine] = None
 

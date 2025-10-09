@@ -5502,6 +5502,8 @@ class BranchBlock(Node):
             node = WhereBlock(new_condblocks)
         else:
             raise RuntimeError(f"Invalid class type: {type(self)}")
+        node.build_parent()
+        node.build_do_index_list(self.do_index_list)
         return node
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
@@ -6217,7 +6219,11 @@ class DoLoop(DoAbst):
 
         if new_body.is_effectively_empty():
             return None
-        return DoLoop(new_body, self.index, self.range, self.label)
+        loop = DoLoop(new_body, self.index, self.range, self.label)
+        loop.build_parent()
+        loop.do_index_list = self.do_index_list
+        loop._body.build_do_index_list(self.do_index_list)
+        return loop
 
     def check_initial(self, assigned_vars: Optional[VarList] = None) -> VarList:
         if assigned_vars is None:
@@ -7148,8 +7154,6 @@ class OmpDirective(Node):
                 if i in delta_rev:
                     nhalo -= 1
 
-            delta_varnames = [v.name for v, _ in delta_vars]
-
             private_varnames: Dict[str, Dict[int, str]] = {}
             for pv in private_vars:
                 private_varnames[pv] = {}
@@ -7157,6 +7161,9 @@ class OmpDirective(Node):
                     private_varnames[pv][d] = f"{pv}_n{-d}{AD_SUFFIX}"
                 for d in range(1, max_delta+1):
                     private_varnames[pv][d] = f"{pv}_p{d}{AD_SUFFIX}"
+
+            # print(private_vars)
+            # print(private_varnames)
 
             def _idx_delta(i: int) -> OpVar:
                 if i == 0:
@@ -7174,7 +7181,7 @@ class OmpDirective(Node):
                 delta: int,
                 result_nodes: List[Node],
                 ad_info_prev: Optional[str],
-            ) -> None:
+            ) -> str | None:
                 lhs = assign_node.lhs
                 rhs = assign_node.rhs
                 lhsname = lhs.name
@@ -7218,7 +7225,7 @@ class OmpDirective(Node):
                                     dst = OpVar(private_varnames[_idx_delta(d).name][delta])
                                 rhs_new = rhs_new.replace_with(src, dst)
                             if rhs_new is rhs:
-                                return
+                                return ad_info_prev
                         lhs_new = lhs.deep_clone()
                         if delta in private_varnames[lhsname]:
                             lhs_new.name = private_varnames[lhsname][delta]
@@ -7237,10 +7244,10 @@ class OmpDirective(Node):
                             cond = (idx_new >= range_min) & (idx_new <= range_max)
                         node_new = IfBlock([(cond, Block([assign]))])
                         result_nodes.append(node_new)
-                    return
+                    return assign_node.ad_info
 
                 if delta != 0 and lhsname not in target_vars:
-                    return
+                    return ad_info_prev
 
                 if lhsname not in target_vars:
                     if nhalo > 0:
@@ -7249,7 +7256,7 @@ class OmpDirective(Node):
                         result_nodes.append(guard)
                     else:
                         result_nodes.append(assign_node)
-                    return
+                    return assign_node.ad_info
 
                 idim = target_vars[lhs.name]
                 dim = lhs.index[idim]
@@ -7257,7 +7264,7 @@ class OmpDirective(Node):
                     (-delta not in delta_rev or delta_rev[-delta] != dim) and
                     (-delta != (dim - do_index).get_int())
                 ):
-                    return
+                    return ad_info_prev
 
                 if delta != 0:
                     index_lhs = lhs.index.copy()
@@ -7308,7 +7315,7 @@ class OmpDirective(Node):
                     assign = Assignment(lhs, rhs, assign_node.accumulate, assign_node.info, assign_node.ad_info)
                     result_nodes.append(assign)
 
-                return
+                return assign_node.ad_info
 
             def _transform_node(
                     node: Node,
@@ -7318,20 +7325,31 @@ class OmpDirective(Node):
                     ad_info_local: str | None = None
                 ) -> str | None:
 
-                if (
-                    isinstance(node, ClearAssignment)
-                    and node.lhs.name in clear_vars
-                ):
-                    if 0 in deltas:
-                        clear_nodes.append(node.copy())
+                if isinstance(node, ClearAssignment):
+                    lhsname = node.lhs.name
+                    if lhsname in clear_vars:
+                        if 0 in deltas:
+                            clear_nodes.append(node.copy())
+                        return None
+                    if (lhsname.endswith(AD_SUFFIX) and lhsname in private_varnames):
+                        for delta in deltas:
+                            if delta == 0:
+                                result_nodes.append(node)
+                                continue
+                            if delta in private_varnames[lhsname]:
+                                lhs = node.lhs.deep_clone()
+                                lhs.name = private_varnames[lhsname][delta]
+                                ca = ClearAssignment(lhs, ad_info=node.ad_info)
+                                result_nodes.append(ca)
+                            else:
+                                print(private_varnames[lhsname])
+                                raise RuntimeError(f"Unexpected Error: {delta} {lhsname}")
+                        return None
                     return None
 
                 if isinstance(node, Assignment):
                     for delta in deltas:
-                        if delta == 0 and not node.lhs.name.endswith(AD_SUFFIX):
-                            clear_nodes.append(node.copy())
-                        _process_assignment(node, delta, result_nodes, ad_info_local)
-                        ad_info_local = node.ad_info
+                        ad_info_local = _process_assignment(node, delta, result_nodes, ad_info_local)
                     return ad_info_local
 
                 if isinstance(node, DoLoop):
@@ -7436,6 +7454,9 @@ class OmpDirective(Node):
                         block_clear: List[Node] = []
                         _transform_node(blk, deltas, block_nodes, block_clear)
                         cond_blocks.append((cond, Block(block_nodes)))
+                        # if str(node.cond_blocks[0][0]) ==  "ue > 0.d0":
+                        #     print(delta, deltas, cond)
+                        #     print(cond_blocks[-1][1])
                         if delta == 0:
                             cond_clears.append((cond, Block(block_clear)))
                             if all_same:
@@ -7483,13 +7504,19 @@ class OmpDirective(Node):
                         ad_info_local = _transform_node(child, deltas, result_nodes, clear_nodes, ad_info_local)
                     return None
 
-                result_nodes.append(node)
-                return None
+                raise ConvertToSerial
+                #result_nodes.append(node)
+                #return None
 
             result_nodes: List[Node] = []
             clear_nodes: List[Node] = []
             ad_info_local: str | None = None
             deltas = list(range(-max_delta, max_delta + 1))
+            for pv in sorted(private_vars):
+                if pv.endswith(AD_SUFFIX):
+                    for pv_delta in private_varnames[pv].values():
+                        clear_assign = ClearAssignment(OpVar(pv_delta))
+                        result_nodes.append(clear_assign)
             for node in loop._body:
                 ad_info_local = _transform_node(node, deltas, result_nodes, clear_nodes, ad_info_local)
 
@@ -7505,14 +7532,14 @@ class OmpDirective(Node):
                             if vn in all_vnames and vn not in clause["private"]:
                                 clause["private"].append(vn)
                     break
-            nodes = [OmpDirective(
+            node = OmpDirective(
                 self.directive,
                 clauses,
                 body_new,
                 self.skip_alloc,
                 self.info
-            )]
-            nodes[0].build_do_index_list(self.do_index_list)
+            )
+            nodes = [node]
             if clear_nodes:
                 clear_loop = DoLoop(Block(clear_nodes), do_index, loop.range, loop.label)
                 pv_names: List[str] = []
