@@ -89,6 +89,12 @@ Ignore any ``!$FAD`` directives in the source:
 bin/fautodiff --ignore-fad examples/directives.f90
 ```
 
+Keep OpenMP scatter stores as-is instead of rewriting them to gathers with
+``--disable-scatter-to-gather``:
+```bash
+bin/fautodiff --disable-scatter-to-gather examples/omp_loops.f90
+```
+
 Each module's routine signatures are also written to a `<module>.fadmod` file when AD code is generated.
 These JSON files can be loaded when differentiating another file that uses the module.
 Add search directories with ``-I`` (repeat as needed), choose the output directory with ``-M DIR`` (defaults to the current directory), and disable writing with ``--no-fadmod``:
@@ -166,7 +172,9 @@ generation; in these cases the OpenMP directive is dropped and the loop runs
 sequentially. When the dependency arises from scatter-style updates (e.g.
 stencil kernels) the generator rewrites the reverse loop to gather
 contributions instead. The OpenMP directive is preserved in those cases and a
-diagnostic message notes that the loop was rewritten for thread-safety.
+diagnostic message notes that the loop was rewritten for thread-safety. Pass
+``--disable-scatter-to-gather`` to skip this rewrite when you would rather keep
+the original scatter stores.
 
 ## Runtime stack module
 

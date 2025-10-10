@@ -6893,7 +6893,12 @@ class OmpDirective(Node):
             return assigned_vars
         return self.body.check_initial(assigned_vars)
 
-    def convert_scatter_to_gather(self) -> Tuple[List[Node], str | None]:
+    def convert_scatter_to_gather(
+            self,
+            disable_scatter_to_gather: bool
+
+        ) -> Tuple[List[Node], str | None]:
+
         if self.directive not in ["parallel do", "do"]:
             return ([self], None)
         if not (len(self.body) == 1 and isinstance(self.body[0], DoLoop)):
@@ -7134,6 +7139,8 @@ class OmpDirective(Node):
                             raise ConvertToSerial
                         deltas.add(delta_new)
                 if idim is not None and len(deltas) > 1:
+                    if disable_scatter_to_gather:
+                        raise ConvertToSerial
                     target_vars[varname] = idim
 
             # print(delta_vars)

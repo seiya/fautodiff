@@ -43,7 +43,9 @@ This document summarizes the Fortran constructs handled by the AD code generator
   their OpenMP directives are removed so that the loop executes sequentially. When the
   dependency stems from scatter-style assignments (such as stencil updates), the
   generator rewrites the loop to use gather updates so that the OpenMP directive can be
-  preserved. A warning is emitted when this rewrite is applied.
+  preserved. A warning is emitted when this rewrite is applied. Pass
+  ``--disable-scatter-to-gather`` to the CLI to keep the original scatter stores
+  instead of applying this transformation.
 
 ## Parameter and module variables
 - Parameter constants remain untouched.
