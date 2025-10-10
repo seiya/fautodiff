@@ -2049,10 +2049,13 @@ def _parse_routine(
         line_no = None
         if getattr(stmt, "item", None) is not None and getattr(stmt.item, "span", None):
             line_no = stmt.item.span[0]
+        code = stmt.string
+        if isinstance(code, str):
+            code = ' '.join(code.split())
         info = {
             "file": src_name,
             "line": line_no,
-            "code": stmt.string,
+            "code": code,
             "lines": _collect_stmt_lines(line_no, stmt.string),
         }
         consumed_set = (
