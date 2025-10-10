@@ -57,6 +57,8 @@ contains
     integer, intent(in) :: is, ie
     real, intent(in) :: x(is:ie)
     real, intent(out) :: y(is:ie)
+    real :: xn
+    real :: xp
     real :: work
     integer :: i
     integer :: in
@@ -65,12 +67,22 @@ contains
 
     len = ie - is + 1
 
-   !$omp parallel do private(in, ip, work)
+   !$omp parallel do private(in, ip, xn, xp, work)
     do i = is, ie
       in = modulo(i - is - 1, len) + is
       ip = modulo(i - is + 1, len) + is
-      work = x(i)
-      y(i) = work * (2.0 * x(i) + x(in) + x(ip)) / 4.0
+      xn = x(in)
+      xp = x(ip)
+      if (x(i) > 0.0) then
+        work = xn
+      else
+        work = xp
+      end if
+      if (work >= 0.0) then
+        y(i) = work * (2.0 * x(i) + x(in)) / 4.0
+      else
+        y(i) = work * (2.0 * x(i) + x(ip)) / 4.0
+      end if
     end do
 
     return

@@ -1211,7 +1211,7 @@ def _generate_ad_subroutine(
         for var in routine_org.arg_vars()
         if (var.intent is None or var.intent in ("out", "inout"))
     ]
-    ad_block = subroutine.ad_content
+    ad_block: Block = subroutine.ad_content
 
     sub_fwd_rev: Optional[Subroutine] = None
 
@@ -2424,47 +2424,6 @@ def _generate_ad_subroutine(
         routine_map,
         reverse=reverse,
     )
-
-    # Final cleanup: drop any empty conditional blocks that may have been
-    # left after previous pruning passes (e.g., guards around removed clears).
-    def _drop_empty_branches_global(node: Node) -> None:
-        if isinstance(node, Block):
-            to_remove = []
-            for ch in list(node.iter_children()):
-                _drop_empty_branches_global(ch)
-                if isinstance(ch, IfBlock):
-                    ch.cond_blocks = [
-                        (cond, body)
-                        for cond, body in ch.cond_blocks
-                        if not body.is_effectively_empty()
-                    ]
-                    if len(ch.cond_blocks) == 0:
-                        to_remove.append(ch)
-                elif isinstance(ch, WhereBlock):
-                    ch.cond_blocks = [
-                        (cond, body)
-                        for cond, body in ch.cond_blocks
-                        if not body.is_effectively_empty()
-                    ]
-                    if len(ch.cond_blocks) == 0:
-                        to_remove.append(ch)
-                elif isinstance(ch, SelectBlock):
-                    ch.cond_blocks = [
-                        (conds, body)
-                        for conds, body in ch.cond_blocks
-                        if not body.is_effectively_empty()
-                    ]
-                    if len(ch.cond_blocks) == 0:
-                        to_remove.append(ch)
-            for n in to_remove:
-                node.remove_child(n)
-        else:
-            for ch in getattr(node, "iter_children", lambda: [])():
-                _drop_empty_branches_global(ch)
-
-    for blk in (subroutine.content, subroutine.ad_init, subroutine.ad_content):
-        if blk is not None:
-            _drop_empty_branches_global(blk)
 
     # print(subroutine.ad_content)
     return subroutine, uses_pushpop, called_mods

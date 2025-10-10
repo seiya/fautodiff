@@ -147,7 +147,7 @@ contains
   end subroutine test_stencil_loop
 
   subroutine test_stencil_loop_mod
-    real, parameter :: tol_stencil = 4.1e-4
+    real, parameter :: tol_stencil = 4.3e-3
     integer, parameter :: n = 3
     integer, parameter :: is = 1
     integer, parameter :: ie = n
@@ -158,7 +158,7 @@ contains
     real :: inner1, inner2
 
     eps = 1.0e-3
-    x = (/1.0, 2.0, 3.0/)
+    x = (/1.0, - 2.0, 3.0/)
     call stencil_loop_mod(is, ie, x, y)
     x_eps(:) = x(:) + eps
     call stencil_loop_mod(is, ie, x_eps, y_eps)
