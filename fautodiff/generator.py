@@ -113,19 +113,28 @@ def _contains_pushpop(node: Node) -> bool:
 
 def _strip_sequential_omp(
     node: Node,
-    warnings: Optional[List[str]]
+    warnings: Optional[List[str]],
+    *,
+    convert_scatter_to_gather: bool = True,
 ) -> List[Node]:
     """Remove OpenMP directives for loops with modified indices in reverse mode."""
 
     if isinstance(node, OmpDirective):
-        nodes, msg = node.convert_scatter_to_gather()
-        if msg is not None and nodes:
-            _warn(warnings, nodes[0].info, "OpenMP", msg)
+        if convert_scatter_to_gather:
+            nodes, msg = node.convert_scatter_to_gather()
+            if msg is not None and nodes:
+                _warn(warnings, nodes[0].info, "OpenMP", msg)
+        else:
+            nodes, msg = [node], None
 
         processed: List[Node] = []
         for new_node in nodes:
             if isinstance(new_node, OmpDirective) and new_node.body is not None:
-                body_nodes = _strip_sequential_omp(new_node.body, warnings)
+                body_nodes = _strip_sequential_omp(
+                    new_node.body,
+                    warnings,
+                    convert_scatter_to_gather=convert_scatter_to_gather,
+                )
                 if len(body_nodes) == 1 and body_nodes[0] is new_node.body:
                     pass
                 else:
@@ -136,7 +145,11 @@ def _strip_sequential_omp(
                     new_body.set_parent(new_node)
                     new_node.body = new_body
             else:
-                sub_nodes = _strip_sequential_omp(new_node, warnings)
+                sub_nodes = _strip_sequential_omp(
+                    new_node,
+                    warnings,
+                    convert_scatter_to_gather=convert_scatter_to_gather,
+                )
                 if len(sub_nodes) > 1 or sub_nodes[0] is not new_node:
                     processed.extend(sub_nodes)
                     continue
@@ -145,7 +158,11 @@ def _strip_sequential_omp(
     if isinstance(node, Block):
         idx = 0
         for i, child in enumerate(list(node.iter_children())):
-            nodes = _strip_sequential_omp(child, warnings)
+            nodes = _strip_sequential_omp(
+                child,
+                warnings,
+                convert_scatter_to_gather=convert_scatter_to_gather,
+            )
             if len(nodes) > 1 or nodes[0] is not child:
                 node.replace_at(idx, nodes)
                 idx += len(nodes)
@@ -153,14 +170,22 @@ def _strip_sequential_omp(
                 idx += 1
         return [node]
     if isinstance(node, DoAbst):
-        nodes = _strip_sequential_omp(node._body, warnings)
+        nodes = _strip_sequential_omp(
+            node._body,
+            warnings,
+            convert_scatter_to_gather=convert_scatter_to_gather,
+        )
         if len(nodes) > 1 or nodes[0] is not node._body:
             node._body = Block(nodes)
         return [node]
     if isinstance(node, BranchBlock):
         for i, cond_block in enumerate(node.cond_blocks):
             block = cond_block[1]
-            nodes = _strip_sequential_omp(block, warnings)
+            nodes = _strip_sequential_omp(
+                block,
+                warnings,
+                convert_scatter_to_gather=convert_scatter_to_gather,
+            )
             if len(nodes) > 1 or nodes[0] is not block:
                 node.cond_blocks[i] = (cond_block[0], Block(nodes))
         return [node]
@@ -1189,6 +1214,7 @@ def _generate_ad_subroutine(
     const_var_names: List[str],
     *,
     reverse: bool,
+    convert_scatter_to_gather: bool,
 ) -> tuple[Optional[Subroutine], bool, Set[str]]:
     """Generate forward or reverse AD subroutine.
 
@@ -1333,7 +1359,11 @@ def _generate_ad_subroutine(
         if reverse:
             ad_code.check_initial(VarList(grad_args + mod_ad_vars_filtered + save_ad_vars))
 
-            _strip_sequential_omp(ad_code, warnings)
+            _strip_sequential_omp(
+                ad_code,
+                warnings,
+                convert_scatter_to_gather=convert_scatter_to_gather,
+            )
 
         # Declare any temporary gradient variables introduced by AD code
         for var in ad_code.assigned_vars(without_savevar=True):
@@ -2439,6 +2469,7 @@ def generate_ad(
     fadmod_dir: Optional[Union[str, Path]] = None,
     mode: str = "both",
     ignore_fad: bool = False,
+    convert_scatter_to_gather: bool = True,
 ) -> Optional[str]:
     """Generate an AD version of ``src``.
 
@@ -2447,7 +2478,8 @@ def generate_ad(
     ``out_file`` is ``None`` the generated code is returned as a string.  When
     ``out_file`` is provided the code is also written to that path. ``fadmod_dir``
     selects where ``<module>.fadmod`` files are written (defaults to the current
-    working directory).
+    working directory). ``convert_scatter_to_gather`` controls whether scatter
+    stores in OpenMP loops are rewritten into gather-style updates.
     """
     modules = []
     warnings = []
@@ -2613,6 +2645,7 @@ def generate_ad(
                             warnings,
                             const_var_names,
                             reverse=False,
+                            convert_scatter_to_gather=convert_scatter_to_gather,
                         )
                         if sub is not None:
                             group_subs.setdefault(name_r, {})["fwd"] = sub
@@ -2629,6 +2662,7 @@ def generate_ad(
                             warnings,
                             const_var_names,
                             reverse=True,
+                            convert_scatter_to_gather=convert_scatter_to_gather,
                         )
                         if sub is not None:
                             group_subs.setdefault(name_r, {})["rev"] = sub
