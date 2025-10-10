@@ -51,6 +51,11 @@ def main():
         action="store_true",
         help="ignore !$FAD directives in source files",
     )
+    parser_arg.add_argument(
+        "--disable-scatter-to-gather",
+        action="store_true",
+        help="do not rewrite OpenMP scatter stores into gather operations",
+    )
     args = parser_arg.parse_args()
 
     search_dirs = args.search_dirs if args.search_dirs else []
@@ -69,6 +74,7 @@ def main():
             fadmod_dir=args.fadmod_dir,
             mode=args.mode,
             ignore_fad=args.ignore_fad,
+            disable_scatter_to_gather=args.disable_scatter_to_gather,
         )
     except Exception as exc:
         raise

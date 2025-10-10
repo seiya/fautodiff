@@ -98,6 +98,7 @@ class TestCLIUnit(unittest.TestCase):
             fadmod_dir,
             mode,
             ignore_fad,
+            disable_scatter_to_gather,
         ):
             called.update(
                 dict(
@@ -110,6 +111,7 @@ class TestCLIUnit(unittest.TestCase):
                     fadmod_dir=fadmod_dir,
                     mode=mode,
                     ignore_fad=ignore_fad,
+                    disable_scatter_to_gather=disable_scatter_to_gather,
                 )
             )
             return "module dummy_ad\nend module dummy_ad\n"
