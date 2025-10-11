@@ -88,6 +88,28 @@ contains
     return
   end subroutine stencil_loop_mod
 
+  subroutine stencil_loop_max(nx, ny, h, u)
+    integer, intent(in) :: nx, ny
+    real, intent(out) :: u(nx,ny)
+    real, intent(in)  :: h(nx,ny)
+    integer :: i, j
+    integer :: im1
+    integer :: jp1, jm1
+
+    !$omp parallel do private(im1,jp1,jm1)
+    do j = 1, ny
+      jp1 = min(j+1, ny)
+      jm1 = max(j-1, 1)
+      do i = 1, nx
+        im1 = modulo(i-2, nx) + 1
+        u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+      end do
+    end do
+    !$omp end parallel do
+
+    return
+  end subroutine stencil_loop_max
+
   subroutine stencil_loop_with_halo(is, ie, istart, iend, h, u, dhdt)
     integer, intent(in) :: is, ie
     integer, intent(in) :: istart, iend

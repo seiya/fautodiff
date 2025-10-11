@@ -280,6 +280,82 @@ contains
     return
   end subroutine stencil_loop_mod_rev_ad
 
+  subroutine stencil_loop_max_fwd_ad(nx, ny, h, h_ad, u, u_ad)
+    integer, intent(in)  :: nx
+    integer, intent(in)  :: ny
+    real, intent(in)  :: h(nx,ny)
+    real, intent(in)  :: h_ad(nx,ny)
+    real, intent(out) :: u(nx,ny)
+    real, intent(out) :: u_ad(nx,ny)
+    integer :: j
+    integer :: jp1
+    integer :: jm1
+    integer :: i
+    integer :: im1
+
+    !$omp parallel do private(im1, jp1, jm1)
+    do j = 1, ny
+      jp1 = min(j + 1, ny)
+      jm1 = max(j - 1, 1)
+      do i = 1, nx
+        im1 = modulo(i - 2, nx) + 1
+        u_ad(i,j) = h_ad(im1,jp1) + h_ad(i,jp1) - h_ad(im1,jm1) - h_ad(i,jm1)
+          ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+        u(i,j) = h(im1,jp1) + h(i,jp1) - h(im1,jm1) - h(i,jm1)
+      end do
+    end do
+    !$omp end parallel do
+
+    return
+  end subroutine stencil_loop_max_fwd_ad
+
+  subroutine stencil_loop_max_rev_ad(nx, ny, h_ad, u_ad)
+    integer, intent(in)  :: nx
+    integer, intent(in)  :: ny
+    real, intent(inout) :: h_ad(nx,ny)
+    real, intent(inout) :: u_ad(nx,ny)
+    integer :: j
+    integer :: jp1
+    integer :: jm1
+    integer :: i
+    integer :: im1
+
+    !$omp parallel do private(im1, jp1, jm1)
+    do j = ny, 1, - 1
+      jp1 = min(j + 1, ny)
+      jm1 = max(j - 1, 1)
+      do i = nx, 1, - 1
+        im1 = modulo(i - 2, nx) + 1
+        if (j == ny) then
+          h_ad(im1,j) = u_ad(i,j) + h_ad(im1,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+          h_ad(i,j) = u_ad(i,j) + h_ad(i,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+        end if
+        if (j >= 2) then
+          h_ad(im1,j) = u_ad(i,jm1) + h_ad(im1,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+          h_ad(i,j) = u_ad(i,jm1) + h_ad(i,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+        end if
+        if (j == 1) then
+          h_ad(im1,j) = - u_ad(i,j) + h_ad(im1,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+          h_ad(i,j) = - u_ad(i,j) + h_ad(i,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+        end if
+        if (j <= ny - 1) then
+          h_ad(im1,j) = - u_ad(i,jp1) + h_ad(im1,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+          h_ad(i,j) = - u_ad(i,jp1) + h_ad(i,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+        end if
+      end do
+    end do
+    !$omp end parallel do
+    !$omp parallel do
+    do j = ny, 1, - 1
+      do i = nx, 1, - 1
+        u_ad(i,j) = 0.0 ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+      end do
+    end do
+    !$omp end parallel do
+
+    return
+  end subroutine stencil_loop_max_rev_ad
+
   subroutine stencil_loop_with_halo_fwd_ad(is, ie, istart, iend, h, h_ad, u, u_ad, dhdt, dhdt_ad)
     integer, intent(in)  :: is
     integer, intent(in)  :: ie
@@ -464,12 +540,12 @@ contains
     real, intent(inout), allocatable :: x(:)
     real, intent(inout), allocatable :: x_ad(:)
     real, intent(inout) :: y_ad(size(x))
-    real, allocatable :: x_save_138_ad(:)
+    real, allocatable :: x_save_162_ad(:)
 
-    allocate(x_save_138_ad, mold=x)
+    allocate(x_save_162_ad, mold=x)
     !$omp parallel
     !$omp workshare
-    x_save_138_ad(:) = x(:)
+    x_save_162_ad(:) = x(:)
     !$omp end workshare
     !$omp end parallel
 
@@ -477,12 +553,12 @@ contains
     !$omp workshare
     x_ad = y_ad + x_ad ! y = x
     y_ad = 0.0 ! y = x
-    x(:) = x_save_138_ad(:)
+    x(:) = x_save_162_ad(:)
     x_ad = x_ad * 2.0 * x ! x = x**2
     !$omp end workshare
     !$omp end parallel
-    if (allocated(x_save_138_ad)) then
-      deallocate(x_save_138_ad)
+    if (allocated(x_save_162_ad)) then
+      deallocate(x_save_162_ad)
     end if
 
     return

@@ -222,6 +222,7 @@ class TestFortranADCode(unittest.TestCase):
                 "sum_loop",
                 "stencil_loop",
                 "stencil_loop_mod",
+                "stencil_loop_max",
                 "stencil_loop_with_halo",
                 "indirect_access_loop",
                 "omp_ws_if",
