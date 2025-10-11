@@ -494,12 +494,12 @@ class TestNodeMethods(unittest.TestCase):
         y = OpVar("y", index=[i + one], dims=(OpRange([one,n]),))
         loop = DoLoop(
             Block([
-                Assignment(OpVar("z", index=[i]), OpReal("0.0")),
+                Assignment(z, OpReal("0.0")),
                 IfBlock([(i >= OpInt(2), Block([Assignment(z, x + z)]))]),
                 IfBlock([(i <= n - OpInt(1), Block([Assignment(z, y + z)]))]),
             ]),
             index=i,
-            range=OpRange([OpInt(1), n]),
+            range=OpRange([one, n]),
         )
 
         required = {str(v) for v in loop.required_vars()}

@@ -327,19 +327,27 @@ contains
       do i = nx, 1, - 1
         im1 = modulo(i - 2, nx) + 1
         if (j == ny) then
-          h_ad(im1,j) = u_ad(i,j) + h_ad(im1,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
-          h_ad(i,j) = u_ad(i,j) + h_ad(i,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+          h_ad(im1,j) = u_ad(i,ny) + h_ad(im1,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
         end if
         if (j >= 2) then
           h_ad(im1,j) = u_ad(i,jm1) + h_ad(im1,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+        end if
+        if (j == ny) then
+          h_ad(i,j) = u_ad(i,ny) + h_ad(i,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+        end if
+        if (j >= 2) then
           h_ad(i,j) = u_ad(i,jm1) + h_ad(i,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
         end if
         if (j == 1) then
-          h_ad(im1,j) = - u_ad(i,j) + h_ad(im1,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
-          h_ad(i,j) = - u_ad(i,j) + h_ad(i,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+          h_ad(im1,j) = - u_ad(i,1) + h_ad(im1,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
         end if
         if (j <= ny - 1) then
           h_ad(im1,j) = - u_ad(i,jp1) + h_ad(im1,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+        end if
+        if (j == 1) then
+          h_ad(i,j) = - u_ad(i,1) + h_ad(i,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+        end if
+        if (j <= ny - 1) then
           h_ad(i,j) = - u_ad(i,jp1) + h_ad(i,j) ! u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
         end if
       end do
@@ -408,35 +416,35 @@ contains
 
     !$omp parallel do private(flux_ad, flux_ad_n2_ad, flux_ad_n1_ad, flux_ad_p1_ad, flux_ad_p2_ad)
     do i = iend + 2, istart - 2, - 1
-      if (i - 2 >= istart) then
+      if (i >= istart + 2) then
         flux_ad_n2_ad(1) = - dhdt_ad(i - 2) ! dhdt(i) = - (flux(1) - flux(2))
       end if
-      if (i - 1 >= istart .and. i - 1 <= iend) then
+      if (i >= istart + 1 .and. i <= iend + 1) then
         flux_ad_n1_ad(1) = - dhdt_ad(i - 1) ! dhdt(i) = - (flux(1) - flux(2))
       end if
       if (i >= istart .and. i <= iend) then
         flux_ad(1) = - dhdt_ad(i) ! dhdt(i) = - (flux(1) - flux(2))
       end if
-      if (i + 1 >= istart .and. i + 1 <= iend) then
+      if (i >= istart - 1 .and. i <= iend - 1) then
         flux_ad_p1_ad(1) = - dhdt_ad(i + 1) ! dhdt(i) = - (flux(1) - flux(2))
       end if
-      if (i - 1 >= istart .and. i - 1 <= iend) then
+      if (i >= istart + 1 .and. i <= iend + 1) then
         flux_ad_n1_ad(2) = dhdt_ad(i - 1) ! dhdt(i) = - (flux(1) - flux(2))
       end if
       if (i >= istart .and. i <= iend) then
         flux_ad(2) = dhdt_ad(i) ! dhdt(i) = - (flux(1) - flux(2))
       end if
-      if (i + 1 >= istart .and. i + 1 <= iend) then
+      if (i >= istart - 1 .and. i <= iend - 1) then
         flux_ad_p1_ad(2) = dhdt_ad(i + 1) ! dhdt(i) = - (flux(1) - flux(2))
       end if
-      if (i + 2 <= iend) then
+      if (i <= iend - 2) then
         flux_ad_p2_ad(2) = dhdt_ad(i + 2) ! dhdt(i) = - (flux(1) - flux(2))
       end if
-      if (i + 1 >= istart .and. i + 1 <= iend) then
+      if (i >= istart - 1 .and. i <= iend - 1) then
         u_ad(i) = flux_ad_p1_ad(2) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 + u_ad(i)
           ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
       end if
-      if (i - 1 >= istart .and. i - 1 <= iend) then
+      if (i >= istart + 1 .and. i <= iend + 1) then
         h_ad(i) = - flux_ad_n1_ad(2) * u(i - 2) / 6.0 + h_ad(i)
           ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
       end if
@@ -444,11 +452,11 @@ contains
         h_ad(i) = flux_ad(2) * u(i - 1) * 2.0 / 6.0 + h_ad(i)
           ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
       end if
-      if (i + 1 >= istart .and. i + 1 <= iend) then
+      if (i >= istart - 1 .and. i <= iend - 1) then
         h_ad(i) = - flux_ad_p1_ad(2) * u(i) * 2.0 / 6.0 + h_ad(i)
           ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
       end if
-      if (i + 2 <= iend) then
+      if (i <= iend - 2) then
         h_ad(i) = flux_ad_p2_ad(2) * u(i + 1) / 6.0 + h_ad(i)
           ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
       end if
@@ -456,18 +464,18 @@ contains
         u_ad(i) = flux_ad(1) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 + u_ad(i)
           ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
       end if
-      if (i - 2 >= istart) then
+      if (i >= istart + 2) then
         h_ad(i) = - flux_ad_n2_ad(1) * u(i - 2) / 6.0 + h_ad(i)
           ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
       end if
-      if (i - 1 >= istart .and. i - 1 <= iend) then
+      if (i >= istart + 1 .and. i <= iend + 1) then
         h_ad(i) = flux_ad_n1_ad(1) * u(i - 1) * 2.0 / 6.0 + h_ad(i)
           ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
       end if
       if (i >= istart .and. i <= iend) then
         h_ad(i) = - flux_ad(1) * u(i) * 2.0 / 6.0 + h_ad(i) ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
       end if
-      if (i + 1 >= istart .and. i + 1 <= iend) then
+      if (i >= istart - 1 .and. i <= iend - 1) then
         h_ad(i) = flux_ad_p1_ad(1) * u(i + 1) / 6.0 + h_ad(i)
           ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
       end if
