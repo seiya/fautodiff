@@ -7112,6 +7112,10 @@ class OmpDirective(Node):
             delta_vars, ary_vars, clear_vars = _collect_data(loop._body, [], {}, [], do_index, do_range, None)
             delta_vars.append((do_index, 0))
 
+            # print(delta_vars)
+            # print(ary_vars)
+            # print(clear_vars)
+
             target_vars: Dict[str, int] = {}
             max_delta = 0
             for varname in ary_vars:
@@ -7243,7 +7247,7 @@ class OmpDirective(Node):
                         else:
                             raise RuntimeError(f"Unexpected Error: {private_varnames[lhsname]} {delta}")
                         assign = Assignment(lhs_new, rhs_new, ad_info=assign_node.ad_info)
-                    if nhalo == 0:
+                    if nhalo == 0 or not dependent_privatevars[lhsname]:
                         result_nodes.append(assign)
                     else:
                         idx_new = _idx_delta(delta)
