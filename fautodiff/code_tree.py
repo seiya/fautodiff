@@ -6947,7 +6947,7 @@ class OmpDirective(Node):
             loop_clone.info = dict(self.info) if self.info is not None else None
             return ([loop_clone], msg)
 
-        def _infer_func_delta(rhs: Operator) -> Optional[int]:
+        def _infer_func_delta(rhs: Operator) -> Tuple[int | None, bool]:
             func_name: str = None
             func_term: Optional[OpFunc] = None
             other_term: Optional[Operator] = None
@@ -6960,159 +6960,201 @@ class OmpDirective(Node):
             for term in terms:
                 if isinstance(term, OpFunc):
                     if func_term is not None: # only one func_term is allowed
-                        return None
+                        return (None, False)
                     func_name = term.name.lower()
                     if func_name in {"mod", "modulo", "min", "max"}:
                         func_term = term
                     else:
-                        return None
+                        return (None, False)
                 else:
                     if other_term is not None: # only one other_term is allowed
-                        return None
+                        return (None, False)
                     other_term = term
             if func_term is None:
-                return None
+                return (None, False)
 
             if func_name in {"mod", "modulo"}:
-                base = do_range[0]
+                base = range_min
                 if other_term is None or base is None:
-                    return None
+                    return (None, False)
                 if other_term != base:
                     base_int = base.get_int()
                     term_int = other_term.get_int()
                     if base_int is None or term_int is None or term_int != base_int:
-                        return None
+                        return (None, False)
                 numerator = func_term.args[0]
                 base_expr = do_index - base
-                return (numerator - base_expr).get_int()
+                delta = (numerator - base_expr).get_int()
+                return (delta, False)
 
             if func_name == "min":
-                if func_term.args[0] != do_range[1] and func_term.args[1] != do_range[1]:
-                    return None
-                return (func_term.args[0] - do_index).get_int() or (func_term.args[1] - do_index).get_int()
+                arg0 = func_term.args[0]
+                arg1 = func_term.args[1]
+                if arg0 != range_max and arg1 != range_max:
+                    return (None, False)
+                d0 = (arg0 - do_index).get_int()
+                if isinstance(d0, int):
+                    return (d0, True)
+                d1 = (func_term.args[1] - do_index).get_int()
+                if isinstance(d1, int):
+                    return (d1, True)
+                return (None, False)
             if func_name == "max":
-                if func_term.args[0] != do_range[0] and func_term.args[1] != do_range[0]:
-                    return None
-                return (func_term.args[0] - do_index).get_int() or (func_term.args[1] - do_index).get_int()
-
-        def _collect_data(
-                node: Node,
-                delta_vars: List[Tuple[OpVar, int]],
-                ary_vars: Dict[str, List[AryIndex]],
-                clear_vars: List[str],
-                do_index: OpVar,
-                do_range: OpRange,
-                cond: OpLogic | None
-        ) -> Tuple[List[Tuple[OpVar, int]], Dict[str, List[AryIndex]], List[str]]:
-            if isinstance(node, Assignment):
-                lhs: OpVar = node.lhs
-                lhsname = lhs.name
-                if lhs.is_integer_type and lhs.index is None: # for delta_vars
-                    if lhsname not in private_vars:
-                        raise RuntimeError(f"Scalar variable was found but not private: {lhsname}")
-                    rhs = node.rhs
-                    for var, delta in delta_vars:
-                        rhs = rhs.replace_with(var, do_index + OpInt(delta))
-                    if cond:
-                        if cond.args[0] != do_index:
-                            raise RuntimeError(f"Unexpected error: {type(cond)} {cond}")
-                        if cond.op == "==":
-                            v1 = rhs - cond.args[1]
-                            v2 = do_range[1] - do_range[0] + 1
-                            delta_new1 = (v1 - v2).get_int()
-                            delta_new2 = (v1 + v2).get_int()
-                            if delta_new1 is None and delta_new2 is None:
-                                delta_new = None
-                            elif delta_new1 is not None and delta_new2 is not None:
-                                delta_new = min(delta_new1, delta_new2)
-                            else:
-                                delta_new = delta_new1 if delta_new1 is not None else delta_new2
-                        else:
-                            # Not Implemented yet
-                            # print(1)
-                            raise ConvertToSerial
-                    else:
-                        delta_new = (rhs - do_index).get_int()
-                    if delta_new is None:
-                        delta_new = _infer_func_delta(rhs)
-                    if delta_new is not None:
-                        found = False
-                        for var, delta in delta_vars:
-                            if lhsname == var.name:
-                                if delta_new is not delta:
-                                   # print(2)
-                                   raise ConvertToSerial
-                                found = True
-                        if not found:
-                            delta_vars.append((lhs, delta_new))
-                    else:
-                        if lhs in [v[0] for v in delta_vars]:
-                            # print(node)
-                            # print(delta_vars)
-                            # print(3)
-                            raise ConvertToSerial
-                    return (delta_vars, ary_vars, clear_vars)
-
-                if lhsname.endswith(AD_SUFFIX): # for ary_vars and clear_vars
-                    index = lhs.index
-                    if index is not None and lhsname not in private_vars:
-                        if lhsname in ary_vars:
-                            if index not in ary_vars[lhsname]:
-                                ary_vars[lhsname].append(index)
-                        else:
-                            ary_vars[lhsname] = [index]
-                    for var in node.rhs.collect_vars(without_index=True):
-                        if var.index is not None and do_index in var.index.collect_vars():
-                            if var.name not in clear_vars:
-                                clear_vars.append(var.name)
-                    return (delta_vars, ary_vars, clear_vars)
-
-            if isinstance(node, BranchBlock):
-                cond_list = []
-                for cond_new, block in node.cond_blocks:
-                    if isinstance(cond_new, List): # select case
-                        # Not implemented yet
-                        # print(4)
-                        raise ConvertToSerial
-                    elif isinstance(cond_new, OpLogic):
-                        lhs_cond = cond_new.args[0]
-                        rhs_cond = cond_new.args[1]
-                        for v, delta in delta_vars:
-                            dvar = do_index + OpInt(delta)
-                            lhs_cond = lhs_cond.replace_with(v, dvar)
-                            rhs_cond = rhs_cond.replace_with(v, dvar)
-                        if cond_new.op in (".eq.", "=="):
-                            if do_index in lhs_cond.collect_vars():
-                                rhs_cond = rhs_cond - lhs_cond + do_index
-                                cond = OpLogic("==", [do_index, rhs_cond])
-                            elif do_index in rhs_cond.collect_vars():
-                                rhs_cond = lhs_cond - rhs_cond + do_index
-                                cond = OpLogic("==", [do_index, rhs_cond])
-                        else:
-                            if do_index in lhs_cond.collect_vars() or do_index in rhs_cond.collect_vars():
-                                # todo for >, >=, <, <=, .gt., .ge., .lt., and .le
-                                cond = OpLogic(cond_new.op, [lhs_cond, rhs_cond])
-                            else:
-                                cond = cond_new
-                    else:
-                        if cond_new is None: # else
-                            cond = OpNot([reduce(lambda x, y: x & y, cond_list)])
-                        elif do_index in cond_new.collect_vars():
-                            raise RuntimeError(f"Unexpected Error: {cond_new}")
-                        else:
-                            cond = cond_new
-                    cond_list.append(cond)
-                    delta_vars, ary_vars, clear_vars = _collect_data(block, delta_vars, ary_vars, clear_vars, do_index, do_range, cond)
-                return (delta_vars, ary_vars, clear_vars)
-            for child in node.iter_children():
-                delta_vars, ary_vars, clear_vars = _collect_data(child, delta_vars, ary_vars, clear_vars, do_index, do_range, cond)
-            return (delta_vars, ary_vars, clear_vars)
+                arg0 = func_term.args[0]
+                arg1 = func_term.args[1]
+                if arg0 != range_min and arg1 != range_min:
+                    return (None, False)
+                d0 = (arg0 - do_index).get_int()
+                if isinstance(d0, int):
+                    return (d0, True)
+                d1 = (func_term.args[1] - do_index).get_int()
+                if isinstance(d1, int):
+                    return (d1, True)
+                return (None, False)
 
         def _convert() -> Tuple[List[Node], str | None]:
-            delta_vars, ary_vars, clear_vars = _collect_data(loop._body, [], {}, [], do_index, do_range, None)
+            debug = False
+            # debug = True
+
+            def _collect_data(
+                    node: Node,
+                    do_index: OpVar,
+                    do_range: OpRange,
+                    cond: OpLogic | None
+            ) -> None:
+                if isinstance(node, Assignment):
+                    lhs: OpVar = node.lhs
+                    lhsname = lhs.name
+                    if lhs.is_integer_type and lhs.index is None: # for delta_vars
+                        if lhsname not in private_vars:
+                            raise RuntimeError(f"Scalar variable was found but not private: {lhsname}")
+                        rhs = node.rhs
+                        for var, delta in delta_vars:
+                            rhs = rhs.replace_with(var, do_index + OpInt(delta))
+                        if cond:
+                            cond0 = cond.args[0]
+                            cond1 = cond.args[1]
+                            if cond0 != do_index and cond1 != do_index:
+                                raise RuntimeError(f"Unexpected error: {type(cond)} {cond}")
+                            if cond.op == "==":
+                                if cond1 == do_index:
+                                    cond0, cond1 = cond1, cond0
+                                if cond1 == range_min or cond1 == range_max:
+                                    for v, delta in delta_vars:
+                                        if v == lhs:
+                                            delta_except[lhsname] = delta
+                                            return
+                                    raise RuntimeError(f"Unexpected error: {lhs} {node}")
+                                else:
+                                    v1 = rhs - cond1
+                                    v2 = do_range[1] - do_range[0] + 1
+                                    delta_new1 = (v1 - v2).get_int()
+                                    delta_new2 = (v1 + v2).get_int()
+                                    if delta_new1 is None and delta_new2 is None:
+                                        delta_new = None
+                                    elif delta_new1 is not None and delta_new2 is not None:
+                                        delta_new = min(delta_new1, delta_new2)
+                                    else:
+                                        delta_new = delta_new1 if delta_new1 is not None else delta_new2
+                            else:
+                                # Not Implemented yet
+                                if debug:
+                                    print("ConvertToSerial 1")
+                                raise ConvertToSerial
+                        else:
+                            delta_new = (rhs - do_index).get_int()
+                        if delta_new is None:
+                            delta_new, exept = _infer_func_delta(rhs)
+                            if exept:
+                                delta_except[lhsname] = delta_new
+                        if delta_new is not None:
+                            found = False
+                            for var, delta in delta_vars:
+                                if lhsname == var.name:
+                                    if delta_new is not delta:
+                                       if debug:
+                                           print("ConvertToSerial 2")
+                                           print(node)
+                                           print(delta, delta_new)
+                                       raise ConvertToSerial
+                                    found = True
+                            if not found:
+                                delta_vars.append((lhs, delta_new))
+                        else:
+                            if lhs in [v[0] for v in delta_vars]:
+                                if debug:
+                                    print("ConvertToSerial 3")
+                                    print(node)
+                                    print(delta_vars)
+                                raise ConvertToSerial
+                        return
+
+                    if lhsname.endswith(AD_SUFFIX): # for ary_vars and clear_vars
+                        index = lhs.index
+                        if index is not None and lhsname not in private_vars:
+                            if lhsname in ary_vars:
+                                if index not in ary_vars[lhsname]:
+                                    ary_vars[lhsname].append(index)
+                            else:
+                                ary_vars[lhsname] = [index]
+                        for var in node.rhs.collect_vars(without_index=True):
+                            if var.index is not None and do_index in var.index.collect_vars():
+                                if var.name not in clear_vars:
+                                    clear_vars.append(var.name)
+                        return
+
+                if isinstance(node, BranchBlock):
+                    cond_list = []
+                    for cond_new, block in node.cond_blocks:
+                        if isinstance(cond_new, List): # select case
+                            # Not implemented yet
+                            if debug:
+                                print("ConvertToSerial 4")
+                            raise ConvertToSerial
+                        elif isinstance(cond_new, OpLogic):
+                            lhs_cond = cond_new.args[0]
+                            rhs_cond = cond_new.args[1]
+                            for v, delta in delta_vars:
+                                dvar = do_index + OpInt(delta)
+                                lhs_cond = lhs_cond.replace_with(v, dvar)
+                                rhs_cond = rhs_cond.replace_with(v, dvar)
+                            if cond_new.op in (".eq.", "=="):
+                                if do_index in lhs_cond.collect_vars():
+                                    rhs_cond = rhs_cond - lhs_cond + do_index
+                                    cond = OpLogic("==", [do_index, rhs_cond])
+                                elif do_index in rhs_cond.collect_vars():
+                                    rhs_cond = lhs_cond - rhs_cond + do_index
+                                    cond = OpLogic("==", [do_index, rhs_cond])
+                            else:
+                                if do_index in lhs_cond.collect_vars() or do_index in rhs_cond.collect_vars():
+                                    # todo for >, >=, <, <=, .gt., .ge., .lt., and .le
+                                    cond = OpLogic(cond_new.op, [lhs_cond, rhs_cond])
+                                else:
+                                    cond = cond_new
+                        else:
+                            if cond_new is None: # else
+                                cond = OpNot([reduce(lambda x, y: x & y, cond_list)])
+                            elif do_index in cond_new.collect_vars():
+                                raise RuntimeError(f"Unexpected Error: {cond_new}")
+                            else:
+                                cond = cond_new
+                        cond_list.append(cond)
+                        _collect_data(block, do_index, do_range, cond)
+                    return
+                for child in node.iter_children():
+                    _collect_data(child, do_index, do_range, cond)
+                return
+
+            delta_vars: List[Tuple[OpVar, int]] = []
+            delta_except: Dict[str, int] = {}
+            ary_vars: Dict[str, List[AryIndex]] = {}
+            clear_vars: List[str] = []
+
+            _collect_data(loop._body, do_index, do_range, None)
             delta_vars.append((do_index, 0))
 
             # print(delta_vars)
+            # print(delta_except)
             # print(ary_vars)
             # print(clear_vars)
 
@@ -7127,23 +7169,29 @@ class OmpDirective(Node):
                             dim = dim.replace_with(dvar, do_index + OpInt(delta))
                         delta_new = (dim - do_index).get_int()
                         if delta_new is None:
-                            delta_new = _infer_func_delta(dim)
+                            delta_new, _ = _infer_func_delta(dim)
+                            if delta_new is not None:
+                                delta_new = delta_new[0]
                         if delta_new is None:
                             if i == idim or do_index in dim.collect_vars():
-                                # print(5)
-                                # print(varname, ary_vars[varname])
-                                # print(dim, do_index)
+                                if debug:
+                                    print("ConvertToSerial 5")
+                                    print(varname, ary_vars[varname])
+                                    print(dim, do_index)
                                 raise ConvertToSerial
                             continue
                         max_delta = max(max_delta, abs(delta_new))
                         if idim is None:
                             idim = i
                         elif i is not idim:
-                            # print(6)
+                            if debug:
+                                print("ConvertToSerial 6")
                             raise ConvertToSerial
                         deltas.add(delta_new)
                 if idim is not None and len(deltas) > 1:
                     if disable_scatter_to_gather:
+                        if debug:
+                            print("ConvertToSerial 7")
                         raise ConvertToSerial
                     target_vars[varname] = idim
 
@@ -7157,6 +7205,8 @@ class OmpDirective(Node):
             delta_rev: Dict[int, OpVar] = {}
             for var, delta in delta_vars:
                 if delta in delta_rev:
+                    if debug:
+                        print("ConvertToSerial 8")
                     raise ConvertToSerial
                 delta_rev[delta] = var
 
@@ -7200,7 +7250,6 @@ class OmpDirective(Node):
                 delta_vnames = [v.name for v in delta_rev.values() if isinstance(v, OpVar)]
                 if lhsname in private_vars:
                     if delta == 0:
-                        idx_new = do_index
                         assign = assign_node
                     else:
                         rhs_new = rhs
@@ -7250,13 +7299,13 @@ class OmpDirective(Node):
                     if nhalo == 0 or not dependent_privatevars[lhsname]:
                         result_nodes.append(assign)
                     else:
-                        idx_new = _idx_delta(delta)
+                        op_delta = OpInt(delta)
                         if delta == -nhalo:
-                            cond = idx_new >= range_min
+                            cond = do_index >= range_min - op_delta
                         elif delta == nhalo:
-                            cond = idx_new <= range_max
+                            cond = do_index <= range_max - op_delta
                         else:
-                            cond = (idx_new >= range_min) & (idx_new <= range_max)
+                            cond = (do_index >= range_min - op_delta) & (do_index <= range_max - op_delta)
                         node_new = IfBlock([(cond, Block([assign]))])
                         result_nodes.append(node_new)
                     return assign_node.ad_info
@@ -7285,17 +7334,50 @@ class OmpDirective(Node):
                     index_lhs = lhs.index.copy()
                     index_lhs[idim] = do_index
                     lhs = lhs.change_index(index_lhs)
-                    if delta in delta_rev:
+
+                    if isinstance(dim, OpVar) and dim.name in delta_except:
+                        delta_ex = delta_except[dim.name]
+                        if delta_ex > 0:
+                            base = range_max
+                            rng = range(-delta_ex+1, 1)
+                            cond = do_index >= range_min + delta_ex
+                        else:
+                            base = range_min
+                            rng = range(0, -delta_ex)
+                            cond = do_index <= range_max + delta_ex
+                        rhs_new = None
+                        for i in rng:
+                            v = rhs.replace_with(do_index, base+i)
+                            if rhs_new is None:
+                                rhs_new = v
+                            else:
+                                rhs_new = rhs_new + v
+                        cond_ex = OpLogic("==", [do_index, base])
+                        assign = Assignment(lhs, rhs_new, assign_node.accumulate, assign_node.info, assign_node.ad_info)
+                        ifblock = IfBlock([(cond_ex, Block([assign]))])
+                        result_nodes.append(ifblock)
+                        if delta not in delta_rev:
+                            print(delta_rev)
+                            raise RuntimeError(f"delta var is not cound: {delta}")
+                        index_rhs = delta_rev[delta]
+                    elif nhalo == 0:
+                        if delta not in delta_rev:
+                            print(delta_rev)
+                            raise RuntimeError(f"delta var is not cound: {delta}")
                         index_rhs = delta_rev[delta]
                         cond = None
                     else:
-                        index_rhs = do_index + OpInt(delta)
-                        if delta == nhalo:
-                            cond = index_rhs <= range_max
-                        elif delta == -nhalo:
-                            cond = index_rhs >= range_min
+                        op_delta = OpInt(delta)
+                        if delta in delta_rev:
+                            index_rhs = delta_rev[delta]
                         else:
-                            cond = (index_rhs >= range_min) & (index_rhs <= range_max)
+                            index_rhs = do_index + op_delta
+                        if delta == nhalo:
+                            cond = do_index <= range_max - op_delta
+                        elif delta == -nhalo:
+                            cond = do_index >= range_min - op_delta
+                        else:
+                            cond = (do_index >= range_min - op_delta) & (do_index <= range_max - op_delta)
                     for var in rhs.collect_vars(without_index=True):
                         vname = var.name
                         if vname in private_vars and dependent_privatevars[vname]:
@@ -7371,6 +7453,8 @@ class OmpDirective(Node):
 
                 if isinstance(node, DoLoop):
                     if do_index in node.range.collect_vars():
+                        if debug:
+                            print("ConvertToSerial 9")
                         raise ConvertToSerial
                     clear_nodes_child: List[Node] = []
                     inner_nodes: List[Node] = []
@@ -7527,9 +7611,9 @@ class OmpDirective(Node):
                         ad_info_local = _transform_node(child, deltas, result_nodes, clear_nodes, ad_info_local)
                     return None
 
+                if debug:
+                    print("ConvertToSerial 10")
                 raise ConvertToSerial
-                #result_nodes.append(node)
-                #return None
 
             result_nodes: List[Node] = []
 
