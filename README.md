@@ -28,13 +28,17 @@ routine names.
 Integer variables are treated as constants, so no ``_ad`` variables are generated for them.
 The generated module is named ``<module>_ad`` and provides both a forward (``<name>_fwd_ad``) and a reverse (``<name>_rev_ad``) version of each original routine.
 
+After installation the ``fautodiff`` console script is available on your ``PATH``.
+When working directly from a source checkout you can invoke the same entry point
+with ``python -m fautodiff.cli`` or run ``./bin/fautodiff``.
+
 Generate the AD code for an example file ``examples/simple_math.f90``:
 ```bash
 # print to standard output
-bin/fautodiff examples/simple_math.f90
+fautodiff examples/simple_math.f90
 
 # or write to a file
-bin/fautodiff examples/simple_math.f90 -o examples/simple_math_ad.f90
+fautodiff examples/simple_math.f90 -o examples/simple_math_ad.f90
 ```
 
 Example of the original code in ``examples/simple_math.f90``:
@@ -71,28 +75,28 @@ The default ``both`` generates both sets of routines.
 
 Generate forward mode only:
 ```bash
-bin/fautodiff --mode forward examples/simple_math.f90
+fautodiff --mode forward examples/simple_math.f90
 ```
 
 Generate reverse mode only:
 ```bash
-bin/fautodiff --mode reverse examples/simple_math.f90
+fautodiff --mode reverse examples/simple_math.f90
 ```
 
 Suppress warnings about unsupported derivatives with ``--no-warn``:
 ```bash
-bin/fautodiff --no-warn examples/simple_math.f90
+fautodiff --no-warn examples/simple_math.f90
 ```
 
 Ignore any ``!$FAD`` directives in the source:
 ```bash
-bin/fautodiff --ignore-fad examples/directives.f90
+fautodiff --ignore-fad examples/directives.f90
 ```
 
 Keep OpenMP scatter stores as-is instead of rewriting them to gathers with
 ``--disable-scatter-to-gather``:
 ```bash
-bin/fautodiff --disable-scatter-to-gather examples/omp_loops.f90
+fautodiff --disable-scatter-to-gather examples/omp_loops.f90
 ```
 
 Each module's routine signatures are also written to a `<module>.fadmod` file when AD code is generated.
@@ -100,10 +104,10 @@ These JSON files can be loaded when differentiating another file that uses the m
 Add search directories with ``-I`` (repeat as needed), choose the output directory with ``-M DIR`` (defaults to the current directory), and disable writing with ``--no-fadmod``:
 ```bash
 # write ``cross_mod_a.fadmod`` under ``examples``
-bin/fautodiff -M examples examples/cross_mod_a.f90
+fautodiff -M examples examples/cross_mod_a.f90
 
 # load that file when differentiating another module
-bin/fautodiff -I examples examples/cross_mod_b.f90
+fautodiff -I examples examples/cross_mod_b.f90
 ```
 
 The structure of these files is documented in [docs/fadmod.md](docs/fadmod.md).
