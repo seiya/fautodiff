@@ -97,8 +97,9 @@ class TestCLIUnit(unittest.TestCase):
             write_fadmod,
             fadmod_dir,
             mode,
-            ignore_fad,
+            disable_directives,
             disable_scatter_to_gather,
+            **kwargs,
         ):
             called.update(
                 dict(
@@ -110,10 +111,12 @@ class TestCLIUnit(unittest.TestCase):
                     write_fadmod=write_fadmod,
                     fadmod_dir=fadmod_dir,
                     mode=mode,
-                    ignore_fad=ignore_fad,
+                    disable_directives=disable_directives,
                     disable_scatter_to_gather=disable_scatter_to_gather,
                 )
             )
+            if kwargs:
+                called["extra_kwargs"] = kwargs
             return "module dummy_ad\nend module dummy_ad\n"
 
         with patch(
@@ -134,7 +137,7 @@ class TestCLIUnit(unittest.TestCase):
             buf = io.StringIO()
             with patch.object(sys, "argv", argv), redirect_stdout(buf):
                 cli.main()
-            argv.append("--ignore-fad")
+            argv.append("--disable-directives")
             buf = io.StringIO()
             with patch.object(sys, "argv", argv), redirect_stdout(buf):
                 cli.main()
@@ -144,7 +147,7 @@ class TestCLIUnit(unittest.TestCase):
         self.assertFalse(called["write_fadmod"])  # --no-fadmod
         self.assertIsNone(called["fadmod_dir"])  # default
         self.assertEqual(called["mode"], "both")
-        self.assertTrue(called["ignore_fad"])  # --ignore-fad
+        self.assertTrue(called["disable_directives"])  # --disable-directives
 
 
 if __name__ == "__main__":

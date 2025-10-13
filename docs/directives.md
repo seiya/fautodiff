@@ -2,7 +2,7 @@
 
 Optional directives can be added in Fortran comments to adjust how the automatic differentiation code is generated.
 Each directive starts with `!$FAD` and may appear immediately before a subroutine, function or module definition. Use the
-`--ignore-fad` command line option to treat all directives as ordinary comments and disable their effects.
+`--disable-directives` command line option to treat all directives as ordinary comments and disable their effects.
 
 ## CONSTANT_VARS
 

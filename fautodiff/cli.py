@@ -47,9 +47,10 @@ def main():
         help="AD mode to generate",
     )
     parser_arg.add_argument(
-        "--ignore-fad",
+        "--disable-directives",
+        dest="disable_directives",
         action="store_true",
-        help="ignore !$FAD directives in source files",
+        help="treat !$FAD directives as ordinary comments",
     )
     parser_arg.add_argument(
         "--disable-scatter-to-gather",
@@ -73,7 +74,7 @@ def main():
             write_fadmod=not args.no_fadmod,
             fadmod_dir=args.fadmod_dir,
             mode=args.mode,
-            ignore_fad=args.ignore_fad,
+            disable_directives=args.disable_directives,
             disable_scatter_to_gather=args.disable_scatter_to_gather,
         )
     except Exception as exc:
