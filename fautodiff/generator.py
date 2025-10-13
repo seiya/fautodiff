@@ -8,6 +8,7 @@ REV_SUFFIX = "_rev_ad"
 
 import re
 import sys
+import warnings as warning_mod
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -2464,8 +2465,9 @@ def generate_ad(
     write_fadmod: bool = True,
     fadmod_dir: Optional[Union[str, Path]] = None,
     mode: str = "both",
-    ignore_fad: bool = False,
+    disable_directives: bool = False,
     disable_scatter_to_gather: bool = False,
+    **kwargs,
 ) -> Optional[str]:
     """Generate an AD version of ``src``.
 
@@ -2474,11 +2476,26 @@ def generate_ad(
     ``out_file`` is ``None`` the generated code is returned as a string.  When
     ``out_file`` is provided the code is also written to that path. ``fadmod_dir``
     selects where ``<module>.fadmod`` files are written (defaults to the current
-    working directory). ``disable_scatter_to_gather`` controls whether scatter
+    working directory). ``disable_directives`` treats all ``!$FAD`` directives as
+    ordinary comments. ``disable_scatter_to_gather`` controls whether scatter
     stores in OpenMP loops are rewritten into gather-style updates.
     """
     modules = []
     warnings = []
+
+    if "ignore_fad" in kwargs:
+        warning_mod.warn(
+            "The 'ignore_fad' argument is deprecated; use 'disable_directives' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        disable_directives = disable_directives or bool(kwargs.pop("ignore_fad"))
+
+    if kwargs:
+        unexpected = ", ".join(sorted(kwargs))
+        raise TypeError(
+            f"generate_ad() got unexpected keyword argument(s): {unexpected}"
+        )
 
     if search_dirs is None:
         search_dirs = []
@@ -2486,7 +2503,7 @@ def generate_ad(
     if cwd not in search_dirs:
         search_dirs.append(cwd)
 
-    if ignore_fad:
+    if disable_directives:
         src = "\n".join(
             "" if line.lstrip().startswith("!$FAD") else line
             for line in src.splitlines()

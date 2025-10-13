@@ -88,9 +88,9 @@ Suppress warnings about unsupported derivatives with ``--no-warn``:
 fautodiff --no-warn examples/simple_math.f90
 ```
 
-Ignore any ``!$FAD`` directives in the source:
+Disable processing of any ``!$FAD`` directives in the source:
 ```bash
-fautodiff --ignore-fad examples/directives.f90
+fautodiff --disable-directives examples/directives.f90
 ```
 
 Keep OpenMP scatter stores as-is instead of rewriting them to gathers with
