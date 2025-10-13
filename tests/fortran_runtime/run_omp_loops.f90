@@ -8,10 +8,11 @@ program run_omp_loops
   integer, parameter :: I_sum_loop = 1
   integer, parameter :: I_stencil_loop = 2
   integer, parameter :: I_stencil_loop_mod = 3
-  integer, parameter :: I_stencil_loop_with_halo = 4
-  integer, parameter :: I_indirect_access_loop = 5
-  integer, parameter :: I_omp_ws_if = 6
-  integer, parameter :: I_omp_ws_alloc = 7
+  integer, parameter :: I_stencil_loop_max = 4
+  integer, parameter :: I_stencil_loop_with_halo = 5
+  integer, parameter :: I_indirect_access_loop = 6
+  integer, parameter :: I_omp_ws_if = 7
+  integer, parameter :: I_omp_ws_alloc = 8
 
   integer :: length, status
   character(:), allocatable :: arg
@@ -31,6 +32,8 @@ program run_omp_loops
               i_test = I_stencil_loop
            case ("stencil_loop_mod")
               i_test = I_stencil_loop_mod
+           case ("stencil_loop_max")
+              i_test = I_stencil_loop_max
            case ("stencil_loop_with_halo")
               i_test = I_stencil_loop_with_halo
            case ("indirect_access_loop")
@@ -56,6 +59,9 @@ program run_omp_loops
   end if
   if (i_test == I_stencil_loop_mod .or. i_test == I_all) then
      call test_stencil_loop_mod
+  end if
+  if (i_test == I_stencil_loop_max .or. i_test == I_all) then
+     call test_stencil_loop_max
   end if
   if (i_test == I_stencil_loop_with_halo .or. i_test == I_all) then
      call test_stencil_loop_with_halo
@@ -181,6 +187,54 @@ contains
 
     return
   end subroutine test_stencil_loop_mod
+
+  subroutine test_stencil_loop_max
+    real, parameter :: tol_max = 1.7e-4
+    integer, parameter :: nx = 4
+    integer, parameter :: ny = 3
+    real :: h(nx, ny), u(nx, ny)
+    real :: h_eps_plus(nx, ny), h_eps_minus(nx, ny)
+    real :: u_eps_plus(nx, ny), u_eps_minus(nx, ny)
+    real :: h_seed(nx, ny)
+    real :: fd_u(nx, ny), eps
+    real :: h_ad(nx, ny), u_ad(nx, ny)
+    real :: inner1, inner2
+    integer :: i, j
+
+    eps = 1.0e-3
+    do j = 1, ny
+       do i = 1, nx
+          h(i, j) = 0.5 * real(i) - 0.25 * real(j)
+          h_seed(i, j) = 0.25 * real(i) + 0.5 * real(j)
+       end do
+    end do
+
+    call stencil_loop_max(nx, ny, h, u)
+
+    h_eps_plus(:,:) = h(:,:) + eps * h_seed(:,:)
+    call stencil_loop_max(nx, ny, h_eps_plus, u_eps_plus)
+    h_eps_minus(:,:) = h(:,:) - eps * h_seed(:,:)
+    call stencil_loop_max(nx, ny, h_eps_minus, u_eps_minus)
+    fd_u(:,:) = (u_eps_plus(:,:) - u_eps_minus(:,:)) / (2.0 * eps)
+
+    h_ad(:,:) = h_seed(:,:)
+    call stencil_loop_max_fwd_ad(nx, ny, h, h_ad, u, u_ad)
+    if (any(abs((u_ad(:,:) - fd_u(:,:)) / max(abs(fd_u(:,:)), tol_max)) > tol_max)) then
+       print *, 'test_stencil_loop_max_fwd failed', maxval(abs((u_ad(:,:) - fd_u(:,:)) / fd_u(:,:)))
+       error stop 1
+    end if
+
+    inner1 = sum(u_ad(:,:)**2)
+    h_ad(:,:) = 0.0
+    call stencil_loop_max_rev_ad(nx, ny, h_ad, u_ad)
+    inner2 = sum(h_seed(:,:) * h_ad(:,:))
+    if (abs((inner2 - inner1) / max(abs(inner1), tol_max)) > tol_max) then
+       print *, 'test_stencil_loop_max_rev failed', inner1, inner2
+       error stop 1
+    end if
+
+    return
+  end subroutine test_stencil_loop_max
 
   subroutine test_stencil_loop_with_halo
     real, parameter :: tol_halo = 5.0e-4

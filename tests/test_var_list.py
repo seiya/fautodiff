@@ -390,78 +390,6 @@ class TestVarList(unittest.TestCase):
         vl_intersect2 = vl1 & vl3
         self.assertIn(v("A", (1, n)), vl_intersect2)
 
-
-def make_dt_var(chain, index_dims=None):
-    """Create an OpVar for a derived-type chain.
-
-    chain: list of tuples (name, dims_tuple_or_None).
-      - dims use declaration-size tokens, e.g., ("n",) or ("n","m").
-    index_dims: optional list of index Operators for the leaf (slice at use-site); if None, no index.
-    """
-    ref = None
-    for name, dims in chain:
-        dims_op = None
-        dims_raw = None
-        if dims is not None:
-            dims_raw = tuple(str(d) for d in dims)
-            dims_op = []
-            for d in dims:
-                if isinstance(d, str):
-                    if d in (":", "*"):
-                        dims_op.append(None)
-                    else:
-                        dims_op.append(OpVar(d))
-                else:
-                    dims_op.append(d)
-            dims_op = tuple(dims_op)
-        ref = OpVar(
-            name,
-            var_type=VarType("real"),
-            dims=dims_op,
-            dims_raw=dims_raw,
-            ref_var=ref,
-        )
-    if index_dims is not None:
-        ref = OpVar(
-            ref.name,
-            index=AryIndex(index_dims),
-            var_type=ref.var_type,
-            dims=ref.dims,
-            dims_raw=ref.dims_raw,
-            ref_var=ref.ref_var,
-        )
-    return ref
-
-
-class TestVarListDerivedShape(unittest.TestCase):
-    def test_shape_inferred_from_leaf_dims_in_derived_type(self):
-        # s%a where a has dims ('n',) and s is scalar
-        var = make_dt_var([("s", None), ("a", ("n",))])
-        il = IndexList()
-        il.push_var(var)
-        self.assertTrue(il.contains(AryIndex([OpInt(1)])))
-        self.assertTrue(il.contains(AryIndex([OpVar("n")])))
-        self.assertFalse(il.contains(AryIndex([OpInt(0)])))
-
-    def test_shape_inferred_from_parent_and_leaf_dims(self):
-        # s(i)%a(n,m) -> concatenated dims length 3
-        var = make_dt_var([("s", ("i",)), ("a", ("n", "m"))])
-        il = IndexList()
-        il.push_var(var)
-        self.assertTrue(il.contains(AryIndex([OpInt(1), OpInt(1), OpInt(1)])))
-        self.assertTrue(il.contains(AryIndex([OpVar("i"), OpVar("n"), OpVar("m")])))
-        self.assertFalse(il.contains(AryIndex([OpInt(0), OpInt(1), OpInt(1)])))
-        self.assertFalse(il.contains(AryIndex([OpInt(1), OpInt(0), OpInt(1)])))
-        self.assertFalse(il.contains(AryIndex([OpInt(1), OpInt(1), OpInt(0)])))
-
-    def test_shape_mismatch_raises_for_different_leaf_dims(self):
-        var1 = make_dt_var([("s", None), ("a", ("n",))])
-        il = IndexList()
-        il.push_var(var1)
-        var2 = make_dt_var([("s", None), ("a", ("m",))])
-        with self.assertRaises(ValueError):
-            il.push_var(var2)
-
     def test_guard_push_creates_guarded_entry(self):
         vl = VarList()
         guard = OpVar("mask")
@@ -616,6 +544,127 @@ class TestVarListDerivedShape(unittest.TestCase):
         vl.enter_guard(guard2)
 
         self.assertIn(item, vl)
+
+    def test_context(self):
+        i = OpVar("i")
+        n = OpVar("n")
+        u = OpVar("u", index=AryIndex([i]))
+        one = OpInt(1)
+        do_index = i
+        do_range = OpRange([one, n])
+        ctx = (do_index, [], do_range)
+        vl = VarList()
+        vl.push_context(ctx)
+        vl.push(u)
+        vl.pop_context()
+
+        self.assertEqual({"u(1:n)"}, {str(v) for v in vl})
+
+    def test_context_reverse(self):
+        i = OpVar("i")
+        n = OpVar("n")
+        u = OpVar("u", index=AryIndex([i]))
+        one = OpInt(1)
+        do_index = i
+        do_range = OpRange([n, one, -one])
+        ctx = (do_index, [], do_range)
+        vl = VarList()
+        vl.push_context(ctx)
+        vl.push(u)
+        vl.pop_context()
+
+        self.assertEqual({"u(1:n)"}, {str(v) for v in vl})
+
+    def test_context_with_guard(self):
+        i = OpVar("i")
+        n = OpVar("n")
+        u = OpVar("u", index=AryIndex([i]))
+        one = OpInt(1)
+        do_index = i
+        do_range = OpRange([n, one, -one])
+        mask = i > 2
+        ctx = (do_index, [], do_range)
+        vl = VarList()
+        vl.push_context(ctx)
+        vl.enter_guard(mask)
+        vl.push(u)
+        vl.leave_guard()
+        vl.pop_context()
+
+        self.assertEqual({"u(1:n)"}, {str(v) for v in vl})
+        self.assertFalse(vl._guarded)
+
+
+def make_dt_var(chain, index_dims=None):
+    """Create an OpVar for a derived-type chain.
+
+    chain: list of tuples (name, dims_tuple_or_None).
+      - dims use declaration-size tokens, e.g., ("n",) or ("n","m").
+    index_dims: optional list of index Operators for the leaf (slice at use-site); if None, no index.
+    """
+    ref = None
+    for name, dims in chain:
+        dims_op = None
+        dims_raw = None
+        if dims is not None:
+            dims_raw = tuple(str(d) for d in dims)
+            dims_op = []
+            for d in dims:
+                if isinstance(d, str):
+                    if d in (":", "*"):
+                        dims_op.append(None)
+                    else:
+                        dims_op.append(OpVar(d))
+                else:
+                    dims_op.append(d)
+            dims_op = tuple(dims_op)
+        ref = OpVar(
+            name,
+            var_type=VarType("real"),
+            dims=dims_op,
+            dims_raw=dims_raw,
+            ref_var=ref,
+        )
+    if index_dims is not None:
+        ref = OpVar(
+            ref.name,
+            index=AryIndex(index_dims),
+            var_type=ref.var_type,
+            dims=ref.dims,
+            dims_raw=ref.dims_raw,
+            ref_var=ref.ref_var,
+        )
+    return ref
+
+
+class TestVarListDerivedShape(unittest.TestCase):
+    def test_shape_inferred_from_leaf_dims_in_derived_type(self):
+        # s%a where a has dims ('n',) and s is scalar
+        var = make_dt_var([("s", None), ("a", ("n",))])
+        il = IndexList()
+        il.push_var(var)
+        self.assertTrue(il.contains(AryIndex([OpInt(1)])))
+        self.assertTrue(il.contains(AryIndex([OpVar("n")])))
+        self.assertFalse(il.contains(AryIndex([OpInt(0)])))
+
+    def test_shape_inferred_from_parent_and_leaf_dims(self):
+        # s(i)%a(n,m) -> concatenated dims length 3
+        var = make_dt_var([("s", ("i",)), ("a", ("n", "m"))])
+        il = IndexList()
+        il.push_var(var)
+        self.assertTrue(il.contains(AryIndex([OpInt(1), OpInt(1), OpInt(1)])))
+        self.assertTrue(il.contains(AryIndex([OpVar("i"), OpVar("n"), OpVar("m")])))
+        self.assertFalse(il.contains(AryIndex([OpInt(0), OpInt(1), OpInt(1)])))
+        self.assertFalse(il.contains(AryIndex([OpInt(1), OpInt(0), OpInt(1)])))
+        self.assertFalse(il.contains(AryIndex([OpInt(1), OpInt(1), OpInt(0)])))
+
+    def test_shape_mismatch_raises_for_different_leaf_dims(self):
+        var1 = make_dt_var([("s", None), ("a", ("n",))])
+        il = IndexList()
+        il.push_var(var1)
+        var2 = make_dt_var([("s", None), ("a", ("m",))])
+        with self.assertRaises(ValueError):
+            il.push_var(var2)
 
 
 if __name__ == "__main__":

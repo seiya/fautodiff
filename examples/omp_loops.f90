@@ -88,6 +88,28 @@ contains
     return
   end subroutine stencil_loop_mod
 
+  subroutine stencil_loop_max(nx, ny, h, u)
+    integer, intent(in) :: nx, ny
+    real, intent(out) :: u(nx,ny)
+    real, intent(in)  :: h(nx,ny)
+    integer :: i, j
+    integer :: im1
+    integer :: jp1, jm1
+
+    !$omp parallel do private(im1,jp1,jm1)
+    do j = 1, ny
+      jp1 = min(j+1, ny)
+      jm1 = max(j-1, 1)
+      do i = 1, nx
+        im1 = modulo(i-2, nx) + 1
+        u(i,j) = (h(im1,jp1) + h(i,jp1)) - (h(im1,jm1) + h(i,jm1))
+      end do
+    end do
+    !$omp end parallel do
+
+    return
+  end subroutine stencil_loop_max
+
   subroutine stencil_loop_with_halo(is, ie, istart, iend, h, u, dhdt)
     integer, intent(in) :: is, ie
     integer, intent(in) :: istart, iend
@@ -96,11 +118,17 @@ contains
     real, intent(out) :: dhdt(is:ie)
     real :: flux(2)
     integer :: i
+    integer :: ip1, ip2
+    integer :: in1, in2
 
-   !$omp parallel do private(flux)
+   !$omp parallel do private(flux, ip1, ip2, in1, in2)
     do i = istart, iend
-      flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
-      flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      ip1 = i + 1
+      ip2 = i + 2
+      in1 = i - 1
+      in2 = i - 2
+      flux(1) = u(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0
+      flux(2) = u(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0
       dhdt(i) = - (flux(1) - flux(2))
     end do
 

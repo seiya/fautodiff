@@ -1391,17 +1391,17 @@ class VarList:
             arg0 = _remove_var(guard.args[0], vars)
             arg1 = _remove_var(guard.args[1], vars)
             if arg0 is None and arg1 is None:
-                raise RuntimeError(f"Unexpected guard: {guard}")
+                return None
             if arg0 is None:
-                return arg1
+                return arg1 if guard.is_logical() else None
             if arg1 is None:
-                return arg0
+                return arg0 if guard.is_logical() else None
             if arg0 is not guard.args[0] or arg1 is not guard.args[1]:
                 return OpLogic(guard.op, [arg0, arg1])
             return guard
         all_vars = [base_var] + vars
         to_remove: List[str] = []
-        for name in self._guarded:
+        for name in list(self._guarded.keys()):
             for gname in list(self._guarded[name].keys()):
                 guarded = self._guarded[name][gname]
                 guarded.exit_context((base_var, vars, range))
@@ -1410,15 +1410,20 @@ class VarList:
                 if guard_new is not guard: # changed
                     # print("del in pop_content 1", name, gname)
                     del self._guarded[name][gname]
-                    if guard_new is not None:
+                    if guard_new is None:
+                        if name in self._store:
+                            self._store[name].merge_from(guarded)
+                        else:
+                            self._store[name] = guarded
+                    else:
                         gname_new = str(guard_new)
                         self._guarded[name][gname_new] = guarded
                         if gname_new not in self._guard_dict:
                             self._guard_dict[gname_new] = guard_new
                     if gname not in to_remove:
                         to_remove.append(gname)
-                else:
-                    self._guarded[name][gname] = guarded
+            if not self._guarded[name]:
+                del self._guarded[name]
         for gname in to_remove:
             del self._guard_dict[gname]
 

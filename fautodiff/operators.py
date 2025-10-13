@@ -2157,10 +2157,12 @@ class OpPow(OpBinary):
 
 @dataclass
 class OpLogic(OpBinary):
-    """Logical operations (.and., .or., .eq., .gt., .ge., .lt., and .le.)."""
+    """Logical operations (.and., .or., .eqv., .neqv., .eq., .gt., .ge., .lt., and .le.)."""
 
     op: str = field(default="")
     PRIORITY: ClassVar[int] = 6
+    COMPARISON_OPS: ClassVar[List[str]] = [".eq.", "==", ".gt.", ">", ".ge.", ">=", ".lt.", "<", ".le.", "<="]
+    LOGICAL_OPS: ClassVar[List[str]] = [".and.", ".or.", ".eqv.", ".neqv."]
 
     def __init__(self, op: str, args: List[Operator]):
         super().__init__(args=args, var_type=VarType("logical"))
@@ -2193,6 +2195,9 @@ class OpLogic(OpBinary):
 
     def __or__(self, other):
         return OpLogic(".or.", args=[self, other])
+
+    def is_logical(self) -> bool:
+        return self.op in self.LOGICAL_OPS
 
 
 INTRINSIC_FUNCTIONS = {
