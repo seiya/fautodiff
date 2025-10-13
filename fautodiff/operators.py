@@ -2443,11 +2443,18 @@ class OpFunc(Operator):
         arg1 = self.args[1]
         dvar1 = arg1.derivative(var, target, info, warnings)
 
-        if self.name == "mod":
-            return dvar0 - dvar1 * OpFunc(
+        if self.name in ("mod", "modulo"):
+            ratio = arg0 / arg1
+            trunc = OpFunc(
                 "real",
-                args=[OpFunc("int", args=[arg0 / arg1]), OpFunc("kind", args=[arg0])],
+                args=[OpFunc("int", args=[ratio]), OpFunc("kind", args=[arg0])],
             )
+            if self.name == "modulo":
+                adjust = OpFunc("merge", args=[one, zero, trunc > ratio])
+                factor = trunc - adjust
+            else:
+                factor = trunc
+            return dvar0 - dvar1 * factor
         if self.name == "min":
             cond = arg0 >= arg1
             return dvar0 * OpFunc("merge", args=[one, zero, cond]) + dvar1 * OpFunc(
