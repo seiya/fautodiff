@@ -2483,14 +2483,6 @@ def generate_ad(
     modules = []
     warnings = []
 
-    if "ignore_fad" in kwargs:
-        warning_mod.warn(
-            "The 'ignore_fad' argument is deprecated; use 'disable_directives' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        disable_directives = disable_directives or bool(kwargs.pop("ignore_fad"))
-
     if kwargs:
         unexpected = ", ".join(sorted(kwargs))
         raise TypeError(

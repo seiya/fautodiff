@@ -53,12 +53,6 @@ def main():
         help="treat !$FAD directives as ordinary comments",
     )
     parser_arg.add_argument(
-        "--ignore-fad",
-        dest="disable_directives",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
-    parser_arg.add_argument(
         "--disable-scatter-to-gather",
         action="store_true",
         help="do not rewrite OpenMP scatter stores into gather operations",
