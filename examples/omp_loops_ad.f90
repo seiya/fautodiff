@@ -377,18 +377,26 @@ contains
     real, intent(out) :: dhdt_ad(is:ie)
     real :: flux_ad(2)
     integer :: i
+    integer :: ip1
+    integer :: ip2
+    integer :: in1
+    integer :: in2
     real :: flux(2)
 
-    !$omp parallel do private(flux, flux_ad)
+    !$omp parallel do private(flux, ip1, ip2, in1, in2, flux_ad)
     do i = istart, iend
-      flux_ad(1) = u_ad(i) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 - h_ad(i + 2) * u(i) / 6.0 &
-                   + h_ad(i + 1) * u(i) * 2.0 / 6.0 - h_ad(i) * u(i) * 2.0 / 6.0 + h_ad(i - 1) * u(i) / 6.0
-        ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
-      flux(1) = u(i) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0
-      flux_ad(2) = u_ad(i - 1) * (- h(i + 1) + 2.0 * h(i) - 2.0 * h(i - 1) + h(i - 2)) / 6.0 - h_ad(i + 1) * u(i - 1) / 6.0 &
-                   + h_ad(i) * u(i - 1) * 2.0 / 6.0 - h_ad(i - 1) * u(i - 1) * 2.0 / 6.0 + h_ad(i - 2) * u(i - 1) / 6.0
-        ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
-      flux(2) = u(i - 1) * (- h(i + 1) + 2.0 * h(i) - 2.0 * h(i - 1) + h(i - 2)) / 6.0
+      ip1 = i + 1
+      ip2 = i + 2
+      in1 = i - 1
+      in2 = i - 2
+      flux_ad(1) = u_ad(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0 - h_ad(ip2) * u(i) / 6.0 &
+                   + h_ad(ip1) * u(i) * 2.0 / 6.0 - h_ad(i) * u(i) * 2.0 / 6.0 + h_ad(in1) * u(i) / 6.0
+        ! flux(1) = u(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0
+      flux(1) = u(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0
+      flux_ad(2) = u_ad(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0 - h_ad(ip1) * u(in1) / 6.0 &
+                   + h_ad(i) * u(in1) * 2.0 / 6.0 - h_ad(in1) * u(in1) * 2.0 / 6.0 + h_ad(in2) * u(in1) / 6.0
+        ! flux(2) = u(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0
+      flux(2) = u(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0
       dhdt_ad(i) = - flux_ad(1) + flux_ad(2) ! dhdt(i) = - (flux(1) - flux(2))
       dhdt(i) = - (flux(1) - flux(2))
     end do
@@ -413,9 +421,17 @@ contains
     real :: flux_ad_p1_ad(2)
     real :: flux_ad_p2_ad(2)
     integer :: i
+    integer :: ip1
+    integer :: ip2
+    integer :: in1
 
-    !$omp parallel do private(flux_ad, flux_ad_n2_ad, flux_ad_n1_ad, flux_ad_p1_ad, flux_ad_p2_ad)
+    !$omp parallel do private(ip1, ip2, in1, flux_ad, flux_ad_n2_ad, flux_ad_n1_ad, flux_ad_p1_ad, flux_ad_p2_ad)
     do i = iend + 2, istart - 2, - 1
+      if (i >= istart .and. i <= iend) then
+        ip1 = i + 1
+        ip2 = i + 2
+        in1 = i - 1
+      end if
       if (i >= istart + 2) then
         flux_ad_n2_ad(1) = - dhdt_ad(i - 2) ! dhdt(i) = - (flux(1) - flux(2))
       end if
@@ -442,42 +458,42 @@ contains
       end if
       if (i >= istart - 1 .and. i <= iend - 1) then
         u_ad(i) = flux_ad_p1_ad(2) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 + u_ad(i)
-          ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+          ! flux(2) = u(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0
       end if
       if (i >= istart + 1 .and. i <= iend + 1) then
         h_ad(i) = - flux_ad_n1_ad(2) * u(i - 2) / 6.0 + h_ad(i)
-          ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+          ! flux(2) = u(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0
       end if
       if (i >= istart .and. i <= iend) then
-        h_ad(i) = flux_ad(2) * u(i - 1) * 2.0 / 6.0 + h_ad(i)
-          ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+        h_ad(i) = flux_ad(2) * u(in1) * 2.0 / 6.0 + h_ad(i)
+          ! flux(2) = u(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0
       end if
       if (i >= istart - 1 .and. i <= iend - 1) then
         h_ad(i) = - flux_ad_p1_ad(2) * u(i) * 2.0 / 6.0 + h_ad(i)
-          ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+          ! flux(2) = u(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0
       end if
       if (i <= iend - 2) then
         h_ad(i) = flux_ad_p2_ad(2) * u(i + 1) / 6.0 + h_ad(i)
-          ! flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+          ! flux(2) = u(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0
       end if
       if (i >= istart .and. i <= iend) then
-        u_ad(i) = flux_ad(1) * (- h(i + 2) + 2.0 * h(i + 1) - 2.0 * h(i) + h(i - 1)) / 6.0 + u_ad(i)
-          ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+        u_ad(i) = flux_ad(1) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0 + u_ad(i)
+          ! flux(1) = u(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0
       end if
       if (i >= istart + 2) then
         h_ad(i) = - flux_ad_n2_ad(1) * u(i - 2) / 6.0 + h_ad(i)
-          ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+          ! flux(1) = u(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0
       end if
       if (i >= istart + 1 .and. i <= iend + 1) then
         h_ad(i) = flux_ad_n1_ad(1) * u(i - 1) * 2.0 / 6.0 + h_ad(i)
-          ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+          ! flux(1) = u(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0
       end if
       if (i >= istart .and. i <= iend) then
-        h_ad(i) = - flux_ad(1) * u(i) * 2.0 / 6.0 + h_ad(i) ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+        h_ad(i) = - flux_ad(1) * u(i) * 2.0 / 6.0 + h_ad(i) ! flux(1) = u(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0
       end if
       if (i >= istart - 1 .and. i <= iend - 1) then
         h_ad(i) = flux_ad_p1_ad(1) * u(i + 1) / 6.0 + h_ad(i)
-          ! flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
+          ! flux(1) = u(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0
       end if
     end do
     !$omp end parallel do
@@ -548,12 +564,12 @@ contains
     real, intent(inout), allocatable :: x(:)
     real, intent(inout), allocatable :: x_ad(:)
     real, intent(inout) :: y_ad(size(x))
-    real, allocatable :: x_save_162_ad(:)
+    real, allocatable :: x_save_170_ad(:)
 
-    allocate(x_save_162_ad, mold=x)
+    allocate(x_save_170_ad, mold=x)
     !$omp parallel
     !$omp workshare
-    x_save_162_ad(:) = x(:)
+    x_save_170_ad(:) = x(:)
     !$omp end workshare
     !$omp end parallel
 
@@ -561,12 +577,12 @@ contains
     !$omp workshare
     x_ad = y_ad + x_ad ! y = x
     y_ad = 0.0 ! y = x
-    x(:) = x_save_162_ad(:)
+    x(:) = x_save_170_ad(:)
     x_ad = x_ad * 2.0 * x ! x = x**2
     !$omp end workshare
     !$omp end parallel
-    if (allocated(x_save_162_ad)) then
-      deallocate(x_save_162_ad)
+    if (allocated(x_save_170_ad)) then
+      deallocate(x_save_170_ad)
     end if
 
     return

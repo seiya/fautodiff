@@ -7289,45 +7289,44 @@ class OmpDirective(Node):
                 rhs = assign_node.rhs
                 lhsname = lhs.name
 
+                def _replace_rhs(rhs: Operator) -> Operator:
+                    for var in rhs.collect_vars(without_index=True):
+                        vname = var.name
+                        if vname in private_vars and dependent_privatevars[vname]:
+                            var_new = var.deep_clone()
+                            if delta not in private_varnames[vname]:
+                                print(self)
+                                print(assign_node)
+                                print(vname)
+                                print(delta)
+                                print(private_varnames[vname])
+                                raise RuntimeError(f"Unexpected Error: {private_varnames[vn]} {delta}")
+                            var_new.name = private_varnames[vname][delta]
+                            rhs = rhs.replace_with(var, var_new)
+                    if nhalo > 0:
+                        rhs = rhs.replace_with(do_index, do_index + OpInt(delta))
+                    for d in range(-max_delta, max_delta+1) if delta < 0 else range(max_delta, -max_delta-1, -1):
+                        if d == 0 and nhalo > 0:
+                            continue
+                        src = _idx_delta(d)
+                        if nhalo == 0:
+                            dst = _idx_delta(d + delta)
+                            if "modulo" in str(dst) and src.name in private_varnames and delta in private_varnames[src.name]:
+                                dst = OpVar(private_varnames[_idx_delta(d).name][delta])
+                        else:
+                            dst = do_index + OpInt(d + delta)
+                        rhs = rhs.replace_with(src, dst)
+                    return rhs
+
                 delta_vnames = [v.name for v in delta_rev.values() if isinstance(v, OpVar)]
                 if lhsname in private_vars:
                     if delta == 0:
                         assign = assign_node
                     else:
-                        rhs_new = rhs
                         if lhsname in delta_vnames:
                             rhs_new = rhs.replace_with(do_index, do_index + OpInt(delta))
                         else:
-                            for vn in private_varnames:
-                                if vn == lhsname:
-                                    continue
-                                src = OpVar(vn)
-                                if src not in rhs_new.collect_vars():
-                                    continue
-                                found = False
-                                for v in delta_rev.values(): # try to find delta variables
-                                    if isinstance(v, OpVar) and v.name == vn:
-                                        found = True
-                                        break
-                                if found:
-                                    continue
-                                if not dependent_privatevars[vn]:
-                                    continue
-                                if delta not in private_varnames[vn]:
-                                    print(self)
-                                    print(assign_node)
-                                    print(vn)
-                                    print(delta)
-                                    print(private_varnames[vn])
-                                    raise RuntimeError(f"Unexpected Error: {private_varnames[vn]} {delta}")
-                                dst = OpVar(private_varnames[vn][delta])
-                                rhs_new = rhs_new.replace_with(src, dst)
-                            for d in range(-max_delta, max_delta+1) if delta < 0 else range(max_delta, -max_delta-1, -1):
-                                src = _idx_delta(d)
-                                dst = _idx_delta(d + delta)
-                                if "modulo" in str(dst) and src.name in private_varnames and delta in private_varnames[src.name]:
-                                    dst = OpVar(private_varnames[_idx_delta(d).name][delta])
-                                rhs_new = rhs_new.replace_with(src, dst)
+                            rhs_new = _replace_rhs(rhs)
                             if rhs_new is rhs:
                                 dependent_privatevars[lhsname] = False
                                 return ad_info_prev
@@ -7366,6 +7365,7 @@ class OmpDirective(Node):
 
                 idim = target_vars[lhs.name]
                 dim = lhs.index[idim]
+                # check if dim == do_index - delta or dim == delta_rev[-delta]
                 if (
                     (-delta not in delta_rev or delta_rev[-delta] != dim) and
                     (-delta != (dim - do_index).get_int())
@@ -7404,32 +7404,20 @@ class OmpDirective(Node):
                         if delta not in delta_rev:
                             print(delta_rev)
                             raise RuntimeError(f"delta var is not cound: {delta}")
-                        index_rhs = delta_rev[delta]
                     elif nhalo == 0:
                         if delta not in delta_rev:
                             print(delta_rev)
                             raise RuntimeError(f"delta var is not cound: {delta}")
-                        index_rhs = delta_rev[delta]
                         cond = None
                     else:
                         op_delta = OpInt(delta)
-                        if delta in delta_rev:
-                            index_rhs = delta_rev[delta]
-                        else:
-                            index_rhs = do_index + op_delta
                         if delta == nhalo:
                             cond = do_index <= range_max - op_delta
                         elif delta == -nhalo:
                             cond = do_index >= range_min - op_delta
                         else:
                             cond = (do_index >= range_min - op_delta) & (do_index <= range_max - op_delta)
-                    for var in rhs.collect_vars(without_index=True):
-                        vname = var.name
-                        if vname in private_vars and dependent_privatevars[vname]:
-                            var_new = var.deep_clone()
-                            var_new.name = private_varnames[vname][delta]
-                            rhs = rhs.replace_with(var, var_new)
-                    rhs = rhs.replace_with(do_index, index_rhs)
+                    rhs = _replace_rhs(rhs)
                 elif nhalo > 0:
                     cond = (do_index >= range_min) & (do_index <= range_max)
                 else:

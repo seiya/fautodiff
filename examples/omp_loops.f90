@@ -118,11 +118,17 @@ contains
     real, intent(out) :: dhdt(is:ie)
     real :: flux(2)
     integer :: i
+    integer :: ip1, ip2
+    integer :: in1, in2
 
-   !$omp parallel do private(flux)
+   !$omp parallel do private(flux, ip1, ip2, in1, in2)
     do i = istart, iend
-      flux(1) = u(i) * (- h(i+2) + 2.0 * h(i+1) - 2.0 * h(i) + h(i-1)) / 6.0
-      flux(2) = u(i-1) * (- h(i+1) + 2.0 * h(i) - 2.0 * h(i-1) + h(i-2)) / 6.0
+      ip1 = i + 1
+      ip2 = i + 2
+      in1 = i - 1
+      in2 = i - 2
+      flux(1) = u(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0
+      flux(2) = u(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0
       dhdt(i) = - (flux(1) - flux(2))
     end do
 
