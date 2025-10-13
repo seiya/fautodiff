@@ -49,6 +49,24 @@ class TestGenerator(unittest.TestCase):
         expected = Path("examples/cross_mod_b_ad.f90").read_text()
         self.assertEqual(generated, expected)
 
+    def test_modulo_intrinsic_supported(self):
+        code_tree.Node.reset()
+        src = textwrap.dedent(
+            """
+            module modulo_mod
+            contains
+              subroutine foo(x, y, z)
+                real, intent(in) :: x
+                real, intent(in) :: y
+                real, intent(out) :: z
+                z = modulo(x, y)
+              end subroutine foo
+            end module modulo_mod
+            """
+        )
+        generated = generator.generate_ad(src, "modulo.f90", warn=False)
+        self.assertIn("z = modulo(x, y)", generated)
+
     def test_missing_fadmod_raises(self):
         code_tree.Node.reset()
         fadmod = Path("cross_mod_a.fadmod")
