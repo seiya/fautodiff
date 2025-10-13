@@ -7215,8 +7215,6 @@ class OmpDirective(Node):
                             delta_new = (dim - do_index).get_int()
                             if delta_new is None:
                                 delta_new, _ = _infer_func_delta(dim)
-                                if delta_new is not None:
-                                    delta_new = delta_new[0]
                         else:
                             delta_new = None
                         if delta_new is None:
@@ -7311,7 +7309,11 @@ class OmpDirective(Node):
                         src = _idx_delta(d)
                         if nhalo == 0:
                             dst = _idx_delta(d + delta)
-                            if "modulo" in str(dst) and src.name in private_varnames and delta in private_varnames[src.name]:
+                            if ("modulo" in str(dst) and
+                                isinstance(src, OpVar) and
+                                src.name in private_varnames and
+                                delta in private_varnames[src.name]
+                            ):
                                 dst = OpVar(private_varnames[_idx_delta(d).name][delta])
                         else:
                             dst = do_index + OpInt(d + delta)
