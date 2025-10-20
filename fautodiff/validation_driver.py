@@ -519,14 +519,14 @@ def render_validation_driver(
                     _indent(f"{info['name']}_init = {info['name']}", 2)
                 )
 
-        first_input_ref: Optional[str] = None
+        first_input_info: Optional[Dict[str, Any]] = None
         if diff_inputs_names:
             for info in inputs_unique:
                 if info["name"] in diff_inputs_names:
-                    first_input_ref = info["name"]
+                    first_input_info = info
                     break
         elif inputs_unique:
-            first_input_ref = inputs_unique[0]["name"]
+            first_input_info = inputs_unique[0]
 
         def _emit_call(call_name: Optional[str], arg_list: List[str], indent: int):
             if call_name is None:
@@ -554,9 +554,15 @@ def render_validation_driver(
         if diff_inputs_names and diff_outputs_names and forward_available:
             sub_lines.append("")
             sub_lines.append(_indent("! Perturbed evaluation", 2))
-            if first_input_ref:
+            if first_input_info:
+                ref_name = first_input_info["name"]
+                rank = first_input_info["rank"]
+                if rank > 0:
+                    ref_expr = f"{ref_name}(1)"
+                else:
+                    ref_expr = ref_name
                 sub_lines.append(
-                    _indent(f"delta = sqrt(epsilon({first_input_ref}))", 2)
+                    _indent(f"delta = sqrt(epsilon({ref_expr}))", 2)
                 )
             for info in inputs_unique:
                 base_name = info["name"]
