@@ -99,6 +99,26 @@ Keep OpenMP scatter stores as-is instead of rewriting them to gathers with
 fautodiff --disable-scatter-to-gather examples/omp_loops.f90
 ```
 
+Generate a validation driver template alongside the AD output with
+``--emit-validation-driver``. The flag accepts an optional file name; when
+omitted, ``run_<module>_validation.f90`` is emitted next to the AD output. The
+driver performs both the forward finite-difference vs. AD comparison and a
+transpose consistency check, printing the individual norms in addition to the
+difference. Array workspaces are declared with placeholder extent variables and
+TODO comments so you can quickly fill in problem-specific sizes. Validation
+drivers require both forward and reverse derivatives, so combine the flag with
+``--mode both`` (the default):
+
+```bash
+# emit run_simple_math_validation.f90 next to the AD file
+fautodiff examples/simple_math.f90 -o examples/simple_math_ad.f90 \
+    --emit-validation-driver
+
+# emit a custom driver name
+fautodiff examples/simple_math.f90 -o examples/simple_math_ad.f90 \
+    --emit-validation-driver simple_math_validate.f90
+```
+
 Each module's routine signatures are also written to a `<module>.fadmod` file when AD code is generated.
 These JSON files can be loaded when differentiating another file that uses the module.
 Add search directories with ``-I`` (repeat as needed), choose the output directory with ``-M DIR`` (defaults to the current directory), and disable writing with ``--no-fadmod``:

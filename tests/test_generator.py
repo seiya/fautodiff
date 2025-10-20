@@ -1,6 +1,6 @@
 import sys
-import unittest
 import textwrap
+import unittest
 from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
@@ -206,6 +206,167 @@ class TestGenerator(unittest.TestCase):
             )
             self.assertNotIn("c_ad", generated)
 
+    def test_emit_validation_driver_template(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        src = Path("examples/simple_math.f90")
+        with TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            src_copy = tmp_dir / src.name
+            src_copy.write_text(src.read_text())
+            out_file = tmp_dir / "simple_math_ad.f90"
+            generator.generate_ad(
+                src_copy.read_text(),
+                str(src_copy),
+                out_file=out_file,
+                warn=False,
+                fadmod_dir=tmp_dir,
+                emit_validation=True,
+            )
+            driver_path = tmp_dir / "run_simple_math_validation.f90"
+            self.assertTrue(driver_path.exists())
+            driver_text = driver_path.read_text()
+            self.assertIn("program run_simple_math_validation", driver_text)
+            self.assertIn("use simple_math", driver_text)
+            self.assertIn("use simple_math_ad", driver_text)
+            self.assertIn("call validate_add_numbers()", driver_text)
+            self.assertIn("delta = sqrt(epsilon(a))", driver_text)
+            self.assertIn("call add_numbers_fwd_ad", driver_text)
+            self.assertIn("Forward check (add_numbers): max |FD - FWD|", driver_text)
+            self.assertIn("call add_numbers_rev_ad", driver_text)
+            self.assertIn("Transpose check (add_numbers): |v^TJu - u^TJ^Tv|", driver_text)
+
+    def test_emit_validation_driver_custom_name(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        src = Path("examples/simple_math.f90")
+        with TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            src_copy = tmp_dir / src.name
+            src_copy.write_text(src.read_text())
+            out_file = tmp_dir / "simple_math_ad.f90"
+            custom_name = "my_validation_driver.f90"
+            generator.generate_ad(
+                src_copy.read_text(),
+                str(src_copy),
+                out_file=out_file,
+                warn=False,
+                fadmod_dir=tmp_dir,
+                emit_validation=True,
+                validation_driver_name=custom_name,
+            )
+            driver_path = tmp_dir / custom_name
+            self.assertTrue(driver_path.exists())
+            driver_text = driver_path.read_text()
+            self.assertIn("program run_simple_math_validation", driver_text)
+            self.assertIn("call validate_add_numbers()", driver_text)
+            self.assertIn("call add_numbers_fwd_ad", driver_text)
+
+    def test_optional_argument_does_not_flag_derivatives_optional(self):
+        code_tree.Node.reset()
+        src = textwrap.dedent(
+            """
+            module optional_mod
+            contains
+              subroutine foo(x, y)
+                real, optional :: x
+                real, intent(out) :: y
+                if (present(x)) then
+                  y = x
+                else
+                  y = 0.0
+                end if
+              end subroutine foo
+            end module optional_mod
+            """
+        )
+        generated = generator.generate_ad(src, "optional_mod.f90", warn=False)
+        self.assertIn("optional :: x", generated)
+        self.assertNotIn("optional :: x_ad", generated)
+        self.assertNotIn("optional :: y_ad", generated)
+
+    def test_validation_driver_optional_argument_derivatives_not_optional(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module optional_mod
+            contains
+              subroutine foo(x, y, offset)
+                real, intent(in) :: x(:)
+                real, intent(out) :: y(:)
+                real, optional, intent(in) :: offset
+                if (present(offset)) then
+                  y = x + offset
+                else
+                  y = x
+                end if
+              end subroutine foo
+            end module optional_mod
+            """
+        )
+        with TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            src_path = tmp_dir / "optional_mod.f90"
+            src_path.write_text(src)
+            out_file = tmp_dir / "optional_mod_ad.f90"
+            driver_name = "driver.f90"
+            generator.generate_ad(
+                src_path.read_text(),
+                str(src_path),
+                out_file=out_file,
+                warn=False,
+                fadmod_dir=tmp_dir,
+                emit_validation=True,
+                validation_driver_name=driver_name,
+            )
+            driver_text = (tmp_dir / driver_name).read_text()
+            self.assertNotIn("optional :: offset_ad", driver_text)
+            self.assertNotIn("optional :: offset_u", driver_text)
+            self.assertNotIn("optional :: offset", driver_text)
+
+    def test_validation_driver_scalar_precision(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module precision_mod
+              integer, parameter :: dp = kind(1.0d0)
+            contains
+              subroutine foo(x, y)
+                real(kind=dp), intent(in) :: x(:)
+                real(kind=dp), intent(out) :: y(:)
+                y = x
+              end subroutine foo
+            end module precision_mod
+            """
+        )
+        with TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            src_path = tmp_dir / "precision_mod.f90"
+            src_path.write_text(src)
+            out_file = tmp_dir / "precision_mod_ad.f90"
+            driver_name = "driver.f90"
+            generator.generate_ad(
+                src_path.read_text(),
+                str(src_path),
+                out_file=out_file,
+                warn=False,
+                fadmod_dir=tmp_dir,
+                emit_validation=True,
+                validation_driver_name=driver_name,
+            )
+            driver_text = (tmp_dir / driver_name).read_text()
+            self.assertIn("real(kind=dp) :: delta", driver_text)
+            self.assertIn("real(kind=dp) :: fd_error", driver_text)
+            self.assertIn("real(kind=dp) :: v_t_j_u", driver_text)
+            self.assertIn("real(kind=dp) :: u_t_j_t_v", driver_text)
+            self.assertNotIn("y = 0.0", driver_text)
+
     def test_module_vars_example_fadmod(self):
         code_tree.Node.reset()
         fadmod_path = Path("module_vars.fadmod")
@@ -237,9 +398,7 @@ class TestGenerator(unittest.TestCase):
             end module shadow_mod
             """
         )
-        generated = generator.generate_ad(
-            src, "shadow.f90", warn=False, mode="reverse"
-        )
+        generated = generator.generate_ad(src, "shadow.f90", warn=False, mode="reverse")
         self.assertIn("z_ad = y_ad ! y = y + z", generated)
         self.assertNotIn("z_ad = y_ad + z_ad ! y = y + z", generated)
 
@@ -479,9 +638,7 @@ class TestGenerator(unittest.TestCase):
                 fadmod_dir=tmp,
             )
         stderr = buf.getvalue()
-        expected_msg = (
-            "macro_multistmt.F90:8: foo - Assumed intent(inout) for arguments x, y because no INTENT attribute was specified"
-        )
+        expected_msg = "macro_multistmt.F90:8: foo - Assumed intent(inout) for arguments x, y because no INTENT attribute was specified"
         self.assertIn(expected_msg, stderr)
 
     def test_deallocate_mod_grad_var_prevents_skip(self):

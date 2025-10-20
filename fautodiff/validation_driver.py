@@ -1,0 +1,729 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+from .code_tree import Declaration, Module, Routine
+from .operators import OpVar, VarType
+
+
+def _var_type_priority(var_type: VarType) -> tuple[int, float]:
+    typename = var_type.typename.lower()
+    if typename.startswith("complex"):
+        category = 3
+    elif typename.startswith("real") or typename == "double precision":
+        category = 2
+    elif typename.startswith("integer"):
+        category = 1
+    else:
+        category = 0
+
+    kind_val = None
+    if var_type.kind is not None and getattr(var_type.kind, "val", None) is not None:
+        kind_val = var_type.kind.val
+    else:
+        kind_defaults = {
+            "double precision": 8,
+            "real": 4,
+            "complex": 4,
+        }
+        kind_val = kind_defaults.get(typename, 0)
+    return (category, kind_val if kind_val is not None else 0.0)
+
+
+def _select_var_type(
+    infos: List[Dict[str, Any]],
+    *,
+    default: Optional[VarType] = None,
+) -> VarType:
+    best: Optional[VarType] = None
+    best_pri: Optional[tuple[int, float]] = None
+    for info in infos:
+        decl = info.get("decl")
+        if decl is None or decl.var_type is None:
+            continue
+        vt = decl.var_type
+        pri = _var_type_priority(vt)
+        if best_pri is None or pri > best_pri:
+            best_pri = pri
+            best = vt
+    if best is not None:
+        return best.copy()
+    if default is not None:
+        return default.copy()
+    return VarType("real")
+
+
+def _render_scalar_decl(name: str, var_type: VarType) -> str:
+    decl = Declaration(
+        name=name,
+        var_type=var_type.copy(),
+        dims=None,
+        dims_raw=None,
+        declared_in="routine",
+    )
+    return decl.render(indent=2)[0].rstrip()
+
+
+def _render_print(indent: int, fragments: List[str]) -> List[str]:
+    if not fragments:
+        return []
+    lines: List[str] = []
+    if len(fragments) == 1:
+        lines.append(_indent(f"print *, {fragments[0]}", indent))
+        return lines
+    lines.append(_indent(f"print *, {fragments[0]}, &", indent))
+    for frag in fragments[1:-1]:
+        lines.append(_indent(f"& {frag}, &", indent + 1))
+    lines.append(_indent(f"& {fragments[-1]}", indent + 1))
+    return lines
+
+
+def _indent(line: str, level: int) -> str:
+    return "  " * level + line
+
+
+def _clone_decl(
+    decl: Declaration,
+    name: str,
+    *,
+    force_allocatable: bool = False,
+    force_optional: Optional[bool] = None,
+) -> Declaration:
+    clone = decl.copy()
+    clone.name = name
+    clone.intent = None
+    clone.parameter = False
+    clone.access = None
+    clone.save = False
+    if force_allocatable:
+        if clone.dims_raw is None and clone.dims is not None:
+            clone.dims_raw = tuple(
+                str(d) if d is not None else ":" for d in clone.dims
+            )
+        if clone.dims_raw is not None:
+            clone.allocatable = True
+            clone.pointer = False
+            clone.dims = tuple(None for _ in clone.dims_raw)
+            clone.dims_raw = tuple(":" for _ in clone.dims_raw)
+    if force_optional is not None:
+        clone.optional = force_optional
+    return clone
+
+
+def render_validation_driver(
+    mod_org: Module,
+    mod_ad: Module,
+    mode: str,
+    *,
+    ad_suffix: str,
+    fwd_suffix: str,
+    rev_suffix: str,
+) -> str:
+    """Return the validation driver template for ``mod_org`` and ``mod_ad``."""
+
+    forward_enabled = mode in ("forward", "both")
+    reverse_enabled = mode in ("reverse", "both")
+
+    ad_routine_lookup: Dict[str, Routine] = {r.name: r for r in mod_ad.routines}
+
+    program_name = f"run_{mod_org.name}_validation"
+    lines: List[str] = [
+        f"program {program_name}",
+        f"  use {mod_org.name}",
+        f"  use {mod_org.name}{ad_suffix}",
+        "  implicit none",
+        "",
+        f"  print *, 'Running validation stubs for {mod_org.name}'",
+    ]
+
+    routines = list(mod_org.routines)
+    if not routines:
+        lines.append("  ! No routines found in this module to validate.")
+        lines.append("")
+        lines.append(f"end program {program_name}")
+        return "\n".join(lines) + "\n"
+
+    for routine in routines:
+        lines.append(f"  call validate_{routine.name}()")
+    lines.extend(["", "contains", ""])
+
+    for idx, routine in enumerate(routines):
+        decls_map: Dict[str, Declaration] = {}
+        if routine.decls is not None:
+            for node in routine.decls.iter_children():
+                if isinstance(node, Declaration):
+                    decls_map[node.name] = node
+
+        routine_fwd = (
+            ad_routine_lookup.get(f"{routine.name}{fwd_suffix}")
+            if forward_enabled
+            else None
+        )
+        routine_rev = (
+            ad_routine_lookup.get(f"{routine.name}{rev_suffix}")
+            if reverse_enabled
+            else None
+        )
+
+        forward_available = routine_fwd is not None
+        reverse_available = routine_rev is not None
+
+        sub_lines: List[str] = []
+        sub_lines.append(_indent(f"subroutine validate_{routine.name}()", 1))
+        sub_lines.append(_indent("implicit none", 2))
+
+        scalar_real_decls: List[str] = []
+        delta_type: Optional[VarType] = None
+        fd_type: Optional[VarType] = None
+
+        inputs: List[Dict[str, Any]] = []
+        outputs: List[Dict[str, Any]] = []
+        differentiable_inputs: List[Dict[str, Any]] = []
+        differentiable_outputs: List[Dict[str, Any]] = []
+
+        def _classify_arg(var: OpVar) -> None:
+            decl = decls_map.get(var.name)
+            if decl is None:
+                return
+            intent = var.intent or "inout"
+            is_real = decl.var_type.is_real_type()
+            is_diff = bool(var.ad_target and not var.is_constant and is_real)
+            info = {
+                "name": var.name,
+                "decl": decl,
+                "intent": intent,
+                "is_real": is_real,
+                "is_diff": is_diff,
+                "rank": len(decl.dims_raw) if decl.dims_raw else 0,
+            }
+            if intent != "out":
+                inputs.append(info)
+                if is_diff:
+                    differentiable_inputs.append(info)
+            if intent != "in":
+                outputs.append(info)
+                if is_diff:
+                    differentiable_outputs.append(info)
+
+        for arg in routine.arg_vars():
+            _classify_arg(arg)
+
+        result_info: Optional[Dict[str, Any]] = None
+        if routine.kind == "function" and routine.result:
+            result_decl = decls_map.get(routine.result)
+            if result_decl is not None:
+                existing = next(
+                    (info for info in outputs if info["name"] == routine.result),
+                    None,
+                )
+                if existing is None:
+                    is_real = result_decl.var_type.is_real_type()
+                    info = {
+                        "name": routine.result,
+                        "decl": result_decl,
+                        "intent": "out",
+                        "is_real": is_real,
+                        "is_diff": is_real,
+                        "rank": len(result_decl.dims_raw)
+                        if result_decl.dims_raw
+                        else 0,
+                        "is_function_result": True,
+                    }
+                    outputs.append(info)
+                    if is_real and info not in differentiable_outputs:
+                        differentiable_outputs.append(info)
+                    result_info = info
+                else:
+                    result_info = existing
+                    if (
+                        existing["is_real"]
+                        and existing["is_diff"]
+                        and existing not in differentiable_outputs
+                    ):
+                        differentiable_outputs.append(existing)
+
+        def _unique_by_name(seq: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            seen = set()
+            result: List[Dict[str, Any]] = []
+            for item in seq:
+                name = item["name"]
+                if name in seen:
+                    continue
+                seen.add(name)
+                result.append(item)
+            return result
+
+        inputs_unique = _unique_by_name(inputs)
+        diff_inputs_names = {info["name"] for info in differentiable_inputs}
+        diff_outputs_names = {info["name"] for info in differentiable_outputs}
+        input_names = {info["name"] for info in inputs}
+        output_names = {info["name"] for info in outputs}
+        all_infos = _unique_by_name(inputs + outputs)
+        info_by_name = {info["name"]: info for info in all_infos}
+
+        local_declares: Dict[str, Declaration] = {}
+        array_placeholders: Dict[str, List[str]] = {}
+
+        def _ensure_decl(
+            name: str, decl: Declaration, *, track_placeholders: bool = True
+        ) -> None:
+            if name not in local_declares:
+                local_declares[name] = decl
+                if track_placeholders:
+                    rank = len(decl.dims_raw) if decl.dims_raw else 0
+                    if rank > 0:
+                        placeholders = [f"n_{name}_{i+1}" for i in range(rank)]
+                        array_placeholders[name] = placeholders
+
+        for info in all_infos:
+            name = info["name"]
+            base_decl = _clone_decl(
+                info["decl"], name, force_allocatable=True, force_optional=False
+            )
+            _ensure_decl(name, base_decl, track_placeholders=True)
+
+            if name in input_names:
+                init_decl = _clone_decl(
+                    info["decl"],
+                    f"{name}_init",
+                    force_allocatable=True,
+                    force_optional=False,
+                )
+                _ensure_decl(
+                    f"{name}_init",
+                    init_decl,
+                    track_placeholders=False,
+                )
+
+            if name in diff_inputs_names:
+                ad_name = f"{name}{ad_suffix}"
+                ad_decl = _clone_decl(
+                    info["decl"],
+                    ad_name,
+                    force_allocatable=True,
+                    force_optional=False,
+                )
+                _ensure_decl(ad_name, ad_decl, track_placeholders=False)
+                u_decl = _clone_decl(
+                    info["decl"],
+                    f"{name}_u",
+                    force_allocatable=True,
+                    force_optional=False,
+                )
+                _ensure_decl(
+                    f"{name}_u",
+                    u_decl,
+                    track_placeholders=False,
+                )
+
+            if name in output_names:
+                base_val_decl = _clone_decl(
+                    info["decl"],
+                    f"{name}_base",
+                    force_allocatable=True,
+                    force_optional=False,
+                )
+                _ensure_decl(
+                    f"{name}_base",
+                    base_val_decl,
+                    track_placeholders=False,
+                )
+                pert_decl = _clone_decl(
+                    info["decl"],
+                    f"{name}_pert",
+                    force_allocatable=True,
+                    force_optional=False,
+                )
+                _ensure_decl(
+                    f"{name}_pert",
+                    pert_decl,
+                    track_placeholders=False,
+                )
+
+            if name in diff_outputs_names:
+                deriv_decl = _clone_decl(
+                    info["decl"],
+                    f"{name}{ad_suffix}",
+                    force_allocatable=info["rank"] > 0,
+                    force_optional=False,
+                )
+                _ensure_decl(
+                    f"{name}{ad_suffix}",
+                    deriv_decl,
+                    track_placeholders=False,
+                )
+                grad_decl = _clone_decl(
+                    info["decl"],
+                    f"{name}_grad",
+                    force_allocatable=True,
+                    force_optional=False,
+                )
+                _ensure_decl(
+                    f"{name}_grad",
+                    grad_decl,
+                    track_placeholders=False,
+                )
+                v_decl = _clone_decl(
+                    info["decl"],
+                    f"{name}_v",
+                    force_allocatable=True,
+                    force_optional=False,
+                )
+                _ensure_decl(
+                    f"{name}_v",
+                    v_decl,
+                    track_placeholders=False,
+                )
+
+        if differentiable_inputs and differentiable_outputs and forward_available:
+            delta_type = inputs_unique[0]["decl"].var_type.copy()
+            scalar_real_decls.append(
+                _render_scalar_decl("delta", delta_type)
+            )
+            fd_type = _select_var_type(
+                [info_by_name[name] for name in diff_outputs_names],
+                default=delta_type,
+            )
+            scalar_real_decls.append(
+                _render_scalar_decl("fd_error", fd_type)
+            )
+            scalar_real_decls.append(
+                _render_scalar_decl("fd_forward_val", fd_type)
+            )
+            scalar_real_decls.append(
+                _render_scalar_decl("ad_forward_val", fd_type)
+            )
+        if forward_available and reverse_available:
+            vtj_type = _select_var_type(
+                [info_by_name[name] for name in diff_outputs_names],
+                default=fd_type,
+            )
+            utj_default = delta_type if delta_type is not None else vtj_type
+            utj_type = _select_var_type(
+                [info_by_name[name] for name in diff_inputs_names],
+                default=utj_default,
+            )
+            scalar_real_decls.extend(
+                [
+                    _render_scalar_decl("v_t_j_u", vtj_type),
+                    _render_scalar_decl("u_t_j_t_v", utj_type),
+                ]
+            )
+
+        if array_placeholders:
+            sub_lines.append("")
+            sub_lines.append(
+                _indent("! TODO: provide array extents for validation work buffers.", 2)
+            )
+            for placeholders in array_placeholders.values():
+                for placeholder in placeholders:
+                    scalar_real_decls.append(
+                        _render_scalar_decl(
+                            placeholder, VarType("integer")
+                        )
+                    )
+
+        if scalar_real_decls:
+            sub_lines.append("")
+            sub_lines.extend(scalar_real_decls)
+
+        if local_declares:
+            sub_lines.append("")
+            for decl in local_declares.values():
+                rendered = decl.render(indent=2)[0].rstrip()
+                sub_lines.append(rendered)
+
+        if inputs_unique:
+            sub_lines.append("")
+            sub_lines.append(
+                _indent("! TODO: assign initial values to input variables below.", 2)
+            )
+            for info in inputs_unique:
+                if info["decl"].var_type.is_real_type():
+                    assign_value = "0.0"
+                elif info["decl"].var_type.is_integer_type():
+                    assign_value = "0"
+                else:
+                    assign_value = info["name"]
+                if info["rank"] > 0:
+                    base_name = info["name"]
+                    placeholders = array_placeholders.get(base_name, [])
+                    if placeholders:
+                        dims = ", ".join(placeholders)
+                        sub_lines.append(_indent(f"allocate({base_name}({dims}))", 2))
+                        sub_lines.append(_indent(f"{base_name} = {assign_value}", 2))
+                else:
+                    sub_lines.append(
+                        _indent(f"{info['name']} = {assign_value}", 2)
+                    )
+
+        pure_outputs = [
+            info_by_name[name]
+            for name in output_names - input_names
+            if info_by_name[name]["rank"] > 0
+        ]
+        if pure_outputs:
+            sub_lines.append("")
+            sub_lines.append(_indent("! Allocate storage for output variables.", 2))
+            for info in pure_outputs:
+                placeholders = array_placeholders.get(info["name"], [])
+                if placeholders:
+                    dims = ", ".join(placeholders)
+                    sub_lines.append(
+                        _indent(f"allocate({info['name']}({dims}))", 2)
+                    )
+                    if info["name"] in diff_outputs_names:
+                        sub_lines.append(
+                            _indent(
+                                f"allocate({info['name']}{ad_suffix}, mold={info['name']})",
+                                2,
+                            )
+                        )
+                assign_value = (
+                    "0.0"
+                    if info["decl"].var_type.is_real_type()
+                    else (
+                        "0"
+                        if info["decl"].var_type.is_integer_type()
+                        else info["name"]
+                    )
+                )
+                if info["intent"] != "out":
+                    sub_lines.append(_indent(f"{info['name']} = {assign_value}", 2))
+
+        for name, decl in local_declares.items():
+            rank = len(decl.dims_raw) if decl.dims_raw else 0
+            if rank > 0 and name.endswith(
+                ("_init", "_ad", "_u", "_grad", "_v", "_base", "_pert")
+            ):
+                base_name = name.split("_", 1)[0]
+                if base_name == name:
+                    continue
+                if name.endswith(ad_suffix) and base_name not in input_names:
+                    continue
+                sub_lines.append(
+                    _indent(f"allocate({name}, mold={base_name})", 2)
+                )
+            elif rank > 0 and name.endswith(ad_suffix):
+                base_name = name[: -len(ad_suffix)]
+                if base_name not in input_names:
+                    continue
+                sub_lines.append(
+                    _indent(f"allocate({name}, mold={base_name})", 2)
+                )
+
+        if inputs_unique:
+            sub_lines.append("")
+            for info in inputs_unique:
+                sub_lines.append(
+                    _indent(f"{info['name']}_init = {info['name']}", 2)
+                )
+
+        first_input_info: Optional[Dict[str, Any]] = None
+        if diff_inputs_names:
+            for info in inputs_unique:
+                if info["name"] in diff_inputs_names:
+                    first_input_info = info
+                    break
+        elif inputs_unique:
+            first_input_info = inputs_unique[0]
+
+        def _emit_call(call_name: Optional[str], arg_list: List[str], indent: int):
+            if call_name is None:
+                return
+            args_str = ", ".join(arg_list)
+            sub_lines.append(_indent(f"call {call_name}({args_str})", indent))
+
+        if input_names or output_names:
+            sub_lines.append("")
+            sub_lines.append(_indent("! Baseline evaluation", 2))
+            if routine.kind == "subroutine":
+                _emit_call(routine.name, list(routine.args), 2)
+            else:
+                call_args = ", ".join(routine.args)
+                result_name = result_info["name"] if result_info else "result_value"
+                sub_lines.append(
+                    _indent(f"{result_name} = {routine.name}({call_args})", 2)
+                )
+
+            for name in output_names:
+                sub_lines.append(_indent(f"{name}_base = {name}", 2))
+            for info in inputs_unique:
+                sub_lines.append(_indent(f"{info['name']} = {info['name']}_init", 2))
+
+        if diff_inputs_names and diff_outputs_names and forward_available:
+            sub_lines.append("")
+            sub_lines.append(_indent("! Perturbed evaluation", 2))
+            if first_input_info:
+                ref_name = first_input_info["name"]
+                rank = first_input_info["rank"]
+                if rank > 0:
+                    ref_expr = f"{ref_name}(1)"
+                else:
+                    ref_expr = ref_name
+                sub_lines.append(
+                    _indent(f"delta = sqrt(epsilon({ref_expr}))", 2)
+                )
+            for info in inputs_unique:
+                base_name = info["name"]
+                if base_name in diff_inputs_names:
+                    sub_lines.append(
+                        _indent(f"{base_name} = {base_name}_init + delta", 2)
+                    )
+                else:
+                    sub_lines.append(
+                        _indent(f"{base_name} = {base_name}_init", 2)
+                    )
+            if routine.kind == "subroutine":
+                _emit_call(routine.name, list(routine.args), 2)
+            else:
+                call_args = ", ".join(routine.args)
+                result_name = result_info["name"] if result_info else "result_value"
+                sub_lines.append(
+                    _indent(f"{result_name} = {routine.name}({call_args})", 2)
+                )
+            for name in output_names:
+                sub_lines.append(_indent(f"{name}_pert = {name}", 2))
+            for info in inputs_unique:
+                sub_lines.append(_indent(f"{info['name']} = {info['name']}_init", 2))
+
+        if forward_available and diff_inputs_names and diff_outputs_names:
+            sub_lines.append("")
+            sub_lines.append(_indent("! Forward AD evaluation", 2))
+            for info in inputs_unique:
+                sub_lines.append(_indent(f"{info['name']} = {info['name']}_init", 2))
+            for base_name in diff_inputs_names:
+                sub_lines.append(_indent(f"{base_name}_u = 1.0", 2))
+                sub_lines.append(
+                    _indent(f"{base_name}{ad_suffix} = {base_name}_u", 2)
+                )
+            for name in diff_outputs_names:
+                info = info_by_name[name]
+                if info["intent"] != "in":
+                    sub_lines.append(_indent(f"{name} = {name}_base", 2))
+            for name in diff_outputs_names:
+                sub_lines.append(_indent(f"{name}{ad_suffix} = 0.0", 2))
+            sub_lines.append(_indent("fd_error = 0.0", 2))
+            sub_lines.append(_indent("fd_forward_val = 0.0", 2))
+            sub_lines.append(_indent("ad_forward_val = 0.0", 2))
+            if routine_fwd is not None:
+                _emit_call(routine_fwd.name, list(routine_fwd.args), 2)
+            for name in diff_outputs_names:
+                sub_lines.append(
+                    _indent(f"{name}_grad = {name}{ad_suffix}", 2)
+                )
+            sub_lines.append("")
+            for name in diff_outputs_names:
+                info = info_by_name[name]
+                expr_num = f"{name}_pert - {name}_base"
+                fd_expr = f"({expr_num}) / delta"
+                if info["rank"] == 0:
+                    diff_expr = f"abs({fd_expr} - {name}_grad)"
+                    fd_mag = f"abs({fd_expr})"
+                    ad_mag = f"abs({name}_grad)"
+                else:
+                    diff_expr = f"maxval(abs({fd_expr} - {name}_grad))"
+                    fd_mag = f"maxval(abs({fd_expr}))"
+                    ad_mag = f"maxval(abs({name}_grad))"
+                sub_lines.append(
+                    _indent(f"fd_error = max(fd_error, {diff_expr})", 2)
+                )
+                sub_lines.append(
+                    _indent(f"fd_forward_val = max(fd_forward_val, {fd_mag})", 2)
+                )
+                sub_lines.append(
+                    _indent(
+                        f"ad_forward_val = max(ad_forward_val, {ad_mag})",
+                        2,
+                    )
+                )
+            sub_lines.extend(
+                _render_print(
+                    2,
+                    [
+                        f"'Forward check ({routine.name}): max |FD - FWD| = '",
+                        "fd_error",
+                        "'  |FD| = '",
+                        "fd_forward_val",
+                        "'  |FWD| = '",
+                        "ad_forward_val",
+                    ],
+                )
+            )
+
+        if (
+            forward_available
+            and reverse_available
+            and diff_inputs_names
+            and diff_outputs_names
+        ):
+            sub_lines.append("")
+            sub_lines.append(_indent("! Reverse AD evaluation", 2))
+            sub_lines.append(_indent("v_t_j_u = 0.0", 2))
+            sub_lines.append(_indent("u_t_j_t_v = 0.0", 2))
+            for name in diff_outputs_names:
+                info = info_by_name[name]
+                sub_lines.append(_indent(f"{name}_v = 1.0", 2))
+                if info["rank"] == 0:
+                    sub_lines.append(
+                        _indent(
+                            f"v_t_j_u = v_t_j_u + {name}_v * {name}_grad",
+                            2,
+                        )
+                    )
+                else:
+                    sub_lines.append(
+                        _indent(
+                            f"v_t_j_u = v_t_j_u + sum({name}_v * {name}_grad)",
+                            2,
+                        )
+                    )
+            for name in diff_inputs_names:
+                sub_lines.append(_indent(f"{name}{ad_suffix} = 0.0", 2))
+            for name in diff_outputs_names:
+                sub_lines.append(
+                    _indent(
+                        f"{name}{ad_suffix} = {name}_v",
+                        2,
+                    )
+                )
+            if routine_rev is not None:
+                _emit_call(routine_rev.name, list(routine_rev.args), 2)
+            for name in diff_inputs_names:
+                info = info_by_name[name]
+                if info["rank"] == 0:
+                    sub_lines.append(
+                        _indent(
+                            f"u_t_j_t_v = u_t_j_t_v + {name}_u * {name}{ad_suffix}",
+                            2,
+                        )
+                    )
+                else:
+                    sub_lines.append(
+                        _indent(
+                            f"u_t_j_t_v = u_t_j_t_v + sum({name}_u * {name}{ad_suffix})",
+                            2,
+                        )
+                    )
+            sub_lines.extend(
+                _render_print(
+                    2,
+                    [
+                        f"'Transpose check ({routine.name}): |v^TJu - u^TJ^Tv| = '",
+                        "abs(v_t_j_u - u_t_j_t_v)",
+                        "'  v^TJu = '",
+                        "v_t_j_u",
+                        "'  u^TJ^Tv = '",
+                        "u_t_j_t_v",
+                    ],
+                )
+            )
+
+        sub_lines.append(_indent(f"end subroutine validate_{routine.name}", 1))
+        if idx != len(routines) - 1:
+            sub_lines.append("")
+        lines.extend(sub_lines)
+
+    lines.append("")
+    lines.append(f"end program {program_name}")
+    return "\n".join(lines) + "\n"

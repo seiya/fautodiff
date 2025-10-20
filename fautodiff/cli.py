@@ -57,11 +57,33 @@ def main():
         action="store_true",
         help="do not rewrite OpenMP scatter stores into gather operations",
     )
+    parser_arg.add_argument(
+        "--emit-validation-driver",
+        nargs="?",
+        const=None,
+        default=False,
+        metavar="FILENAME",
+        help=(
+            "generate a validation driver template alongside the AD output; "
+            "optionally provide a filename for the emitted driver"
+        ),
+    )
     args = parser_arg.parse_args()
 
     search_dirs = args.search_dirs if args.search_dirs else []
     if "." not in search_dirs:
         search_dirs.append(".")
+
+    emit_validation_arg = args.emit_validation_driver
+    emit_validation = emit_validation_arg is not False
+    validation_driver_name = None
+    if emit_validation:
+        if args.mode != "both":
+            parser_arg.error(
+                "--emit-validation-driver requires --mode=both"
+            )
+        if emit_validation_arg not in (False, None):
+            validation_driver_name = emit_validation_arg
 
     try:
         src_text = Path(args.input).read_text()
@@ -76,6 +98,8 @@ def main():
             mode=args.mode,
             disable_directives=args.disable_directives,
             disable_scatter_to_gather=args.disable_scatter_to_gather,
+            emit_validation=emit_validation,
+            validation_driver_name=validation_driver_name,
         )
     except Exception as exc:
         raise
