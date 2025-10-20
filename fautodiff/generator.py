@@ -21,6 +21,7 @@ from .code_tree import (
     Assignment,
     Block,
     BlockConstruct,
+    BranchBlock,
     CallStatement,
     ClearAssignment,
     Deallocate,
@@ -30,7 +31,6 @@ from .code_tree import (
     DoWhile,
     ForallBlock,
     Function,
-    BranchBlock,
     IfBlock,
     Interface,
     Module,
@@ -77,6 +77,7 @@ operators.AD_SUFFIX = AD_SUFFIX
 
 from . import parser
 from .var_list import VarList
+from .validation_driver import render_validation_driver
 
 
 def _warn(
@@ -113,9 +114,7 @@ def _contains_pushpop(node: Node) -> bool:
 
 
 def _strip_sequential_omp(
-    node: Node,
-    warnings: Optional[List[str]],
-    disable_scatter_to_gather: bool
+    node: Node, warnings: Optional[List[str]], disable_scatter_to_gather: bool
 ) -> List[Node]:
     """Remove OpenMP directives for loops with modified indices in reverse mode."""
 
@@ -187,6 +186,19 @@ def _strip_sequential_omp(
                 node.cond_blocks[i] = (cond_block[0], Block(nodes))
         return [node]
     return [node]
+
+
+def _routine_signature(routine: Routine) -> str:
+    """Return a human-readable signature string for ``routine``."""
+
+    args = ", ".join(routine.args) if routine.args else ""
+    signature = f"{routine.kind} {routine.name}({args})"
+    if routine.kind == "function" and routine.result:
+        signature += f" result({routine.result})"
+    return signature
+
+
+
 
 def _add_fwd_rev_calls(
     node: Node,
@@ -1354,7 +1366,9 @@ def _generate_ad_subroutine(
         # print(render_program(ad_code))
 
         if reverse:
-            ad_code.check_initial(VarList(grad_args + mod_ad_vars_filtered + save_ad_vars))
+            ad_code.check_initial(
+                VarList(grad_args + mod_ad_vars_filtered + save_ad_vars)
+            )
 
             _strip_sequential_omp(
                 ad_code,
@@ -1374,7 +1388,9 @@ def _generate_ad_subroutine(
                 base_decl = routine_org.decls.find_by_name(name_org)
                 if base_decl is None:
                     # for variables generated in OmpDirective.convert_scatter_to_gather
-                    name_org = re.sub(r'_[np]\d+$', '', name_org).removesuffix(AD_SUFFIX)
+                    name_org = re.sub(r"_[np]\d+$", "", name_org).removesuffix(
+                        AD_SUFFIX
+                    )
                     base_decl = routine_org.decls.find_by_name(name_org)
                 if base_decl is not None and not subroutine.is_declared(name):
                     subroutine.decls.append(
@@ -1387,7 +1403,9 @@ def _generate_ad_subroutine(
                             init_val=base_decl.init_val,
                             allocatable=base_decl.allocatable,
                             pointer=base_decl.pointer,
-                            optional=base_decl.optional,
+                            optional=base_decl.optional
+                            if not name.endswith(AD_SUFFIX)
+                            else False,
                             target=base_decl.target,
                             save=base_decl.save,
                             value=base_decl.value,
@@ -1509,9 +1527,7 @@ def _generate_ad_subroutine(
                     is_routine_local = (
                         base_decl.declared_in == "routine" and intent is None
                     )
-                    is_allocatable_local = (
-                        base_decl.allocatable and intent is None
-                    )
+                    is_allocatable_local = base_decl.allocatable and intent is None
                     is_out_argument = intent == "out"
                     if is_routine_local or is_allocatable_local or is_out_argument:
                         if not any(
@@ -1991,7 +2007,9 @@ def _generate_ad_subroutine(
                             init_val=base_decl.init_val,
                             allocatable=base_decl.allocatable,
                             pointer=base_decl.pointer,
-                            optional=base_decl.optional,
+                            optional=base_decl.optional
+                            if not name.endswith(AD_SUFFIX)
+                            else False,
                             target=base_decl.target,
                             save=base_decl.save,
                             value=base_decl.value,
@@ -2181,7 +2199,9 @@ def _generate_ad_subroutine(
                 init_val=base_decl.init_val if base_decl else None,
                 allocatable=allocatable,
                 pointer=pointer,
-                optional=base_decl.optional if base_decl else False,
+                optional=base_decl.optional
+                if (base_decl and not var.name.endswith(AD_SUFFIX))
+                else False,
                 target=base_decl.target if base_decl else False,
                 declared_in="routine",
             )
@@ -2419,9 +2439,10 @@ def _generate_ad_subroutine(
     mod_all_var_names.extend(const_var_names)
     required_vnames = []
     for var in subroutine.required_vars():
-        if (var.name_ext() in mod_all_var_names or
-            var.is_constant or
-            var.name.endswith("pushpop_ad")
+        if (
+            var.name_ext() in mod_all_var_names
+            or var.is_constant
+            or var.name.endswith("pushpop_ad")
         ):
             continue
         decl = subroutine.decls.find_by_name(var.name) if subroutine.decls else None
@@ -2467,6 +2488,9 @@ def generate_ad(
     mode: str = "both",
     disable_directives: bool = False,
     disable_scatter_to_gather: bool = False,
+    emit_validation: bool = False,
+    validation_dir: Optional[Union[str, Path]] = None,
+    validation_driver_name: Optional[Union[str, Path]] = None,
     **kwargs,
 ) -> Optional[str]:
     """Generate an AD version of ``src``.
@@ -2478,7 +2502,11 @@ def generate_ad(
     selects where ``<module>.fadmod`` files are written (defaults to the current
     working directory). ``disable_directives`` treats all ``!$FAD`` directives as
     ordinary comments. ``disable_scatter_to_gather`` controls whether scatter
-    stores in OpenMP loops are rewritten into gather-style updates.
+    stores in OpenMP loops are rewritten into gather-style updates. When
+    ``emit_validation`` is ``True`` a validation driver template is written next
+    to the generated code (or to ``validation_dir`` when provided). Set
+    ``validation_driver_name`` to override the emitted driver filename; relative
+    paths are resolved within ``validation_dir``.
     """
     modules = []
     warnings = []
@@ -2488,6 +2516,27 @@ def generate_ad(
         raise TypeError(
             f"generate_ad() got unexpected keyword argument(s): {unexpected}"
         )
+
+    if validation_driver_name is not None and not emit_validation:
+        emit_validation = True
+    validation_driver_name_path: Optional[Path] = (
+        Path(validation_driver_name)
+        if validation_driver_name is not None
+        else None
+    )
+
+    validation_dir_path: Optional[Path] = None
+    if emit_validation:
+        if validation_dir is not None:
+            validation_dir_path = Path(validation_dir)
+        elif out_file is not None:
+            validation_dir_path = Path(out_file).parent
+        else:
+            try:
+                validation_dir_path = Path(src_name).parent
+            except Exception:
+                validation_dir_path = Path.cwd()
+        validation_dir_path.mkdir(parents=True, exist_ok=True)
 
     if search_dirs is None:
         search_dirs = []
@@ -2720,6 +2769,28 @@ def generate_ad(
             mod.uses.append(Use("fautodiff_stack"))
 
         modules.append(render_program(mod))
+        if (
+            emit_validation
+            and validation_dir_path is not None
+            and isinstance(mod_org, Module)
+        ):
+            driver_code = render_validation_driver(
+                mod_org,
+                mod,
+                mode,
+                ad_suffix=AD_SUFFIX,
+                fwd_suffix=FWD_SUFFIX,
+                rev_suffix=REV_SUFFIX,
+            )
+            if validation_driver_name_path is not None:
+                if validation_driver_name_path.is_absolute():
+                    driver_path = validation_driver_name_path
+                else:
+                    driver_path = validation_dir_path / validation_driver_name_path
+            else:
+                driver_path = validation_dir_path / f"run_{mod_org.name}_validation.f90"
+            driver_path.parent.mkdir(parents=True, exist_ok=True)
+            driver_path.write_text(driver_code)
         if write_fadmod:
             fad = fadmod.FadmodV1.from_module(mod_org, routine_map)
             fad.write(fadmod_dir / f"{mod_org.name}.fadmod")
