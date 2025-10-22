@@ -3,11 +3,20 @@
 # fautodiff
 Autodiff code generator for Fortran
 
+## Highlights
+
+* Works seamlessly with existing Fortran code
+  * Performs source-to-source transformations
+  * Minimizes the need to modify the original files
+* Optimized for computational efficiency
+  * Supports MPI, OpenMP, and SIMD parallelism
+  * Trades extra arithmetic for reduced memory traffic
+
 This source-to-source tool parses existing Fortran programs and emits new modules
 with ``_ad`` suffixes, preserving the original structure while providing forward
 and reverse mode derivatives. Documentation of the supported Fortran constructs
-can be found in ``docs/fortran_support.md``.
-Basic C preprocessor macros are also recognized; see ``docs/preprocessor.md`` for
+can be found in [docs/fortran_support.md](docs/fortran_support.md).
+Basic C preprocessor macros are also recognized; see [docs/preprocessor.md](docs/preprocessor.md) for
 details.
 
 ## Installation
@@ -175,12 +184,12 @@ call foo_rev_ad(x, x_ad, y_ad) ! x: in, x_ad: out, y_ad: inout
 
 ## Directives
 
-See ``docs/directives.md`` for a description of optional directives that can control how AD code is generated.
+See [docs/directives.md](docs/directives.md) for a description of optional directives that can control how AD code is generated.
 Details on how module variable assignments are handled in reverse mode are in the [Module variables in reverse mode](docs/fortran_support.md#module-variables-in-reverse-mode) section.
 
 ## Supported Fortran syntax and features
 
-See ``docs/fortran_support.md`` for a description of supported Fortran constructs.
+See [docs/fortran_support.md](docs/fortran_support.md) for a description of supported Fortran constructs.
 
 ## OpenMP constructs
 
