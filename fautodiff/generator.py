@@ -76,9 +76,8 @@ code_tree.REV_SUFFIX = REV_SUFFIX
 operators.AD_SUFFIX = AD_SUFFIX
 
 from . import parser
-from .var_list import VarList
 from .validation_driver import render_validation_driver
-
+from .var_list import VarList
 
 _MODULES_REQUIRING_ORIGINAL_USE: Set[str] = {"mpi"}
 
@@ -2366,6 +2365,46 @@ def _generate_ad_subroutine(
     subroutine = subroutine.prune_for(
         targets, mod_vars_all, decl_map=subroutine.decl_map, base_targets=targets
     )
+
+    # Ensure original USE statements remain after pruning and rewriting.
+    original_use_nodes = [
+        node for node in routine_org.decls.iter_children() if isinstance(node, Use)
+    ]
+    if original_use_nodes:
+        decl_children = list(subroutine.decls.iter_children())
+        first_non_pp_id: Optional[int] = None
+        for child in decl_children:
+            if isinstance(child, PreprocessorLine):
+                continue
+            first_non_pp_id = child.get_id()
+            break
+        for use_node in original_use_nodes:
+            if use_node.name.lower() not in _MODULES_REQUIRING_ORIGINAL_USE:
+                continue
+            only = tuple(use_node.only) if use_node.only is not None else None
+            key = (use_node.name, only)
+            has_skip_clone = False
+            last_match_id: Optional[int] = None
+            for child in subroutine.decls.iter_children():
+                if not isinstance(child, Use):
+                    continue
+                child_only = tuple(child.only) if child.only is not None else None
+                child_key = (child.name, child_only)
+                if child_key == key:
+                    last_match_id = child.get_id()
+                    if getattr(child, "_fautodiff_skip_rewrite", False):
+                        has_skip_clone = True
+                        break
+            if has_skip_clone:
+                continue
+            clone = use_node.deep_clone()
+            setattr(clone, "_fautodiff_skip_rewrite", True)
+            if last_match_id is not None:
+                subroutine.decls.insert_after(last_match_id, clone)
+            elif first_non_pp_id is not None:
+                subroutine.decls.insert_before(first_non_pp_id, clone)
+            else:
+                subroutine.decls.append(clone)
 
     # Remove arguments that are no longer used after pruning
     used = {v.name for v in subroutine.content.collect_vars()}
