@@ -1428,8 +1428,8 @@ class OpComplex(OpNum):
 class OpAry(OpLeaf):
     def __post_init__(self):
         super().__post_init__()
-        if len(self.args) == 0:
-            raise ValueError("OpAry must have at least one argument")
+        if self.args is None:
+            self.args = []
 
     def __str__(self) -> str:
         if self.macro_name:
