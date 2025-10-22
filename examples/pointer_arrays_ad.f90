@@ -327,8 +327,8 @@ contains
 
   subroutine pointer_swap(n, x, y, res)
     integer, intent(in) :: n
-    real, intent(in), target  :: x(n)
-    real, intent(in), target  :: y(n)
+    real, intent(in), target :: x(n)
+    real, intent(in), target :: y(n)
     real, intent(out) :: res
     real, pointer :: work1(:)
     real, pointer :: work2(:)
@@ -353,10 +353,10 @@ contains
 
   subroutine pointer_swap_fwd_ad(n, x, x_ad, y, y_ad, res, res_ad)
     integer, intent(in) :: n
-    real, intent(in), target  :: x(n)
-    real, intent(in), target  :: x_ad(n)
-    real, intent(in), target  :: y(n)
-    real, intent(in), target  :: y_ad(n)
+    real, intent(in), target :: x(n)
+    real, intent(in), target :: x_ad(n)
+    real, intent(in), target :: y(n)
+    real, intent(in), target :: y_ad(n)
     real, intent(out) :: res
     real, intent(out) :: res_ad
     real, pointer :: swap_ad(:)
