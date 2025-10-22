@@ -690,6 +690,34 @@ class TestParser(unittest.TestCase):
         self.assertIsInstance(stmt, code_tree.PointerAssignment)
         self.assertEqual(render_program(Block([stmt])), "p => q\n")
 
+    def test_parse_io_statements_preserved(self):
+        src = textwrap.dedent(
+            """
+            module t
+            contains
+              subroutine foo()
+                integer :: u, x
+                open(newunit=u, file='foo.txt')
+                write(u,*) 'hello'
+                read(u,*) x
+                close(u)
+              end subroutine foo
+            end module t
+            """
+        )
+        module = parser.parse_src(src)[0]
+        routine = module.routines[0]
+        stmts = [
+            node
+            for node in routine.content.iter_children()
+            if isinstance(node, code_tree.Statement)
+        ]
+        bodies = [stmt.body for stmt in stmts]
+        self.assertIn("open(newunit=u, file='foo.txt')", bodies)
+        self.assertIn("write(u,*) 'hello'", bodies)
+        self.assertIn("read(u,*) x", bodies)
+        self.assertIn("close(u)", bodies)
+
     def test_parse_optional_argument(self):
         src = textwrap.dedent(
             """
