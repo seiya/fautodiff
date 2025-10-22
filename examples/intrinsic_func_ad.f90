@@ -38,76 +38,6 @@ contains
     return
   end subroutine math_intrinsics
 
-  subroutine reduction(x, a, b, c, d)
-    real, intent(in)  :: x(:)
-    real, intent(out) :: a
-    real, intent(out) :: b
-    real, intent(out) :: c
-    real, intent(out) :: d
-
-    a = sum(x)
-    b = sum(x(:))
-    c = minval(x)
-    d = maxval(x)
-
-    return
-  end subroutine reduction
-
-  subroutine non_differentiable_intrinsics(str, arr, idx, lb, ub, x, y)
-    character(len=*), intent(in)  :: str
-    real, intent(in)  :: arr(:)
-    integer, intent(out) :: idx
-    integer, intent(out) :: lb
-    integer, intent(out) :: ub
-    real, intent(in)  :: x
-    real, intent(out) :: y
-    integer :: n
-    integer :: len_trimmed
-    real :: a
-    real :: b
-    real :: c
-
-    len_trimmed = len_trim(adjustl(str))
-    idx = index(str, 'a')
-    lb = lbound(arr, 1)
-    ub = ubound(arr, 1)
-    n = size(arr)
-    a = epsilon(x)
-    b = huge(x)
-    c = tiny(x)
-    y = a + b + c
-
-    return
-  end subroutine non_differentiable_intrinsics
-
-  subroutine special_intrinsics(mat_in, mat_out)
-    real, intent(in)  :: mat_in(:,:)
-    real, intent(out) :: mat_out(:,:)
-
-    mat_out = transpose(mat_in)
-    mat_out = cshift(mat_out, 1, 2)
-
-    return
-  end subroutine special_intrinsics
-
-  subroutine casting_intrinsics(i, r, d, c, n)
-    integer, intent(in)  :: i
-    real, intent(in)  :: r
-    double precision, intent(out) :: d
-    character(len=1), intent(inout) :: c
-    integer, intent(out) :: n
-    integer :: i2
-    real :: r2
-
-    i2 = int(r)
-    r2 = real(i)
-    d = dble(r) + dble(i2)
-    n = nint(r)
-    c = achar(ichar(c) + i2)
-
-    return
-  end subroutine casting_intrinsics
-
   subroutine math_intrinsics_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
@@ -231,6 +161,21 @@ contains
     return
   end subroutine math_intrinsics_rev_ad
 
+  subroutine reduction(x, a, b, c, d)
+    real, intent(in)  :: x(:)
+    real, intent(out) :: a
+    real, intent(out) :: b
+    real, intent(out) :: c
+    real, intent(out) :: d
+
+    a = sum(x)
+    b = sum(x(:))
+    c = minval(x)
+    d = maxval(x)
+
+    return
+  end subroutine reduction
+
   subroutine reduction_fwd_ad(x, x_ad, a, a_ad, b, b_ad, c, c_ad, d, d_ad)
     real, intent(in)  :: x(:)
     real, intent(in)  :: x_ad(:)
@@ -275,6 +220,33 @@ contains
     return
   end subroutine reduction_rev_ad
 
+  subroutine non_differentiable_intrinsics(str, arr, idx, lb, ub, x, y)
+    character(len=*), intent(in)  :: str
+    real, intent(in)  :: arr(:)
+    integer, intent(out) :: idx
+    integer, intent(out) :: lb
+    integer, intent(out) :: ub
+    real, intent(in)  :: x
+    real, intent(out) :: y
+    integer :: n
+    integer :: len_trimmed
+    real :: a
+    real :: b
+    real :: c
+
+    len_trimmed = len_trim(adjustl(str))
+    idx = index(str, 'a')
+    lb = lbound(arr, 1)
+    ub = ubound(arr, 1)
+    n = size(arr)
+    a = epsilon(x)
+    b = huge(x)
+    c = tiny(x)
+    y = a + b + c
+
+    return
+  end subroutine non_differentiable_intrinsics
+
   subroutine non_differentiable_intrinsics_fwd_ad(str, arr, idx, lb, ub, x, y, y_ad)
     character(len=*), intent(in)  :: str
     real, intent(in)  :: arr(:)
@@ -315,6 +287,16 @@ contains
     return
   end subroutine non_differentiable_intrinsics_rev_ad
 
+  subroutine special_intrinsics(mat_in, mat_out)
+    real, intent(in)  :: mat_in(:,:)
+    real, intent(out) :: mat_out(:,:)
+
+    mat_out = transpose(mat_in)
+    mat_out = cshift(mat_out, 1, 2)
+
+    return
+  end subroutine special_intrinsics
+
   subroutine special_intrinsics_fwd_ad(mat_in, mat_in_ad, mat_out, mat_out_ad)
     real, intent(in)  :: mat_in(:,:)
     real, intent(in)  :: mat_in_ad(:,:)
@@ -338,6 +320,24 @@ contains
 
     return
   end subroutine special_intrinsics_rev_ad
+
+  subroutine casting_intrinsics(i, r, d, c, n)
+    integer, intent(in)  :: i
+    real, intent(in)  :: r
+    double precision, intent(out) :: d
+    character(len=1), intent(inout) :: c
+    integer, intent(out) :: n
+    integer :: i2
+    real :: r2
+
+    i2 = int(r)
+    r2 = real(i)
+    d = dble(r) + dble(i2)
+    n = nint(r)
+    c = achar(ichar(c) + i2)
+
+    return
+  end subroutine casting_intrinsics
 
   subroutine casting_intrinsics_fwd_ad(r, r_ad, d, d_ad, c, n)
     real, intent(in)  :: r

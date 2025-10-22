@@ -2792,7 +2792,6 @@ def generate_ad(
             # print(content)
 
         routine_lookup = {r.name: r for r in mod_org.routines}
-        orig_order = [r.name for r in mod_org.routines]
         groups, deps = _dependency_groups(mod_org.routines)
 
         ad_modules_used = set()
@@ -2889,13 +2888,19 @@ def generate_ad(
                 if not changed:
                     break
 
-        for name_r in orig_order:
-            info = generated_subs.get(name_r, {})
+        original_routines = list(mod.routines)
+        mod.routines = []
+        for routine in original_routines:
+            mod.routines.append(routine)
+            info = generated_subs.get(routine.name, {})
             if mode in ("forward", "both") and "fwd" in info:
+                info["fwd"].set_parent(mod)
                 mod.routines.append(info["fwd"])
             if mode in ("reverse", "both") and "rev" in info:
+                info["rev"].set_parent(mod)
                 mod.routines.append(info["rev"])
                 if "wrapper" in info:
+                    info["wrapper"].set_parent(mod)
                     mod.routines.append(info["wrapper"])
 
         name_mod = mod.name

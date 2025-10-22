@@ -17,25 +17,6 @@ contains
     return
   end subroutine conditional_return
 
-  subroutine alloc_return(n, x, y, f)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
-    real, intent(out) :: y(n)
-    logical, intent(in)  :: f
-    real, allocatable :: xtmp(:)
-
-    allocate(xtmp(n))
-    if (f) then
-      xtmp = x**2
-      y = xtmp
-      return
-    end if
-    xtmp = x + 1.0
-    y = xtmp * x
-
-    return
-  end subroutine alloc_return
-
   subroutine conditional_return_fwd_ad(x, x_ad, y, y_ad)
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
@@ -75,6 +56,25 @@ contains
 
     return
   end subroutine conditional_return_rev_ad
+
+  subroutine alloc_return(n, x, y, f)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x(n)
+    real, intent(out) :: y(n)
+    logical, intent(in)  :: f
+    real, allocatable :: xtmp(:)
+
+    allocate(xtmp(n))
+    if (f) then
+      xtmp = x**2
+      y = xtmp
+      return
+    end if
+    xtmp = x + 1.0
+    y = xtmp * x
+
+    return
+  end subroutine alloc_return
 
   subroutine alloc_return_fwd_ad(n, x, x_ad, y, y_ad, f)
     integer, intent(in)  :: n

@@ -18,19 +18,6 @@ contains
     return
   end subroutine where_example
 
-  subroutine forall_example(n, a, b)
-    integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
-    real, intent(out) :: b(n)
-    integer :: i
-
-    forall (i=1:n)
-      b(i) = 2.0 * a(i)
-    end forall
-
-    return
-  end subroutine forall_example
-
   subroutine where_example_fwd_ad(n, a, a_ad, b, b_ad)
     integer, intent(in)  :: n
     real, intent(inout) :: a(n)
@@ -63,6 +50,19 @@ contains
 
     return
   end subroutine where_example_rev_ad
+
+  subroutine forall_example(n, a, b)
+    integer, intent(in)  :: n
+    real, intent(in)  :: a(n)
+    real, intent(out) :: b(n)
+    integer :: i
+
+    forall (i=1:n)
+      b(i) = 2.0 * a(i)
+    end forall
+
+    return
+  end subroutine forall_example
 
   subroutine forall_example_fwd_ad(n, a, a_ad, b, b_ad)
     integer, intent(in)  :: n

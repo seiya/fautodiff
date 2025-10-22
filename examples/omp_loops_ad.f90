@@ -23,184 +23,6 @@ contains
     return
   end subroutine sum_loop
 
-  subroutine stencil_loop(n, m, x, y)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
-    real, intent(out) :: y(n,m)
-    integer :: i
-    integer :: in
-    integer :: ip
-    integer :: j
-    integer :: jn
-    integer :: jp
-
-    !$omp parallel do private(in, ip, jn, jp)
-    do j = 1, m
-      jn = j - 1
-      jp = j + 1
-      if (j == 1) then
-        jn = m
-      else if (j == m) then
-        jp = 1
-      end if
-      do i = 1, n
-        in = i - 1
-        ip = i + 1
-        if (i == 1) then
-          in = n
-        else if (i == n) then
-          ip = 1
-        end if
-        y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
-      end do
-    end do
-    !$omp end parallel do
-
-    return
-  end subroutine stencil_loop
-
-  subroutine stencil_loop_mod(is, ie, x, y)
-    integer, intent(in)  :: is
-    integer, intent(in)  :: ie
-    real, intent(in)  :: x(is:ie)
-    real, intent(out) :: y(is:ie)
-    real :: xn
-    real :: xp
-    real :: work
-    integer :: i
-    integer :: in
-    integer :: ip
-    integer :: len
-
-    len = ie - is + 1
-    !$omp parallel do private(in, ip, xn, xp, work)
-    do i = is, ie
-      in = modulo(i - is - 1, len) + is
-      ip = modulo(i - is + 1, len) + is
-      xn = x(in)
-      xp = x(ip)
-      if (x(i) > 0.0) then
-        work = xn
-      else
-        work = xp
-      end if
-      if (work >= 0.0) then
-        y(i) = work * (2.0 * x(i) + x(in)) / 4.0
-      else
-        y(i) = work * (2.0 * x(i) + x(ip)) / 4.0
-      end if
-    end do
-    !$omp end parallel do
-
-    return
-  end subroutine stencil_loop_mod
-
-  subroutine stencil_loop_max(nx, ny, h, u)
-    integer, intent(in)  :: nx
-    integer, intent(in)  :: ny
-    real, intent(out) :: u(nx,ny)
-    real, intent(in)  :: h(nx,ny)
-    integer :: i
-    integer :: j
-    integer :: im1
-    integer :: jp1
-    integer :: jm1
-
-    !$omp parallel do private(im1, jp1, jm1)
-    do j = 1, ny
-      jp1 = min(j + 1, ny)
-      jm1 = max(j - 1, 1)
-      do i = 1, nx
-        im1 = modulo(i - 2, nx) + 1
-        u(i,j) = h(im1,jp1) + h(i,jp1) - h(im1,jm1) - h(i,jm1)
-      end do
-    end do
-    !$omp end parallel do
-
-    return
-  end subroutine stencil_loop_max
-
-  subroutine stencil_loop_with_halo(is, ie, istart, iend, h, u, dhdt)
-    integer, intent(in)  :: is
-    integer, intent(in)  :: ie
-    integer, intent(in)  :: istart
-    integer, intent(in)  :: iend
-    real, intent(in)  :: h(is:ie)
-    real, intent(in)  :: u(is:ie)
-    real, intent(out) :: dhdt(is:ie)
-    real :: flux(2)
-    integer :: i
-    integer :: ip1
-    integer :: ip2
-    integer :: in1
-    integer :: in2
-
-    !$omp parallel do private(flux, ip1, ip2, in1, in2)
-    do i = istart, iend
-      ip1 = i + 1
-      ip2 = i + 2
-      in1 = i - 1
-      in2 = i - 2
-      flux(1) = u(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0
-      flux(2) = u(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0
-      dhdt(i) = - (flux(1) - flux(2))
-    end do
-    !$omp end parallel do
-
-    return
-  end subroutine stencil_loop_with_halo
-
-  subroutine indirect_access_loop(n, m, idx, x, y)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: idx(n)
-    real, intent(in)  :: x(m)
-    real, intent(out) :: y(n)
-    integer :: i
-
-    !$omp parallel do
-    do i = 1, n
-      y(i) = x(idx(i))
-    end do
-    !$omp end parallel do
-
-    return
-  end subroutine indirect_access_loop
-
-  subroutine omp_ws_alloc(x, y)
-    real, intent(inout), allocatable :: x(:)
-    real, intent(out) :: y(size(x))
-
-    !$omp parallel
-    !$omp workshare
-    x = x**2
-    y = x
-    !$omp end workshare
-    !$omp end parallel
-
-    return
-  end subroutine omp_ws_alloc
-
-  subroutine omp_ws_if(x, y, f)
-    real, intent(in)  :: x(:)
-    real, intent(out) :: y(:)
-    logical, intent(in)  :: f
-
-    !$omp parallel
-    !$omp workshare
-    y(:) = x(:)
-    !$omp end workshare
-    if (f) then
-      !$omp workshare
-      y(:) = y(:) + x(:)**2
-      !$omp end workshare
-    end if
-    !$omp end parallel
-
-    return
-  end subroutine omp_ws_if
-
   subroutine sum_loop_fwd_ad(n, x, x_ad, y, y_ad, s, s_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x(n)
@@ -243,6 +65,43 @@ contains
 
     return
   end subroutine sum_loop_rev_ad
+
+  subroutine stencil_loop(n, m, x, y)
+    integer, intent(in)  :: n
+    integer, intent(in)  :: m
+    real, intent(in)  :: x(n,m)
+    real, intent(out) :: y(n,m)
+    integer :: i
+    integer :: in
+    integer :: ip
+    integer :: j
+    integer :: jn
+    integer :: jp
+
+    !$omp parallel do private(in, ip, jn, jp)
+    do j = 1, m
+      jn = j - 1
+      jp = j + 1
+      if (j == 1) then
+        jn = m
+      else if (j == m) then
+        jp = 1
+      end if
+      do i = 1, n
+        in = i - 1
+        ip = i + 1
+        if (i == 1) then
+          in = n
+        else if (i == n) then
+          ip = 1
+        end if
+        y(i,j) = (4.0 * x(i,j) + x(in,j) + x(ip,j) + x(i,jn) + x(i,jp)) / 8.0
+      end do
+    end do
+    !$omp end parallel do
+
+    return
+  end subroutine stencil_loop
 
   subroutine stencil_loop_fwd_ad(n, m, x, x_ad, y, y_ad)
     integer, intent(in)  :: n
@@ -332,6 +191,42 @@ contains
 
     return
   end subroutine stencil_loop_rev_ad
+
+  subroutine stencil_loop_mod(is, ie, x, y)
+    integer, intent(in)  :: is
+    integer, intent(in)  :: ie
+    real, intent(in)  :: x(is:ie)
+    real, intent(out) :: y(is:ie)
+    real :: xn
+    real :: xp
+    real :: work
+    integer :: i
+    integer :: in
+    integer :: ip
+    integer :: len
+
+    len = ie - is + 1
+    !$omp parallel do private(in, ip, xn, xp, work)
+    do i = is, ie
+      in = modulo(i - is - 1, len) + is
+      ip = modulo(i - is + 1, len) + is
+      xn = x(in)
+      xp = x(ip)
+      if (x(i) > 0.0) then
+        work = xn
+      else
+        work = xp
+      end if
+      if (work >= 0.0) then
+        y(i) = work * (2.0 * x(i) + x(in)) / 4.0
+      else
+        y(i) = work * (2.0 * x(i) + x(ip)) / 4.0
+      end if
+    end do
+    !$omp end parallel do
+
+    return
+  end subroutine stencil_loop_mod
 
   subroutine stencil_loop_mod_fwd_ad(is, ie, x, x_ad, y, y_ad)
     integer, intent(in)  :: is
@@ -477,6 +372,31 @@ contains
     return
   end subroutine stencil_loop_mod_rev_ad
 
+  subroutine stencil_loop_max(nx, ny, h, u)
+    integer, intent(in)  :: nx
+    integer, intent(in)  :: ny
+    real, intent(out) :: u(nx,ny)
+    real, intent(in)  :: h(nx,ny)
+    integer :: i
+    integer :: j
+    integer :: im1
+    integer :: jp1
+    integer :: jm1
+
+    !$omp parallel do private(im1, jp1, jm1)
+    do j = 1, ny
+      jp1 = min(j + 1, ny)
+      jm1 = max(j - 1, 1)
+      do i = 1, nx
+        im1 = modulo(i - 2, nx) + 1
+        u(i,j) = h(im1,jp1) + h(i,jp1) - h(im1,jm1) - h(i,jm1)
+      end do
+    end do
+    !$omp end parallel do
+
+    return
+  end subroutine stencil_loop_max
+
   subroutine stencil_loop_max_fwd_ad(nx, ny, h, h_ad, u, u_ad)
     integer, intent(in)  :: nx
     integer, intent(in)  :: ny
@@ -560,6 +480,36 @@ contains
 
     return
   end subroutine stencil_loop_max_rev_ad
+
+  subroutine stencil_loop_with_halo(is, ie, istart, iend, h, u, dhdt)
+    integer, intent(in)  :: is
+    integer, intent(in)  :: ie
+    integer, intent(in)  :: istart
+    integer, intent(in)  :: iend
+    real, intent(in)  :: h(is:ie)
+    real, intent(in)  :: u(is:ie)
+    real, intent(out) :: dhdt(is:ie)
+    real :: flux(2)
+    integer :: i
+    integer :: ip1
+    integer :: ip2
+    integer :: in1
+    integer :: in2
+
+    !$omp parallel do private(flux, ip1, ip2, in1, in2)
+    do i = istart, iend
+      ip1 = i + 1
+      ip2 = i + 2
+      in1 = i - 1
+      in2 = i - 2
+      flux(1) = u(i) * (- h(ip2) + 2.0 * h(ip1) - 2.0 * h(i) + h(in1)) / 6.0
+      flux(2) = u(in1) * (- h(ip1) + 2.0 * h(i) - 2.0 * h(in1) + h(in2)) / 6.0
+      dhdt(i) = - (flux(1) - flux(2))
+    end do
+    !$omp end parallel do
+
+    return
+  end subroutine stencil_loop_with_halo
 
   subroutine stencil_loop_with_halo_fwd_ad(is, ie, istart, iend, h, h_ad, u, u_ad, dhdt, dhdt_ad)
     integer, intent(in)  :: is
@@ -703,6 +653,23 @@ contains
     return
   end subroutine stencil_loop_with_halo_rev_ad
 
+  subroutine indirect_access_loop(n, m, idx, x, y)
+    integer, intent(in)  :: n
+    integer, intent(in)  :: m
+    integer, intent(in)  :: idx(n)
+    real, intent(in)  :: x(m)
+    real, intent(out) :: y(n)
+    integer :: i
+
+    !$omp parallel do
+    do i = 1, n
+      y(i) = x(idx(i))
+    end do
+    !$omp end parallel do
+
+    return
+  end subroutine indirect_access_loop
+
   subroutine indirect_access_loop_fwd_ad(n, m, idx, x, x_ad, y, y_ad)
     integer, intent(in)  :: n
     integer, intent(in)  :: m
@@ -738,6 +705,20 @@ contains
 
     return
   end subroutine indirect_access_loop_rev_ad
+
+  subroutine omp_ws_alloc(x, y)
+    real, intent(inout), allocatable :: x(:)
+    real, intent(out) :: y(size(x))
+
+    !$omp parallel
+    !$omp workshare
+    x = x**2
+    y = x
+    !$omp end workshare
+    !$omp end parallel
+
+    return
+  end subroutine omp_ws_alloc
 
   subroutine omp_ws_alloc_fwd_ad(x, x_ad, y, y_ad)
     real, intent(inout), allocatable :: x(:)
@@ -784,6 +765,25 @@ contains
 
     return
   end subroutine omp_ws_alloc_rev_ad
+
+  subroutine omp_ws_if(x, y, f)
+    real, intent(in)  :: x(:)
+    real, intent(out) :: y(:)
+    logical, intent(in)  :: f
+
+    !$omp parallel
+    !$omp workshare
+    y(:) = x(:)
+    !$omp end workshare
+    if (f) then
+      !$omp workshare
+      y(:) = y(:) + x(:)**2
+      !$omp end workshare
+    end if
+    !$omp end parallel
+
+    return
+  end subroutine omp_ws_if
 
   subroutine omp_ws_if_fwd_ad(x, x_ad, y, y_ad, f)
     real, intent(in)  :: x(:)
