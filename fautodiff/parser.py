@@ -2077,12 +2077,22 @@ def _parse_routine(
                 return PointerClear(lhs, None)
             rhs = _stmt2op(stmt.items[2], decl_map, type_map)
             return PointerAssignment(lhs, rhs, info=info)
-        if isinstance(stmt, (Fortran2003.Write_Stmt, Fortran2003.Print_Stmt)):
-            return None
-        if isinstance(stmt, Fortran2003.Read_Stmt):
-            return None
-        if isinstance(stmt, (Fortran2003.Open_Stmt, Fortran2003.Close_Stmt)):
-            return None
+        if isinstance(
+            stmt,
+            (
+                Fortran2003.Write_Stmt,
+                Fortran2003.Print_Stmt,
+                Fortran2003.Read_Stmt,
+                Fortran2003.Open_Stmt,
+                Fortran2003.Close_Stmt,
+            ),
+        ):
+            text = info["code"]
+            if info["lines"]:
+                text = _normalize_stmt_lines(info["lines"])
+            node = Statement(text)
+            setattr(node, "_consumed_lines", consumed_set)
+            return node
         if isinstance(stmt, Fortran2003.Call_Stmt):
             name = stmt.items[0].tofortran()
             args = []
