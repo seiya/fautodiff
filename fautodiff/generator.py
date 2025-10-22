@@ -80,6 +80,28 @@ from .var_list import VarList
 from .validation_driver import render_validation_driver
 
 
+_MODULES_REQUIRING_ORIGINAL_USE: Set[str] = {"mpi"}
+
+
+def _add_original_use(node: Use, original_name: str) -> None:
+    """Insert ``use original_name`` next to ``node`` if possible."""
+
+    parent = node.parent
+    if not isinstance(parent, Block):
+        return
+
+    try:
+        idx = parent._children.index(node)
+    except ValueError:
+        return
+
+    only = list(node.only) if node.only is not None else None
+    original_use = Use(original_name, only)
+    setattr(original_use, "_fautodiff_skip_rewrite", True)
+    parent._children.insert(idx + 1, original_use)
+    parent._set_parent(original_use)
+
+
 def _deduplicate_use_statements(block: Block) -> None:
     """Remove duplicate ``use`` statements from ``block``."""
 
@@ -132,9 +154,15 @@ def _rewrite_use_tree(
         return
 
     if isinstance(node, Use):
-        mapped = _find_ad_module_name(node.name, module_map, search_paths)
+        if getattr(node, "_fautodiff_skip_rewrite", False):
+            return
+
+        original_name = node.name
+        mapped = _find_ad_module_name(original_name, module_map, search_paths)
         if mapped is not None:
             node.name = mapped
+            if original_name.lower() in _MODULES_REQUIRING_ORIGINAL_USE:
+                _add_original_use(node, original_name)
 
     for child in getattr(node, "iter_children", lambda: [])():
         _rewrite_use_tree(child, module_map, search_paths)
