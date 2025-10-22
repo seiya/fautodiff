@@ -1016,6 +1016,52 @@ class TestGenerator(unittest.TestCase):
         self.assertRegex(generated, r"(?mi)^\s*use\s+mpi_ad\b")
         self.assertRegex(generated, r"(?mi)^\s*use\s+mpi\b")
 
+    def test_mpi_use_preserved_inside_subroutine(self):
+        code_tree.Node.reset()
+        import shutil
+        import textwrap
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module m
+            contains
+              subroutine foo(x, comm)
+                use mpi
+                real, intent(inout) :: x
+                integer, intent(in) :: comm
+                integer :: ierr
+                call MPI_Barrier(comm, ierr)
+              end subroutine foo
+            end module m
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            (tmp_path / "m.f90").write_text(src)
+            shutil.copy(Path("fortran_modules") / "mpi_ad.f90", tmp_path / "mpi_ad.f90")
+            generated = generator.generate_ad(
+                src,
+                str(tmp_path / "m.f90"),
+                warn=False,
+                search_dirs=["fortran_modules", tmp],
+                fadmod_dir=tmp_path,
+            )
+
+        self.assertRegex(
+            generated,
+            r"(?ms)^  subroutine foo_fwd_ad\b.*?^    use\s+mpi_ad\b",
+        )
+        self.assertRegex(
+            generated,
+            r"(?ms)^  subroutine foo_fwd_ad\b.*?^    use\s+mpi\b",
+        )
+        self.assertRegex(
+            generated,
+            r"(?ms)^  subroutine foo_rev_ad\b.*?^    use\s+mpi\b",
+        )
+
     def test_init_non_ad_target_mirror_vars(self):
         """Initialize non-AD-target "_ad" mirrors.
 
