@@ -13,22 +13,6 @@ contains
     return
   end subroutine scale_8
 
-  subroutine scale_rp(x)
-    real(kind=RP), intent(inout) :: x
-
-    x = x * 2.0_RP
-
-    return
-  end subroutine scale_rp
-
-  subroutine scale_dp(x)
-    double precision, intent(inout) :: x
-
-    x = x * 2.0d0
-
-    return
-  end subroutine scale_dp
-
   subroutine scale_8_fwd_ad(x, x_ad)
     real(8), intent(inout) :: x
     real(8), intent(inout) :: x_ad
@@ -47,6 +31,14 @@ contains
     return
   end subroutine scale_8_rev_ad
 
+  subroutine scale_rp(x)
+    real(kind=RP), intent(inout) :: x
+
+    x = x * 2.0_RP
+
+    return
+  end subroutine scale_rp
+
   subroutine scale_rp_fwd_ad(x, x_ad)
     real(kind=RP), intent(inout) :: x
     real(kind=RP), intent(inout) :: x_ad
@@ -64,6 +56,14 @@ contains
 
     return
   end subroutine scale_rp_rev_ad
+
+  subroutine scale_dp(x)
+    double precision, intent(inout) :: x
+
+    x = x * 2.0d0
+
+    return
+  end subroutine scale_dp
 
   subroutine scale_dp_fwd_ad(x, x_ad)
     double precision, intent(inout) :: x

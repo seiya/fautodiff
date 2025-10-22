@@ -18,69 +18,6 @@ contains
     return
   end function add_real4
 
-  function add_real8(x, y) result(r)
-    real(8), intent(in)  :: x
-    real(8), intent(in)  :: y
-    real(8) :: r
-
-    r = x + y
-
-    return
-  end function add_real8
-
-  function add_int(i, j) result(k)
-    integer, intent(in)  :: i
-    integer, intent(in)  :: j
-    integer :: k
-
-    k = i + j
-
-    return
-  end function add_int
-
-  subroutine call_add_real_8(x, y, z)
-    integer, parameter :: RP = 8
-    real(RP), intent(in)  :: x
-    real(RP), intent(in)  :: y
-    real(RP), intent(out) :: z
-
-    z = add(x, y)
-
-    return
-  end subroutine call_add_real_8
-
-  subroutine call_add_real_selected_real_kind(x, y, z)
-    integer, parameter :: RP = selected_real_kind(15, 307)
-    real(kind=RP), intent(in)  :: x
-    real(kind=RP), intent(in)  :: y
-    real(kind=RP), intent(out) :: z
-
-    z = add(x, y)
-
-    return
-  end subroutine call_add_real_selected_real_kind
-
-  subroutine call_add_real_kind(x, y, z)
-    integer, parameter :: RP = kind(1.0d0)
-    real(kind=RP), intent(in)  :: x
-    real(kind=RP), intent(in)  :: y
-    real(kind=RP), intent(out) :: z
-
-    z = add(x, y)
-
-    return
-  end subroutine call_add_real_kind
-
-  subroutine call_add_real_real64(x, y, z)
-    real(real64), intent(in)  :: x
-    real(real64), intent(in)  :: y
-    real(real64), intent(out) :: z
-
-    z = add(x, y)
-
-    return
-  end subroutine call_add_real_real64
-
   subroutine add_real4_fwd_ad(x, x_ad, y, y_ad, r, r_ad)
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
@@ -106,6 +43,16 @@ contains
 
     return
   end subroutine add_real4_rev_ad
+
+  function add_real8(x, y) result(r)
+    real(8), intent(in)  :: x
+    real(8), intent(in)  :: y
+    real(8) :: r
+
+    r = x + y
+
+    return
+  end function add_real8
 
   subroutine add_real8_fwd_ad(x, x_ad, y, y_ad, r, r_ad)
     real(8), intent(in)  :: x
@@ -133,6 +80,27 @@ contains
     return
   end subroutine add_real8_rev_ad
 
+  function add_int(i, j) result(k)
+    integer, intent(in)  :: i
+    integer, intent(in)  :: j
+    integer :: k
+
+    k = i + j
+
+    return
+  end function add_int
+
+  subroutine call_add_real_8(x, y, z)
+    integer, parameter :: RP = 8
+    real(RP), intent(in)  :: x
+    real(RP), intent(in)  :: y
+    real(RP), intent(out) :: z
+
+    z = add(x, y)
+
+    return
+  end subroutine call_add_real_8
+
   subroutine call_add_real_8_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
     integer, parameter :: RP = 8
     real(RP), intent(in)  :: x
@@ -157,6 +125,17 @@ contains
 
     return
   end subroutine call_add_real_8_rev_ad
+
+  subroutine call_add_real_selected_real_kind(x, y, z)
+    integer, parameter :: RP = selected_real_kind(15, 307)
+    real(kind=RP), intent(in)  :: x
+    real(kind=RP), intent(in)  :: y
+    real(kind=RP), intent(out) :: z
+
+    z = add(x, y)
+
+    return
+  end subroutine call_add_real_selected_real_kind
 
   subroutine call_add_real_selected_real_kind_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
     integer, parameter :: RP = selected_real_kind(15, 307)
@@ -183,6 +162,17 @@ contains
     return
   end subroutine call_add_real_selected_real_kind_rev_ad
 
+  subroutine call_add_real_kind(x, y, z)
+    integer, parameter :: RP = kind(1.0d0)
+    real(kind=RP), intent(in)  :: x
+    real(kind=RP), intent(in)  :: y
+    real(kind=RP), intent(out) :: z
+
+    z = add(x, y)
+
+    return
+  end subroutine call_add_real_kind
+
   subroutine call_add_real_kind_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
     integer, parameter :: RP = kind(1.0d0)
     real(kind=RP), intent(in)  :: x
@@ -207,6 +197,16 @@ contains
 
     return
   end subroutine call_add_real_kind_rev_ad
+
+  subroutine call_add_real_real64(x, y, z)
+    real(real64), intent(in)  :: x
+    real(real64), intent(in)  :: y
+    real(real64), intent(out) :: z
+
+    z = add(x, y)
+
+    return
+  end subroutine call_add_real_real64
 
   subroutine call_add_real_real64_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
     real(real64), intent(in)  :: x

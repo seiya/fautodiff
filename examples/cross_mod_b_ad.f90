@@ -15,16 +15,6 @@ contains
     return
   end subroutine call_inc
 
-  subroutine call_inc_kw(b)
-    real, intent(inout) :: b
-    real :: inc
-
-    inc = 1.0
-    call incval(inc=inc, a=b)
-
-    return
-  end subroutine call_inc_kw
-
   subroutine call_inc_fwd_ad(b, b_ad)
     real, intent(inout) :: b
     real, intent(inout) :: b_ad
@@ -48,6 +38,16 @@ contains
 
     return
   end subroutine call_inc_rev_ad
+
+  subroutine call_inc_kw(b)
+    real, intent(inout) :: b
+    real :: inc
+
+    inc = 1.0
+    call incval(inc=inc, a=b)
+
+    return
+  end subroutine call_inc_kw
 
   subroutine call_inc_kw_fwd_ad(b, b_ad)
     real, intent(inout) :: b

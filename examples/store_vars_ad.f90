@@ -23,26 +23,6 @@ contains
     return
   end subroutine do_with_recurrent_scalar
 
-  subroutine do_while(x, y, z)
-    real, intent(in)  :: x
-    real, intent(out) :: y
-    real, intent(out) :: z
-    real :: a
-
-    y = 0.0
-    z = 1.0
-    a = y * x
-    do while (y < 10.0)
-      a = a + x
-      y = y + a
-      a = a + 1.0
-      z = z * a
-    end do
-    y = z * y
-
-    return
-  end subroutine do_while
-
   subroutine do_with_recurrent_scalar_fwd_ad(n, x, x_ad, z, z_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x(n)
@@ -109,6 +89,26 @@ contains
 
     return
   end subroutine do_with_recurrent_scalar_rev_ad
+
+  subroutine do_while(x, y, z)
+    real, intent(in)  :: x
+    real, intent(out) :: y
+    real, intent(out) :: z
+    real :: a
+
+    y = 0.0
+    z = 1.0
+    a = y * x
+    do while (y < 10.0)
+      a = a + x
+      y = y + a
+      a = a + 1.0
+      z = z * a
+    end do
+    y = z * y
+
+    return
+  end subroutine do_while
 
   subroutine do_while_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
     real, intent(in)  :: x

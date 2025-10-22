@@ -13,15 +13,6 @@ contains
     return
   end subroutine inc
 
-  subroutine do_inc(x, y)
-    real, intent(inout) :: x
-    real, intent(in)  :: y
-
-    call inc(a=x, b=y)
-
-    return
-  end subroutine do_inc
-
   subroutine inc_fwd_ad(a, a_ad, b, b_ad)
     real, intent(inout) :: a
     real, intent(inout) :: a_ad
@@ -42,6 +33,15 @@ contains
 
     return
   end subroutine inc_rev_ad
+
+  subroutine do_inc(x, y)
+    real, intent(inout) :: x
+    real, intent(in)  :: y
+
+    call inc(a=x, b=y)
+
+    return
+  end subroutine do_inc
 
   subroutine do_inc_fwd_ad(x, x_ad, y, y_ad)
     real, intent(inout) :: x

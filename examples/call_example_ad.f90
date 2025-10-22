@@ -13,51 +13,6 @@ contains
     return
   end subroutine foo
 
-  function bar(a) result(b)
-    real, intent(in)  :: a
-    real :: b
-
-    b = a**2
-
-    return
-  end function bar
-
-  subroutine call_subroutine(x, y)
-    real, intent(inout) :: x
-    real, intent(in)  :: y
-
-    call foo(x, y)
-
-    return
-  end subroutine call_subroutine
-
-  subroutine call_fucntion(x, y)
-    real, intent(out) :: x
-    real, intent(in)  :: y
-
-    x = bar(y)
-
-    return
-  end subroutine call_fucntion
-
-  subroutine arg_operation(x, y)
-    real, intent(inout) :: x
-    real, intent(in)  :: y
-
-    call foo(x, y * 2.0)
-
-    return
-  end subroutine arg_operation
-
-  subroutine arg_function(x, y)
-    real, intent(inout) :: x
-    real, intent(in)  :: y
-
-    call foo(x, bar(y))
-
-    return
-  end subroutine arg_function
-
   subroutine foo_fwd_ad(a, a_ad, b, b_ad)
     real, intent(inout) :: a
     real, intent(inout) :: a_ad
@@ -79,6 +34,15 @@ contains
 
     return
   end subroutine foo_rev_ad
+
+  function bar(a) result(b)
+    real, intent(in)  :: a
+    real :: b
+
+    b = a**2
+
+    return
+  end function bar
 
   subroutine bar_fwd_ad(a, a_ad, b, b_ad)
     real, intent(in)  :: a
@@ -103,6 +67,15 @@ contains
     return
   end subroutine bar_rev_ad
 
+  subroutine call_subroutine(x, y)
+    real, intent(inout) :: x
+    real, intent(in)  :: y
+
+    call foo(x, y)
+
+    return
+  end subroutine call_subroutine
+
   subroutine call_subroutine_fwd_ad(x, x_ad, y, y_ad)
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
@@ -122,6 +95,15 @@ contains
 
     return
   end subroutine call_subroutine_rev_ad
+
+  subroutine call_fucntion(x, y)
+    real, intent(out) :: x
+    real, intent(in)  :: y
+
+    x = bar(y)
+
+    return
+  end subroutine call_fucntion
 
   subroutine call_fucntion_fwd_ad(x, x_ad, y, y_ad)
     real, intent(out) :: x
@@ -143,6 +125,15 @@ contains
 
     return
   end subroutine call_fucntion_rev_ad
+
+  subroutine arg_operation(x, y)
+    real, intent(inout) :: x
+    real, intent(in)  :: y
+
+    call foo(x, y * 2.0)
+
+    return
+  end subroutine arg_operation
 
   subroutine arg_operation_fwd_ad(x, x_ad, y, y_ad)
     real, intent(inout) :: x
@@ -168,6 +159,15 @@ contains
 
     return
   end subroutine arg_operation_rev_ad
+
+  subroutine arg_function(x, y)
+    real, intent(inout) :: x
+    real, intent(in)  :: y
+
+    call foo(x, bar(y))
+
+    return
+  end subroutine arg_function
 
   subroutine arg_function_fwd_ad(x, x_ad, y, y_ad)
     real, intent(inout) :: x

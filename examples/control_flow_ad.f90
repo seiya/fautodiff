@@ -23,53 +23,6 @@ contains
     return
   end subroutine if_example
 
-  subroutine select_example(i, x, z)
-    integer, intent(in)  :: i
-    real, intent(in)  :: x
-    real, intent(out) :: z
-
-    select case (i)
-    case (1)
-      z = x + 1.0
-    case (2, 3)
-      z = x - 1.0
-    case default
-      z = 0.0
-    end select
-
-    return
-  end subroutine select_example
-
-  subroutine do_example(n, x, sum)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(out) :: sum
-    integer :: i
-
-    sum = 0.0
-    do i = 1, n
-      sum = sum + i * x
-    end do
-
-    return
-  end subroutine do_example
-
-  subroutine do_while_example(x, limit, count)
-    real, intent(in)  :: x
-    real, intent(in)  :: limit
-    integer, intent(out) :: count
-    real :: y
-
-    y = x
-    count = 0
-    do while (y < limit)
-      y = y * 2.0
-      count = count + 1
-    end do
-
-    return
-  end subroutine do_while_example
-
   subroutine if_example_fwd_ad(x, x_ad, y, z, z_ad)
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
@@ -110,6 +63,23 @@ contains
 
     return
   end subroutine if_example_rev_ad
+
+  subroutine select_example(i, x, z)
+    integer, intent(in)  :: i
+    real, intent(in)  :: x
+    real, intent(out) :: z
+
+    select case (i)
+    case (1)
+      z = x + 1.0
+    case (2, 3)
+      z = x - 1.0
+    case default
+      z = 0.0
+    end select
+
+    return
+  end subroutine select_example
 
   subroutine select_example_fwd_ad(i, x, x_ad, z, z_ad)
     integer, intent(in)  :: i
@@ -152,6 +122,20 @@ contains
     return
   end subroutine select_example_rev_ad
 
+  subroutine do_example(n, x, sum)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(out) :: sum
+    integer :: i
+
+    sum = 0.0
+    do i = 1, n
+      sum = sum + i * x
+    end do
+
+    return
+  end subroutine do_example
+
   subroutine do_example_fwd_ad(n, x, x_ad, sum, sum_ad)
     integer, intent(in)  :: n
     real, intent(in)  :: x
@@ -183,6 +167,22 @@ contains
 
     return
   end subroutine do_example_rev_ad
+
+  subroutine do_while_example(x, limit, count)
+    real, intent(in)  :: x
+    real, intent(in)  :: limit
+    integer, intent(out) :: count
+    real :: y
+
+    y = x
+    count = 0
+    do while (y < limit)
+      y = y * 2.0
+      count = count + 1
+    end do
+
+    return
+  end subroutine do_while_example
 
   subroutine do_while_example_rev_ad(x, x_ad, limit)
     real, intent(in)  :: x

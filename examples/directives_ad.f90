@@ -14,25 +14,6 @@ contains
     return
   end subroutine add_const
 
-  subroutine skip_me(x)
-    real, intent(in)  :: x
-    ! routine is intentionally empty but must be parsed
-
-    return
-  end subroutine skip_me
-
-  subroutine worker(x, z)
-    real, intent(in)  :: x
-    real, intent(out) :: z
-    real :: y
-
-    y = x + 1.0
-    call skip_me(y)
-    z = y
-
-    return
-  end subroutine worker
-
   subroutine add_const_fwd_ad(x, x_ad, y, y_ad, z)
     real, intent(in)  :: x
     real, intent(in)  :: x_ad
@@ -55,6 +36,25 @@ contains
 
     return
   end subroutine add_const_rev_ad
+
+  subroutine skip_me(x)
+    real, intent(in)  :: x
+    ! routine is intentionally empty but must be parsed
+
+    return
+  end subroutine skip_me
+
+  subroutine worker(x, z)
+    real, intent(in)  :: x
+    real, intent(out) :: z
+    real :: y
+
+    y = x + 1.0
+    call skip_me(y)
+    z = y
+
+    return
+  end subroutine worker
 
   subroutine worker_fwd_ad(x, x_ad, z, z_ad)
     real, intent(in)  :: x
