@@ -2287,16 +2287,22 @@ class OpFunc(Operator):
         self.name = name
 
     def deep_clone(self) -> "OpFunc":
-        return OpFunc(
-            name = self.name,
-            args = [arg.deep_clone() for arg in self.args]
+        clone = OpFunc(
+            name=self.name,
+            args=[arg.deep_clone() for arg in self.args] if self.args else [],
+            var_type=self.var_type.deep_clone() if self.var_type is not None else None,
         )
+        clone.macro_name = self.macro_name
+        return clone
 
     def clone_with_args(self, args: List[Operator] | None) -> "OpFunc":
-        return OpFunc(
-            name = self.name,
-            args = args
+        clone = OpFunc(
+            name=self.name,
+            args=list(args) if args is not None else None,
+            var_type=self.var_type.deep_clone() if self.var_type is not None else None,
         )
+        clone.macro_name = self.macro_name
+        return clone
 
     def __str__(self) -> str:
         if self.macro_name:
