@@ -1004,6 +1004,18 @@ class TestGenerator(unittest.TestCase):
         for routine in generics["MPI_Recv_init"]:
             self.assertIn(routine, routines)
 
+    def test_mpi_ad_keeps_original_module_use(self):
+        code_tree.Node.reset()
+
+        generated = gen(
+            "examples/mpi_sub_use.f90",
+            warn=False,
+            search_dirs=[".", "examples", "fortran_modules"],
+        )
+
+        self.assertRegex(generated, r"(?mi)^\s*use\s+mpi_ad\b")
+        self.assertRegex(generated, r"(?mi)^\s*use\s+mpi\b")
+
     def test_init_non_ad_target_mirror_vars(self):
         """Initialize non-AD-target "_ad" mirrors.
 
