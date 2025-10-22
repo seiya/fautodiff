@@ -1,5 +1,4 @@
 program run_derived_alloc
-  use derived_alloc
   use derived_alloc_ad
   implicit none
   real, parameter :: tol = 1.0e-4

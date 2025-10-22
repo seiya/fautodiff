@@ -1,14 +1,25 @@
 module mpi_sub_use_ad
-  use mpi_sub_use
-  use mpi
   use mpi_ad
   implicit none
 
+
 contains
+
+  subroutine foo(x, comm)
+    use mpi
+    real, intent(inout) :: x
+    integer, intent(in)  :: comm
+    real :: tmp
+    integer :: ierr
+
+    call MPI_Allreduce(x, tmp, 1, MPI_REAL, MPI_SUM, comm, ierr)
+    x = tmp
+
+    return
+  end subroutine foo
 
   subroutine foo_fwd_ad(x, x_ad, comm)
     use mpi
-    use mpi_ad
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
     integer, intent(in)  :: comm
@@ -26,7 +37,6 @@ contains
 
   subroutine foo_rev_ad(x, x_ad, comm)
     use mpi
-    use mpi_ad
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
     integer, intent(in)  :: comm

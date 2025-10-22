@@ -1,10 +1,113 @@
 module mpi_example_ad
-  use mpi_example
   use mpi
   use mpi_ad
   implicit none
 
+
 contains
+
+  subroutine sum_reduce(x, y, comm)
+    real, intent(inout) :: x
+    real, intent(inout) :: y
+    integer, intent(in)  :: comm
+    real :: tmp
+    integer :: ierr
+
+    call MPI_Allreduce(x, tmp, 1, MPI_REAL, MPI_SUM, comm, ierr)
+    x = tmp
+    call MPI_Allreduce(MPI_IN_PLACE, y, 1, MPI_REAL, MPI_SUM, comm, ierr)
+
+    return
+  end subroutine sum_reduce
+
+  subroutine isend_irecv(x, y, comm)
+    real, intent(inout) :: x(3)
+    real, intent(out) :: y
+    integer, intent(in)  :: comm
+    integer, parameter :: tag = 0
+    integer :: reqs(2)
+    integer :: ierr
+    integer :: rank
+    integer :: size
+    integer :: pn
+    integer :: pp
+
+    call MPI_Comm_rank(comm, rank, ierr)
+    call MPI_Comm_size(comm, size, ierr)
+    x(:) = x(:) + rank
+    pn = rank - 1
+    pp = rank + 1
+    reqs(:) = MPI_REQUEST_NULL
+    if (pn >= 0) then
+      call MPI_Irecv(x(1), 1, MPI_REAL, pn, tag, comm, reqs(1), ierr)
+    end if
+    if (pp < size) then
+      call MPI_Isend(x(2), 1, MPI_REAL, pp, tag, comm, reqs(2), ierr)
+    end if
+    y = x(2)
+    call MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE, ierr)
+    reqs(:) = MPI_REQUEST_NULL
+    if (pp < size) then
+      call MPI_Irecv(x(3), 1, MPI_REAL, pp, tag + 1, comm, reqs(1), ierr)
+    end if
+    if (pn >= 0) then
+      call MPI_Isend(x(2), 1, MPI_REAL, pn, tag + 1, comm, reqs(2), ierr)
+    end if
+    call MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE, ierr)
+    if (pn >= 0) then
+      y = x(1) + y
+    end if
+    if (pp < size) then
+      y = x(3) + y
+    end if
+
+    return
+  end subroutine isend_irecv
+
+  subroutine isend_irecv_alloc(x, y, comm)
+    real, intent(in)  :: x
+    real, intent(out) :: y
+    integer, intent(in)  :: comm
+    integer, parameter :: tag = 0
+    real, allocatable :: z(:)
+    integer :: reqs(4)
+    integer :: ierr
+    integer :: rank
+    integer :: size
+    integer :: pn
+    integer :: pp
+
+    call MPI_Comm_rank(comm, rank, ierr)
+    call MPI_Comm_size(comm, size, ierr)
+    reqs(:) = MPI_REQUEST_NULL
+    allocate(z(3))
+    z(:) = x + rank
+    pn = rank - 1
+    pp = rank + 1
+    if (pn >= 0) then
+      call MPI_Irecv(z(1), 1, MPI_REAL, pn, tag, comm, reqs(1), ierr)
+      call MPI_Isend(z(2), 1, MPI_REAL, pn, tag + 1, comm, reqs(2), ierr)
+    end if
+    if (pp < size) then
+      call MPI_Irecv(z(3), 1, MPI_REAL, pp, tag + 1, comm, reqs(3), ierr)
+      call MPI_Isend(z(2), 1, MPI_REAL, pp, tag, comm, reqs(4), ierr)
+    end if
+    y = x + z(2)
+    call MPI_Waitall(4, reqs, MPI_STATUSES_IGNORE, ierr)
+    if (pn >= 0) then
+      y = z(1) + y
+    end if
+    if (pp < size) then
+      y = z(3) + y
+    end if
+    if (allocated(z)) then
+      if (allocated(z)) then
+        deallocate(z)
+      end if
+    end if
+
+    return
+  end subroutine isend_irecv_alloc
 
   subroutine sum_reduce_fwd_ad(x, x_ad, y, y_ad, comm)
     real, intent(inout) :: x
@@ -114,7 +217,7 @@ contains
     integer :: size
     integer :: pn
     integer :: pp
-    integer :: reqs_ad_save_380_ad(2)
+    integer :: reqs_ad_save_475_ad(2)
 
     call MPI_Comm_rank(comm, rank, ierr)
     call MPI_Comm_size(comm, size, ierr)
@@ -127,7 +230,7 @@ contains
     if (pp < size) then
       call MPI_Isend_fwd_rev_ad(x_ad(2), 1, MPI_REAL, pp, tag, comm, reqs_ad(2), ierr)
     end if
-    reqs_ad_save_380_ad(:) = reqs_ad(:)
+    reqs_ad_save_475_ad(:) = reqs_ad(:)
     reqs_ad(:) = MPI_REQUEST_NULL
     if (pp < size) then
       call MPI_Irecv_fwd_rev_ad(x_ad(3), 1, MPI_REAL, pp, tag + 1, comm, reqs_ad(1), ierr)
@@ -151,7 +254,7 @@ contains
       call MPI_Irecv_rev_ad(x_ad(3), 1, MPI_REAL, pp, tag + 1, comm, reqs_ad(1), ierr)
         ! call MPI_Irecv(x(3), 1, MPI_REAL, pp, tag+1, comm, reqs(1), ierr)
     end if
-    reqs_ad(:) = reqs_ad_save_380_ad(:)
+    reqs_ad(:) = reqs_ad_save_475_ad(:)
     call MPI_Waitall_rev_ad(2, reqs_ad, ierr) ! call MPI_Waitall(2, reqs, MPI_STATUSES_IGNORE, ierr)
     x_ad(2) = y_ad + x_ad(2) ! y = x(2)
     y_ad = 0.0 ! y = x(2)

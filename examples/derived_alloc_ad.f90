@@ -1,14 +1,70 @@
 module derived_alloc_ad
-  use derived_alloc
   use fautodiff_stack
   implicit none
 
+  type :: derived_t
+    real, allocatable :: arr(:)
+  end type derived_t
+  type(derived_t), public, allocatable :: obj(:)
   type :: derived_ad_t
     real, allocatable :: arr_ad(:)
   end type derived_ad_t
   type(derived_ad_t), allocatable :: obj_ad(:)
 
 contains
+
+  subroutine derived_alloc_init(n, m)
+    integer, intent(in)  :: n
+    integer, intent(in)  :: m
+    integer :: j
+
+    allocate(obj(m))
+    do j = 1, m
+      allocate(obj(j)%arr(n))
+      obj(j)%arr(:) = 1.0
+    end do
+
+    return
+  end subroutine derived_alloc_init
+
+  subroutine derived_alloc_finalize(m)
+    integer, intent(in)  :: m
+    integer :: j
+
+    do j = 1, m
+      if (allocated(obj) .and. allocated(obj(j)%arr)) then
+        deallocate(obj(j)%arr)
+      end if
+    end do
+    if (allocated(obj)) then
+      deallocate(obj)
+    end if
+
+    return
+  end subroutine derived_alloc_finalize
+
+  subroutine derived_alloc_run(n, m, x, res)
+    integer, intent(in)  :: n
+    integer, intent(in)  :: m
+    real, intent(in)  :: x
+    real, intent(out) :: res
+    integer :: i
+    integer :: j
+
+    do j = 1, m
+      do i = 1, n
+        obj(j)%arr(i) = obj(j)%arr(i) * x + j
+      end do
+    end do
+    res = 0.0
+    do j = 1, m
+      do i = 1, n
+        res = res + obj(j)%arr(i) * x
+      end do
+    end do
+
+    return
+  end subroutine derived_alloc_run
 
   subroutine derived_alloc_init_fwd_ad(n, m)
     integer, intent(in)  :: n

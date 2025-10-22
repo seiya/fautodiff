@@ -1,5 +1,4 @@
 program run_macro_multistmt
-  use macro_multistmt
   use macro_multistmt_ad
   implicit none
   real, parameter :: tol = 1.0e-4

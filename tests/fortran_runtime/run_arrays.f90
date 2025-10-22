@@ -1,5 +1,4 @@
 program run_arrays
-  use arrays
   use arrays_ad
   implicit none
   real, parameter :: tol = 1.0e-4

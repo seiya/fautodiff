@@ -1,5 +1,4 @@
 program run_use_module_conflict
-  use use_module_conflict
   use use_module_conflict_ad
   use real8_module_ad, only: r_ad
   implicit none

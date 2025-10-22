@@ -1,6 +1,5 @@
 program run_mpi_sub_use
   use mpi
-  use mpi_sub_use
   use mpi_sub_use_ad
   implicit none
   real, parameter :: tol = 1.0e-4

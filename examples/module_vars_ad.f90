@@ -1,11 +1,23 @@
 module module_vars_ad
-  use module_vars
   use fautodiff_stack
   implicit none
 
+  real, public :: c = 2.0
+  real, public :: a
   real :: a_ad = 0.0
 
 contains
+
+  subroutine inc_and_use(x, y)
+    real, intent(in)  :: x
+    real, intent(out) :: y
+
+    y = (c + x) * a
+    a = a + x
+    y = y * a
+
+    return
+  end subroutine inc_and_use
 
   subroutine inc_and_use_fwd_ad(x, x_ad, y, y_ad)
     real, intent(in)  :: x

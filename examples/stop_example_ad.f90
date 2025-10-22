@@ -1,8 +1,23 @@
 module stop_example_ad
-  use stop_example
   implicit none
 
+
 contains
+
+  subroutine stop_sub(x, y)
+    real, intent(in)  :: x
+    real, intent(out) :: y
+
+    if (x < 0.0) then
+      stop 'negative'
+    end if
+    if (x > 10.0) then
+      error stop 1
+    end if
+    y = x
+
+    return
+  end subroutine stop_sub
 
   subroutine stop_sub_fwd_ad(x, x_ad, y, y_ad)
     real, intent(in)  :: x

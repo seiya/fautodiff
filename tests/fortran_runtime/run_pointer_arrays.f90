@@ -1,5 +1,4 @@
 program run_pointer_arrays
-  use pointer_arrays
   use pointer_arrays_ad
   implicit none
   real, parameter :: tol = 1.0e-4

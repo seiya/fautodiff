@@ -1,5 +1,4 @@
 program run_return_example
-  use return_example
   use return_example_ad
   implicit none
   real, parameter :: tol = 1.0e-3

@@ -2,10 +2,19 @@
 #define MUL(x, y) ((x) * (y))
 
 module macro_args_ad
-  use macro_args
   implicit none
 
+
 contains
+
+  subroutine foo(a, b)
+    real, intent(in)  :: a
+    real, intent(out) :: b
+
+    b = SQR(a + 1.0) + MUL(a, a - 1.0)
+
+    return
+  end subroutine foo
 
   subroutine foo_fwd_ad(a, a_ad, b, b_ad)
     real, intent(in)  :: a

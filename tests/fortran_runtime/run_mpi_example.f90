@@ -1,6 +1,5 @@
 program run_mpi_example
   use mpi
-  use mpi_example
   use mpi_example_ad
   implicit none
   real, parameter :: tol = 1.0e-4

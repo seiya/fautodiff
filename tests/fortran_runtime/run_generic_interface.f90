@@ -1,5 +1,4 @@
 program run_generic_interface
-  use generic_interface
   use generic_interface_ad
   implicit none
   real, parameter :: tol = 1.0e-4

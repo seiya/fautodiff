@@ -1,5 +1,4 @@
 program run_self_reference
-  use self_reference
   use self_reference_ad
   implicit none
   real, parameter :: tol = 1.0e-4

@@ -1,5 +1,4 @@
 program run_directives
-  use directives
   use directives_ad
   implicit none
   real, parameter :: tol = 1.0e-4

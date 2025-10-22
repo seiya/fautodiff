@@ -1,8 +1,17 @@
 module cross_mod_a_ad
-  use cross_mod_a
   implicit none
 
+
 contains
+
+  subroutine incval(a, inc)
+    real, intent(inout) :: a
+    real, intent(in)  :: inc
+
+    a = a + inc
+
+    return
+  end subroutine incval
 
   subroutine incval_fwd_ad(a, a_ad, inc, inc_ad)
     real, intent(inout) :: a

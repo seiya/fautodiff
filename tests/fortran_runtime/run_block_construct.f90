@@ -1,5 +1,4 @@
 program run_block_construct
-  use block_construct
   use block_construct_ad
   implicit none
   real, parameter :: tol = 1.0e-3

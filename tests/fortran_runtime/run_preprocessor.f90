@@ -1,5 +1,4 @@
 program run_preprocessor
-  use preprocessor_example
   use preprocessor_example_ad
   implicit none
   real, parameter :: tol = 1.0e-4

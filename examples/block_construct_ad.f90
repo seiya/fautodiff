@@ -1,10 +1,35 @@
 module block_construct_ad
-  use block_construct
   implicit none
 
+  real, public :: z
   real :: z_ad = 0.0
 
 contains
+
+  subroutine compute_module(val)
+    real, intent(in)  :: val
+
+    z = val + 1.0
+
+    return
+  end subroutine compute_module
+
+  subroutine use_block(x, y)
+    real, intent(in)  :: x
+    real, intent(out) :: y
+    real :: z
+
+    z = x + 1.0
+    block
+      real :: z
+
+      z = x + 2.0
+      y = z + 1.0
+    end block
+    y = y + z
+
+    return
+  end subroutine use_block
 
   subroutine compute_module_fwd_ad(val, val_ad)
     real, intent(in)  :: val

@@ -1,5 +1,4 @@
 program run_macro_sample
-  use macro_sample
   use macro_sample_ad
   implicit none
   real, parameter :: tol = 1.0e-12

@@ -1,8 +1,26 @@
 module keyword_args_ad
-  use keyword_args
   implicit none
 
+
 contains
+
+  subroutine inc(a, b)
+    real, intent(inout) :: a
+    real, intent(in)  :: b
+
+    a = a + b
+
+    return
+  end subroutine inc
+
+  subroutine do_inc(x, y)
+    real, intent(inout) :: x
+    real, intent(in)  :: y
+
+    call inc(a=x, b=y)
+
+    return
+  end subroutine do_inc
 
   subroutine inc_fwd_ad(a, a_ad, b, b_ad)
     real, intent(inout) :: a
