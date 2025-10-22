@@ -4,7 +4,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fautodiff.operators import Kind, OpFunc, OpInt, OpRange, OpVar, VarType
+from fautodiff.operators import (
+    Kind,
+    OpAry,
+    OpFunc,
+    OpInt,
+    OpRange,
+    OpVar,
+    VarType,
+)
 
 
 class TestOperatorsBasic(unittest.TestCase):
@@ -34,6 +42,11 @@ class TestOperatorsBasic(unittest.TestCase):
             var_type=VarType("integer", kind=Kind(OpVar("IP"), use_kind_keyword=False)),
         )
         self.assertEqual(str(OpInt(9, target=target)), "9_IP")
+
+    def test_opary_allows_empty_args(self):
+        ary = OpAry([], var_type=VarType("real"))
+        self.assertEqual(ary.args, [])
+        self.assertEqual(str(ary), "[]")
 
     def test_opvar_suffix_and_eq(self):
         v = OpVar("a")
