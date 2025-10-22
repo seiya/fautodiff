@@ -5,8 +5,8 @@ module simple_math_ad
 contains
 
   function add_numbers(a, b) result(c)
-    real, intent(in)  :: a
-    real, intent(in)  :: b
+    real, intent(in) :: a
+    real, intent(in) :: b
     real :: c
     real :: work
 
@@ -18,10 +18,10 @@ contains
   end function add_numbers
 
   subroutine add_numbers_fwd_ad(a, a_ad, b, b_ad, c, c_ad)
-    real, intent(in)  :: a
-    real, intent(in)  :: a_ad
-    real, intent(in)  :: b
-    real, intent(in)  :: b_ad
+    real, intent(in) :: a
+    real, intent(in) :: a_ad
+    real, intent(in) :: b
+    real, intent(in) :: b_ad
     real, intent(out) :: c
     real, intent(out) :: c_ad
     real :: work_ad
@@ -53,8 +53,8 @@ contains
   end subroutine add_numbers_rev_ad
 
   function subtract_numbers(a, b) result(c)
-    real, intent(in)  :: a
-    real, intent(in)  :: b
+    real, intent(in) :: a
+    real, intent(in) :: b
     real :: c
 
     c = a - b
@@ -64,10 +64,10 @@ contains
   end function subtract_numbers
 
   subroutine subtract_numbers_fwd_ad(a, a_ad, b, b_ad, c, c_ad)
-    real, intent(in)  :: a
-    real, intent(in)  :: a_ad
-    real, intent(in)  :: b
-    real, intent(in)  :: b_ad
+    real, intent(in) :: a
+    real, intent(in) :: a_ad
+    real, intent(in) :: b
+    real, intent(in) :: b_ad
     real, intent(out) :: c
     real, intent(out) :: c_ad
 
@@ -94,8 +94,8 @@ contains
   end subroutine subtract_numbers_rev_ad
 
   subroutine multiply_numbers(a, b, c)
-    real, intent(in)  :: a
-    real, intent(in)  :: b
+    real, intent(in) :: a
+    real, intent(in) :: b
     real, intent(out) :: c
 
     c = a * b + a
@@ -105,10 +105,10 @@ contains
   end subroutine multiply_numbers
 
   subroutine multiply_numbers_fwd_ad(a, a_ad, b, b_ad, c, c_ad)
-    real, intent(in)  :: a
-    real, intent(in)  :: a_ad
-    real, intent(in)  :: b
-    real, intent(in)  :: b_ad
+    real, intent(in) :: a
+    real, intent(in) :: a_ad
+    real, intent(in) :: b
+    real, intent(in) :: b_ad
     real, intent(out) :: c
     real, intent(out) :: c_ad
 
@@ -121,9 +121,9 @@ contains
   end subroutine multiply_numbers_fwd_ad
 
   subroutine multiply_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
-    real, intent(in)  :: a
+    real, intent(in) :: a
     real, intent(inout) :: a_ad
-    real, intent(in)  :: b
+    real, intent(in) :: b
     real, intent(inout) :: b_ad
     real, intent(inout) :: c_ad
 
@@ -137,8 +137,8 @@ contains
   end subroutine multiply_numbers_rev_ad
 
   subroutine divide_numbers(a, b, c)
-    real, intent(in)  :: a
-    real, intent(in)  :: b
+    real, intent(in) :: a
+    real, intent(in) :: b
     real, intent(out) :: c
 
     c = a / (b + 1.5)
@@ -148,10 +148,10 @@ contains
   end subroutine divide_numbers
 
   subroutine divide_numbers_fwd_ad(a, a_ad, b, b_ad, c, c_ad)
-    real, intent(in)  :: a
-    real, intent(in)  :: a_ad
-    real, intent(in)  :: b
-    real, intent(in)  :: b_ad
+    real, intent(in) :: a
+    real, intent(in) :: a_ad
+    real, intent(in) :: b
+    real, intent(in) :: b_ad
     real, intent(out) :: c
     real, intent(out) :: c_ad
 
@@ -164,9 +164,9 @@ contains
   end subroutine divide_numbers_fwd_ad
 
   subroutine divide_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
-    real, intent(in)  :: a
+    real, intent(in) :: a
     real, intent(inout) :: a_ad
-    real, intent(in)  :: b
+    real, intent(in) :: b
     real, intent(inout) :: b_ad
     real, intent(inout) :: c_ad
 
@@ -180,8 +180,8 @@ contains
   end subroutine divide_numbers_rev_ad
 
   function power_numbers(a, b) result(c)
-    real, intent(in)  :: a
-    real, intent(in)  :: b
+    real, intent(in) :: a
+    real, intent(in) :: b
     real :: c
 
     c = a**3 + b**5.5
@@ -191,10 +191,10 @@ contains
   end function power_numbers
 
   subroutine power_numbers_fwd_ad(a, a_ad, b, b_ad, c, c_ad)
-    real, intent(in)  :: a
-    real, intent(in)  :: a_ad
-    real, intent(in)  :: b
-    real, intent(in)  :: b_ad
+    real, intent(in) :: a
+    real, intent(in) :: a_ad
+    real, intent(in) :: b
+    real, intent(in) :: b_ad
     real, intent(out) :: c
     real, intent(out) :: c_ad
 
@@ -209,9 +209,9 @@ contains
   end subroutine power_numbers_fwd_ad
 
   subroutine power_numbers_rev_ad(a, a_ad, b, b_ad, c_ad)
-    real, intent(in)  :: a
+    real, intent(in) :: a
     real, intent(inout) :: a_ad
-    real, intent(in)  :: b
+    real, intent(in) :: b
     real, intent(inout) :: b_ad
     real, intent(inout) :: c_ad
 

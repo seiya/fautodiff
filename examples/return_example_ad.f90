@@ -5,7 +5,7 @@ module return_example_ad
 contains
 
   subroutine conditional_return(x, y)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(out) :: y
 
     if (x < 0.0) then
@@ -18,8 +18,8 @@ contains
   end subroutine conditional_return
 
   subroutine conditional_return_fwd_ad(x, x_ad, y, y_ad)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: y
     real, intent(out) :: y_ad
 
@@ -35,7 +35,7 @@ contains
   end subroutine conditional_return_fwd_ad
 
   subroutine conditional_return_rev_ad(x, x_ad, y_ad)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
     logical :: return_flag_10_ad
@@ -58,10 +58,10 @@ contains
   end subroutine conditional_return_rev_ad
 
   subroutine alloc_return(n, x, y, f)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
     real, intent(out) :: y(n)
-    logical, intent(in)  :: f
+    logical, intent(in) :: f
     real, allocatable :: xtmp(:)
 
     allocate(xtmp(n))
@@ -77,12 +77,12 @@ contains
   end subroutine alloc_return
 
   subroutine alloc_return_fwd_ad(n, x, x_ad, y, y_ad, f)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
-    real, intent(in)  :: x_ad(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
+    real, intent(in) :: x_ad(n)
     real, intent(out) :: y(n)
     real, intent(out) :: y_ad(n)
-    logical, intent(in)  :: f
+    logical, intent(in) :: f
     real, allocatable :: xtmp_ad(:)
     real, allocatable :: xtmp(:)
 
@@ -110,11 +110,11 @@ contains
   end subroutine alloc_return_fwd_ad
 
   subroutine alloc_return_rev_ad(n, x, x_ad, y_ad, f)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
     real, intent(inout) :: x_ad(n)
     real, intent(inout) :: y_ad(n)
-    logical, intent(in)  :: f
+    logical, intent(in) :: f
     real, allocatable :: xtmp_ad(:)
     logical :: return_flag_28_ad
     real, allocatable :: xtmp(:)

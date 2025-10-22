@@ -91,7 +91,7 @@ contains
   subroutine stencil_loop_max(nx, ny, h, u)
     integer, intent(in) :: nx, ny
     real, intent(out) :: u(nx,ny)
-    real, intent(in)  :: h(nx,ny)
+    real, intent(in) :: h(nx,ny)
     integer :: i, j
     integer :: im1
     integer :: jp1, jm1

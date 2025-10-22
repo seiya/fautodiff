@@ -6,7 +6,7 @@ module control_flow_ad
 contains
 
   subroutine if_example(x, y, z)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(inout) :: y
     real, intent(out) :: z
 
@@ -24,8 +24,8 @@ contains
   end subroutine if_example
 
   subroutine if_example_fwd_ad(x, x_ad, y, z, z_ad)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(inout) :: y
     real, intent(out) :: z
     real, intent(out) :: z_ad
@@ -47,7 +47,7 @@ contains
   end subroutine if_example_fwd_ad
 
   subroutine if_example_rev_ad(x, x_ad, z_ad)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: z_ad
 
@@ -65,8 +65,8 @@ contains
   end subroutine if_example_rev_ad
 
   subroutine select_example(i, x, z)
-    integer, intent(in)  :: i
-    real, intent(in)  :: x
+    integer, intent(in) :: i
+    real, intent(in) :: x
     real, intent(out) :: z
 
     select case (i)
@@ -82,9 +82,9 @@ contains
   end subroutine select_example
 
   subroutine select_example_fwd_ad(i, x, x_ad, z, z_ad)
-    integer, intent(in)  :: i
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: i
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: z
     real, intent(out) :: z_ad
 
@@ -104,7 +104,7 @@ contains
   end subroutine select_example_fwd_ad
 
   subroutine select_example_rev_ad(i, x_ad, z_ad)
-    integer, intent(in)  :: i
+    integer, intent(in) :: i
     real, intent(inout) :: x_ad
     real, intent(inout) :: z_ad
 
@@ -123,8 +123,8 @@ contains
   end subroutine select_example_rev_ad
 
   subroutine do_example(n, x, sum)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(out) :: sum
     integer :: i
 
@@ -137,9 +137,9 @@ contains
   end subroutine do_example
 
   subroutine do_example_fwd_ad(n, x, x_ad, sum, sum_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: sum
     real, intent(out) :: sum_ad
     integer :: i
@@ -155,7 +155,7 @@ contains
   end subroutine do_example_fwd_ad
 
   subroutine do_example_rev_ad(n, x_ad, sum_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: x_ad
     real, intent(inout) :: sum_ad
     integer :: i
@@ -169,8 +169,8 @@ contains
   end subroutine do_example_rev_ad
 
   subroutine do_while_example(x, limit, count)
-    real, intent(in)  :: x
-    real, intent(in)  :: limit
+    real, intent(in) :: x
+    real, intent(in) :: limit
     integer, intent(out) :: count
     real :: y
 
@@ -185,9 +185,9 @@ contains
   end subroutine do_while_example
 
   subroutine do_while_example_rev_ad(x, x_ad, limit)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
-    real, intent(in)  :: limit
+    real, intent(in) :: limit
     real :: y_ad
     real :: y
 

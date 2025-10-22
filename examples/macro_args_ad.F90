@@ -8,7 +8,7 @@ module macro_args_ad
 contains
 
   subroutine foo(a, b)
-    real, intent(in)  :: a
+    real, intent(in) :: a
     real, intent(out) :: b
 
     b = SQR(a + 1.0) + MUL(a, a - 1.0)
@@ -17,8 +17,8 @@ contains
   end subroutine foo
 
   subroutine foo_fwd_ad(a, a_ad, b, b_ad)
-    real, intent(in)  :: a
-    real, intent(in)  :: a_ad
+    real, intent(in) :: a
+    real, intent(in) :: a_ad
     real, intent(out) :: b
     real, intent(out) :: b_ad
 
@@ -29,7 +29,7 @@ contains
   end subroutine foo_fwd_ad
 
   subroutine foo_rev_ad(a, a_ad, b_ad)
-    real, intent(in)  :: a
+    real, intent(in) :: a
     real, intent(inout) :: a_ad
     real, intent(inout) :: b_ad
 

@@ -11,8 +11,8 @@ program main_program_ad
 contains
 
   subroutine simple(a, b, c)
-    real, intent(in)  :: a
-    real, intent(in)  :: b
+    real, intent(in) :: a
+    real, intent(in) :: b
     real, intent(out) :: c
 
     c = a + b
@@ -21,10 +21,10 @@ contains
   end subroutine simple
 
   subroutine simple_fwd_ad(a, a_ad, b, b_ad, c, c_ad)
-    real, intent(in)  :: a
-    real, intent(in)  :: a_ad
-    real, intent(in)  :: b
-    real, intent(in)  :: b_ad
+    real, intent(in) :: a
+    real, intent(in) :: a_ad
+    real, intent(in) :: b
+    real, intent(in) :: b_ad
     real, intent(out) :: c
     real, intent(out) :: c_ad
 

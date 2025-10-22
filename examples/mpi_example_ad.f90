@@ -9,7 +9,7 @@ contains
   subroutine sum_reduce(x, y, comm)
     real, intent(inout) :: x
     real, intent(inout) :: y
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     real :: tmp
     integer :: ierr
 
@@ -25,7 +25,7 @@ contains
     real, intent(inout) :: x_ad
     real, intent(inout) :: y
     real, intent(inout) :: y_ad
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     real :: tmp_ad
     real :: tmp
     integer :: ierr
@@ -45,7 +45,7 @@ contains
     real, intent(inout) :: x_ad
     real, intent(inout) :: y
     real, intent(inout) :: y_ad
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     real :: tmp_ad
     integer :: ierr
 
@@ -62,7 +62,7 @@ contains
   subroutine isend_irecv(x, y, comm)
     real, intent(inout) :: x(3)
     real, intent(out) :: y
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     integer, parameter :: tag = 0
     integer :: reqs(2)
     integer :: ierr
@@ -109,7 +109,7 @@ contains
     real, intent(inout) :: x_ad(3)
     real, intent(out) :: y
     real, intent(out) :: y_ad
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     integer :: reqs_ad(2)
     integer :: rank
     integer :: ierr
@@ -165,7 +165,7 @@ contains
     integer, parameter :: tag = 0
     real, intent(inout) :: x_ad(3)
     real, intent(inout) :: y_ad
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     integer :: reqs_ad(2)
     integer :: rank
     integer :: ierr
@@ -226,9 +226,9 @@ contains
   end subroutine isend_irecv_rev_ad
 
   subroutine isend_irecv_alloc(x, y, comm)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(out) :: y
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     integer, parameter :: tag = 0
     real, allocatable :: z(:)
     integer :: reqs(4)
@@ -272,11 +272,11 @@ contains
 
   subroutine isend_irecv_alloc_fwd_ad(x, x_ad, y, y_ad, comm)
     integer, parameter :: tag = 0
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: y
     real, intent(out) :: y_ad
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     integer :: reqs_ad(4)
     real, allocatable :: z_ad(:)
     integer :: rank
@@ -337,7 +337,7 @@ contains
     integer, parameter :: tag = 0
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     integer :: reqs_ad(4)
     real, allocatable :: z_ad(:)
     integer :: rank

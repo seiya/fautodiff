@@ -6,7 +6,7 @@ contains
 
   subroutine incval(a, inc)
     real, intent(inout) :: a
-    real, intent(in)  :: inc
+    real, intent(in) :: inc
 
     a = a + inc
 
@@ -16,8 +16,8 @@ contains
   subroutine incval_fwd_ad(a, a_ad, inc, inc_ad)
     real, intent(inout) :: a
     real, intent(inout) :: a_ad
-    real, intent(in)  :: inc
-    real, intent(in)  :: inc_ad
+    real, intent(in) :: inc
+    real, intent(in) :: inc_ad
 
     a_ad = a_ad + inc_ad ! a = a + inc
     a = a + inc

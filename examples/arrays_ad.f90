@@ -5,9 +5,9 @@ module arrays_ad
 contains
 
   subroutine elementwise_add(n, a, b, c)
-    integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
-    real, intent(in)  :: b(n)
+    integer, intent(in) :: n
+    real, intent(in) :: a(n)
+    real, intent(in) :: b(n)
     real, intent(out) :: c(n)
 
     c(:) = a + b
@@ -17,11 +17,11 @@ contains
   end subroutine elementwise_add
 
   subroutine elementwise_add_fwd_ad(n, a, a_ad, b, b_ad, c, c_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
-    real, intent(in)  :: a_ad(n)
-    real, intent(in)  :: b(n)
-    real, intent(in)  :: b_ad(n)
+    integer, intent(in) :: n
+    real, intent(in) :: a(n)
+    real, intent(in) :: a_ad(n)
+    real, intent(in) :: b(n)
+    real, intent(in) :: b_ad(n)
     real, intent(out) :: c(n)
     real, intent(out) :: c_ad(n)
 
@@ -34,7 +34,7 @@ contains
   end subroutine elementwise_add_fwd_ad
 
   subroutine elementwise_add_rev_ad(n, a_ad, b_ad, c_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: a_ad(n)
     real, intent(inout) :: b_ad(n)
     real, intent(inout) :: c_ad(n)
@@ -48,7 +48,7 @@ contains
   end subroutine elementwise_add_rev_ad
 
   subroutine scale_array(n, a)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: a(n)
     integer :: i
 
@@ -60,7 +60,7 @@ contains
   end subroutine scale_array
 
   subroutine scale_array_fwd_ad(n, a, a_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: a(n)
     real, intent(inout) :: a_ad(n)
     integer :: i
@@ -74,7 +74,7 @@ contains
   end subroutine scale_array_fwd_ad
 
   subroutine scale_array_rev_ad(n, a_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: a_ad(n)
     integer :: i
 
@@ -86,11 +86,11 @@ contains
   end subroutine scale_array_rev_ad
 
   subroutine multidimension(n, m, a, b, c, d)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: a(n,m)
-    real, intent(in)  :: b(n,m)
-    real, intent(in)  :: c
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: a(n,m)
+    real, intent(in) :: b(n,m)
+    real, intent(in) :: c
     real, intent(out) :: d(n,m)
     integer :: i
     integer :: j
@@ -105,14 +105,14 @@ contains
   end subroutine multidimension
 
   subroutine multidimension_fwd_ad(n, m, a, a_ad, b, b_ad, c, c_ad, d, d_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: a(n,m)
-    real, intent(in)  :: a_ad(n,m)
-    real, intent(in)  :: b(n,m)
-    real, intent(in)  :: b_ad(n,m)
-    real, intent(in)  :: c
-    real, intent(in)  :: c_ad
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: a(n,m)
+    real, intent(in) :: a_ad(n,m)
+    real, intent(in) :: b(n,m)
+    real, intent(in) :: b_ad(n,m)
+    real, intent(in) :: c
+    real, intent(in) :: c_ad
     real, intent(out) :: d(n,m)
     real, intent(out) :: d_ad(n,m)
     integer :: i
@@ -129,12 +129,12 @@ contains
   end subroutine multidimension_fwd_ad
 
   subroutine multidimension_rev_ad(n, m, a_ad, b, b_ad, c, c_ad, d_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
+    integer, intent(in) :: n
+    integer, intent(in) :: m
     real, intent(inout) :: a_ad(n,m)
-    real, intent(in)  :: b(n,m)
+    real, intent(in) :: b(n,m)
     real, intent(inout) :: b_ad(n,m)
-    real, intent(in)  :: c
+    real, intent(in) :: c
     real, intent(inout) :: c_ad
     real, intent(inout) :: d_ad(n,m)
     integer :: i
@@ -153,9 +153,9 @@ contains
   end subroutine multidimension_rev_ad
 
   function dot_product(n, a, b) result(res)
-    integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
-    real, intent(in)  :: b(n)
+    integer, intent(in) :: n
+    real, intent(in) :: a(n)
+    real, intent(in) :: b(n)
     real :: res
     integer :: i
 
@@ -168,11 +168,11 @@ contains
   end function dot_product
 
   subroutine dot_product_fwd_ad(n, a, a_ad, b, b_ad, res, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
-    real, intent(in)  :: a_ad(n)
-    real, intent(in)  :: b(n)
-    real, intent(in)  :: b_ad(n)
+    integer, intent(in) :: n
+    real, intent(in) :: a(n)
+    real, intent(in) :: a_ad(n)
+    real, intent(in) :: b(n)
+    real, intent(in) :: b_ad(n)
     real, intent(out) :: res
     real, intent(out) :: res_ad
     integer :: i
@@ -188,10 +188,10 @@ contains
   end subroutine dot_product_fwd_ad
 
   subroutine dot_product_rev_ad(n, a, a_ad, b, b_ad, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
+    integer, intent(in) :: n
+    real, intent(in) :: a(n)
     real, intent(inout) :: a_ad(n)
-    real, intent(in)  :: b(n)
+    real, intent(in) :: b(n)
     real, intent(inout) :: b_ad(n)
     real, intent(inout) :: res_ad
     integer :: i
@@ -206,11 +206,11 @@ contains
   end subroutine dot_product_rev_ad
 
   subroutine indirect(n, a, b, c, idx)
-    integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
+    integer, intent(in) :: n
+    real, intent(in) :: a(n)
     real, intent(out) :: b(n)
     real, intent(out) :: c(n)
-    integer, intent(in)  :: idx(n)
+    integer, intent(in) :: idx(n)
     integer :: i
 
     do i = 1, n
@@ -222,14 +222,14 @@ contains
   end subroutine indirect
 
   subroutine indirect_fwd_ad(n, a, a_ad, b, b_ad, c, c_ad, idx)
-    integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
-    real, intent(in)  :: a_ad(n)
+    integer, intent(in) :: n
+    real, intent(in) :: a(n)
+    real, intent(in) :: a_ad(n)
     real, intent(out) :: b(n)
     real, intent(out) :: b_ad(n)
     real, intent(out) :: c(n)
     real, intent(out) :: c_ad(n)
-    integer, intent(in)  :: idx(n)
+    integer, intent(in) :: idx(n)
     integer :: i
 
     do i = 1, n
@@ -243,12 +243,12 @@ contains
   end subroutine indirect_fwd_ad
 
   subroutine indirect_rev_ad(n, a, a_ad, b_ad, c_ad, idx)
-    integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
+    integer, intent(in) :: n
+    real, intent(in) :: a(n)
     real, intent(inout) :: a_ad(n)
     real, intent(inout) :: b_ad(n)
     real, intent(inout) :: c_ad(n)
-    integer, intent(in)  :: idx(n)
+    integer, intent(in) :: idx(n)
     integer :: i
 
     do i = n, 1, - 1
@@ -262,8 +262,8 @@ contains
   end subroutine indirect_rev_ad
 
   subroutine stencil(n, a, b)
-    integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
+    integer, intent(in) :: n
+    real, intent(in) :: a(n)
     real, intent(out) :: b(n)
     integer :: i
     integer :: in
@@ -284,9 +284,9 @@ contains
   end subroutine stencil
 
   subroutine stencil_fwd_ad(n, a, a_ad, b, b_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: a(n)
-    real, intent(in)  :: a_ad(n)
+    integer, intent(in) :: n
+    real, intent(in) :: a(n)
+    real, intent(in) :: a_ad(n)
     real, intent(out) :: b(n)
     real, intent(out) :: b_ad(n)
     integer :: i
@@ -309,7 +309,7 @@ contains
   end subroutine stencil_fwd_ad
 
   subroutine stencil_rev_ad(n, a_ad, b_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: a_ad(n)
     real, intent(inout) :: b_ad(n)
     integer :: i

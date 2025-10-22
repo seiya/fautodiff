@@ -5,8 +5,8 @@ module save_vars_ad
 contains
 
   subroutine simple(x, y, z)
-    real, intent(in)  :: x
-    real, intent(in)  :: y
+    real, intent(in) :: x
+    real, intent(in) :: y
     real, intent(out) :: z
     real :: work
 
@@ -21,10 +21,10 @@ contains
   end subroutine simple
 
   subroutine simple_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
-    real, intent(in)  :: y
-    real, intent(in)  :: y_ad
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
+    real, intent(in) :: y
+    real, intent(in) :: y_ad
     real, intent(out) :: z
     real, intent(out) :: z_ad
     real :: work_ad
@@ -47,7 +47,7 @@ contains
   end subroutine simple_fwd_ad
 
   subroutine simple_rev_ad(x, x_ad, y_ad, z_ad)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
     real, intent(inout) :: z_ad
@@ -79,8 +79,8 @@ contains
   end subroutine simple_rev_ad
 
   subroutine if_example(x, y, z)
-    real, intent(in)  :: x
-    real, intent(in)  :: y
+    real, intent(in) :: x
+    real, intent(in) :: y
     real, intent(out) :: z
     real :: work
 
@@ -103,10 +103,10 @@ contains
   end subroutine if_example
 
   subroutine if_example_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
-    real, intent(in)  :: y
-    real, intent(in)  :: y_ad
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
+    real, intent(in) :: y
+    real, intent(in) :: y_ad
     real, intent(out) :: z
     real, intent(out) :: z_ad
     real :: work_ad
@@ -141,9 +141,9 @@ contains
   end subroutine if_example_fwd_ad
 
   subroutine if_example_rev_ad(x, x_ad, y, y_ad, z_ad)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
-    real, intent(in)  :: y
+    real, intent(in) :: y
     real, intent(inout) :: y_ad
     real, intent(inout) :: z_ad
     real :: work_ad
@@ -200,10 +200,10 @@ contains
   end subroutine if_example_rev_ad
 
   subroutine do_with_array_private(n, m, x, y, z)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
-    real, intent(in)  :: y(n,m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x(n,m)
+    real, intent(in) :: y(n,m)
     real, intent(out) :: z(n,m)
     real :: ary(n,m)
     real :: scalar
@@ -227,12 +227,12 @@ contains
   end subroutine do_with_array_private
 
   subroutine do_with_array_private_fwd_ad(n, m, x, x_ad, y, y_ad, z, z_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
-    real, intent(in)  :: x_ad(n,m)
-    real, intent(in)  :: y(n,m)
-    real, intent(in)  :: y_ad(n,m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x(n,m)
+    real, intent(in) :: x_ad(n,m)
+    real, intent(in) :: y(n,m)
+    real, intent(in) :: y_ad(n,m)
     real, intent(out) :: z(n,m)
     real, intent(out) :: z_ad(n,m)
     real :: ary_ad(n,m)
@@ -267,11 +267,11 @@ contains
   end subroutine do_with_array_private_fwd_ad
 
   subroutine do_with_array_private_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x(n,m)
     real, intent(inout) :: x_ad(n,m)
-    real, intent(in)  :: y(n,m)
+    real, intent(in) :: y(n,m)
     real, intent(inout) :: y_ad(n,m)
     real, intent(inout) :: z_ad(n,m)
     real :: ary_ad(n,m)
@@ -325,10 +325,10 @@ contains
   end subroutine do_with_array_private_rev_ad
 
   subroutine do_with_array(n, m, x, y, z)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
-    real, intent(in)  :: y(n,m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x(n,m)
+    real, intent(in) :: y(n,m)
     real, intent(out) :: z(n,m)
     real :: ary(n,m)
     integer :: i
@@ -357,12 +357,12 @@ contains
   end subroutine do_with_array
 
   subroutine do_with_array_fwd_ad(n, m, x, x_ad, y, y_ad, z, z_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
-    real, intent(in)  :: x_ad(n,m)
-    real, intent(in)  :: y(n,m)
-    real, intent(in)  :: y_ad(n,m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x(n,m)
+    real, intent(in) :: x_ad(n,m)
+    real, intent(in) :: y(n,m)
+    real, intent(in) :: y_ad(n,m)
     real, intent(out) :: z(n,m)
     real, intent(out) :: z_ad(n,m)
     real :: ary_ad(n,m)
@@ -399,11 +399,11 @@ contains
   end subroutine do_with_array_fwd_ad
 
   subroutine do_with_array_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x(n,m)
     real, intent(inout) :: x_ad(n,m)
-    real, intent(in)  :: y(n,m)
+    real, intent(in) :: y(n,m)
     real, intent(inout) :: y_ad(n,m)
     real, intent(inout) :: z_ad(n,m)
     real :: ary_ad(n,m)
@@ -457,10 +457,10 @@ contains
   end subroutine do_with_array_rev_ad
 
   subroutine do_with_local_array(n, m, x, y, z)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
-    real, intent(in)  :: y(n,m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x(n,m)
+    real, intent(in) :: y(n,m)
     real, intent(out) :: z(n,m)
     real :: work1(2,n,m)
     real :: work2(2,m)
@@ -496,12 +496,12 @@ contains
   end subroutine do_with_local_array
 
   subroutine do_with_local_array_fwd_ad(n, m, x, x_ad, y, y_ad, z, z_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
-    real, intent(in)  :: x_ad(n,m)
-    real, intent(in)  :: y(n,m)
-    real, intent(in)  :: y_ad(n,m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x(n,m)
+    real, intent(in) :: x_ad(n,m)
+    real, intent(in) :: y(n,m)
+    real, intent(in) :: y_ad(n,m)
     real, intent(out) :: z(n,m)
     real, intent(out) :: z_ad(n,m)
     real :: work1_ad(2,n,m)
@@ -554,11 +554,11 @@ contains
   end subroutine do_with_local_array_fwd_ad
 
   subroutine do_with_local_array_rev_ad(n, m, x, x_ad, y, y_ad, z_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x(n,m)
     real, intent(inout) :: x_ad(n,m)
-    real, intent(in)  :: y(n,m)
+    real, intent(in) :: y(n,m)
     real, intent(inout) :: y_ad(n,m)
     real, intent(inout) :: z_ad(n,m)
     real :: work1_ad(2,n,m)
@@ -653,7 +653,7 @@ contains
   end subroutine do_with_local_array_rev_ad
 
   subroutine do_with_stencil_array(n, x)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: x(n)
     integer :: i
 
@@ -667,7 +667,7 @@ contains
   end subroutine do_with_stencil_array
 
   subroutine do_with_stencil_array_fwd_ad(n, x, x_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: x(n)
     real, intent(inout) :: x_ad(n)
     integer :: i
@@ -686,7 +686,7 @@ contains
   end subroutine do_with_stencil_array_fwd_ad
 
   subroutine do_with_stencil_array_rev_ad(n, x, x_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: x(n)
     real, intent(inout) :: x_ad(n)
     integer :: i

@@ -6,8 +6,8 @@ module store_vars_ad
 contains
 
   subroutine do_with_recurrent_scalar(n, x, z)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
     real, intent(out) :: z(n)
     real :: work
     integer :: i
@@ -24,9 +24,9 @@ contains
   end subroutine do_with_recurrent_scalar
 
   subroutine do_with_recurrent_scalar_fwd_ad(n, x, x_ad, z, z_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
-    real, intent(in)  :: x_ad(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
+    real, intent(in) :: x_ad(n)
     real, intent(out) :: z(n)
     real, intent(out) :: z_ad(n)
     real :: work_ad
@@ -49,8 +49,8 @@ contains
   end subroutine do_with_recurrent_scalar_fwd_ad
 
   subroutine do_with_recurrent_scalar_rev_ad(n, x, x_ad, z_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
     real, intent(inout) :: x_ad(n)
     real, intent(inout) :: z_ad(n)
     real :: work_ad
@@ -91,7 +91,7 @@ contains
   end subroutine do_with_recurrent_scalar_rev_ad
 
   subroutine do_while(x, y, z)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(out) :: y
     real, intent(out) :: z
     real :: a
@@ -111,8 +111,8 @@ contains
   end subroutine do_while
 
   subroutine do_while_fwd_ad(x, x_ad, y, y_ad, z, z_ad)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: y
     real, intent(out) :: y_ad
     real, intent(out) :: z
@@ -142,7 +142,7 @@ contains
   end subroutine do_while_fwd_ad
 
   subroutine do_while_rev_ad(x, x_ad, y_ad, z_ad)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
     real, intent(inout) :: z_ad

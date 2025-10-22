@@ -5,7 +5,7 @@ module parameter_var_ad
 contains
 
   subroutine compute_area(r, area)
-    real, intent(in)  :: r
+    real, intent(in) :: r
     real, intent(out) :: area
     real, parameter :: pi = 3.14159
 
@@ -16,8 +16,8 @@ contains
 
   subroutine compute_area_fwd_ad(r, r_ad, area, area_ad)
     real, parameter :: pi = 3.14159
-    real, intent(in)  :: r
-    real, intent(in)  :: r_ad
+    real, intent(in) :: r
+    real, intent(in) :: r_ad
     real, intent(out) :: area
     real, intent(out) :: area_ad
 
@@ -29,7 +29,7 @@ contains
 
   subroutine compute_area_rev_ad(r, r_ad, area_ad)
     real, parameter :: pi = 3.14159
-    real, intent(in)  :: r
+    real, intent(in) :: r
     real, intent(inout) :: r_ad
     real, intent(inout) :: area_ad
 

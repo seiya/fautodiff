@@ -5,10 +5,10 @@ module self_reference_ad
 contains
 
   subroutine self_ref_slice(u, n, m, i, j)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: i
-    integer, intent(in)  :: j
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: i
+    integer, intent(in) :: j
     real, intent(inout) :: u(:)
 
     u(n:m) = u(i:j)
@@ -19,10 +19,10 @@ contains
   subroutine self_ref_slice_fwd_ad(u, u_ad, n, m, i, j)
     real, intent(inout) :: u(:)
     real, intent(inout) :: u_ad(:)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: i
-    integer, intent(in)  :: j
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: i
+    integer, intent(in) :: j
 
     u_ad(n:m) = u_ad(i:j) ! u(n:m) = u(i:j)
     u(n:m) = u(i:j)
@@ -32,9 +32,9 @@ contains
 
   subroutine self_ref_slice_rev_ad(u_ad, n, m, i)
     real, intent(inout) :: u_ad(:)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: i
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: i
     integer :: n1_11_ad
     real :: tmp_save_11_ad
 
@@ -48,10 +48,10 @@ contains
   end subroutine self_ref_slice_rev_ad
 
   subroutine self_ref_slice_ptr(u, v, n, m, i, j)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: i
-    integer, intent(in)  :: j
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: i
+    integer, intent(in) :: j
     real, intent(inout), target :: u(:)
     real, intent(inout), target :: v(:)
     real, pointer :: p(:)
@@ -74,10 +74,10 @@ contains
     real, intent(inout), target :: u_ad(:)
     real, intent(inout), target :: v(:)
     real, intent(inout), target :: v_ad(:)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: i
-    integer, intent(in)  :: j
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: i
+    integer, intent(in) :: j
     real, pointer :: p_ad(:)
     real, pointer :: q_ad(:)
     real, pointer :: p(:)
@@ -103,10 +103,10 @@ contains
   subroutine self_ref_slice_ptr_rev_ad(u_ad, v_ad, n, m, i, j)
     real, intent(inout), target :: u_ad(:)
     real, intent(inout), target :: v_ad(:)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: i
-    integer, intent(in)  :: j
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: i
+    integer, intent(in) :: j
     real, pointer :: p_ad(:)
     real, pointer :: q_ad(:)
     integer :: k
@@ -133,14 +133,14 @@ contains
   end subroutine self_ref_slice_ptr_rev_ad
 
   subroutine self_ref_slice_expr(u, v, w, n, m, i, j, l1, l2)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: i
-    integer, intent(in)  :: j
-    integer, intent(in)  :: l1
-    integer, intent(in)  :: l2
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: i
+    integer, intent(in) :: j
+    integer, intent(in) :: l1
+    integer, intent(in) :: l2
     real, intent(inout) :: u(:,:)
-    real, intent(in)  :: v(:,:)
+    real, intent(in) :: v(:,:)
     real, intent(inout) :: w(:,:)
     integer :: k1
     integer :: k2
@@ -158,16 +158,16 @@ contains
   subroutine self_ref_slice_expr_fwd_ad(u, u_ad, v, v_ad, w, w_ad, n, m, i, j, l1, l2)
     real, intent(inout) :: u(:,:)
     real, intent(inout) :: u_ad(:,:)
-    real, intent(in)  :: v(:,:)
-    real, intent(in)  :: v_ad(:,:)
+    real, intent(in) :: v(:,:)
+    real, intent(in) :: v_ad(:,:)
     real, intent(inout) :: w(:,:)
     real, intent(inout) :: w_ad(:,:)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: i
-    integer, intent(in)  :: j
-    integer, intent(in)  :: l1
-    integer, intent(in)  :: l2
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: i
+    integer, intent(in) :: j
+    integer, intent(in) :: l1
+    integer, intent(in) :: l2
     integer :: k1
     integer :: k2
 
@@ -190,16 +190,16 @@ contains
   subroutine self_ref_slice_expr_rev_ad(u, u_ad, v, v_ad, w, w_ad, n, m, i, j, l1, l2)
     real, intent(inout) :: u(:,:)
     real, intent(inout) :: u_ad(:,:)
-    real, intent(in)  :: v(:,:)
+    real, intent(in) :: v(:,:)
     real, intent(inout) :: v_ad(:,:)
     real, intent(inout) :: w(:,:)
     real, intent(inout) :: w_ad(:,:)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: i
-    integer, intent(in)  :: j
-    integer, intent(in)  :: l1
-    integer, intent(in)  :: l2
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: i
+    integer, intent(in) :: j
+    integer, intent(in) :: l1
+    integer, intent(in) :: l2
     integer :: k1
     integer :: k2
     integer :: n2_51_ad

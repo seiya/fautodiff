@@ -5,9 +5,9 @@ module directives_ad
 contains
 
   subroutine add_const(x, y, z)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(out) :: y
-    real, intent(in)  :: z
+    real, intent(in) :: z
 
     y = x + z
 
@@ -15,11 +15,11 @@ contains
   end subroutine add_const
 
   subroutine add_const_fwd_ad(x, x_ad, y, y_ad, z)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: y
     real, intent(out) :: y_ad
-    real, intent(in)  :: z
+    real, intent(in) :: z
 
     y_ad = x_ad ! y = x + z
     y = x + z
@@ -38,14 +38,14 @@ contains
   end subroutine add_const_rev_ad
 
   subroutine skip_me(x)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     ! routine is intentionally empty but must be parsed
 
     return
   end subroutine skip_me
 
   subroutine worker(x, z)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(out) :: z
     real :: y
 
@@ -57,8 +57,8 @@ contains
   end subroutine worker
 
   subroutine worker_fwd_ad(x, x_ad, z, z_ad)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: z
     real, intent(out) :: z_ad
     real :: y_ad

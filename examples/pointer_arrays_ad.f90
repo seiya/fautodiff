@@ -14,8 +14,8 @@ module pointer_arrays_ad
 contains
 
   subroutine pointer_allocate(n, x, res)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(out) :: res
     real, pointer :: p(:)
     integer :: i
@@ -41,9 +41,9 @@ contains
   end subroutine pointer_allocate
 
   subroutine pointer_allocate_fwd_ad(n, x, x_ad, res, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: res
     real, intent(out) :: res_ad
     real, pointer :: p_ad(:)
@@ -81,7 +81,7 @@ contains
   end subroutine pointer_allocate_fwd_ad
 
   subroutine pointer_allocate_rev_ad(n, x_ad, res_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, pointer :: p_ad(:)
@@ -112,8 +112,8 @@ contains
   end subroutine pointer_allocate_rev_ad
 
   subroutine pointer_subarray(n, x, res)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(out) :: res
     real, pointer :: p(:)
     integer :: i
@@ -135,9 +135,9 @@ contains
   end subroutine pointer_subarray
 
   subroutine pointer_subarray_fwd_ad(n, x, x_ad, res, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: res
     real, intent(out) :: res_ad
     real, pointer :: p_ad(:)
@@ -167,7 +167,7 @@ contains
   end subroutine pointer_subarray_fwd_ad
 
   subroutine pointer_subarray_rev_ad(n, x_ad, res_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, pointer :: p_ad(:)
@@ -193,7 +193,7 @@ contains
   end subroutine pointer_subarray_rev_ad
 
   subroutine pointer_allsub_init(n)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     integer :: i
 
     allocate(all_p(n,2))
@@ -208,7 +208,7 @@ contains
   end subroutine pointer_allsub_init
 
   subroutine pointer_allsub_init_fwd_ad(n)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     integer :: i
 
     if (.not. allocated(all_p_ad)) then
@@ -251,8 +251,8 @@ contains
   end subroutine pointer_allsub_init_fwd_rev_ad
 
   subroutine pointer_allsub_main(n, x, res)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
     real, intent(out) :: res
     integer :: i
 
@@ -269,9 +269,9 @@ contains
   end subroutine pointer_allsub_main
 
   subroutine pointer_allsub_main_fwd_ad(n, x, x_ad, res, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
-    real, intent(in)  :: x_ad(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
+    real, intent(in) :: x_ad(n)
     real, intent(out) :: res
     real, intent(out) :: res_ad
     integer :: i
@@ -292,8 +292,8 @@ contains
   end subroutine pointer_allsub_main_fwd_ad
 
   subroutine pointer_allsub_main_rev_ad(n, x, x_ad, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
     real, intent(inout) :: x_ad(n)
     real, intent(inout) :: res_ad
     integer :: i
@@ -326,7 +326,7 @@ contains
   end subroutine pointer_allsub_main_fwd_rev_ad
 
   subroutine pointer_swap(n, x, y, res)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(in), target  :: x(n)
     real, intent(in), target  :: y(n)
     real, intent(out) :: res
@@ -352,7 +352,7 @@ contains
   end subroutine pointer_swap
 
   subroutine pointer_swap_fwd_ad(n, x, x_ad, y, y_ad, res, res_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(in), target  :: x(n)
     real, intent(in), target  :: x_ad(n)
     real, intent(in), target  :: y(n)
@@ -391,7 +391,7 @@ contains
   end subroutine pointer_swap_fwd_ad
 
   subroutine pointer_swap_rev_ad(n, x_ad, y_ad, res_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout), target :: x_ad(n)
     real, intent(inout), target :: y_ad(n)
     real, intent(inout) :: res_ad

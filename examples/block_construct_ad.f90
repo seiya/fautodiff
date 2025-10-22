@@ -7,7 +7,7 @@ module block_construct_ad
 contains
 
   subroutine compute_module(val)
-    real, intent(in)  :: val
+    real, intent(in) :: val
 
     z = val + 1.0
 
@@ -15,8 +15,8 @@ contains
   end subroutine compute_module
 
   subroutine compute_module_fwd_ad(val, val_ad)
-    real, intent(in)  :: val
-    real, intent(in)  :: val_ad
+    real, intent(in) :: val
+    real, intent(in) :: val_ad
 
     z_ad = val_ad ! z = val + 1.0
     z = val + 1.0
@@ -34,7 +34,7 @@ contains
   end subroutine compute_module_rev_ad
 
   subroutine use_block(x, y)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(out) :: y
     real :: z
 
@@ -51,8 +51,8 @@ contains
   end subroutine use_block
 
   subroutine use_block_fwd_ad(x, x_ad, y, y_ad)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: y
     real, intent(out) :: y_ad
     real :: z_ad
