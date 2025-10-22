@@ -1,5 +1,4 @@
 program run_parameter_var
-  use parameter_var
   use parameter_var_ad
   implicit none
   real, parameter :: tol = 1.0e-4

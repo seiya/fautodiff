@@ -1,5 +1,4 @@
 program run_intrinsic_func
-  use intrinsic_func
   use intrinsic_func_ad
   implicit none
   real, parameter :: tol = 1.0e-4

@@ -1,5 +1,4 @@
 program run_keyword_args
-  use keyword_args
   use keyword_args_ad
   implicit none
   real, parameter :: tol = 1.0e-4

@@ -1,5 +1,4 @@
 program run_macro_args
-  use macro_args
   use macro_args_ad
   implicit none
   real, parameter :: tol = 1.0e-4

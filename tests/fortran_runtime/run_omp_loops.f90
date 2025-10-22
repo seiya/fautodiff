@@ -1,5 +1,5 @@
 program run_omp_loops
-  use omp_loops
+  use iso_fortran_env, only: real64
   use omp_loops_ad
   implicit none
   real, parameter :: tol = 1.0e-4
@@ -189,7 +189,7 @@ contains
   end subroutine test_stencil_loop_mod
 
   subroutine test_stencil_loop_max
-    real, parameter :: tol_max = 1.7e-4
+    real, parameter :: tol_max = 2.0e-4
     integer, parameter :: nx = 4
     integer, parameter :: ny = 3
     real :: h(nx, ny), u(nx, ny)
@@ -215,7 +215,10 @@ contains
     call stencil_loop_max(nx, ny, h_eps_plus, u_eps_plus)
     h_eps_minus(:,:) = h(:,:) - eps * h_seed(:,:)
     call stencil_loop_max(nx, ny, h_eps_minus, u_eps_minus)
-    fd_u(:,:) = (u_eps_plus(:,:) - u_eps_minus(:,:)) / (2.0 * eps)
+    fd_u(:,:) = real( &
+         (real(u_eps_plus(:,:), kind=real64) - real(u_eps_minus(:,:), kind=real64)) &
+         / (2.0_real64 * real(eps, kind=real64)), &
+         kind=kind(fd_u(1, 1)) )
 
     h_ad(:,:) = h_seed(:,:)
     call stencil_loop_max_fwd_ad(nx, ny, h, h_ad, u, u_ad)

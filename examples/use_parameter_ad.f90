@@ -1,13 +1,23 @@
 module use_parameter_ad
-  use use_parameter
-  use support_mod
   use support_mod_ad
   implicit none
 
+
 contains
 
+  subroutine scale_and_shift(x, y)
+    use support_mod_ad
+    real, parameter :: c = 2.0
+    real, intent(inout) :: x
+    real, intent(out) :: y
+
+    call add_one(x)
+    y = c * x
+
+    return
+  end subroutine scale_and_shift
+
   subroutine scale_and_shift_fwd_ad(x, x_ad, y, y_ad)
-    use support_mod
     use support_mod_ad
     real, parameter :: c = 2.0
     real, intent(inout) :: x
@@ -23,7 +33,6 @@ contains
   end subroutine scale_and_shift_fwd_ad
 
   subroutine scale_and_shift_rev_ad(x_ad, y_ad)
-    use support_mod
     use support_mod_ad
     real, parameter :: c = 2.0
     real, intent(inout) :: x_ad

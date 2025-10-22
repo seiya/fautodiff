@@ -1,5 +1,4 @@
 program run_stop_example
-  use stop_example
   use stop_example_ad
   implicit none
   real, parameter :: tol = 3.0e-4

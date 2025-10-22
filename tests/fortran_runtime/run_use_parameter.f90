@@ -1,7 +1,5 @@
 program run_use_parameter
-  use support_mod
   use support_mod_ad
-  use use_parameter
   use use_parameter_ad
   implicit none
   real, parameter :: tol = 1.0e-4

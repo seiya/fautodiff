@@ -1,8 +1,21 @@
 module preprocessor_example_ad
-  use preprocessor_example
   implicit none
 
+
 contains
+
+  subroutine foo(x, y)
+    real, intent(in)  :: x
+    real, intent(out) :: y
+
+    y = x
+#define SCALE_TWO 2
+#ifdef USE_ADD
+    y = y + 1.0
+#endif
+
+    return
+  end subroutine foo
 
   subroutine foo_fwd_ad(x, x_ad, y, y_ad)
     real, intent(in)  :: x

@@ -1,5 +1,4 @@
 program run_exit_cycle
-  use exit_cycle
   use exit_cycle_ad
   implicit none
   real, parameter :: tol = 1.0e-4

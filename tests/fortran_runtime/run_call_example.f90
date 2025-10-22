@@ -1,5 +1,4 @@
 program run_call_example
-  use call_example
   use call_example_ad
   implicit none
   real, parameter :: tol = 1.0e-4

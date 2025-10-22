@@ -22,7 +22,10 @@ class TestGenerator(unittest.TestCase):
         code_tree.Node.reset()
         generated = gen("examples/store_vars.f90", warn=False)
         lines = generated.splitlines()
-        self.assertIn("use fautodiff_stack", lines[2])
+        self.assertTrue(
+            any("use fautodiff_stack" in line for line in lines),
+            "use fautodiff_stack missing",
+        )
         idx_use = next(i for i, l in enumerate(lines) if "use fautodiff_stack" in l)
         idx_imp = next(i for i, l in enumerate(lines) if "implicit none" in l)
         self.assertLess(idx_use, idx_imp)
@@ -66,6 +69,24 @@ class TestGenerator(unittest.TestCase):
         )
         generated = generator.generate_ad(src, "modulo.f90", warn=False)
         self.assertIn("z = modulo(x, y)", generated)
+
+    def test_function_header_preserves_result_clause(self):
+        code_tree.Node.reset()
+        src = textwrap.dedent(
+            """
+            module fn_mod
+            contains
+              function add(x, y) result(sum)
+                real, intent(in) :: x
+                real, intent(in) :: y
+                real :: sum
+                sum = x + y
+              end function add
+            end module fn_mod
+            """
+        )
+        generated = generator.generate_ad(src, "fn_mod.f90", warn=False)
+        self.assertIn("function add(x, y) result(sum)", generated)
 
     def test_missing_fadmod_raises(self):
         code_tree.Node.reset()
@@ -235,7 +256,9 @@ class TestGenerator(unittest.TestCase):
             self.assertIn("call add_numbers_fwd_ad", driver_text)
             self.assertIn("Forward check (add_numbers): max |FD - FWD|", driver_text)
             self.assertIn("call add_numbers_rev_ad", driver_text)
-            self.assertIn("Transpose check (add_numbers): |v^TJu - u^TJ^Tv|", driver_text)
+            self.assertIn(
+                "Transpose check (add_numbers): |v^TJu - u^TJ^Tv|", driver_text
+            )
 
     def test_emit_validation_driver_custom_name(self):
         code_tree.Node.reset()

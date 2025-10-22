@@ -1,10 +1,29 @@
 module cross_mod_b_ad
-  use cross_mod_b
-  use cross_mod_a
   use cross_mod_a_ad
   implicit none
 
+
 contains
+
+  subroutine call_inc(b)
+    real, intent(inout) :: b
+    real :: inc
+
+    inc = 1.0
+    call incval(b, inc)
+
+    return
+  end subroutine call_inc
+
+  subroutine call_inc_kw(b)
+    real, intent(inout) :: b
+    real :: inc
+
+    inc = 1.0
+    call incval(inc=inc, a=b)
+
+    return
+  end subroutine call_inc_kw
 
   subroutine call_inc_fwd_ad(b, b_ad)
     real, intent(inout) :: b

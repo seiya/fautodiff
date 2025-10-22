@@ -1,5 +1,4 @@
 program run_real_kind
-  use real_kind
   use real_kind_ad
   implicit none
   real, parameter :: tol = 1.0e-5

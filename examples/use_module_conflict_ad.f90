@@ -1,12 +1,22 @@
 module use_module_conflict_ad
-  use use_module_conflict
-  use real4_module
+  use real4_module_ad, only: r
   implicit none
+
 
 contains
 
+  subroutine add_with_mod(x, y)
+    use real8_module_ad
+    real(8), intent(in)  :: x
+    real(8), intent(out) :: y
+
+    y = x + 1.0d0
+    r = x
+
+    return
+  end subroutine add_with_mod
+
   subroutine add_with_mod_fwd_ad(x, x_ad, y, y_ad)
-    use real8_module
     use real8_module_ad
     real(8), intent(in)  :: x
     real(8), intent(in)  :: x_ad
@@ -22,7 +32,6 @@ contains
   end subroutine add_with_mod_fwd_ad
 
   subroutine add_with_mod_rev_ad(x_ad, y_ad)
-    use real8_module
     use real8_module_ad
     real(8), intent(inout) :: x_ad
     real(8), intent(inout) :: y_ad

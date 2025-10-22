@@ -1,5 +1,4 @@
 program run_where_forall
-  use where_forall
   use where_forall_ad
   implicit none
   real, parameter :: tol = 1.0e-4

@@ -1,10 +1,189 @@
 module allocate_vars_ad
-  use allocate_vars
   implicit none
 
+  real, public, allocatable :: mod_arr(:)
+  real, public, allocatable :: mod_arr_diff(:)
   real, allocatable :: mod_arr_diff_ad(:)
 
 contains
+
+  subroutine allocate_and_sum(n, x, res)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(out) :: res
+    real, allocatable :: arr(:)
+    integer :: i
+
+    allocate(arr(n))
+    do i = 1, n
+      arr(i) = i * x
+    end do
+    res = 0.0
+    do i = 1, n
+      res = res + arr(i) * x
+    end do
+    if (allocated(arr)) then
+      deallocate(arr)
+    end if
+
+    return
+  end subroutine allocate_and_sum
+
+  subroutine allocate_in_if(n, x, res)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(out) :: res
+    real, allocatable :: arr(:)
+    real, allocatable :: arr2(:)
+    integer :: i
+
+    allocate(arr(n))
+    do i = 1, n
+      arr(i) = i * x
+    end do
+    if (n > 0) then
+      res = 0.0
+      allocate(arr2(n))
+      arr2(:) = arr(:)
+      do i = 1, n
+        res = res + arr2(i) * x
+      end do
+      if (allocated(arr2)) then
+        deallocate(arr2)
+      end if
+    else
+      res = 0.0
+    end if
+    if (allocated(arr)) then
+      deallocate(arr)
+    end if
+
+    return
+  end subroutine allocate_in_if
+
+  subroutine allocate_in_loop(n, x, res)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(out) :: res
+    real, allocatable :: arr(:)
+    integer :: i
+    integer :: j
+
+    res = 0.0
+    do i = 1, n
+      allocate(arr(i))
+      do j = 1, i
+        arr(j) = j * x
+      end do
+      do j = 1, i
+        res = res + arr(j) * x
+      end do
+      if (allocated(arr)) then
+        deallocate(arr)
+      end if
+    end do
+
+    return
+  end subroutine allocate_in_loop
+
+  subroutine save_alloc(n, x, y, z)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x(n)
+    real, intent(in)  :: y
+    real, intent(out) :: z
+    real, allocatable :: htmp(:)
+    integer :: i
+
+    allocate(htmp(n))
+    htmp = x
+    z = 0.0
+    do i = 1, n
+      z = z + htmp(i) * y
+    end do
+    htmp = x**2
+    do i = 1, n
+      z = z + htmp(i) * y
+    end do
+    if (allocated(htmp)) then
+      deallocate(htmp)
+    end if
+
+    return
+  end subroutine save_alloc
+
+  subroutine module_vars_init(n, x)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    integer :: i
+
+    allocate(mod_arr(n))
+    allocate(mod_arr_diff(n))
+    do i = 1, n
+      mod_arr(i) = i * 2.0
+      mod_arr_diff(i) = i * x
+    end do
+
+    return
+  end subroutine module_vars_init
+
+  subroutine module_vars_main(n, x)
+    integer, intent(in)  :: n
+    real, intent(out) :: x
+    integer :: i
+
+    x = 0.0
+    do i = 1, n
+      mod_arr_diff(i) = mod_arr_diff(i) * (2.0 + i)
+      x = x + mod_arr(i) * mod_arr_diff(i)
+    end do
+
+    return
+  end subroutine module_vars_main
+
+  subroutine module_vars_finalize(n, x)
+    integer, intent(in)  :: n
+    real, intent(out) :: x
+    integer :: i
+
+    x = 0.0
+    do i = 1, n
+      x = x + mod_arr(i) * mod_arr_diff(i)
+    end do
+    if (allocated(mod_arr)) then
+      deallocate(mod_arr)
+    end if
+    if (allocated(mod_arr_diff)) then
+      deallocate(mod_arr_diff)
+    end if
+
+    return
+  end subroutine module_vars_finalize
+
+  subroutine allocate_with_early_return(n, x, res)
+    integer, intent(in)  :: n
+    real, intent(in)  :: x
+    real, intent(out) :: res
+    real, allocatable :: arr(:)
+    integer :: i
+
+    allocate(arr(n))
+    if (n <= 0) then
+      res = 0.0
+      return
+    end if
+    do i = 1, n
+      arr(i) = i * x
+    end do
+    res = 0.0
+    do i = 1, n
+      res = res + arr(i) * x
+    end do
+    if (allocated(arr)) then
+      deallocate(arr)
+    end if
+
+    return
+  end subroutine allocate_with_early_return
 
   subroutine allocate_and_sum_fwd_ad(n, x, x_ad, res, res_ad)
     integer, intent(in)  :: n

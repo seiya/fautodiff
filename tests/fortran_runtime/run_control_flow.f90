@@ -1,5 +1,4 @@
 program run_control_flow
-  use control_flow
   use control_flow_ad
   implicit none
   real, parameter :: tol = 1.0e-4

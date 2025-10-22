@@ -1,5 +1,4 @@
 program run_store_vars
-  use store_vars
   use store_vars_ad
   implicit none
   real, parameter :: tol = 1.0e-5

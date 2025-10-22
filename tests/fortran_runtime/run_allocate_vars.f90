@@ -1,5 +1,4 @@
 program run_allocate_vars
-  use allocate_vars
   use allocate_vars_ad
   implicit none
   real, parameter :: tol = 1.0e-4

@@ -1,5 +1,4 @@
 program run_module_vars
-  use module_vars
   use module_vars_ad
   implicit none
   real, parameter :: tol = 1.0e-4

@@ -2939,10 +2939,14 @@ class Routine(Node):
     ) -> List[Routine]:
         raise RuntimeError("generate_ad for Routine is not allowed")
 
-    def render(self, indent: int = 0) -> List[str]:
+    def _render_header(self, indent: int) -> List[str]:
         space = "  " * indent
         args = ", ".join(self.args)
-        lines = [f"{space}{self.kind} {self.name}({args})\n"]
+        return [f"{space}{self.kind} {self.name}({args})\n"]
+
+    def _render_body(self, indent: int) -> List[str]:
+        space = "  " * indent
+        lines: List[str] = []
         lines.extend(self.decls.render(indent + 1))
         lines.append("\n")
         last_block: Optional[Block] = None
@@ -2970,6 +2974,11 @@ class Routine(Node):
         else:
             lines.append(f"{space}  return\n")
         lines.append(f"{space}end {self.kind} {self.name}\n")
+        return lines
+
+    def render(self, indent: int = 0) -> List[str]:
+        lines = self._render_header(indent)
+        lines.extend(self._render_body(indent))
         return lines
 
     def get_var(self, name: str) -> Optional[OpVar]:
@@ -3409,6 +3418,12 @@ class Function(Routine):
     result: str
     kind: ClassVar[str] = "function"
 
+    def _render_header(self, indent: int) -> List[str]:
+        space = "  " * indent
+        args = ", ".join(self.args)
+        result_clause = f" result({self.result})" if self.result else ""
+        return [f"{space}{self.kind} {self.name}({args}){result_clause}\n"]
+
 
 @dataclass
 class Declaration(Node):
@@ -3814,6 +3829,29 @@ class Interface(Node):
             )
         return f"[Interface] {self.name}"
 
+    def deep_clone(self) -> "Interface":
+        module_procs = (
+            list(self.module_procs) if self.module_procs is not None else None
+        )
+        return Interface(self.name, module_procs=module_procs)
+
+    def render(self, indent: int = 0) -> List[str]:
+        space = "  " * indent
+        header = f"{space}interface"
+        if self.name:
+            header += f" {self.name}"
+        lines = [f"{header}\n"]
+        if self.module_procs:
+            procs = ", ".join(self.module_procs)
+            lines.append(
+                f"{space}  module procedure :: {procs}\n"
+            )
+        footer = f"{space}end interface"
+        if self.name:
+            footer += f" {self.name}"
+        lines.append(f"{footer}\n")
+        return lines
+
 
 @dataclass
 class TypeDef(Node):
@@ -3849,6 +3887,19 @@ class TypeDef(Node):
             self.name,
             self.components,
             self.procs,
+            self.access,
+            bind=self.bind,
+            abstract=self.abstract,
+            sequence=self.sequence,
+        )
+
+    def deep_clone(self) -> "TypeDef":
+        components = [decl.deep_clone() for decl in self.components]
+        procs = [list(proc) for proc in self.procs]
+        return TypeDef(
+            self.name,
+            components,
+            procs,
             self.access,
             bind=self.bind,
             abstract=self.abstract,
@@ -4535,7 +4586,9 @@ class Allocate(Node):
         return Allocate(self.vars, mold=self.mold)
 
     def deep_clone(self) -> "Allocate":
-        return Allocate(self.vars.deep_clone(), mold=self.mold.deep_clone())
+        vars_clone = [var.deep_clone() for var in self.vars]
+        mold_clone = self.mold.deep_clone() if self.mold is not None else None
+        return Allocate(vars_clone, mold=mold_clone)
 
     def iter_ref_vars(self) -> Iterator[OpVar]:
         for var in self.vars:
@@ -4714,10 +4767,20 @@ class Deallocate(Node):
         space = "  " * indent
         lines: List[str] = []
         for v in self.vars:
-            func = "associated" if v.pointer else "allocated"
-            name = str(v)
+            # ``deallocate`` statements must operate on the base allocatable
+            # object rather than a specific element.  ``v`` may carry index
+            # information copied from the corresponding ``allocate`` call when
+            # the code tree recorded array extents.  Strip that index off before
+            # rendering the guard to avoid emitting invalid expressions such as
+            # ``allocated(z(3))``.
+            var_clean = v.change_index(None)
+            if var_clean is not v:
+                var_clean = var_clean.clone_with(dims=None, dims_raw=None)
+
+            func = "associated" if var_clean.pointer else "allocated"
+            name = str(var_clean)
             cond = f"{func}({name})"
-            ref = v.ref_var
+            ref = var_clean.ref_var
             while isinstance(ref, OpVar):
                 func_ref = "associated" if ref.pointer else "allocated"
                 cond = f"{func_ref}({ref.change_index(None)}) .and. {cond}"

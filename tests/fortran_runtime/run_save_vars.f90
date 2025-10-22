@@ -1,5 +1,4 @@
 program run_save_vars
-  use save_vars
   use save_vars_ad
   implicit none
   real, parameter :: tol = 1.0e-4

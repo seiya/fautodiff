@@ -1,5 +1,4 @@
 program run_conditional_macro
-  use conditional_macro
   use conditional_macro_ad
   implicit none
   real, parameter :: tol = 1.0e-3

@@ -6,10 +6,26 @@
 #endif
 
 module conditional_macro_ad
-  use conditional_macro
   implicit none
 
+
 contains
+
+  subroutine foo(x, y)
+    real, intent(in)  :: x
+    real, intent(out) :: y
+    real :: z
+
+    z = x + BASE
+    z = z + DOUBLE
+#ifdef COND
+    y = z + COND
+#else
+    y = z
+#endif
+
+    return
+  end subroutine foo
 
   subroutine foo_fwd_ad(x, x_ad, y, y_ad)
     real, intent(in)  :: x

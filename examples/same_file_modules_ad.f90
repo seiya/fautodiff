@@ -1,17 +1,27 @@
 module var_mod_ad
-  use var_mod
   implicit none
+
+  real, public :: b
 
 contains
 
 end module var_mod_ad
 
 module use_mod_ad
-  use use_mod
-  use var_mod
+  use var_mod_ad
   implicit none
 
+
 contains
+
+  subroutine add_b(x, y)
+    real, intent(in)  :: x
+    real, intent(out) :: y
+
+    y = x + b
+
+    return
+  end subroutine add_b
 
   subroutine add_b_fwd_ad(x, x_ad, y, y_ad)
     real, intent(in)  :: x

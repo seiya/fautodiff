@@ -10,7 +10,7 @@ import re
 import sys
 import warnings as warning_mod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 # Ensure other modules use the same AD suffix
 from . import code_tree as code_tree
@@ -78,6 +78,125 @@ operators.AD_SUFFIX = AD_SUFFIX
 from . import parser
 from .var_list import VarList
 from .validation_driver import render_validation_driver
+
+
+def _deduplicate_use_statements(block: Block) -> None:
+    """Remove duplicate ``use`` statements from ``block``."""
+
+    if block is None:
+        return
+
+    seen: Set[Tuple[str, Optional[Tuple[str, ...]]]] = set()
+    children = block._children
+    idx = 0
+    while idx < len(children):
+        child = children[idx]
+        if isinstance(child, Use):
+            only = tuple(child.only) if child.only is not None else None
+            key = (child.name, only)
+            if key in seen:
+                del children[idx]
+                continue
+            seen.add(key)
+        idx += 1
+
+
+def _find_ad_module_name(
+    name: str, module_map: Dict[str, str], search_paths: Sequence[Path]
+) -> Optional[str]:
+    """Return the AD module name for ``name`` if available."""
+
+    mapped = module_map.get(name)
+    if mapped is not None:
+        return mapped
+
+    candidate = f"{name}{AD_SUFFIX}"
+    for base in search_paths:
+        if base is None:
+            continue
+        for suffix in (".f90", ".F90"):
+            candidate_path = base / f"{candidate}{suffix}"
+            if candidate_path.exists():
+                return candidate
+    return None
+
+
+def _rewrite_use_tree(
+    node: Optional[Node],
+    module_map: Dict[str, str],
+    search_paths: Sequence[Path],
+) -> None:
+    """Rewrite ``use`` statements within ``node`` according to available AD modules."""
+
+    if node is None:
+        return
+
+    if isinstance(node, Use):
+        mapped = _find_ad_module_name(node.name, module_map, search_paths)
+        if mapped is not None:
+            node.name = mapped
+
+    for child in getattr(node, "iter_children", lambda: [])():
+        _rewrite_use_tree(child, module_map, search_paths)
+
+    if isinstance(node, Block):
+        _deduplicate_use_statements(node)
+
+
+def _rewrite_module_uses(
+    mod: Module, module_map: Dict[str, str], search_paths: Sequence[Path]
+) -> None:
+    """Rewrite and deduplicate all ``use`` statements within ``mod``."""
+
+    if mod.uses is not None:
+        _rewrite_use_tree(mod.uses, module_map, search_paths)
+    if mod.decls is not None:
+        _rewrite_use_tree(mod.decls, module_map, search_paths)
+    if mod.body is not None:
+        _rewrite_use_tree(mod.body, module_map, search_paths)
+    for routine in mod.routines:
+        _rewrite_use_tree(routine.decls, module_map, search_paths)
+        _rewrite_use_tree(routine.content, module_map, search_paths)
+
+
+def _infer_module_use_only_names(mod: Module) -> Dict[str, List[str]]:
+    """Return inferred ``only`` lists for simple module-level ``use`` statements."""
+
+    if mod.uses is None:
+        return {}
+
+    uses = [child for child in mod.uses.iter_children() if isinstance(child, Use)]
+    plain_uses = [use for use in uses if use.only is None]
+    if len(plain_uses) != 1:
+        return {}
+
+    declared: Set[str] = set()
+    if mod.decls is not None:
+        for child in mod.decls.iter_children():
+            if isinstance(child, Declaration):
+                declared.add(child.name)
+
+    assigned: Set[str] = set()
+    for routine in mod.routines:
+        declared.update(routine.args)
+        if routine.result is not None:
+            declared.add(routine.result)
+        for child in routine.decls.iter_children():
+            if isinstance(child, Declaration):
+                declared.add(child.name)
+        stack: List[Node] = [routine.content]
+        while stack:
+            node = stack.pop()
+            if node is None:
+                continue
+            if isinstance(node, Assignment):
+                assigned.add(node.lhs.name)
+            stack.extend(getattr(node, "iter_children", lambda: [])())
+
+    inferred = sorted(name for name in assigned if name and name not in declared)
+    if not inferred:
+        return {}
+    return {plain_uses[0].name: inferred}
 
 
 def _warn(
@@ -196,8 +315,6 @@ def _routine_signature(routine: Routine) -> str:
     if routine.kind == "function" and routine.result:
         signature += f" result({routine.result})"
     return signature
-
-
 
 
 def _add_fwd_rev_calls(
@@ -980,8 +1097,6 @@ def _prepare_fwd_ad_header(
     for node in decl_children:
         if isinstance(node, Use):
             subroutine.decls.append(node.deep_clone())
-            if not node.name.endswith(AD_SUFFIX):
-                subroutine.decls.append(Use(f"{node.name}{AD_SUFFIX}"))
 
     # Copy parameter declarations from the original routine
     for node in decl_children:
@@ -1130,8 +1245,6 @@ def _prepare_rev_ad_header(
     for node in decl_children:
         if isinstance(node, Use):
             subroutine.decls.append(node.deep_clone())
-            if not node.name.endswith(AD_SUFFIX):
-                subroutine.decls.append(Use(f"{node.name}{AD_SUFFIX}"))
 
     # Copy parameter declarations from the original routine
     for node in decl_children:
@@ -1403,9 +1516,11 @@ def _generate_ad_subroutine(
                             init_val=base_decl.init_val,
                             allocatable=base_decl.allocatable,
                             pointer=base_decl.pointer,
-                            optional=base_decl.optional
-                            if not name.endswith(AD_SUFFIX)
-                            else False,
+                            optional=(
+                                base_decl.optional
+                                if not name.endswith(AD_SUFFIX)
+                                else False
+                            ),
                             target=base_decl.target,
                             save=base_decl.save,
                             value=base_decl.value,
@@ -2007,9 +2122,11 @@ def _generate_ad_subroutine(
                             init_val=base_decl.init_val,
                             allocatable=base_decl.allocatable,
                             pointer=base_decl.pointer,
-                            optional=base_decl.optional
-                            if not name.endswith(AD_SUFFIX)
-                            else False,
+                            optional=(
+                                base_decl.optional
+                                if not name.endswith(AD_SUFFIX)
+                                else False
+                            ),
                             target=base_decl.target,
                             save=base_decl.save,
                             value=base_decl.value,
@@ -2199,9 +2316,11 @@ def _generate_ad_subroutine(
                 init_val=base_decl.init_val if base_decl else None,
                 allocatable=allocatable,
                 pointer=pointer,
-                optional=base_decl.optional
-                if (base_decl and not var.name.endswith(AD_SUFFIX))
-                else False,
+                optional=(
+                    base_decl.optional
+                    if (base_decl and not var.name.endswith(AD_SUFFIX))
+                    else False
+                ),
                 target=base_decl.target if base_decl else False,
                 declared_in="routine",
             )
@@ -2520,9 +2639,7 @@ def generate_ad(
     if validation_driver_name is not None and not emit_validation:
         emit_validation = True
     validation_driver_name_path: Optional[Path] = (
-        Path(validation_driver_name)
-        if validation_driver_name is not None
-        else None
+        Path(validation_driver_name) if validation_driver_name is not None else None
     )
 
     validation_dir_path: Optional[Path] = None
@@ -2559,24 +2676,43 @@ def generate_ad(
 
     routine_map = {}
     generic_routines = {}
+    module_name_map = {
+        mod_org.name: f"{mod_org.name}{AD_SUFFIX}" for mod_org in modules_org
+    }
+    search_path_dirs: List[Path] = []
+    if src_name is not None:
+        try:
+            src_dir = Path(src_name).parent
+            if src_dir not in search_path_dirs:
+                search_path_dirs.append(src_dir)
+        except Exception:
+            pass
+    cwd_path = Path.cwd()
+    if cwd_path not in search_path_dirs:
+        search_path_dirs.append(cwd_path)
     for mod_org in modules_org:
         name = mod_org.name
         mod = type(mod_org)(f"{name}{AD_SUFFIX}")
-        if isinstance(mod_org, Program):
-            if mod_org.uses is not None:
-                mod.uses = mod_org.uses.deep_clone()
-            else:
-                mod.uses = Block([])
-        else:
-            if mod_org.uses is not None:
-                uses = Block([Use(name)])
-                for child in mod_org.uses.iter_children():
-                    uses.append(child.deep_clone())
-                mod.uses = uses
-            else:
-                mod.uses = Block([Use(name)])
+        uses_block = Block([])
+        mod.uses = uses_block
+        uses_block.set_parent(mod)
+        use_only_overrides = _infer_module_use_only_names(mod_org)
+        if mod_org.uses is not None:
+            for child in mod_org.uses.iter_children():
+                cloned = child.deep_clone()
+                if isinstance(cloned, Use):
+                    override = use_only_overrides.get(child.name)
+                    if override is not None:
+                        cloned.only = list(override)
+                uses_block.append(cloned)
 
         if mod_org.decls:
+            decl_block = Block([])
+            mod.decls = decl_block
+            decl_block.set_parent(mod)
+            for child in mod_org.decls.iter_children():
+                decl_block.append(child.deep_clone())
+
             type_map = {}
             for child in mod_org.decls.iter_children():
                 ad_code = child.generate_ad([], type_map=type_map)
@@ -2585,10 +2721,15 @@ def generate_ad(
                 if ad_code:
                     if isinstance(child, TypeDef):
                         type_map[child.name] = ad_code[0]
-                    if mod.decls is None:
-                        mod.decls = Block([])
                     for node in ad_code:
-                        mod.decls.append(node)
+                        decl_block.append(node)
+        else:
+            mod.decls = Block([])
+            mod.decls.set_parent(mod)
+
+        mod.routines = [routine.deep_clone() for routine in mod_org.routines]
+        for routine in mod.routines:
+            routine.set_parent(mod)
 
         mod_vars = (
             [var for var in mod_org.decls.collect_vars()]
@@ -2758,15 +2899,29 @@ def generate_ad(
                     mod.routines.append(info["wrapper"])
 
         name_mod = mod.name
-        existing_uses = {u.name for u in mod.uses.iter_children() if isinstance(u, Use)}
+        existing_uses: Set[Tuple[str, Optional[Tuple[str, ...]]]] = set()
+        for u in mod.uses.iter_children():
+            if isinstance(u, Use):
+                mapped = _find_ad_module_name(u.name, module_name_map, search_path_dirs)
+                if mapped is None:
+                    mapped = u.name
+                only = tuple(u.only) if u.only is not None else None
+                existing_uses.add((mapped, only))
         for m in sorted(ad_modules_used):
-            if m != name_mod:
-                if m not in existing_uses:
-                    mod.uses.append(Use(m))
-                    existing_uses.add(m)
-                mod.uses.append(Use(f"{m}{AD_SUFFIX}"))
+            ad_name = module_name_map.get(m, f"{m}{AD_SUFFIX}")
+            if ad_name == name_mod:
+                continue
+            key = (ad_name, None)
+            if key not in existing_uses:
+                mod.uses.append(Use(ad_name))
+                existing_uses.add(key)
         if pushpop_used:
-            mod.uses.append(Use("fautodiff_stack"))
+            key = ("fautodiff_stack", None)
+            if key not in existing_uses:
+                mod.uses.append(Use("fautodiff_stack"))
+                existing_uses.add(key)
+
+        _rewrite_module_uses(mod, module_name_map, search_path_dirs)
 
         modules.append(render_program(mod))
         if (

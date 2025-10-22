@@ -1,6 +1,5 @@
 program run_same_file_modules
-  use var_mod
-  use use_mod
+  use var_mod_ad
   use use_mod_ad
   implicit none
   real, parameter :: tol = 1.0e-4
