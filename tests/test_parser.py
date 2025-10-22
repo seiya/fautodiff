@@ -739,7 +739,7 @@ class TestParser(unittest.TestCase):
         self.assertTrue(decl.optional)
         self.assertEqual(
             render_program(Block([decl])).strip(),
-            "real, intent(in), optional  :: y",
+            "real, intent(in), optional :: y",
         )
 
     def test_new_decl_and_type_attrs(self):
@@ -799,7 +799,7 @@ class TestParser(unittest.TestCase):
         self.assertTrue(decl.optional)
         self.assertEqual(
             render_program(Block([decl])).strip(),
-            "real, intent(in), optional  :: y",
+            "real, intent(in), optional :: y",
         )
 
     def test_new_decl_and_type_attrs(self):

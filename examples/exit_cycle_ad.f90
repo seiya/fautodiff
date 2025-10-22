@@ -6,8 +6,8 @@ module exit_cycle_ad
 contains
 
   subroutine do_exit_cycle(n, x, res)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(out) :: res
     integer :: i
 
@@ -39,9 +39,9 @@ contains
   end subroutine do_exit_cycle
 
   subroutine do_exit_cycle_fwd_ad(n, x, x_ad, res, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: res
     real, intent(out) :: res_ad
     integer :: i
@@ -83,8 +83,8 @@ contains
   end subroutine do_exit_cycle_fwd_ad
 
   subroutine do_exit_cycle_rev_ad(n, x, x_ad, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real :: res
@@ -226,8 +226,8 @@ contains
   end subroutine do_exit_cycle_rev_ad
 
   subroutine while_exit_cycle(n, x, res)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(out) :: res
     integer :: i
 
@@ -263,9 +263,9 @@ contains
   end subroutine while_exit_cycle
 
   subroutine while_exit_cycle_fwd_ad(n, x, x_ad, res, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: res
     real, intent(out) :: res_ad
     integer :: i
@@ -311,8 +311,8 @@ contains
   end subroutine while_exit_cycle_fwd_ad
 
   subroutine while_exit_cycle_rev_ad(n, x, x_ad, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real :: res
@@ -466,8 +466,8 @@ contains
   end subroutine while_exit_cycle_rev_ad
 
   subroutine exit_cycle_with_labels(n, x, res)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(out) :: res
     integer :: i
     integer :: j
@@ -509,9 +509,9 @@ contains
   end subroutine exit_cycle_with_labels
 
   subroutine exit_cycle_with_labels_fwd_ad(n, x, x_ad, res, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: res
     real, intent(out) :: res_ad
     integer :: i
@@ -557,8 +557,8 @@ contains
   end subroutine exit_cycle_with_labels_fwd_ad
 
   subroutine exit_cycle_with_labels_rev_ad(n, x, x_ad, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real :: res

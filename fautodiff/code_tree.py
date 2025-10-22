@@ -3630,14 +3630,11 @@ class Declaration(Node):
     def render(self, indent: int = 0) -> List[str]:
         space = "  " * indent
         line = f"{space}{self.var_type}"
-        pat = ""
         if self.parameter:
             line += ", parameter"
         if self.access is not None:
             line += f", {self.access}"
         if self.intent is not None:
-            if self.intent == "in":
-                pat = " "
             line += f", intent({self.intent})"
         if self.allocatable:
             line += ", allocatable"
@@ -3655,7 +3652,7 @@ class Declaration(Node):
             line += ", volatile"
         if self.asynchronous:
             line += ", asynchronous"
-        line += f"{pat} :: {self.name}"
+        line += f" :: {self.name}"
         if self.dims_raw is not None:
             dims = ",".join(self.dims_raw)
             line += f"({dims})"

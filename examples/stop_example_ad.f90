@@ -5,7 +5,7 @@ module stop_example_ad
 contains
 
   subroutine stop_sub(x, y)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(out) :: y
 
     if (x < 0.0) then
@@ -20,8 +20,8 @@ contains
   end subroutine stop_sub
 
   subroutine stop_sub_fwd_ad(x, x_ad, y, y_ad)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: y
     real, intent(out) :: y_ad
 
@@ -38,7 +38,7 @@ contains
   end subroutine stop_sub_fwd_ad
 
   subroutine stop_sub_rev_ad(x, x_ad, y_ad)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: y_ad
 

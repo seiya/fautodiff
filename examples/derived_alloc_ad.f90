@@ -14,8 +14,8 @@ module derived_alloc_ad
 contains
 
   subroutine derived_alloc_init(n, m)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
+    integer, intent(in) :: n
+    integer, intent(in) :: m
     integer :: j
 
     allocate(obj(m))
@@ -28,8 +28,8 @@ contains
   end subroutine derived_alloc_init
 
   subroutine derived_alloc_init_fwd_ad(n, m)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
+    integer, intent(in) :: n
+    integer, intent(in) :: m
     integer :: j
 
     if (.not. allocated(obj_ad)) then
@@ -47,7 +47,7 @@ contains
   end subroutine derived_alloc_init_fwd_ad
 
   subroutine derived_alloc_init_rev_ad(m)
-    integer, intent(in)  :: m
+    integer, intent(in) :: m
     integer :: j
 
     do j = m, 1, - 1
@@ -63,7 +63,7 @@ contains
   end subroutine derived_alloc_init_rev_ad
 
   subroutine derived_alloc_finalize(m)
-    integer, intent(in)  :: m
+    integer, intent(in) :: m
     integer :: j
 
     do j = 1, m
@@ -79,7 +79,7 @@ contains
   end subroutine derived_alloc_finalize
 
   subroutine derived_alloc_finalize_fwd_ad(m)
-    integer, intent(in)  :: m
+    integer, intent(in) :: m
     integer :: j
 
     do j = 1, m
@@ -95,7 +95,7 @@ contains
   end subroutine derived_alloc_finalize_fwd_ad
 
   subroutine derived_alloc_finalize_rev_ad(m)
-    integer, intent(in)  :: m
+    integer, intent(in) :: m
     integer :: j
 
     if (.not. allocated(obj_ad)) then
@@ -112,9 +112,9 @@ contains
   end subroutine derived_alloc_finalize_rev_ad
 
   subroutine derived_alloc_run(n, m, x, res)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x
     real, intent(out) :: res
     integer :: i
     integer :: j
@@ -135,10 +135,10 @@ contains
   end subroutine derived_alloc_run
 
   subroutine derived_alloc_run_fwd_ad(n, m, x, x_ad, res, res_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: res
     real, intent(out) :: res_ad
     integer :: i
@@ -163,9 +163,9 @@ contains
   end subroutine derived_alloc_run_fwd_ad
 
   subroutine derived_alloc_run_rev_ad(n, m, x, x_ad, res_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     integer :: n0_ad

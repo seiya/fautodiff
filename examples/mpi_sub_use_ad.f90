@@ -8,7 +8,7 @@ contains
   subroutine foo(x, comm)
     use mpi
     real, intent(inout) :: x
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     real :: tmp
     integer :: ierr
 
@@ -22,7 +22,7 @@ contains
     use mpi
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     real :: tmp_ad
     real :: tmp
     integer :: ierr
@@ -39,7 +39,7 @@ contains
     use mpi
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
-    integer, intent(in)  :: comm
+    integer, intent(in) :: comm
     real :: tmp_ad
     integer :: ierr
 

@@ -66,7 +66,7 @@ contains
   end subroutine non_differentiable_intrinsics
 
   subroutine special_intrinsics(mat_in, mat_out)
-    real, intent(in)  :: mat_in(:,:)
+    real, intent(in) :: mat_in(:,:)
     real, intent(out) :: mat_out(:,:)
 
     mat_out = transpose(mat_in)

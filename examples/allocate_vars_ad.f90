@@ -8,8 +8,8 @@ module allocate_vars_ad
 contains
 
   subroutine allocate_and_sum(n, x, res)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(out) :: res
     real, allocatable :: arr(:)
     integer :: i
@@ -30,9 +30,9 @@ contains
   end subroutine allocate_and_sum
 
   subroutine allocate_and_sum_fwd_ad(n, x, x_ad, res, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: res
     real, intent(out) :: res_ad
     real, allocatable :: arr_ad(:)
@@ -62,8 +62,8 @@ contains
   end subroutine allocate_and_sum_fwd_ad
 
   subroutine allocate_and_sum_rev_ad(n, x, x_ad, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, allocatable :: arr_ad(:)
@@ -95,8 +95,8 @@ contains
   end subroutine allocate_and_sum_rev_ad
 
   subroutine allocate_in_if(n, x, res)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(out) :: res
     real, allocatable :: arr(:)
     real, allocatable :: arr2(:)
@@ -127,9 +127,9 @@ contains
   end subroutine allocate_in_if
 
   subroutine allocate_in_if_fwd_ad(n, x, x_ad, res, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: res
     real, intent(out) :: res_ad
     real, allocatable :: arr2_ad(:)
@@ -176,8 +176,8 @@ contains
   end subroutine allocate_in_if_fwd_ad
 
   subroutine allocate_in_if_rev_ad(n, x, x_ad, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, allocatable :: arr2_ad(:)
@@ -226,8 +226,8 @@ contains
   end subroutine allocate_in_if_rev_ad
 
   subroutine allocate_in_loop(n, x, res)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(out) :: res
     real, allocatable :: arr(:)
     integer :: i
@@ -251,9 +251,9 @@ contains
   end subroutine allocate_in_loop
 
   subroutine allocate_in_loop_fwd_ad(n, x, x_ad, res, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: res
     real, intent(out) :: res_ad
     real, allocatable :: arr_ad(:)
@@ -286,8 +286,8 @@ contains
   end subroutine allocate_in_loop_fwd_ad
 
   subroutine allocate_in_loop_rev_ad(n, x, x_ad, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, allocatable :: arr_ad(:)
@@ -321,9 +321,9 @@ contains
   end subroutine allocate_in_loop_rev_ad
 
   subroutine save_alloc(n, x, y, z)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
-    real, intent(in)  :: y
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
+    real, intent(in) :: y
     real, intent(out) :: z
     real, allocatable :: htmp(:)
     integer :: i
@@ -346,11 +346,11 @@ contains
   end subroutine save_alloc
 
   subroutine save_alloc_fwd_ad(n, x, x_ad, y, y_ad, z, z_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
-    real, intent(in)  :: x_ad(n)
-    real, intent(in)  :: y
-    real, intent(in)  :: y_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
+    real, intent(in) :: x_ad(n)
+    real, intent(in) :: y
+    real, intent(in) :: y_ad
     real, intent(out) :: z
     real, intent(out) :: z_ad
     real, allocatable :: htmp_ad(:)
@@ -384,10 +384,10 @@ contains
   end subroutine save_alloc_fwd_ad
 
   subroutine save_alloc_rev_ad(n, x, x_ad, y, y_ad, z_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
     real, intent(inout) :: x_ad(n)
-    real, intent(in)  :: y
+    real, intent(in) :: y
     real, intent(inout) :: y_ad
     real, intent(inout) :: z_ad
     real, allocatable :: htmp_ad(:)
@@ -428,8 +428,8 @@ contains
   end subroutine save_alloc_rev_ad
 
   subroutine module_vars_init(n, x)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     integer :: i
 
     allocate(mod_arr(n))
@@ -443,9 +443,9 @@ contains
   end subroutine module_vars_init
 
   subroutine module_vars_init_fwd_ad(n, x, x_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     integer :: i
 
     if (.not. allocated(mod_arr_diff_ad)) then
@@ -461,7 +461,7 @@ contains
   end subroutine module_vars_init_fwd_ad
 
   subroutine module_vars_init_rev_ad(n, x_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: x_ad
     integer :: i
 
@@ -476,7 +476,7 @@ contains
   end subroutine module_vars_init_rev_ad
 
   subroutine module_vars_main(n, x)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(out) :: x
     integer :: i
 
@@ -490,7 +490,7 @@ contains
   end subroutine module_vars_main
 
   subroutine module_vars_main_fwd_ad(n, x, x_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(out) :: x
     real, intent(out) :: x_ad
     integer :: i
@@ -508,7 +508,7 @@ contains
   end subroutine module_vars_main_fwd_ad
 
   subroutine module_vars_main_rev_ad(n, x_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: x_ad
     integer :: i
 
@@ -522,7 +522,7 @@ contains
   end subroutine module_vars_main_rev_ad
 
   subroutine module_vars_finalize(n, x)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(out) :: x
     integer :: i
 
@@ -541,7 +541,7 @@ contains
   end subroutine module_vars_finalize
 
   subroutine module_vars_finalize_fwd_ad(n, x, x_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(out) :: x
     real, intent(out) :: x_ad
     integer :: i
@@ -560,7 +560,7 @@ contains
   end subroutine module_vars_finalize_fwd_ad
 
   subroutine module_vars_finalize_rev_ad(n, x_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: x_ad
     integer :: i
 
@@ -577,8 +577,8 @@ contains
   end subroutine module_vars_finalize_rev_ad
 
   subroutine allocate_with_early_return(n, x, res)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(out) :: res
     real, allocatable :: arr(:)
     integer :: i
@@ -603,9 +603,9 @@ contains
   end subroutine allocate_with_early_return
 
   subroutine allocate_with_early_return_fwd_ad(n, x, x_ad, res, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    integer, intent(in) :: n
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: res
     real, intent(out) :: res_ad
     real, allocatable :: arr_ad(:)
@@ -646,8 +646,8 @@ contains
   end subroutine allocate_with_early_return_fwd_ad
 
   subroutine allocate_with_early_return_rev_ad(n, x, x_ad, res_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x
+    integer, intent(in) :: n
+    real, intent(in) :: x
     real, intent(inout) :: x_ad
     real, intent(inout) :: res_ad
     real, allocatable :: arr_ad(:)

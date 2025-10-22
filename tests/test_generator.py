@@ -719,7 +719,7 @@ class TestGenerator(unittest.TestCase):
             generated = generator.generate_ad(
                 src, str(Path(tmp) / "opt.f90"), warn=False, fadmod_dir=tmp
             )
-            self.assertIn("real, intent(in), optional  :: y", generated)
+            self.assertIn("real, intent(in), optional :: y", generated)
 
     def test_preserve_new_attributes(self):
         code_tree.Node.reset()

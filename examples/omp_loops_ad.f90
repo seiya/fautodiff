@@ -5,8 +5,8 @@ module omp_loops_ad
 contains
 
   subroutine sum_loop(n, x, y, s)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
     real, intent(out) :: y(n)
     real, intent(out) :: s
     integer :: i
@@ -24,9 +24,9 @@ contains
   end subroutine sum_loop
 
   subroutine sum_loop_fwd_ad(n, x, x_ad, y, y_ad, s, s_ad)
-    integer, intent(in)  :: n
-    real, intent(in)  :: x(n)
-    real, intent(in)  :: x_ad(n)
+    integer, intent(in) :: n
+    real, intent(in) :: x(n)
+    real, intent(in) :: x_ad(n)
     real, intent(out) :: y(n)
     real, intent(out) :: y_ad(n)
     real, intent(out) :: s
@@ -48,7 +48,7 @@ contains
   end subroutine sum_loop_fwd_ad
 
   subroutine sum_loop_rev_ad(n, x_ad, y_ad, s_ad)
-    integer, intent(in)  :: n
+    integer, intent(in) :: n
     real, intent(inout) :: x_ad(n)
     real, intent(inout) :: y_ad(n)
     real, intent(inout) :: s_ad
@@ -67,9 +67,9 @@ contains
   end subroutine sum_loop_rev_ad
 
   subroutine stencil_loop(n, m, x, y)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x(n,m)
     real, intent(out) :: y(n,m)
     integer :: i
     integer :: in
@@ -104,10 +104,10 @@ contains
   end subroutine stencil_loop
 
   subroutine stencil_loop_fwd_ad(n, m, x, x_ad, y, y_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    real, intent(in)  :: x(n,m)
-    real, intent(in)  :: x_ad(n,m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    real, intent(in) :: x(n,m)
+    real, intent(in) :: x_ad(n,m)
     real, intent(out) :: y(n,m)
     real, intent(out) :: y_ad(n,m)
     integer :: j
@@ -145,8 +145,8 @@ contains
   end subroutine stencil_loop_fwd_ad
 
   subroutine stencil_loop_rev_ad(n, m, x_ad, y_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
+    integer, intent(in) :: n
+    integer, intent(in) :: m
     real, intent(inout) :: x_ad(n,m)
     real, intent(inout) :: y_ad(n,m)
     integer :: j
@@ -193,9 +193,9 @@ contains
   end subroutine stencil_loop_rev_ad
 
   subroutine stencil_loop_mod(is, ie, x, y)
-    integer, intent(in)  :: is
-    integer, intent(in)  :: ie
-    real, intent(in)  :: x(is:ie)
+    integer, intent(in) :: is
+    integer, intent(in) :: ie
+    real, intent(in) :: x(is:ie)
     real, intent(out) :: y(is:ie)
     real :: xn
     real :: xp
@@ -229,10 +229,10 @@ contains
   end subroutine stencil_loop_mod
 
   subroutine stencil_loop_mod_fwd_ad(is, ie, x, x_ad, y, y_ad)
-    integer, intent(in)  :: is
-    integer, intent(in)  :: ie
-    real, intent(in)  :: x(is:ie)
-    real, intent(in)  :: x_ad(is:ie)
+    integer, intent(in) :: is
+    integer, intent(in) :: ie
+    real, intent(in) :: x(is:ie)
+    real, intent(in) :: x_ad(is:ie)
     real, intent(out) :: y(is:ie)
     real, intent(out) :: y_ad(is:ie)
     real :: work_ad
@@ -278,9 +278,9 @@ contains
   end subroutine stencil_loop_mod_fwd_ad
 
   subroutine stencil_loop_mod_rev_ad(is, ie, x, x_ad, y_ad)
-    integer, intent(in)  :: is
-    integer, intent(in)  :: ie
-    real, intent(in)  :: x(is:ie)
+    integer, intent(in) :: is
+    integer, intent(in) :: ie
+    real, intent(in) :: x(is:ie)
     real, intent(inout) :: x_ad(is:ie)
     real, intent(inout) :: y_ad(is:ie)
     integer :: in_n1_ad
@@ -373,10 +373,10 @@ contains
   end subroutine stencil_loop_mod_rev_ad
 
   subroutine stencil_loop_max(nx, ny, h, u)
-    integer, intent(in)  :: nx
-    integer, intent(in)  :: ny
+    integer, intent(in) :: nx
+    integer, intent(in) :: ny
     real, intent(out) :: u(nx,ny)
-    real, intent(in)  :: h(nx,ny)
+    real, intent(in) :: h(nx,ny)
     integer :: i
     integer :: j
     integer :: im1
@@ -398,10 +398,10 @@ contains
   end subroutine stencil_loop_max
 
   subroutine stencil_loop_max_fwd_ad(nx, ny, h, h_ad, u, u_ad)
-    integer, intent(in)  :: nx
-    integer, intent(in)  :: ny
-    real, intent(in)  :: h(nx,ny)
-    real, intent(in)  :: h_ad(nx,ny)
+    integer, intent(in) :: nx
+    integer, intent(in) :: ny
+    real, intent(in) :: h(nx,ny)
+    real, intent(in) :: h_ad(nx,ny)
     real, intent(out) :: u(nx,ny)
     real, intent(out) :: u_ad(nx,ny)
     integer :: j
@@ -427,8 +427,8 @@ contains
   end subroutine stencil_loop_max_fwd_ad
 
   subroutine stencil_loop_max_rev_ad(nx, ny, h_ad, u_ad)
-    integer, intent(in)  :: nx
-    integer, intent(in)  :: ny
+    integer, intent(in) :: nx
+    integer, intent(in) :: ny
     real, intent(inout) :: h_ad(nx,ny)
     real, intent(inout) :: u_ad(nx,ny)
     integer :: j
@@ -482,12 +482,12 @@ contains
   end subroutine stencil_loop_max_rev_ad
 
   subroutine stencil_loop_with_halo(is, ie, istart, iend, h, u, dhdt)
-    integer, intent(in)  :: is
-    integer, intent(in)  :: ie
-    integer, intent(in)  :: istart
-    integer, intent(in)  :: iend
-    real, intent(in)  :: h(is:ie)
-    real, intent(in)  :: u(is:ie)
+    integer, intent(in) :: is
+    integer, intent(in) :: ie
+    integer, intent(in) :: istart
+    integer, intent(in) :: iend
+    real, intent(in) :: h(is:ie)
+    real, intent(in) :: u(is:ie)
     real, intent(out) :: dhdt(is:ie)
     real :: flux(2)
     integer :: i
@@ -512,14 +512,14 @@ contains
   end subroutine stencil_loop_with_halo
 
   subroutine stencil_loop_with_halo_fwd_ad(is, ie, istart, iend, h, h_ad, u, u_ad, dhdt, dhdt_ad)
-    integer, intent(in)  :: is
-    integer, intent(in)  :: ie
-    integer, intent(in)  :: istart
-    integer, intent(in)  :: iend
-    real, intent(in)  :: h(is:ie)
-    real, intent(in)  :: h_ad(is:ie)
-    real, intent(in)  :: u(is:ie)
-    real, intent(in)  :: u_ad(is:ie)
+    integer, intent(in) :: is
+    integer, intent(in) :: ie
+    integer, intent(in) :: istart
+    integer, intent(in) :: iend
+    real, intent(in) :: h(is:ie)
+    real, intent(in) :: h_ad(is:ie)
+    real, intent(in) :: u(is:ie)
+    real, intent(in) :: u_ad(is:ie)
     real, intent(out) :: dhdt(is:ie)
     real, intent(out) :: dhdt_ad(is:ie)
     real :: flux_ad(2)
@@ -553,13 +553,13 @@ contains
   end subroutine stencil_loop_with_halo_fwd_ad
 
   subroutine stencil_loop_with_halo_rev_ad(is, ie, istart, iend, h, h_ad, u, u_ad, dhdt_ad)
-    integer, intent(in)  :: is
-    integer, intent(in)  :: ie
-    integer, intent(in)  :: istart
-    integer, intent(in)  :: iend
-    real, intent(in)  :: h(is:ie)
+    integer, intent(in) :: is
+    integer, intent(in) :: ie
+    integer, intent(in) :: istart
+    integer, intent(in) :: iend
+    real, intent(in) :: h(is:ie)
     real, intent(inout) :: h_ad(is:ie)
-    real, intent(in)  :: u(is:ie)
+    real, intent(in) :: u(is:ie)
     real, intent(inout) :: u_ad(is:ie)
     real, intent(inout) :: dhdt_ad(is:ie)
     real :: flux_ad(2)
@@ -654,10 +654,10 @@ contains
   end subroutine stencil_loop_with_halo_rev_ad
 
   subroutine indirect_access_loop(n, m, idx, x, y)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: idx(n)
-    real, intent(in)  :: x(m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: idx(n)
+    real, intent(in) :: x(m)
     real, intent(out) :: y(n)
     integer :: i
 
@@ -671,11 +671,11 @@ contains
   end subroutine indirect_access_loop
 
   subroutine indirect_access_loop_fwd_ad(n, m, idx, x, x_ad, y, y_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: idx(n)
-    real, intent(in)  :: x(m)
-    real, intent(in)  :: x_ad(m)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: idx(n)
+    real, intent(in) :: x(m)
+    real, intent(in) :: x_ad(m)
     real, intent(out) :: y(n)
     real, intent(out) :: y_ad(n)
     integer :: i
@@ -691,9 +691,9 @@ contains
   end subroutine indirect_access_loop_fwd_ad
 
   subroutine indirect_access_loop_rev_ad(n, m, idx, x_ad, y_ad)
-    integer, intent(in)  :: n
-    integer, intent(in)  :: m
-    integer, intent(in)  :: idx(n)
+    integer, intent(in) :: n
+    integer, intent(in) :: m
+    integer, intent(in) :: idx(n)
     real, intent(inout) :: x_ad(m)
     real, intent(inout) :: y_ad(n)
     integer :: i
@@ -767,9 +767,9 @@ contains
   end subroutine omp_ws_alloc_rev_ad
 
   subroutine omp_ws_if(x, y, f)
-    real, intent(in)  :: x(:)
+    real, intent(in) :: x(:)
     real, intent(out) :: y(:)
-    logical, intent(in)  :: f
+    logical, intent(in) :: f
 
     !$omp parallel
     !$omp workshare
@@ -786,11 +786,11 @@ contains
   end subroutine omp_ws_if
 
   subroutine omp_ws_if_fwd_ad(x, x_ad, y, y_ad, f)
-    real, intent(in)  :: x(:)
-    real, intent(in)  :: x_ad(:)
+    real, intent(in) :: x(:)
+    real, intent(in) :: x_ad(:)
     real, intent(out) :: y(:)
     real, intent(out) :: y_ad(:)
-    logical, intent(in)  :: f
+    logical, intent(in) :: f
 
     !$omp parallel
     !$omp workshare
@@ -809,10 +809,10 @@ contains
   end subroutine omp_ws_if_fwd_ad
 
   subroutine omp_ws_if_rev_ad(x, x_ad, y_ad, f)
-    real, intent(in)  :: x(:)
+    real, intent(in) :: x(:)
     real, intent(inout) :: x_ad(:)
     real, intent(inout) :: y_ad(:)
-    logical, intent(in)  :: f
+    logical, intent(in) :: f
 
     !$omp parallel
     if (f) then

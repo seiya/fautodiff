@@ -6,7 +6,7 @@ contains
 
   subroutine foo(a, b)
     real, intent(inout) :: a
-    real, intent(in)  :: b
+    real, intent(in) :: b
 
     a = a * 2.0 + b
 
@@ -16,8 +16,8 @@ contains
   subroutine foo_fwd_ad(a, a_ad, b, b_ad)
     real, intent(inout) :: a
     real, intent(inout) :: a_ad
-    real, intent(in)  :: b
-    real, intent(in)  :: b_ad
+    real, intent(in) :: b
+    real, intent(in) :: b_ad
 
     a_ad = a_ad * 2.0 + b_ad ! a = a * 2.0 + b
     a = a * 2.0 + b
@@ -36,7 +36,7 @@ contains
   end subroutine foo_rev_ad
 
   function bar(a) result(b)
-    real, intent(in)  :: a
+    real, intent(in) :: a
     real :: b
 
     b = a**2
@@ -45,8 +45,8 @@ contains
   end function bar
 
   subroutine bar_fwd_ad(a, a_ad, b, b_ad)
-    real, intent(in)  :: a
-    real, intent(in)  :: a_ad
+    real, intent(in) :: a
+    real, intent(in) :: a_ad
     real, intent(out) :: b
     real, intent(out) :: b_ad
 
@@ -57,7 +57,7 @@ contains
   end subroutine bar_fwd_ad
 
   subroutine bar_rev_ad(a, a_ad, b_ad)
-    real, intent(in)  :: a
+    real, intent(in) :: a
     real, intent(inout) :: a_ad
     real, intent(inout) :: b_ad
 
@@ -69,7 +69,7 @@ contains
 
   subroutine call_subroutine(x, y)
     real, intent(inout) :: x
-    real, intent(in)  :: y
+    real, intent(in) :: y
 
     call foo(x, y)
 
@@ -79,8 +79,8 @@ contains
   subroutine call_subroutine_fwd_ad(x, x_ad, y, y_ad)
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
-    real, intent(in)  :: y
-    real, intent(in)  :: y_ad
+    real, intent(in) :: y
+    real, intent(in) :: y_ad
 
     call foo_fwd_ad(x, x_ad, y, y_ad) ! call foo(x, y)
 
@@ -98,7 +98,7 @@ contains
 
   subroutine call_fucntion(x, y)
     real, intent(out) :: x
-    real, intent(in)  :: y
+    real, intent(in) :: y
 
     x = bar(y)
 
@@ -108,8 +108,8 @@ contains
   subroutine call_fucntion_fwd_ad(x, x_ad, y, y_ad)
     real, intent(out) :: x
     real, intent(out) :: x_ad
-    real, intent(in)  :: y
-    real, intent(in)  :: y_ad
+    real, intent(in) :: y
+    real, intent(in) :: y_ad
 
     call bar_fwd_ad(y, y_ad, x, x_ad) ! x = bar(y)
 
@@ -118,7 +118,7 @@ contains
 
   subroutine call_fucntion_rev_ad(x_ad, y, y_ad)
     real, intent(inout) :: x_ad
-    real, intent(in)  :: y
+    real, intent(in) :: y
     real, intent(inout) :: y_ad
 
     call bar_rev_ad(y, y_ad, x_ad) ! x = bar(y)
@@ -128,7 +128,7 @@ contains
 
   subroutine arg_operation(x, y)
     real, intent(inout) :: x
-    real, intent(in)  :: y
+    real, intent(in) :: y
 
     call foo(x, y * 2.0)
 
@@ -138,8 +138,8 @@ contains
   subroutine arg_operation_fwd_ad(x, x_ad, y, y_ad)
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
-    real, intent(in)  :: y
-    real, intent(in)  :: y_ad
+    real, intent(in) :: y
+    real, intent(in) :: y_ad
     real :: foo_arg1_save_44_ad
 
     foo_arg1_save_44_ad = y_ad * 2.0 ! call foo(x, y * 2.0)
@@ -162,7 +162,7 @@ contains
 
   subroutine arg_function(x, y)
     real, intent(inout) :: x
-    real, intent(in)  :: y
+    real, intent(in) :: y
 
     call foo(x, bar(y))
 
@@ -172,8 +172,8 @@ contains
   subroutine arg_function_fwd_ad(x, x_ad, y, y_ad)
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
-    real, intent(in)  :: y
-    real, intent(in)  :: y_ad
+    real, intent(in) :: y
+    real, intent(in) :: y_ad
     real :: foo_arg1_save_53_ad
     real :: foo_arg1_save_53
 
@@ -185,7 +185,7 @@ contains
 
   subroutine arg_function_rev_ad(x_ad, y, y_ad)
     real, intent(inout) :: x_ad
-    real, intent(in)  :: y
+    real, intent(in) :: y
     real, intent(inout) :: y_ad
     real :: foo_arg1_save_53_ad
 

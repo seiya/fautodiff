@@ -5,7 +5,7 @@ module preprocessor_example_ad
 contains
 
   subroutine foo(x, y)
-    real, intent(in)  :: x
+    real, intent(in) :: x
     real, intent(out) :: y
 
     y = x
@@ -18,8 +18,8 @@ contains
   end subroutine foo
 
   subroutine foo_fwd_ad(x, x_ad, y, y_ad)
-    real, intent(in)  :: x
-    real, intent(in)  :: x_ad
+    real, intent(in) :: x
+    real, intent(in) :: x_ad
     real, intent(out) :: y
     real, intent(out) :: y_ad
 
