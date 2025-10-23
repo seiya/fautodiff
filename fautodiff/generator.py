@@ -162,8 +162,9 @@ def _rewrite_use_tree(
             node.name = mapped
             if original_name.lower() in _MODULES_REQUIRING_ORIGINAL_USE:
                 _add_original_use(node, original_name)
+        return
 
-    for child in getattr(node, "iter_children", lambda: [])():
+    for child in node.iter_children():
         _rewrite_use_tree(child, module_map, search_paths)
 
     if isinstance(node, Block):
@@ -2747,16 +2748,29 @@ def generate_ad(
         mod_org.name: f"{mod_org.name}{AD_SUFFIX}" for mod_org in modules_org
     }
     search_path_dirs: List[Path] = []
+    seen_search_paths: Set[Path] = set()
+
+    def add_search_path(path: Path) -> None:
+        if path not in seen_search_paths:
+            search_path_dirs.append(path)
+            seen_search_paths.add(path)
+
     if src_name is not None:
         try:
-            src_dir = Path(src_name).parent
-            if src_dir not in search_path_dirs:
-                search_path_dirs.append(src_dir)
+            src_dir = Path(src_name).parent.resolve()
+            add_search_path(src_dir)
         except Exception:
             pass
-    cwd_path = Path.cwd()
-    if cwd_path not in search_path_dirs:
-        search_path_dirs.append(cwd_path)
+    add_search_path(Path.cwd())
+
+    for search_dir in search_dirs:
+        if search_dir is None:
+            continue
+        try:
+            dir_path = Path(search_dir).resolve()
+        except Exception:
+            continue
+        add_search_path(dir_path)
     for mod_org in modules_org:
         name = mod_org.name
         mod = type(mod_org)(f"{name}{AD_SUFFIX}")
