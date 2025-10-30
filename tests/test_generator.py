@@ -390,6 +390,36 @@ class TestGenerator(unittest.TestCase):
             self.assertIn("real(kind=dp) :: u_t_j_t_v", driver_text)
             self.assertNotIn("y = 0.0", driver_text)
 
+    def test_validation_driver_populates_array_extents(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        src = Path("examples/arrays.f90")
+        with TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            src_copy = tmp_dir / src.name
+            src_copy.write_text(src.read_text())
+            out_file = tmp_dir / "arrays_ad.f90"
+            driver_name = "run_arrays_validation.f90"
+            generator.generate_ad(
+                src_copy.read_text(),
+                str(src_copy),
+                out_file=out_file,
+                warn=False,
+                fadmod_dir=tmp_dir,
+                emit_validation=True,
+                validation_driver_name=driver_name,
+            )
+            driver_text = (tmp_dir / driver_name).read_text()
+            self.assertNotIn(
+                "! TODO: provide array extents for validation work buffers.",
+                driver_text,
+            )
+            self.assertIn("integer :: n_a_1", driver_text)
+            self.assertIn("n_a_1 = n", driver_text)
+            self.assertIn("integer :: n_d_1", driver_text)
+            self.assertIn("n_d_2 = m", driver_text)
+
     def test_module_vars_example_fadmod(self):
         code_tree.Node.reset()
         fadmod_path = Path("module_vars.fadmod")

@@ -82,6 +82,45 @@ def _indent(line: str, level: int) -> str:
     return "  " * level + line
 
 
+def _build_decl_lookup(routine: Optional[Routine]) -> Dict[str, List[Declaration]]:
+    lookup: Dict[str, List[Declaration]] = {}
+    if routine is None or routine.decls is None:
+        return lookup
+    for node in routine.decls.iter_children():
+        if isinstance(node, Declaration):
+            lookup.setdefault(node.name, []).append(node)
+    return lookup
+
+
+def _extent_from_dim(dim: str) -> Optional[str]:
+    dim = dim.strip()
+    if not dim or dim in (":", "*"):
+        return None
+    parts = [part.strip() for part in dim.split(":")]
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) == 2:
+        lower, upper = parts
+        if not upper:
+            return None
+        if not lower:
+            lower = "1"
+        return f"({upper}) - ({lower}) + 1"
+    return None
+
+
+def _infer_extents_from_decl(decl: Declaration) -> Optional[List[str]]:
+    if not decl.dims_raw:
+        return None
+    extents: List[str] = []
+    for dim in decl.dims_raw:
+        extent = _extent_from_dim(dim)
+        if extent is None:
+            return None
+        extents.append(extent)
+    return extents
+
+
 def _clone_decl(
     decl: Declaration,
     name: str,
@@ -164,6 +203,11 @@ def render_validation_driver(
             if reverse_enabled
             else None
         )
+
+        decl_lookup_candidates = [
+            _build_decl_lookup(routine_fwd),
+            _build_decl_lookup(routine_rev),
+        ]
 
         forward_available = routine_fwd is not None
         reverse_available = routine_rev is not None
@@ -263,6 +307,8 @@ def render_validation_driver(
 
         local_declares: Dict[str, Declaration] = {}
         array_placeholders: Dict[str, List[str]] = {}
+        placeholder_values: Dict[str, str] = {}
+        unresolved_placeholders: List[str] = []
 
         def _ensure_decl(
             name: str, decl: Declaration, *, track_placeholders: bool = True
@@ -375,6 +421,27 @@ def render_validation_driver(
                     track_placeholders=False,
                 )
 
+        if array_placeholders:
+            for base_name, placeholders in array_placeholders.items():
+                extents: Optional[List[str]] = None
+                for lookup in decl_lookup_candidates:
+                    decls = lookup.get(base_name, [])
+                    for decl in decls:
+                        extents = _infer_extents_from_decl(decl)
+                        if extents is not None:
+                            break
+                    if extents is not None:
+                        break
+                if extents is None:
+                    base_decl = info_by_name.get(base_name, {}).get("decl")
+                    if base_decl is not None:
+                        extents = _infer_extents_from_decl(base_decl)
+                if extents is None or len(extents) != len(placeholders):
+                    unresolved_placeholders.extend(placeholders)
+                    continue
+                for placeholder, extent in zip(placeholders, extents):
+                    placeholder_values[placeholder] = extent
+
         if differentiable_inputs and differentiable_outputs and forward_available:
             delta_type = inputs_unique[0]["decl"].var_type.copy()
             scalar_real_decls.append(
@@ -411,10 +478,14 @@ def render_validation_driver(
             )
 
         if array_placeholders:
-            sub_lines.append("")
-            sub_lines.append(
-                _indent("! TODO: provide array extents for validation work buffers.", 2)
-            )
+            if unresolved_placeholders:
+                sub_lines.append("")
+                sub_lines.append(
+                    _indent(
+                        "! TODO: provide array extents for validation work buffers.",
+                        2,
+                    )
+                )
             for placeholders in array_placeholders.values():
                 for placeholder in placeholders:
                     scalar_real_decls.append(
@@ -426,6 +497,14 @@ def render_validation_driver(
         if scalar_real_decls:
             sub_lines.append("")
             sub_lines.extend(scalar_real_decls)
+
+        if placeholder_values:
+            sub_lines.append("")
+            for base_name, placeholders in array_placeholders.items():
+                for placeholder in placeholders:
+                    value = placeholder_values.get(placeholder)
+                    if value is not None:
+                        sub_lines.append(_indent(f"{placeholder} = {value}", 2))
 
         if local_declares:
             sub_lines.append("")
