@@ -457,6 +457,57 @@ class TestGenerator(unittest.TestCase):
             self.assertIn("integer :: n_d_1", driver_text)
             self.assertIn("n_d_2 = m", driver_text)
 
+    def test_validation_driver_uses_external_module_for_extents(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        const_src = textwrap.dedent(
+            """
+            module ext_constants
+              integer, parameter :: n = 8
+            end module ext_constants
+            """
+        )
+        arrays_src = textwrap.dedent(
+            """
+            module ext_arrays
+              use ext_constants, only: n
+            contains
+              subroutine foo(arr)
+                real, intent(inout) :: arr(n)
+                arr = 0.0
+              end subroutine foo
+            end module ext_arrays
+            """
+        )
+        with TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            const_path = tmp_dir / "ext_constants.f90"
+            arrays_path = tmp_dir / "ext_arrays.f90"
+            const_path.write_text(const_src)
+            arrays_path.write_text(arrays_src)
+            generator.generate_ad(
+                const_path.read_text(),
+                str(const_path),
+                out_file=tmp_dir / "ext_constants_ad.f90",
+                warn=False,
+                fadmod_dir=tmp_dir,
+            )
+            out_file = tmp_dir / "ext_arrays_ad.f90"
+            driver_name = "driver.f90"
+            generator.generate_ad(
+                arrays_path.read_text(),
+                str(arrays_path),
+                out_file=out_file,
+                warn=False,
+                fadmod_dir=tmp_dir,
+                search_dirs=[tmp_dir],
+                emit_validation=True,
+                validation_driver_name=driver_name,
+            )
+            driver_text = (tmp_dir / driver_name).read_text().lower()
+            self.assertIn("use ext_constants, only: n", driver_text)
+
     def test_module_vars_example_fadmod(self):
         code_tree.Node.reset()
         fadmod_path = Path("module_vars.fadmod")

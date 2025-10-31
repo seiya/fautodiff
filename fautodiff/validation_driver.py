@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import re
+from collections import OrderedDict
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-from .code_tree import Declaration, Module, Routine
+from .code_tree import Declaration, Module, Routine, Use
 from .operators import OpVar, VarType
 
 
@@ -92,6 +94,42 @@ def _build_decl_lookup(routine: Optional[Routine]) -> Dict[str, List[Declaration
     return lookup
 
 
+def _collect_extent_symbols(extent: str) -> Set[str]:
+    symbols: Set[str] = set()
+    for match in re.finditer(r"[A-Za-z_][A-Za-z0-9_]*", extent):
+        symbols.add(match.group(0))
+    return symbols
+
+
+def _build_use_lookup(
+    mod_org: Module, routine: Routine
+) -> Tuple[Dict[str, List[Use]], List[Use]]:
+    symbol_lookup: Dict[str, List[Use]] = {}
+    fallback: List[Use] = []
+
+    use_nodes: List[Use] = []
+    if mod_org.uses is not None:
+        for child in mod_org.uses.iter_children():
+            if isinstance(child, Use):
+                use_nodes.append(child)
+    if routine.decls is not None:
+        for child in routine.decls.iter_children():
+            if isinstance(child, Use):
+                use_nodes.append(child)
+
+    for use in use_nodes:
+        if use.only:
+            for entry in use.only:
+                local = entry.split("=>")[0].strip()
+                if not local:
+                    continue
+                symbol_lookup.setdefault(local.lower(), []).append(use)
+        else:
+            fallback.append(use)
+
+    return symbol_lookup, fallback
+
+
 def _extent_from_dim(dim: str) -> Optional[str]:
     dim = dim.strip()
     if not dim or dim in (":", "*"):
@@ -136,9 +174,7 @@ def _clone_decl(
     clone.save = False
     if force_allocatable:
         if clone.dims_raw is None and clone.dims is not None:
-            clone.dims_raw = tuple(
-                str(d) if d is not None else ":" for d in clone.dims
-            )
+            clone.dims_raw = tuple(str(d) if d is not None else ":" for d in clone.dims)
         if clone.dims_raw is not None:
             clone.allocatable = True
             clone.pointer = False
@@ -174,6 +210,31 @@ def render_validation_driver(
         "",
         f"  print *, 'Running validation stubs for {mod_org.name}'",
     ]
+
+    module_declared_names: Set[str] = set()
+    if mod_org.decls is not None:
+        for node in mod_org.decls.iter_children():
+            if isinstance(node, Declaration):
+                module_declared_names.add(node.name.lower())
+
+    additional_uses: "OrderedDict[Tuple[str, Optional[Tuple[str, ...]]], Use]" = (
+        OrderedDict()
+    )
+    module_use_names = {
+        mod_org.name.lower(),
+        f"{mod_org.name}{ad_suffix}".lower(),
+    }
+
+    def _record_additional_use(use: Use) -> None:
+        name_lower = use.name.lower()
+        if name_lower in module_use_names:
+            return
+        only_lower: Optional[Tuple[str, ...]] = None
+        if use.only is not None:
+            only_lower = tuple(entry.lower() for entry in use.only)
+        key = (name_lower, only_lower)
+        if key not in additional_uses:
+            additional_uses[key] = use.copy()
 
     routines = list(mod_org.routines)
     if not routines:
@@ -212,11 +273,14 @@ def render_validation_driver(
         forward_available = routine_fwd is not None
         reverse_available = routine_rev is not None
 
+        use_lookup, fallback_uses = _build_use_lookup(mod_org, routine)
+
         sub_lines: List[str] = []
         sub_lines.append(_indent(f"subroutine validate_{routine.name}()", 1))
         sub_lines.append(_indent("implicit none", 2))
 
         scalar_real_decls: List[str] = []
+        scalar_real_names: List[str] = []
         delta_type: Optional[VarType] = None
         fd_type: Optional[VarType] = None
 
@@ -268,9 +332,9 @@ def render_validation_driver(
                         "intent": "out",
                         "is_real": is_real,
                         "is_diff": is_real,
-                        "rank": len(result_decl.dims_raw)
-                        if result_decl.dims_raw
-                        else 0,
+                        "rank": (
+                            len(result_decl.dims_raw) if result_decl.dims_raw else 0
+                        ),
                         "is_function_result": True,
                     }
                     outputs.append(info)
@@ -309,6 +373,7 @@ def render_validation_driver(
         array_placeholders: Dict[str, List[str]] = {}
         placeholder_values: Dict[str, str] = {}
         unresolved_placeholders: List[str] = []
+        extent_symbol_refs: Set[str] = set()
 
         def _ensure_decl(
             name: str, decl: Declaration, *, track_placeholders: bool = True
@@ -441,25 +506,22 @@ def render_validation_driver(
                     continue
                 for placeholder, extent in zip(placeholders, extents):
                     placeholder_values[placeholder] = extent
+                    extent_symbol_refs.update(_collect_extent_symbols(extent))
 
         if differentiable_inputs and differentiable_outputs and forward_available:
             delta_type = inputs_unique[0]["decl"].var_type.copy()
-            scalar_real_decls.append(
-                _render_scalar_decl("delta", delta_type)
-            )
+            scalar_real_decls.append(_render_scalar_decl("delta", delta_type))
+            scalar_real_names.append("delta")
             fd_type = _select_var_type(
                 [info_by_name[name] for name in diff_outputs_names],
                 default=delta_type,
             )
-            scalar_real_decls.append(
-                _render_scalar_decl("fd_error", fd_type)
-            )
-            scalar_real_decls.append(
-                _render_scalar_decl("fd_forward_val", fd_type)
-            )
-            scalar_real_decls.append(
-                _render_scalar_decl("ad_forward_val", fd_type)
-            )
+            scalar_real_decls.append(_render_scalar_decl("fd_error", fd_type))
+            scalar_real_names.append("fd_error")
+            scalar_real_decls.append(_render_scalar_decl("fd_forward_val", fd_type))
+            scalar_real_names.append("fd_forward_val")
+            scalar_real_decls.append(_render_scalar_decl("ad_forward_val", fd_type))
+            scalar_real_names.append("ad_forward_val")
         if forward_available and reverse_available:
             vtj_type = _select_var_type(
                 [info_by_name[name] for name in diff_outputs_names],
@@ -476,6 +538,7 @@ def render_validation_driver(
                     _render_scalar_decl("u_t_j_t_v", utj_type),
                 ]
             )
+            scalar_real_names.extend(["v_t_j_u", "u_t_j_t_v"])
 
         if array_placeholders:
             if unresolved_placeholders:
@@ -489,10 +552,29 @@ def render_validation_driver(
             for placeholders in array_placeholders.values():
                 for placeholder in placeholders:
                     scalar_real_decls.append(
-                        _render_scalar_decl(
-                            placeholder, VarType("integer")
-                        )
+                        _render_scalar_decl(placeholder, VarType("integer"))
                     )
+                    scalar_real_names.append(placeholder)
+
+        local_symbols: Set[str] = set(local_declares.keys())
+        local_symbols.update(placeholder_values.keys())
+        for placeholders in array_placeholders.values():
+            local_symbols.update(placeholders)
+        local_symbols.update(scalar_real_names)
+        local_symbols_lower = {name.lower() for name in local_symbols}
+        local_symbols_lower.update(module_declared_names)
+
+        if extent_symbol_refs:
+            for symbol in extent_symbol_refs:
+                symbol_lower = symbol.lower()
+                if symbol_lower in local_symbols_lower:
+                    continue
+                uses_for_symbol = use_lookup.get(symbol_lower)
+                if uses_for_symbol is None and len(fallback_uses) == 1:
+                    uses_for_symbol = fallback_uses
+                if uses_for_symbol:
+                    for use in uses_for_symbol:
+                        _record_additional_use(use)
 
         if scalar_real_decls:
             sub_lines.append("")
@@ -509,7 +591,7 @@ def render_validation_driver(
             sub_lines.append(
                 _indent("! TODO: assign initial values to input variables below.", 2)
             )
-            
+
             def _default_assign_value(info: Dict[str, Any]) -> str:
                 if info["decl"].var_type.is_real_type():
                     return "0.0"
@@ -521,9 +603,7 @@ def render_validation_driver(
                 if info["rank"] > 0:
                     continue
                 assign_value = _default_assign_value(info)
-                sub_lines.append(
-                    _indent(f"{info['name']} = {assign_value}", 2)
-                )
+                sub_lines.append(_indent(f"{info['name']} = {assign_value}", 2))
 
             for info in inputs_unique:
                 if info["rank"] == 0:
@@ -556,9 +636,7 @@ def render_validation_driver(
                         if value is not None:
                             sub_lines.append(_indent(f"{placeholder} = {value}", 2))
                     dims = ", ".join(placeholders)
-                    sub_lines.append(
-                        _indent(f"allocate({info['name']}({dims}))", 2)
-                    )
+                    sub_lines.append(_indent(f"allocate({info['name']}({dims}))", 2))
                     if info["name"] in diff_outputs_names:
                         sub_lines.append(
                             _indent(
@@ -570,9 +648,7 @@ def render_validation_driver(
                     "0.0"
                     if info["decl"].var_type.is_real_type()
                     else (
-                        "0"
-                        if info["decl"].var_type.is_integer_type()
-                        else info["name"]
+                        "0" if info["decl"].var_type.is_integer_type() else info["name"]
                     )
                 )
                 if info["intent"] != "out":
@@ -588,23 +664,17 @@ def render_validation_driver(
                     continue
                 if name.endswith(ad_suffix) and base_name not in input_names:
                     continue
-                sub_lines.append(
-                    _indent(f"allocate({name}, mold={base_name})", 2)
-                )
+                sub_lines.append(_indent(f"allocate({name}, mold={base_name})", 2))
             elif rank > 0 and name.endswith(ad_suffix):
                 base_name = name[: -len(ad_suffix)]
                 if base_name not in input_names:
                     continue
-                sub_lines.append(
-                    _indent(f"allocate({name}, mold={base_name})", 2)
-                )
+                sub_lines.append(_indent(f"allocate({name}, mold={base_name})", 2))
 
         if inputs_unique:
             sub_lines.append("")
             for info in inputs_unique:
-                sub_lines.append(
-                    _indent(f"{info['name']}_init = {info['name']}", 2)
-                )
+                sub_lines.append(_indent(f"{info['name']}_init = {info['name']}", 2))
 
         first_input_info: Optional[Dict[str, Any]] = None
         if diff_inputs_names:
@@ -648,9 +718,7 @@ def render_validation_driver(
                     ref_expr = f"{ref_name}(1)"
                 else:
                     ref_expr = ref_name
-                sub_lines.append(
-                    _indent(f"delta = sqrt(epsilon({ref_expr}))", 2)
-                )
+                sub_lines.append(_indent(f"delta = sqrt(epsilon({ref_expr}))", 2))
             for info in inputs_unique:
                 base_name = info["name"]
                 if base_name in diff_inputs_names:
@@ -658,9 +726,7 @@ def render_validation_driver(
                         _indent(f"{base_name} = {base_name}_init + delta", 2)
                     )
                 else:
-                    sub_lines.append(
-                        _indent(f"{base_name} = {base_name}_init", 2)
-                    )
+                    sub_lines.append(_indent(f"{base_name} = {base_name}_init", 2))
             if routine.kind == "subroutine":
                 _emit_call(routine.name, list(routine.args), 2)
             else:
@@ -681,9 +747,7 @@ def render_validation_driver(
                 sub_lines.append(_indent(f"{info['name']} = {info['name']}_init", 2))
             for base_name in diff_inputs_names:
                 sub_lines.append(_indent(f"{base_name}_u = 1.0", 2))
-                sub_lines.append(
-                    _indent(f"{base_name}{ad_suffix} = {base_name}_u", 2)
-                )
+                sub_lines.append(_indent(f"{base_name}{ad_suffix} = {base_name}_u", 2))
             for name in diff_outputs_names:
                 info = info_by_name[name]
                 if info["intent"] != "in":
@@ -696,9 +760,7 @@ def render_validation_driver(
             if routine_fwd is not None:
                 _emit_call(routine_fwd.name, list(routine_fwd.args), 2)
             for name in diff_outputs_names:
-                sub_lines.append(
-                    _indent(f"{name}_grad = {name}{ad_suffix}", 2)
-                )
+                sub_lines.append(_indent(f"{name}_grad = {name}{ad_suffix}", 2))
             sub_lines.append("")
             for name in diff_outputs_names:
                 info = info_by_name[name]
@@ -712,9 +774,7 @@ def render_validation_driver(
                     diff_expr = f"maxval(abs({fd_expr} - {name}_grad))"
                     fd_mag = f"maxval(abs({fd_expr}))"
                     ad_mag = f"maxval(abs({name}_grad))"
-                sub_lines.append(
-                    _indent(f"fd_error = max(fd_error, {diff_expr})", 2)
-                )
+                sub_lines.append(_indent(f"fd_error = max(fd_error, {diff_expr})", 2))
                 sub_lines.append(
                     _indent(f"fd_forward_val = max(fd_forward_val, {fd_mag})", 2)
                 )
@@ -810,6 +870,17 @@ def render_validation_driver(
         if idx != len(routines) - 1:
             sub_lines.append("")
         lines.extend(sub_lines)
+
+    if additional_uses:
+        try:
+            implicit_idx = lines.index("  implicit none")
+        except ValueError:
+            implicit_idx = 3
+        use_lines = []
+        for use in additional_uses.values():
+            rendered = use.render(indent=1)[0].rstrip()
+            use_lines.append(rendered)
+        lines[implicit_idx:implicit_idx] = use_lines
 
     lines.append("")
     lines.append(f"end program {program_name}")
