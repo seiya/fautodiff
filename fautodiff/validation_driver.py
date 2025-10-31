@@ -103,8 +103,8 @@ def _collect_extent_symbols(extent: str) -> Set[str]:
 
 def _build_use_lookup(
     mod_org: Module, routine: Routine
-) -> Tuple[Dict[str, List[Use]], List[Use]]:
-    symbol_lookup: Dict[str, List[Use]] = {}
+) -> Tuple[Dict[str, List[Tuple[Use, Optional[str]]]], List[Use]]:
+    symbol_lookup: Dict[str, List[Tuple[Use, Optional[str]]]] = {}
     fallback: List[Use] = []
 
     use_nodes: List[Use] = []
@@ -120,10 +120,11 @@ def _build_use_lookup(
     for use in use_nodes:
         if use.only:
             for entry in use.only:
-                local = entry.split("=>")[0].strip()
+                entry_norm = entry.strip()
+                local = entry_norm.split("=>")[0].strip()
                 if not local:
                     continue
-                symbol_lookup.setdefault(local.lower(), []).append(use)
+                symbol_lookup.setdefault(local.lower(), []).append((use, entry_norm))
         else:
             fallback.append(use)
 
@@ -145,6 +146,30 @@ def _extent_from_dim(dim: str) -> Optional[str]:
             lower = "1"
         return f"({upper}) - ({lower}) + 1"
     return None
+
+
+def _lower_bound_from_dim(dim: str) -> Optional[str]:
+    dim = dim.strip()
+    if not dim or dim in (":", "*"):
+        return None
+    parts = [part.strip() for part in dim.split(":")]
+    if len(parts) == 1:
+        return "1"
+    if len(parts) == 2:
+        lower, _ = parts
+        return lower or "1"
+    return None
+
+
+def _first_element_expr(name: str, decl: Declaration) -> str:
+    if not decl.dims_raw:
+        return name
+    indices: List[str] = []
+    for dim in decl.dims_raw:
+        lower = _lower_bound_from_dim(dim) or "1"
+        indices.append(lower)
+    joined = ", ".join(indices)
+    return f"{name}({joined})"
 
 
 def _infer_extents_from_decl(decl: Declaration) -> Optional[List[str]]:
@@ -204,7 +229,6 @@ def render_validation_driver(
     program_name = f"run_{mod_org.name}_validation"
     lines: List[str] = [
         f"program {program_name}",
-        f"  use {mod_org.name}",
         f"  use {mod_org.name}{ad_suffix}",
         "  implicit none",
         "",
@@ -217,24 +241,50 @@ def render_validation_driver(
             if isinstance(node, Declaration):
                 module_declared_names.add(node.name.lower())
 
-    additional_uses: "OrderedDict[Tuple[str, Optional[Tuple[str, ...]]], Use]" = (
-        OrderedDict()
-    )
+    additional_uses: "OrderedDict[Tuple[str, bool], Dict[str, Any]]" = OrderedDict()
     module_use_names = {
-        mod_org.name.lower(),
         f"{mod_org.name}{ad_suffix}".lower(),
     }
 
-    def _record_additional_use(use: Use) -> None:
-        name_lower = use.name.lower()
-        if name_lower in module_use_names:
-            return
-        only_lower: Optional[Tuple[str, ...]] = None
-        if use.only is not None:
-            only_lower = tuple(entry.lower() for entry in use.only)
-        key = (name_lower, only_lower)
-        if key not in additional_uses:
-            additional_uses[key] = use.copy()
+    intrinsic_module_names = {
+        "iso_fortran_env",
+        "iso_c_binding",
+        "ieee_arithmetic",
+        "ieee_exceptions",
+        "ieee_features",
+    }
+    ad_suffix_lower = ad_suffix.lower()
+
+    def _to_ad_module_name(name: str) -> str:
+        name_lower = name.lower()
+        if name_lower in intrinsic_module_names:
+            return name
+        if name_lower.endswith(ad_suffix_lower):
+            return name
+        return f"{name}{ad_suffix}"
+
+    def _record_additional_use(use: Use, entry: Optional[str]) -> None:
+        target_name = _to_ad_module_name(use.name)
+        name_lower = target_name.lower()
+        key = (name_lower, use.only is not None)
+        info = additional_uses.get(key)
+        if info is None:
+            if name_lower in module_use_names and use.only is None:
+                return
+            copy = use.copy()
+            copy.name = target_name
+            entries: Optional["OrderedDict[str, str]"] = None
+            if use.only is not None:
+                copy.only = []
+                entries = OrderedDict()
+            info = {"use": copy, "entries": entries}
+            additional_uses[key] = info
+            module_use_names.add(name_lower)
+        entries = info.get("entries")
+        if entry is not None and entries is not None:
+            entry_lower = entry.lower()
+            if entry_lower not in entries:
+                entries[entry_lower] = entry
 
     routines = list(mod_org.routines)
     if not routines:
@@ -571,10 +621,10 @@ def render_validation_driver(
                     continue
                 uses_for_symbol = use_lookup.get(symbol_lower)
                 if uses_for_symbol is None and len(fallback_uses) == 1:
-                    uses_for_symbol = fallback_uses
+                    uses_for_symbol = [(fallback_uses[0], None)]
                 if uses_for_symbol:
-                    for use in uses_for_symbol:
-                        _record_additional_use(use)
+                    for use, entry in uses_for_symbol:
+                        _record_additional_use(use, entry)
 
         if scalar_real_decls:
             sub_lines.append("")
@@ -713,11 +763,8 @@ def render_validation_driver(
             sub_lines.append(_indent("! Perturbed evaluation", 2))
             if first_input_info:
                 ref_name = first_input_info["name"]
-                rank = first_input_info["rank"]
-                if rank > 0:
-                    ref_expr = f"{ref_name}(1)"
-                else:
-                    ref_expr = ref_name
+                decl = first_input_info["decl"]
+                ref_expr = _first_element_expr(ref_name, decl)
                 sub_lines.append(_indent(f"delta = sqrt(epsilon({ref_expr}))", 2))
             for info in inputs_unique:
                 base_name = info["name"]
@@ -877,7 +924,13 @@ def render_validation_driver(
         except ValueError:
             implicit_idx = 3
         use_lines = []
-        for use in additional_uses.values():
+        for info in additional_uses.values():
+            use = info["use"]
+            entries = info["entries"]
+            if entries is not None:
+                if not entries:
+                    continue
+                use.only = list(entries.values())
             rendered = use.render(indent=1)[0].rstrip()
             use_lines.append(rendered)
         lines[implicit_idx:implicit_idx] = use_lines
