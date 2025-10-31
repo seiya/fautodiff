@@ -52,6 +52,43 @@ class TestGenerator(unittest.TestCase):
         expected = Path("examples/cross_mod_b_ad.f90").read_text()
         self.assertEqual(generated, expected)
 
+    def test_use_rewrite_finds_ad_module_in_search_dir(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        src_a = Path("examples/cross_mod_a.f90")
+        src_b = Path("examples/cross_mod_b.f90")
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            src_dir = tmp_path / "src"
+            inc_dir = tmp_path / "include"
+            src_dir.mkdir()
+            inc_dir.mkdir()
+
+            src_a_path = src_dir / src_a.name
+            src_a_path.write_text(src_a.read_text())
+            ad_path = inc_dir / "cross_mod_a_ad.f90"
+            generator.generate_ad(
+                src_a_path.read_text(),
+                str(src_a_path),
+                out_file=ad_path,
+                warn=False,
+                fadmod_dir=src_dir,
+            )
+
+            src_b_path = src_dir / src_b.name
+            src_b_path.write_text(src_b.read_text())
+            generated = generator.generate_ad(
+                src_b_path.read_text(),
+                str(src_b_path),
+                warn=False,
+                search_dirs=[inc_dir, src_dir],
+                fadmod_dir=src_dir,
+            )
+            uses = [line.strip() for line in generated.splitlines() if "use " in line]
+            self.assertIn("use cross_mod_a_ad", uses)
+            self.assertNotIn("use cross_mod_a", uses)
+
     def test_modulo_intrinsic_supported(self):
         code_tree.Node.reset()
         src = textwrap.dedent(

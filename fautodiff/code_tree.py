@@ -514,6 +514,8 @@ class Node:
 
     def build_parent(self) -> None:
         for child in self.iter_children():
+            if child is None:
+                continue
             child.set_parent(self)
             child.build_parent()
 

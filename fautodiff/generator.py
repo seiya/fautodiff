@@ -101,6 +101,21 @@ def _add_original_use(node: Use, original_name: str) -> None:
     parent._set_parent(original_use)
 
 
+def _mark_use_tree_skip_rewrite(node: Optional[Node]) -> None:
+    """Mark ``Use`` nodes reachable from ``node`` to preserve original module bindings."""
+
+    if node is None:
+        return
+
+    if isinstance(node, Use):
+        if node.name.lower() in _MODULES_REQUIRING_ORIGINAL_USE:
+            setattr(node, "_fautodiff_skip_rewrite", True)
+        return
+
+    for child in node.iter_children():
+        _mark_use_tree_skip_rewrite(child)
+
+
 def _deduplicate_use_statements(block: Block) -> None:
     """Remove duplicate ``use`` statements from ``block``."""
 
@@ -162,8 +177,9 @@ def _rewrite_use_tree(
             node.name = mapped
             if original_name.lower() in _MODULES_REQUIRING_ORIGINAL_USE:
                 _add_original_use(node, original_name)
+        return
 
-    for child in getattr(node, "iter_children", lambda: [])():
+    for child in node.iter_children():
         _rewrite_use_tree(child, module_map, search_paths)
 
     if isinstance(node, Block):
@@ -2747,16 +2763,29 @@ def generate_ad(
         mod_org.name: f"{mod_org.name}{AD_SUFFIX}" for mod_org in modules_org
     }
     search_path_dirs: List[Path] = []
+    seen_search_paths: Set[Path] = set()
+
+    def add_search_path(path: Path) -> None:
+        if path not in seen_search_paths:
+            search_path_dirs.append(path)
+            seen_search_paths.add(path)
+
     if src_name is not None:
         try:
-            src_dir = Path(src_name).parent
-            if src_dir not in search_path_dirs:
-                search_path_dirs.append(src_dir)
+            src_dir = Path(src_name).parent.resolve()
+            add_search_path(src_dir)
         except Exception:
             pass
-    cwd_path = Path.cwd()
-    if cwd_path not in search_path_dirs:
-        search_path_dirs.append(cwd_path)
+    add_search_path(Path.cwd())
+
+    for search_dir in search_dirs:
+        if search_dir is None:
+            continue
+        try:
+            dir_path = Path(search_dir).resolve()
+        except Exception:
+            continue
+        add_search_path(dir_path)
     for mod_org in modules_org:
         name = mod_org.name
         mod = type(mod_org)(f"{name}{AD_SUFFIX}")
@@ -2796,6 +2825,8 @@ def generate_ad(
 
         mod.routines = [routine.deep_clone() for routine in mod_org.routines]
         for routine in mod.routines:
+            _mark_use_tree_skip_rewrite(routine.decls)
+            _mark_use_tree_skip_rewrite(routine.content)
             routine.set_parent(mod)
 
         mod_vars = (
@@ -2980,6 +3011,8 @@ def generate_ad(
                 only = tuple(u.only) if u.only is not None else None
                 existing_uses.add((mapped, only))
         for m in sorted(ad_modules_used):
+            if m.lower() in _MODULES_REQUIRING_ORIGINAL_USE:
+                continue
             ad_name = module_name_map.get(m, f"{m}{AD_SUFFIX}")
             if ad_name == name_mod:
                 continue
@@ -2993,6 +3026,8 @@ def generate_ad(
                 mod.uses.append(Use("fautodiff_stack"))
                 existing_uses.add(key)
 
+        # Ensure cloned routines have proper parent pointers before rewriting USE trees.
+        mod.build_parent()
         _rewrite_module_uses(mod, module_name_map, search_path_dirs)
 
         modules.append(render_program(mod))

@@ -1,6 +1,6 @@
 module mpi_example_ad
-  use mpi
   use mpi_ad
+  use mpi
   implicit none
 
 
