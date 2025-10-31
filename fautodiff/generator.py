@@ -3007,6 +3007,8 @@ def generate_ad(
                 mod.uses.append(Use("fautodiff_stack"))
                 existing_uses.add(key)
 
+        # Ensure cloned routines have proper parent pointers before rewriting USE trees.
+        mod.build_parent()
         _rewrite_module_uses(mod, module_name_map, search_path_dirs)
 
         modules.append(render_program(mod))
