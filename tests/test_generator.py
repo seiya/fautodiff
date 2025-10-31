@@ -506,7 +506,7 @@ class TestGenerator(unittest.TestCase):
                 validation_driver_name=driver_name,
             )
             driver_text = (tmp_dir / driver_name).read_text().lower()
-            self.assertIn("use ext_constants, only: n", driver_text)
+            self.assertIn("use ext_constants_ad, only: n", driver_text)
 
     def test_module_vars_example_fadmod(self):
         code_tree.Node.reset()
