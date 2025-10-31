@@ -498,14 +498,6 @@ def render_validation_driver(
             sub_lines.append("")
             sub_lines.extend(scalar_real_decls)
 
-        if placeholder_values:
-            sub_lines.append("")
-            for base_name, placeholders in array_placeholders.items():
-                for placeholder in placeholders:
-                    value = placeholder_values.get(placeholder)
-                    if value is not None:
-                        sub_lines.append(_indent(f"{placeholder} = {value}", 2))
-
         if local_declares:
             sub_lines.append("")
             for decl in local_declares.values():
@@ -517,24 +509,36 @@ def render_validation_driver(
             sub_lines.append(
                 _indent("! TODO: assign initial values to input variables below.", 2)
             )
-            for info in inputs_unique:
+            
+            def _default_assign_value(info: Dict[str, Any]) -> str:
                 if info["decl"].var_type.is_real_type():
-                    assign_value = "0.0"
-                elif info["decl"].var_type.is_integer_type():
-                    assign_value = "0"
-                else:
-                    assign_value = info["name"]
+                    return "0.0"
+                if info["decl"].var_type.is_integer_type():
+                    return "0"
+                return info["name"]
+
+            for info in inputs_unique:
                 if info["rank"] > 0:
-                    base_name = info["name"]
-                    placeholders = array_placeholders.get(base_name, [])
-                    if placeholders:
-                        dims = ", ".join(placeholders)
-                        sub_lines.append(_indent(f"allocate({base_name}({dims}))", 2))
-                        sub_lines.append(_indent(f"{base_name} = {assign_value}", 2))
-                else:
-                    sub_lines.append(
-                        _indent(f"{info['name']} = {assign_value}", 2)
-                    )
+                    continue
+                assign_value = _default_assign_value(info)
+                sub_lines.append(
+                    _indent(f"{info['name']} = {assign_value}", 2)
+                )
+
+            for info in inputs_unique:
+                if info["rank"] == 0:
+                    continue
+                base_name = info["name"]
+                placeholders = array_placeholders.get(base_name, [])
+                if placeholders:
+                    for placeholder in placeholders:
+                        value = placeholder_values.get(placeholder)
+                        if value is not None:
+                            sub_lines.append(_indent(f"{placeholder} = {value}", 2))
+                    dims = ", ".join(placeholders)
+                    sub_lines.append(_indent(f"allocate({base_name}({dims}))", 2))
+                    assign_value = _default_assign_value(info)
+                    sub_lines.append(_indent(f"{base_name} = {assign_value}", 2))
 
         pure_outputs = [
             info_by_name[name]
@@ -547,6 +551,10 @@ def render_validation_driver(
             for info in pure_outputs:
                 placeholders = array_placeholders.get(info["name"], [])
                 if placeholders:
+                    for placeholder in placeholders:
+                        value = placeholder_values.get(placeholder)
+                        if value is not None:
+                            sub_lines.append(_indent(f"{placeholder} = {value}", 2))
                     dims = ", ".join(placeholders)
                     sub_lines.append(
                         _indent(f"allocate({info['name']}({dims}))", 2)
