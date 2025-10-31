@@ -101,6 +101,21 @@ def _add_original_use(node: Use, original_name: str) -> None:
     parent._set_parent(original_use)
 
 
+def _mark_use_tree_skip_rewrite(node: Optional[Node]) -> None:
+    """Mark ``Use`` nodes reachable from ``node`` to preserve original module bindings."""
+
+    if node is None:
+        return
+
+    if isinstance(node, Use):
+        if node.name.lower() in _MODULES_REQUIRING_ORIGINAL_USE:
+            setattr(node, "_fautodiff_skip_rewrite", True)
+        return
+
+    for child in node.iter_children():
+        _mark_use_tree_skip_rewrite(child)
+
+
 def _deduplicate_use_statements(block: Block) -> None:
     """Remove duplicate ``use`` statements from ``block``."""
 
@@ -2810,6 +2825,8 @@ def generate_ad(
 
         mod.routines = [routine.deep_clone() for routine in mod_org.routines]
         for routine in mod.routines:
+            _mark_use_tree_skip_rewrite(routine.decls)
+            _mark_use_tree_skip_rewrite(routine.content)
             routine.set_parent(mod)
 
         mod_vars = (
@@ -2994,6 +3011,8 @@ def generate_ad(
                 only = tuple(u.only) if u.only is not None else None
                 existing_uses.add((mapped, only))
         for m in sorted(ad_modules_used):
+            if m.lower() in _MODULES_REQUIRING_ORIGINAL_USE:
+                continue
             ad_name = module_name_map.get(m, f"{m}{AD_SUFFIX}")
             if ad_name == name_mod:
                 continue

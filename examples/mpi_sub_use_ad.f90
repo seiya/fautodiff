@@ -1,5 +1,4 @@
 module mpi_sub_use_ad
-  use mpi_ad
   implicit none
 
 
@@ -19,6 +18,7 @@ contains
   end subroutine foo
 
   subroutine foo_fwd_ad(x, x_ad, comm)
+    use mpi_ad
     use mpi
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
@@ -36,6 +36,7 @@ contains
   end subroutine foo_fwd_ad
 
   subroutine foo_rev_ad(x, x_ad, comm)
+    use mpi_ad
     use mpi
     real, intent(inout) :: x
     real, intent(inout) :: x_ad
