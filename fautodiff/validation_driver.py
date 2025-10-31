@@ -148,6 +148,30 @@ def _extent_from_dim(dim: str) -> Optional[str]:
     return None
 
 
+def _lower_bound_from_dim(dim: str) -> Optional[str]:
+    dim = dim.strip()
+    if not dim or dim in (":", "*"):
+        return None
+    parts = [part.strip() for part in dim.split(":")]
+    if len(parts) == 1:
+        return "1"
+    if len(parts) == 2:
+        lower, _ = parts
+        return lower or "1"
+    return None
+
+
+def _first_element_expr(name: str, decl: Declaration) -> str:
+    if not decl.dims_raw:
+        return name
+    indices: List[str] = []
+    for dim in decl.dims_raw:
+        lower = _lower_bound_from_dim(dim) or "1"
+        indices.append(lower)
+    joined = ", ".join(indices)
+    return f"{name}({joined})"
+
+
 def _infer_extents_from_decl(decl: Declaration) -> Optional[List[str]]:
     if not decl.dims_raw:
         return None
@@ -739,11 +763,8 @@ def render_validation_driver(
             sub_lines.append(_indent("! Perturbed evaluation", 2))
             if first_input_info:
                 ref_name = first_input_info["name"]
-                rank = first_input_info["rank"]
-                if rank > 0:
-                    ref_expr = f"{ref_name}(1)"
-                else:
-                    ref_expr = ref_name
+                decl = first_input_info["decl"]
+                ref_expr = _first_element_expr(ref_name, decl)
                 sub_lines.append(_indent(f"delta = sqrt(epsilon({ref_expr}))", 2))
             for info in inputs_unique:
                 base_name = info["name"]

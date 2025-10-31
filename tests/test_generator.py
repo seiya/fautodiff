@@ -297,6 +297,42 @@ class TestGenerator(unittest.TestCase):
                 "Transpose check (add_numbers): |v^TJu - u^TJ^Tv|", driver_text
             )
 
+    def test_validation_driver_uses_all_indices_for_delta_reference(self):
+        code_tree.Node.reset()
+        from tempfile import TemporaryDirectory
+
+        src = textwrap.dedent(
+            """
+            module multi_dim_mod
+            contains
+              subroutine spread_values(h, y)
+                real, intent(inout) :: h(2, 3)
+                real, intent(out) :: y(2, 3)
+                y = h
+              end subroutine spread_values
+            end module multi_dim_mod
+            """
+        )
+
+        with TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            src_path = tmp_dir / "multi_dim_mod.f90"
+            src_path.write_text(src)
+            out_file = tmp_dir / "multi_dim_mod_ad.f90"
+            generator.generate_ad(
+                src_path.read_text(),
+                str(src_path),
+                out_file=out_file,
+                warn=False,
+                fadmod_dir=tmp_dir,
+                emit_validation=True,
+            )
+            driver_path = tmp_dir / "run_multi_dim_mod_validation.f90"
+            self.assertTrue(driver_path.exists())
+            driver_text = driver_path.read_text()
+            self.assertIn("delta = sqrt(epsilon(h(1, 1)))", driver_text)
+            self.assertNotIn("delta = sqrt(epsilon(h(1)))", driver_text)
+
     def test_emit_validation_driver_custom_name(self):
         code_tree.Node.reset()
         from tempfile import TemporaryDirectory
