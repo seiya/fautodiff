@@ -205,7 +205,6 @@ def render_validation_driver(
     program_name = f"run_{mod_org.name}_validation"
     lines: List[str] = [
         f"program {program_name}",
-        f"  use {mod_org.name}",
         f"  use {mod_org.name}{ad_suffix}",
         "  implicit none",
         "",
@@ -220,7 +219,6 @@ def render_validation_driver(
 
     additional_uses: "OrderedDict[Tuple[str, bool], Dict[str, Any]]" = OrderedDict()
     module_use_names = {
-        mod_org.name.lower(),
         f"{mod_org.name}{ad_suffix}".lower(),
     }
 

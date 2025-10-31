@@ -286,7 +286,7 @@ class TestGenerator(unittest.TestCase):
             self.assertTrue(driver_path.exists())
             driver_text = driver_path.read_text()
             self.assertIn("program run_simple_math_validation", driver_text)
-            self.assertIn("use simple_math", driver_text)
+            self.assertNotIn("use simple_math\n", driver_text)
             self.assertIn("use simple_math_ad", driver_text)
             self.assertIn("call validate_add_numbers()", driver_text)
             self.assertIn("delta = sqrt(epsilon(a))", driver_text)
